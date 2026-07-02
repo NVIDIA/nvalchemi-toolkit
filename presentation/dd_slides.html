@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain Decomposition — nvalchemi</title>
+<style>
+  :root{
+    --nv:#76b900; --nv-d:#5c9200; --ink:#1a1a1a; --muted:#5a5a5a;
+    --bg:#ffffff; --panel:#f4f6f2; --line:#e2e6dc; --dark:#0f1a08;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+       color:var(--ink);background:#222;overflow:hidden}
+  #deck{width:100vw;height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+         padding:4.2vh 5.2vw;background:var(--bg);overflow:auto}
+  .slide.active{display:flex;animation:fade .28s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h1{font-size:3.0em;line-height:1.08;letter-spacing:-.5px}
+  h2{font-size:2.0em;color:var(--dark);border-bottom:3px solid var(--nv);
+     padding-bottom:.25em;margin-bottom:.5em;letter-spacing:-.3px}
+  h3{font-size:1.34em;color:var(--nv-d);margin:.4em 0 .2em}
+  p,li{font-size:1.5em;line-height:1.52;color:var(--ink)}
+  ul,ol{margin:.2em 0 .2em 1.15em}li{margin:.5em 0}
+  .lead{font-size:1.58em;color:var(--muted);line-height:1.5}
+  .muted{color:var(--muted)} b,strong{color:var(--dark)}
+  .nv{color:var(--nv-d);font-weight:700}
+  .title{background:radial-gradient(120% 120% at 20% 0%,#16240c 0%,#0b1206 60%,#070b04 100%);
+         color:#eef3e7;justify-content:center}
+  .title h1{color:#fff}.title .lead{color:#b9c9a6}
+  .title .kicker{color:var(--nv);font-weight:700;letter-spacing:3px;font-size:1.05em;text-transform:uppercase}
+  .title .foot{position:absolute;bottom:4vh;left:5.2vw;color:#7f9468;font-size:.95em}
+  .cols{display:flex;gap:2.2em;flex:1;min-height:0}
+  .col{flex:1;min-width:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.1em}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.9em 1.1em}
+  .card h3{margin-top:0}.card p,.card li{font-size:1.42em;line-height:1.44}
+  .pill{display:inline-block;background:var(--nv);color:#fff;font-weight:700;border-radius:999px;padding:.16em .8em;font-size:.9em;margin:.15em .2em}
+  .pill.ghost{background:#fff;color:var(--nv-d);border:2px solid var(--nv)}
+  figure{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
+  figure img{max-height:72vh;max-width:100%;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff}
+  figcaption{margin-top:.5em;color:var(--muted);font-size:1.16em;text-align:center;line-height:1.4}
+  .plotcap{color:var(--dark);font-weight:600}
+  .big{font-size:2.4em;color:var(--nv-d);font-weight:800;line-height:1}
+  .note{background:#fbfdf7;border-left:4px solid var(--nv);padding:.7em 1em;border-radius:0 10px 10px 0;font-size:1.34em;line-height:1.46}
+  table{border-collapse:collapse;width:100%;font-size:1.18em}
+  th,td{padding:.4em .55em;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dark);border-bottom:2px solid var(--nv)}
+  .win{color:var(--nv-d);font-weight:700}
+  code{background:#eef2e8;border-radius:5px;padding:.05em .35em;font-size:.9em;color:#33501a}
+  #bar{position:fixed;top:0;left:0;height:4px;background:var(--nv);width:0;z-index:50;transition:width .25s}
+  #counter{position:fixed;bottom:1.3vh;right:1.6vw;color:#9aa;font-size:.85em;z-index:50}
+  .flowrow{display:flex;align-items:center;gap:.45em;flex-wrap:wrap;margin:.22em 0}
+  .box{background:#fff;border:2px solid var(--nv);border-radius:10px;padding:.42em .7em;font-weight:600;color:var(--dark);font-size:.98em}
+  .arrow{color:var(--nv);font-size:1.3em;font-weight:800}
+  .subtle{font-size:.96em;color:var(--muted)}
+  .strip{background:var(--dark);color:#dceccb;border-radius:12px;padding:.7em 1em;font-size:1.05em;text-align:center}
+  .strip b{color:#fff}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="deck">
+
+<!-- 1 · TITLE -->
+<section class="slide title active">
+  <div class="kicker">nvalchemi · ML Interatomic Potentials</div>
+  <h1>Domain Decomposition</h1>
+  <p class="lead" style="margin-top:.5em">Large-scale molecular simulation across many GPUs —<br>
+     one design, many models, provably the same answer.</p>
+  <div style="margin-top:1.3em">
+    <span class="pill">MACE</span><span class="pill">UMA</span><span class="pill">AIMNet2</span>
+    <span class="pill ghost">eager + compiled</span><span class="pill ghost">NVT / NPT / NPH</span>
+    <span class="pill ghost">bring-your-own</span>
+  </div>
+  <div class="foot">Scaling: H100 (80&nbsp;GB) · 1–8 GPUs</div>
+</section>
+
+<!-- 2 · WHY + DESIGN -->
+<section class="slide">
+  <h2>The problem, and the shape of the solution</h2>
+  <div class="cols">
+    <div class="col">
+      <p class="lead">One GPU hits two walls as systems grow:</p>
+      <ul style="margin-top:.4em">
+        <li><b>Memory</b> — a big system won't fit (≈44k atoms for MACE, ≈4k for UMA on an 80&nbsp;GB H100).</li>
+        <li><b>Time</b> — MD is thousands of sequential steps; one GPU is too slow.</li>
+      </ul>
+      <p class="lead" style="margin-top:.7em">Fix: give each GPU a <span class="nv">slice of the atoms</span>.
+         More GPUs → bigger and faster.</p>
+      <div class="note" style="margin-top:.7em">The hard part isn't splitting — it's staying
+        <b>bit-for-bit correct</b> while the atoms move every step.</div>
+    </div>
+    <div class="col">
+      <div class="flowrow"><div class="box" style="border-color:#888">Your model &nbsp;<span class="subtle">(MACE, UMA, …)</span></div>
+        <span class="subtle">pure science — one <code>distribution_spec</code></span></div>
+      <div class="flowrow"><span class="arrow">↓</span></div>
+      <div class="flowrow"><div class="box">DistributedModel</div><span class="subtle">split · run · reassemble</span></div>
+      <div class="flowrow"><span class="arrow">↓</span></div>
+      <div class="flowrow"><div class="box">Strategy</div><span class="subtle">the <i>how</i> — Halo or Graph-parallel</span></div>
+      <div class="flowrow"><span class="arrow">↓</span></div>
+      <div class="flowrow"><div class="box">DomainParallel + mesh</div><span class="subtle">GPUs · comms · bookkeeping</span></div>
+      <div class="note" style="margin-top:.8em"><b>One principle:</b> the model writes zero parallel code.
+        It declares <i>what</i> it produces; the framework owns <i>how</i> it splits.
+        <b>Two ways to split:</b> by <span class="nv">space</span> (Halo) or by <span class="nv">atom-list</span> (Graph-parallel).</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · HALO -->
+<section class="slide">
+  <h2>Strategy 1 — Halo: split by space  <span class="subtle" style="font-size:.6em">(MACE, AIMNet2)</span></h2>
+  <div class="cols">
+    <div class="col" style="flex:.72">
+      <svg viewBox="0 0 390 400" width="100%" style="max-height:46vh">
+        <style>.dom{stroke:#5c9200;stroke-width:2;fill:#76b900;fill-opacity:.22}
+                .lab{font:700 20px sans-serif;fill:#1a1a1a}</style>
+        <rect x="40" y="30" width="150" height="150" class="dom"/>
+        <rect x="190" y="30" width="150" height="150" class="dom"/>
+        <rect x="40" y="180" width="150" height="150" class="dom"/>
+        <rect x="190" y="180" width="150" height="150" class="dom"/>
+        <text x="115" y="112" class="lab" text-anchor="middle">GPU 0</text>
+        <text x="265" y="112" class="lab" text-anchor="middle">GPU 1</text>
+        <text x="115" y="262" class="lab" text-anchor="middle">GPU 2</text>
+        <text x="265" y="262" class="lab" text-anchor="middle">GPU 3</text>
+        <!-- ghost shell GPU0 borrows: dashed ring outside GPU0, into neighbors, clear of labels -->
+        <rect x="40" y="30" width="182" height="182" fill="none" stroke="#5c9200" stroke-width="4" stroke-dasharray="9 6"/>
+        <text x="200" y="384" class="lab" text-anchor="middle" style="font:600 17px sans-serif;fill:#5c9200">▢ GPU 0 borrows a thin "ghost" shell from its neighbors</text>
+      </svg>
+    </div>
+    <div class="col">
+      <ol>
+        <li><b>Partition</b> the box into regions — one GPU each.</li>
+        <li><b>Borrow ghosts:</b> a thin shell of border atoms from neighbors.</li>
+        <li><b>Message-pass:</b> ghosts let boundary atoms see real neighbors.</li>
+        <li><b>Refresh between layers</b> — deeper layers stay correct.</li>
+        <li><b>Keep only your atoms'</b> forces.</li>
+      </ol>
+      <div class="note" style="margin-top:.5em">The shell is <b>refreshed</b> between layers, so it stays a
+        <b>constant thin width</b> — never growing with depth. Small shell → low memory →
+        <b>fit much larger systems</b>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · GRAPH-PARALLEL -->
+<section class="slide">
+  <h2>Strategy 2 — Graph-parallel: split the atom list  <span class="subtle" style="font-size:.6em">(UMA)</span></h2>
+  <div class="cols">
+    <div class="col" style="flex:.72">
+      <svg viewBox="0 0 400 400" width="100%" style="max-height:46vh">
+        <defs><marker id="a" markerWidth="12" markerHeight="12" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5c9200"/></marker></defs>
+        <!-- Box A: atoms split -->
+        <rect x="20" y="14" width="360" height="108" rx="12" fill="#f4f6f2" stroke="#c9d4bd" stroke-width="1.5"/>
+        <text x="200" y="40" text-anchor="middle" style="font:700 18px sans-serif;fill:#1a1a1a">Split the atom list across GPUs</text>
+        <g>
+          <circle cx="60" cy="78" r="13" fill="#1f77b4"/><circle cx="100" cy="78" r="13" fill="#1f77b4"/><circle cx="140" cy="78" r="13" fill="#1f77b4"/>
+          <circle cx="185" cy="78" r="13" fill="#ff7f0e"/><circle cx="225" cy="78" r="13" fill="#ff7f0e"/><circle cx="265" cy="78" r="13" fill="#ff7f0e"/>
+          <circle cx="310" cy="78" r="13" fill="#9467bd"/><circle cx="345" cy="78" r="13" fill="#9467bd"/>
+        </g>
+        <text x="100" y="110" text-anchor="middle" style="font:600 14px sans-serif;fill:#1f77b4">GPU 0</text>
+        <text x="225" y="110" text-anchor="middle" style="font:600 14px sans-serif;fill:#ff7f0e">GPU 1</text>
+        <text x="327" y="110" text-anchor="middle" style="font:600 14px sans-serif;fill:#9467bd">GPU 2</text>
+        <!-- arrow -->
+        <path d="M200 126 L200 152" stroke="#5c9200" stroke-width="3.5" marker-end="url(#a)"/>
+        <!-- Box B: all-gather -->
+        <rect x="20" y="158" width="360" height="70" rx="12" fill="#eef7dd" stroke="#76b900" stroke-width="2.5"/>
+        <text x="200" y="188" text-anchor="middle" style="font:700 18px sans-serif;fill:#5c9200">All-gather —</text>
+        <text x="200" y="212" text-anchor="middle" style="font:600 16px sans-serif;fill:#5c9200">every GPU briefly sees all atoms</text>
+        <!-- arrow -->
+        <path d="M200 232 L200 258" stroke="#5c9200" stroke-width="3.5" marker-end="url(#a)"/>
+        <!-- Box C: compute -->
+        <rect x="20" y="264" width="360" height="66" rx="12" fill="#f4f6f2" stroke="#c9d4bd" stroke-width="1.5"/>
+        <text x="200" y="293" text-anchor="middle" style="font:700 17px sans-serif;fill:#1a1a1a">Compute the layer</text>
+        <text x="200" y="316" text-anchor="middle" style="font:600 15px sans-serif;fill:#33501a">edges divided across GPUs</text>
+        <text x="200" y="366" text-anchor="middle" style="font:700 17px sans-serif;fill:#5c9200">↻  repeat every layer</text>
+      </svg>
+    </div>
+    <div class="col">
+      <ol>
+        <li><b>Split the atom list</b> evenly — no geometry needed.</li>
+        <li><b>Divide the edges</b> so the compute is shared.</li>
+        <li><b>All-gather each layer</b> — every GPU briefly sees all atoms, so message passing is exact.</li>
+        <li><b>Reduce forces</b> back to each atom's owner.</li>
+      </ol>
+      <div class="note" style="margin-top:.5em">No spatial shell → <b>no geometry constraints</b>.
+        Ideal for dense systems, where a halo shell would cover nearly the whole box.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · BYO -->
+<section class="slide">
+  <h2>Bring your own — <span class="nv">everything</span></h2>
+  <p class="lead">The core design bet: every layer is a swappable, declared component — not hard-wired.</p>
+  <div class="grid2" style="flex:1;margin-top:.5em">
+    <div class="card"><h3>▸ your Model</h3>
+      <p>Any PyTorch message-passing model — declare a small spec, <b>no rewrite</b>.
+         (Examples: a plain MPNN, a graph transformer.)</p></div>
+    <div class="card"><h3>▸ your Strategy</h3>
+      <p>Halo and Graph-parallel ship built-in, behind <b>one interface</b> — add a new scheme
+         without touching models or dynamics.</p></div>
+    <div class="card"><h3>▸ your Hook</h3>
+      <p>Attach custom per-step logic — monitoring, logging, control — running correctly
+         across <b>all GPUs</b>.</p></div>
+    <div class="card"><h3>▸ your Dynamics</h3>
+      <p>Any integrator: <b>NVE, NVT, NPT, NPH, FIRE</b>. And <b>compose models</b>
+         (potential + electrostatics) in a pipeline.</p></div>
+  </div>
+  <div class="strip" style="margin-top:1em">
+    Works today: <b>MACE · UMA · AIMNet2 · PME · Ewald · DFTD3 · LJ</b> ·
+    <b>eager + torch.compile</b> (zero recompiles in MD) · and matches a single GPU to <b>~10⁻⁶</b>.
+  </div>
+</section>
+
+<!-- 6 · UMA speed + capacity -->
+<section class="slide">
+  <h2>UMA scaling — speed &amp; capacity</h2>
+  <div class="cols">
+    <figure><img src="assets/uma_strong.png" alt="UMA strong scaling">
+      <figcaption>Near-linear speedup — 4,394 atoms run <b>4.5× faster</b> on 8 GPUs.
+        <span class="muted">[note space]</span></figcaption></figure>
+    <figure><img src="assets/uma_capacity.png" alt="UMA capacity">
+      <figcaption>Largest system grows ~9× from 1 → 8 GPUs.</figcaption></figure>
+  </div>
+</section>
+
+<!-- 9 · UMA efficiency + memory -->
+<section class="slide">
+  <h2>UMA scaling — efficiency &amp; memory</h2>
+  <div class="cols">
+    <figure><img src="assets/uma_efficiency.png" alt="UMA efficiency">
+      <figcaption><b>µs / step / atom</b> — cost per atom falls with size and GPUs.
+        <span class="muted">[note space]</span></figcaption></figure>
+    <figure><img src="assets/uma_memory.png" alt="UMA memory">
+      <figcaption>Memory per GPU ~halves each time GPUs double.</figcaption></figure>
+  </div>
+</section>
+
+<!-- 10 · vs FAIRCHEM -->
+<section class="slide">
+  <h2>How we compare — same model, our loop</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="card"><h3>Raw model forward</h3>
+        <p>Our distributed UMA forward <b>is similar to fairchem's own graph-parallel</b> implementation —
+           essentially <b>zero wrapper overhead</b>.</p>
+        <p class="subtle">So any difference below is mostly <i>integration</i>, not a weaker/faster model.</p>
+      </div>
+      <div class="note" style="margin-top:1em">
+        <b>The story:</b> equal at the raw-compute level → our end-to-end MD loop
+        <b>pulls ahead at scale</b>, because fairchem's ASE-driven loop pays a per-step
+        conversion + graph-rebuild cost that ours avoids.
+      </div>
+    </div>
+    <div class="col">
+      <h3 style="text-align:center">Full MD loop (NVT), 8 GPUs — ms per step</h3>
+      <table style="margin-top:.4em">
+        <tr><th>System</th><th>fairchem</th><th>ours</th><th>speedup</th></tr>
+        <tr><td>2,000</td><td>30.3</td><td>33.9</td><td>0.89×</td></tr>
+        <tr><td>4,394</td><td>51.4</td><td>50.6</td><td>1.02×</td></tr>
+        <tr><td>8,192</td><td>84.2</td><td>76.0</td><td class="win">1.11×</td></tr>
+        <tr><td>16,000</td><td>154.9</td><td>129.4</td><td class="win">1.20×</td></tr>
+        <tr><td>24,334</td><td>233.4</td><td>186.1</td><td class="win">1.25×</td></tr>
+        <tr><td>31,250</td><td>289.1</td><td>233.6</td><td class="win">1.24×</td></tr>
+      </table>
+      <p class="subtle" style="text-align:center;margin-top:.4em">
+        both full NVT MD · H100 · uma turbo · speedup = fairchem ÷ ours (&gt;1 = we're faster)</p>
+      <p style="margin-top:.4em;text-align:center"><b>Tie at small N; we pull ahead ~1.2–1.25× as systems grow.</b></p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · MULTINODE -->
+<section class="slide">
+  <h2>Multi-node — and we win at scale</h2>
+  <div class="cols">
+    <figure><img src="assets/uma_multinode.png" alt="16-GPU 2-node crossover">
+      <figcaption><b>16 GPUs across 2 nodes</b> (InfiniBand), UMA NVT — ours vs fairchem's own path.
+        <span class="muted">[note space]</span></figcaption></figure>
+    <div class="col">
+      <p class="lead">Both scale across nodes. Below ~40k atoms fairchem's leaner cross-node comm
+        leads; <b>at ≥40k atoms we overtake — 1.1–1.3× faster</b>.</p>
+      <div class="note" style="margin-top:.7em">Same crossover shape as single-node, shifted right
+        by the extra cross-node communication — the regime production runs live in.</div>
+      <div class="note" style="margin-top:.6em">Our curve is also <b>steadier</b> at the top end,
+        scaling cleanly to <b>71,874 atoms</b> across the 16 GPUs (~68&nbsp;GB/GPU) — about double
+        the single-node ceiling. More GPUs ⇒ proportionally larger systems.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 · TAKEAWAYS -->
+<section class="slide">
+  <h2>Takeaways</h2>
+  <ul style="font-size:1.3em;line-height:1.7;margin-top:.4em">
+    <li>One clean design distributes <span class="nv">many models</span> — science stays pure, parallelism lives in one place.</li>
+    <li><span class="nv">Bring-your-own</span> model, strategy, hook, and dynamics — the whole stack is swappable.</li>
+    <li>Two strategies: <span class="nv">Halo</span> (by space) and <span class="nv">Graph-parallel</span> (by atom list); eager <i>and</i> compiled; NVT/NPT/NPH.</li>
+    <li>Results are <span class="nv">bit-for-bit correct</span> vs. a single GPU (~10⁻⁶).</li>
+    <li><span class="nv">Near-linear</span> UMA speedups single-node, and it <span class="nv">scales across nodes</span> (16 GPUs, IB) — <span class="nv">overtaking fairchem's own distributed MD</span> at production scale (≥40k atoms).</li>
+  </ul>
+  <div class="note" style="margin-top:1.1em">Thank you — questions welcome.</div>
+</section>
+
+</div>
+<div id="counter"></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    document.getElementById('bar').style.width=((i)/(slides.length-1)*100)+'%';
+    document.getElementById('counter').textContent=(i+1)+' / '+slides.length;}
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){show(i+1);e.preventDefault();}
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){show(i-1);e.preventDefault();}
+    else if(e.key==='Home')show(0);else if(e.key==='End')show(slides.length-1);
+    else if(e.key==='f'){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}});
+  document.addEventListener('click',e=>{if(e.target.closest('a'))return;show(i+1);});
+  show(0);
+</script>
+</body>
+</html>
