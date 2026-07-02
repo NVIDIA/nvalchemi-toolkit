@@ -48,6 +48,13 @@
   paths; per-batch transforms run on the consumer thread after `Batch.from_data_list`.
   Transform failures are wrapped in `RuntimeError` with `transform[<i>]`
   breadcrumb and `__cause__` preserved.
+- **Opt-in precision-preserving fields** — `AtomicData` gained a
+  `_precision_preserving_keys` class attribute (empty by default, so behaviour is
+  unchanged) listing floating-point fields exempt from
+  `check_fp_dtype_consistency`'s cast to the positions dtype. A subclass can set
+  it to keep a high-precision label — e.g. `frozenset({"energy"})` so an extensive
+  total energy (~1e4–1e5 eV) is not silently downcast to float32. The exemption
+  also holds across `add_system_property` / `add_node_property`.
 
 ### Models
 

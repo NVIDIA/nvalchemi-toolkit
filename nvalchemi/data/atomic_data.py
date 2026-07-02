@@ -366,6 +366,12 @@ class AtomicData(BaseModel, DataMixin):
         }
     )
 
+    # FP fields exempt from the positions-dtype cast below. Empty by default (all
+    # fp tensors match positions); a subclass may set it to keep a high-precision
+    # label, e.g. {"energy"} so a fp64 total energy (~1e4-1e5 eV, which fp32 would
+    # quantize to ~1e-2 eV) is not silently downcast to the compute precision.
+    _precision_preserving_keys: ClassVar[frozenset[str]] = frozenset()
+
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True, validate_assignment=True, extra="allow"
@@ -462,12 +468,16 @@ class AtomicData(BaseModel, DataMixin):
     @model_validator(mode="after")
     def check_fp_dtype_consistency(self) -> AtomicData:
         """
-        Ensures all floating point tensors are at the same precision
-        as the positions tensor.
+        Cast floating point tensors to the positions dtype for single-precision
+        compute. Fields in ``_precision_preserving_keys`` are exempt (empty by
+        default); a subclass can opt a high-precision label (e.g. ``energy``) out
+        of the downcast.
         """
         dtype = self.positions.dtype
         casted: list[str] = []
         for key in self.model_dump().keys():
+            if key in self._precision_preserving_keys:
+                continue
             value = getattr(self, key)
             if isinstance(value, torch.Tensor):
                 tensor_dtype = value.dtype

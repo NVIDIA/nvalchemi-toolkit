@@ -20,6 +20,7 @@ import runpy
 import textwrap
 import warnings
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -626,6 +627,12 @@ class TestFromAtoms:
 # -----------------------------------------------------------------------------
 # dtype cast warning
 # -----------------------------------------------------------------------------
+class _KeepEnergyData(AtomicData):
+    """AtomicData subclass that opts ``energy`` out of the fp-dtype downcast."""
+
+    _precision_preserving_keys: ClassVar[frozenset[str]] = frozenset({"energy"})
+
+
 class TestDtypeCastWarning:
     """Tests for check_fp_dtype_consistency warning."""
 
@@ -691,6 +698,48 @@ class TestDtypeCastWarning:
             )
         user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
         assert len(user_warnings) == 0
+
+    def test_energy_downcast_by_default(self):
+        """Default exempt set is empty: a fp64 energy is cast to positions dtype."""
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        data = AtomicData(
+            positions=torch.randn(2, 3, dtype=torch.float32),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            energy=e64,
+        )
+        assert data.energy.dtype == torch.float32
+
+    def test_subclass_can_preserve_energy_precision(self):
+        """A subclass listing a field in _precision_preserving_keys keeps its
+        precision, including across validate_assignment re-runs on setattr."""
+        e64 = torch.tensor([[-41512.590527111]], dtype=torch.float64)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            data = _KeepEnergyData(
+                positions=torch.randn(3, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(3, dtype=torch.long),
+                energy=e64,
+            )
+        assert data.energy.dtype == torch.float64
+        assert data.energy.item() == e64.item()  # bit-exact, no fp32 round-trip
+        msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert all("energy" not in m for m in msgs)
+        data.add_system_property("dataset_id", torch.tensor([0], dtype=torch.long))
+        assert data.energy.dtype == torch.float64
+        assert data.energy.item() == e64.item()
+
+    def test_non_exempt_fp_field_still_cast(self):
+        """Fields not in the exempt set are still cast to the positions dtype."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            data = _KeepEnergyData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float64),
+            )
+        assert data.forces.dtype == torch.float32
+        msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert any("forces" in m for m in msgs)
 
 
 # -----------------------------------------------------------------------------
