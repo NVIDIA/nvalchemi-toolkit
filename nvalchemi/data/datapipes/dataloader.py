@@ -35,21 +35,21 @@ from torch.utils.data import RandomSampler, Sampler, SequentialSampler
 
 from nvalchemi._typing import BatchTransform
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
 from nvalchemi.data.transforms import Compose
 
 
 class DataLoader:
     """Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.
 
-    Wraps a :class:`Dataset` and yields ``Batch`` objects
-    built via :meth:`Batch.from_data_list`. Fused prefetching is used by
+    Wraps a batch-loadable dataset and yields ``Batch`` objects. Fused
+    prefetching is used by
     default to amortize I/O across multiple emitted batches; CUDA streams are
     supported for overlapping device transfers when available.
 
     Parameters
     ----------
-    dataset : Dataset
+    dataset : BatchDatasetProtocol
         AtomicData-native dataset to load from.
     batch_size : int, default=1
         Number of samples per batch.
@@ -82,7 +82,7 @@ class DataLoader:
 
     Attributes
     ----------
-    dataset : Dataset
+    dataset : BatchDatasetProtocol
         The underlying dataset.
     batch_size : int
         Number of samples per batch.
@@ -142,7 +142,7 @@ class DataLoader:
 
     def __init__(
         self,
-        dataset: Dataset,
+        dataset: BatchDatasetProtocol,
         *,
         batch_size: int = 1,
         shuffle: bool = False,
