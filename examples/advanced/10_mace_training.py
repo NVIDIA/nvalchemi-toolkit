@@ -30,7 +30,7 @@ The ALCHEMI training workflow has the following structure:
 Each sample provides graph inputs (positions, atom types, periodic boundary
 metadata) and supervised labels (energy, forces, stress).
 
-**Model** — A 3.87M-parameter ScaleShiftMACE model from
+**Model** — A 9.06M-parameter ScaleShiftMACE model from
 `ACEsuit <https://github.com/acesuit/mace>`__ is wrapped with
 :class:`~nvalchemi.models.mace.MACEWrapper` for use inside
 :class:`~nvalchemi.training.TrainingStrategy`. NVIDIA cuEquivariance kernels are
@@ -43,7 +43,10 @@ weights at a configured optimizer step (stage two).
 **Runtime** — Distributed wrapping, EMA, neighbor-list rebuild, gradient
 clipping, metrics logging, and checkpointing attach through hooks instead of
 the core training loop. Validation cadence is configured with
-:class:`~nvalchemi.training.ValidationConfig`.
+:class:`~nvalchemi.training.ValidationConfig` on
+:class:`~nvalchemi.training.TrainingStrategy`; validation runs automatically
+during :meth:`~nvalchemi.training.TrainingStrategy.run` rather than through a
+registered hook.
 
 Dataset-derived metadata (`E0s`, `avg_num_neighbors`, `atomic_inter_shift` /
 `atomic_inter_scale`) must be precomputed and set in ``cfg.model`` before
@@ -121,12 +124,12 @@ _DATALOADER_USE_STREAMS = True
 # This pipeline reads MatPES r2SCAN structures from ALCHEMI-compatible Zarr
 # splits. :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw
 # samples from disk; :class:`~nvalchemi.data.datapipes.InMemoryDataset`
-# materializes each split once as a CPU :class:`~nvalchemi.data.Batch`, and
-# :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or sequential
-# training batches from that in-memory batch.
+# materializes each split once as a :class:`~nvalchemi.data.Batch` on the target
+# device, and :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or
+# sequential training batches from that in-memory batch.
 #
-# The default config uses a per-process training batch size of 32 and a
-# validation batch size of 64. Given that the structure sizes in this dataset range from 1 atom
+# The default config uses a per-process training batch size of 256 and a
+# validation batch size of 512. Given that the structure sizes in this dataset range from 1 atom
 # to 240 atoms, :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` can also be used as an alternative to cap
 # the atom count per batch when memory is tight.
 #
@@ -147,7 +150,7 @@ _DATALOADER_USE_STREAMS = True
 #
 #    train_batches = DataLoader(
 #        train_dataset,
-#        batch_size=32,
+#        batch_size=256,
 #        shuffle=True,
 #    )
 #
@@ -159,7 +162,7 @@ _DATALOADER_USE_STREAMS = True
 #
 #    val_batches = DataLoader(
 #        val_dataset,
-#        batch_size=64,
+#        batch_size=512,
 #        shuffle=False,
 #    )
 #
@@ -244,7 +247,9 @@ def _loader(
 #    model.model_config.active_outputs = {"energy", "forces", "stress"}
 #
 # The runnable script reads architecture hyperparameters from Hydra and builds
-# the wrapped model through ``_build_model(cfg, device)``.
+# the wrapped model through ``_build_model(cfg, device)``, which calls
+# :func:`examples.advanced._mace_models.build_training_mace_model` to set
+# ``active_outputs`` and attach a checkpointable model spec.
 
 # sphinx_gallery_start_ignore
 
@@ -307,7 +312,7 @@ def _build_model(cfg: DictConfig, device: torch.device) -> torch.nn.Module:
 #            values=(10.0, 1.0),
 #            per_epoch=False,
 #        )
-#        * ForceHuberLoss(delta=0.01)
+#        * ForceHuberLoss(normalize_by_atom_count=False, delta=0.01)
 #        + PiecewiseWeight(
 #            boundaries=(stage_two_start,),
 #            values=(100.0, 10.0),
@@ -459,10 +464,11 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 # --------------------
 # Hooks extend the core training loop without embedding that logic in the loop
 # itself. For example, :class:`~nvalchemi.training.DDPHook` wraps the model in
-# DDP at :class:`~nvalchemi.training.TrainingStage` ``BEFORE_TRAINING``,
-# :class:`~nvalchemi.training.EMAHook` maintains shadow weights for validation,
-# and :class:`~nvalchemi.hooks.NeighborListHook` rebuilds the interaction graph
-# before every forward pass.
+# DDP at :class:`~nvalchemi.training.TrainingStage` ``SETUP`` when
+# ``training.distributed.enabled`` is true (the default),
+# :class:`~nvalchemi.training.EMAHook` maintains shadow weights for validation at
+# ``AFTER_OPTIMIZER_STEP``, and :class:`~nvalchemi.hooks.NeighborListHook` rebuilds
+# the interaction graph at ``BEFORE_FORWARD`` before every forward pass.
 #
 # .. code-block:: python
 #
@@ -482,8 +488,8 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 #
 #    hooks = [
 #        DDPHook(backend="nccl", sampler_kwargs={"seed": 42}),
-#        EMAHook(model_key="main", decay=0.999),
-#        GradientClipHook(max_norm=100.0),
+#        EMAHook(model_key="main", decay=0.995),
+#        GradientClipHook(max_norm=2.0),
 #        NeighborListHook(
 #            model.model_config.neighbor_config,
 #            max_neighbors=256,
@@ -511,7 +517,7 @@ def _hooks(
     """Build runtime hooks for DDP, EMA, neighbor lists, logging, and checkpointing."""
     hooks: list[Any] = []
 
-    # Distributed wrapping — DDPHook applies DDP at TrainingStage.BEFORE_TRAINING.
+    # Distributed wrapping — DDPHook applies DDP at TrainingStage.SETUP.
     distributed_cfg = cfg.training.get("distributed", {})
     if bool(distributed_cfg.get("enabled", False)):
         backend = str(distributed_cfg.get("backend", "nccl"))
@@ -587,8 +593,12 @@ def _hooks(
 # Running TrainingStrategy
 # ------------------------
 # The Hydra entrypoint composes the pieces described above from
-# ``examples/advanced/10_vanilla_mace.yaml``. Held-out validation runs through
-# :class:`~nvalchemi.training.ValidationConfig`; in multi-GPU runs each rank
+# ``examples/advanced/10_vanilla_mace.yaml``. Held-out validation is
+# strategy-owned: pass a :class:`~nvalchemi.training.ValidationConfig` when
+# constructing :class:`~nvalchemi.training.TrainingStrategy` (not a registered
+# hook). :meth:`~nvalchemi.training.TrainingStrategy.run` evaluates validation
+# at the configured cadence and once more at end-of-training; the latest summary
+# is stored on ``strategy.last_validation``. In multi-GPU runs each rank
 # evaluates a disjoint shard via ``DistributedSampler``.
 #
 # .. code-block:: python
@@ -660,26 +670,29 @@ def _hooks(
 # %%
 # Validation curves and benchmark accuracy
 # ----------------------------------------
-# With the default config, :class:`~nvalchemi.training.ValidationConfig` evaluates
-# the held-out MatPES r2SCAN validation split every
-# ``training.validation.every_steps`` optimizer steps (1,000 by default). Each pass
-# uses the EMA shadow weights (``use_ema="auto"``), which yields smoother validation
-# curves than the corresponding training losses.
+# With the default config, :class:`~nvalchemi.training.ValidationConfig` drives
+# automatic validation passes during
+# :meth:`~nvalchemi.training.TrainingStrategy.run` every
+# ``training.validation.every_steps`` optimizer steps (1,000 by default), plus one
+# final pass at end-of-training. Each pass uses the EMA shadow weights
+# (``use_ema="auto"``), which yields smoother validation curves than the
+# corresponding training losses.
 # :class:`~examples.advanced._mace_training_helpers.TrainingMetricsLogger` records
 # ``validation/*`` scalars to ``outputs/metrics.jsonl`` when
-# ``training.logging.jsonl_path`` is set.
+# ``training.logging.jsonl_path`` is set via the ``AFTER_VALIDATION`` hook stage.
 #
-# The figure below shows validation Huber losses from a full default-config run.
+# The figure below shows validation Huber losses from a full default-config run
+# on 1× H100 GPU (~80 minutes wall time).
 # The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 # (``training.loss.stage_two.start_step``).
 #
-# .. image:: ../_static/vanilla_mace_validation_metrics_260617.png
+# .. image:: ../_static/vanilla_mace_validation_metrics_260702.png
 #    :align: center
 #    :width: 70%
 #
 # With this default config (68,000 optimizer steps, ~50 epochs on MatPES r2SCAN
-# train), the trained model reaches held-out test MAEs of energy 27.2 meV/atom,
-# forces 147 meV/Å, and stress 0.749 GPa. These values are comparable to the
+# train), the trained model reaches held-out test MAEs of energy 25.5 meV/atom,
+# forces 145 meV/Å, and stress 0.703 GPa. These values are comparable to the
 # MatPES r2SCAN benchmarks reported in
 # `the MatPES paper <https://arxiv.org/pdf/2503.04070>`__ and to training with the
 # `MACE CLI <https://github.com/acesuit/mace>`__.
