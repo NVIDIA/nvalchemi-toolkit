@@ -1,6 +1,11 @@
 ---
 name: nvalchemi-loss-api
-description: How to use built-in loss functions and implement custom losses using the BaseLossFunction template-method pattern — residual types, per-atom normalization, masking, and graph-balanced reductions.
+description: >-
+  How to use built-in loss functions and implement custom losses using the
+  BaseLossFunction template-method pattern — residual types, per-atom
+  normalization, masking, and graph-balanced reductions. Use when choosing or
+  weighting energy, force, or stress objectives for training or fine-tuning,
+  masking atoms or graphs out of the loss, or writing a custom loss term.
 ---
 
 # nvalchemi Loss API

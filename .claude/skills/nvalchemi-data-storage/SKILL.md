@@ -3,7 +3,10 @@ name: nvalchemi-data-storage
 description: >-
   How to write, read, compose, and load atomic data using nvalchemi's
   composable Zarr-backed storage pipeline (Writer, Reader, Dataset,
-  MultiDataset, DataLoader).
+  MultiDataset, DataLoader). Use when saving simulation outputs or
+  trajectories to disk, converting structures (e.g. ASE / extxyz) into Zarr
+  stores, assembling datasets for training or inference, or wiring a
+  DataLoader to stream batches to the GPU.
 ---
 
 # nvalchemi Data Storage

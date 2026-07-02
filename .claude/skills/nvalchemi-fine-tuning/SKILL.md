@@ -5,6 +5,9 @@ description: >-
   pretrained checkpoint initialization, module patches, trainable-parameter
   filters, conservative optimizer defaults, validation, restart checkpoints,
   and model-agnostic MACE, AIMNet2, custom BaseModelMixin, or PyTorch inputs.
+  Use when adapting a pretrained MLIP (e.g. MACE-MP) to new reference data,
+  freezing or patching submodules during training, or resuming an interrupted
+  fine-tune from a checkpoint.
 ---
 
 # nvalchemi Fine Tuning
