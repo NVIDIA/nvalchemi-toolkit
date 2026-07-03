@@ -638,7 +638,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def make_neighbor_hooks(
-        self, max_neighbors: int | None = None
+        self,
+        max_neighbors: int | None = None,
+        neighbor_list_method: str | None = None,
     ) -> list[NeighborListHook]:
         """Return a single :class:`NeighborListHook` for the composite neighbor config.
 
@@ -647,6 +649,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         max_neighbors : int | None, optional
             Maximum neighbors per atom for MATRIX format.  When ``None``
             (default), auto-estimated from the cutoff at first use.
+        neighbor_list_method : str | None, optional
+            Explicit ``nvalchemiops`` neighbor-list method to use.  When
+            ``None`` (default), the hook selects an appropriate method.
         """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
 
@@ -658,6 +663,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 nc,
                 skin=nc.skin,
                 max_neighbors=max_neighbors,
+                method=neighbor_list_method,
                 stage=DynamicsStage.BEFORE_COMPUTE,
             )
         ]
