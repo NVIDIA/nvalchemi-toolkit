@@ -483,6 +483,53 @@ def _node_partition_bounds(ctx: Any) -> tuple[int, int]:
     return sum(counts[:rank]), counts[rank]
 
 
+def _publish_overlap_routing(
+    ctx: Any, edge_index: "torch.Tensor", nlo: int, n_owned: int
+) -> None:
+    """Compute + publish the async-overlap edge split (eager, per forward).
+
+    Runs in the ``@torch._dynamo.disable`` partition-graph adapter, where the
+    owned-receiver ``edge_index`` is available and ``int()`` / ``nonzero`` are free.
+    Splits edges by sender residency (``owner_rank[sender] == rank``): the resident
+    edges go into a fixed-cap LOCAL bucket (``index_select`` subset, run on owned
+    features during the collective); the rest are computed in the full REMOTE pass.
+    Any resident edges that overflow the cap stay remote (``remote_valid`` keeps
+    them on), so the cap is a pure overlap knob — never a correctness risk. The
+    published index tensors let the compiled Edgewise do the split with no
+    host-sync / boolean-mask (hence no graph break). See
+    :func:`_distributed_edgewise_gather_overlap`.
+    """
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        set_overlap_routing,
+    )
+
+    dev = edge_index.device
+    meta = ctx.gather_meta
+    owner = meta.owner_rank.to(dev)
+    local_index = meta.local_index.to(dev)
+    sender = edge_index[0]
+    n_edges = edge_index.shape[1]
+    resident = owner[sender] == ctx.rank
+    # Fixed cap: E/world comfortably holds the (≈E/world²) resident edges under an
+    # index partition, and is stable across steps (padded E is constant).
+    cap = max(1, n_edges // max(ctx.world_size, 1))
+    res_pos = torch.nonzero(resident, as_tuple=False).flatten()
+    take = min(int(res_pos.numel()), cap)
+    local_idx = torch.zeros(cap, dtype=torch.long, device=dev)
+    local_valid = torch.zeros(cap, device=dev)
+    if take:
+        local_idx[:take] = res_pos[:take]
+        local_valid[:take] = 1.0
+    # Owned-local sender for the local bucket; clamp so pad rows (and any
+    # cross-rank local_index ≥ n_owned) never index out of the owned tensor — pad
+    # rows are zeroed by ``local_valid`` anyway.
+    local_sender_owned = local_index[sender[local_idx]].clamp_(0, max(n_owned - 1, 0))
+    remote_valid = torch.ones(n_edges, device=dev)
+    if take:
+        remote_valid[local_idx[:take]] = 0.0  # handled locally → off in remote
+    set_overlap_routing(local_idx, local_sender_owned, local_valid, remote_valid, nlo)
+
+
 @torch._dynamo.disable  # type: ignore[misc]
 @distributed_method
 def _distributed_partition_graph(
@@ -515,6 +562,10 @@ def _distributed_partition_graph(
     finally:
         backbone_self.otf_graph = saved_otf
     nlo, n_owned = _node_partition_bounds(ctx)
+    # Async-overlap: precompute + publish the edge split here (eager) so the
+    # compiled Edgewise reads it as a pure index_select (no graph break).
+    if os.environ.get("NVALCHEMI_UMA_OVERLAP"):
+        _publish_overlap_routing(ctx, gd["edge_index"], nlo, n_owned)
     data_dict["atomic_numbers"] = data_dict["atomic_numbers"][nlo : nlo + n_owned]
     data_dict["batch"] = data_dict["batch"][nlo : nlo + n_owned]
     data_dict["gp_node_offset"] = nlo
@@ -590,27 +641,50 @@ def _distributed_edgewise_gather_overlap(
     Gated by ``NVALCHEMI_UMA_OVERLAP`` — the validated default path
     (:func:`_distributed_edgewise_gather`) is unchanged when unset.
     """
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        get_overlap_routing,
+    )
+
     node_offset = kwargs.get("node_offset", 0)
     n_owned = x.shape[0]
-    part = ctx.strategy.locality_partition(edge_index, ctx.gather_meta)
-    lm, rm = part.local_mask, part.remote_mask
-    recv = edge_index[1]
-    # Local pass. eSCN's message reads the feature tensor at BOTH edge ends
-    # (``cat(x_source, x_target)``) from one index space, so with owned features
-    # both ends must be owned-local: senders are resident here and receivers are
-    # always owned, so index owned rows for source AND target (receiver ids shifted
-    # by ``node_offset`` into owned-local) and scatter with ``node_offset=0``.
-    ei_local = torch.stack([part.local_sender_owned, recv[lm] - node_offset])
-    out = edgewise_self.forward_chunk(
-        x, n_owned, x_edge[lm], ei_local, wigner[lm], wigner_inv_envelope[lm], 0
+    routing = get_overlap_routing()
+    if routing is None:
+        # No split published (not a node-partition forward) — stock gather.
+        x_full = refresh_neighbors(x)
+        return edgewise_self.forward_chunk(
+            x_full, n_owned, x_edge, edge_index, wigner, wigner_inv_envelope, node_offset
+        )
+    local_idx, lso, local_valid, remote_valid, nlo = routing
+
+    def _bcast(mask: "torch.Tensor", ref: "torch.Tensor") -> "torch.Tensor":
+        return mask.view((-1,) + (1,) * (ref.dim() - 1))
+
+    # LOCAL bucket: resident-sender edges (small under an index partition), a
+    # fixed-cap ``index_select`` subset run on the OWNED features with both ends in
+    # owned-local space (sender via ``lso``, receiver shifted by ``nlo``) and
+    # ``node_offset=0``. Pad rows are zeroed through ``wigner_inv_envelope`` (the
+    # output-side rotation), so they contribute exactly zero. Computable with no
+    # all-gather — this is the compute overlapped with the collective (P2).
+    winv_l = wigner_inv_envelope.index_select(0, local_idx) * _bcast(
+        local_valid, wigner_inv_envelope
     )
-    # Remote pass: all-gathered full features; both endpoints keep their global ids
-    # and the scatter uses the real ``node_offset`` (owned receivers live at
-    # ``[nlo, nlo + n_owned)`` in the gathered set).
+    ei_local = torch.stack([lso, edge_index[1].index_select(0, local_idx) - nlo])
+    out = edgewise_self.forward_chunk(
+        x,
+        n_owned,
+        x_edge.index_select(0, local_idx),
+        ei_local,
+        wigner.index_select(0, local_idx),
+        winv_l,
+        0,
+    )
+    # REMOTE pass: the full edge set on the all-gathered features (remote senders
+    # are ~all edges under an index partition), with the edges already handled
+    # locally zeroed via ``remote_valid`` — so every edge is computed exactly once.
     x_full = refresh_neighbors(x)
-    ei_remote = edge_index[:, rm]
+    winv_r = wigner_inv_envelope * _bcast(remote_valid, wigner_inv_envelope)
     out = out + edgewise_self.forward_chunk(
-        x_full, n_owned, x_edge[rm], ei_remote, wigner[rm], wigner_inv_envelope[rm], node_offset
+        x_full, n_owned, x_edge, edge_index, wigner, winv_r, node_offset
     )
     return out
 

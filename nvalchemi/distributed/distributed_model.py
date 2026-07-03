@@ -1109,6 +1109,7 @@ class DistributedModel:
         # (``refresh_neighbors`` gates the fixed gather on ``is_compiling``).
         from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
             clear_gp_compile_routing,
+            clear_overlap_routing,
             set_gp_compile_routing,
         )
 
@@ -1125,6 +1126,10 @@ class DistributedModel:
                 output = _padder.unpad(output)
         finally:
             clear_gp_compile_routing()
+            # The overlap edge split (if any) is republished every forward by the
+            # partition-graph adapter; clear it so a later non-partition forward
+            # can't read stale routing.
+            clear_overlap_routing()
             # Restore the backbone's ``otf_graph`` flag the padder flipped, even on
             # a forward error, so the next step isn't stuck on the fixed-shape path.
             if _padder is not None:

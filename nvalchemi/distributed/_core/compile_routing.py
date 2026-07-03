@@ -35,6 +35,9 @@ __all__ = [
     "set_gp_compile_routing",
     "get_gp_compile_routing",
     "clear_gp_compile_routing",
+    "set_overlap_routing",
+    "get_overlap_routing",
+    "clear_overlap_routing",
 ]
 
 # Single-slot holder. ``None`` = not inside a compiled DD region (helpers use
@@ -108,3 +111,41 @@ def get_gp_compile_routing() -> Any:
 def clear_gp_compile_routing() -> None:
     """Reset the graph-parallel routing holder to ``None`` after the forward."""
     _GP_COMPILE_ROUTING[0] = None
+
+
+# Single-slot holder for the async-overlap edge split (node-partition GP). ``None``
+# = overlap off. A tuple ``(local_idx, local_sender_owned, local_valid,
+# remote_valid, node_offset)`` computed eagerly per forward from the owned-receiver
+# ``edge_index`` and read inside the compiled Edgewise so the split is a pure
+# ``index_select`` + elementwise mask — no ``int()`` / boolean-mask indexing, hence
+# no graph break. The LOCAL bucket (resident senders, small under an index
+# partition) is a fixed-cap ``index_select`` subset; the REMOTE pass runs the FULL
+# edge set (remote senders are ~all edges) with resident edges zeroed via
+# ``remote_valid``. ``*_valid`` are per-edge {0,1} masks applied to
+# ``wigner_inv_envelope`` (the output-side rotation) so masked edges contribute
+# exactly zero regardless of the activation. Topology drifts per step, so this is
+# refreshed every forward; at fixed caps the shapes are constant, so no recompile.
+_OVERLAP_ROUTING: list[Any] = [None]
+
+
+def set_overlap_routing(
+    local_idx: Any,
+    local_sender_owned: Any,
+    local_valid: Any,
+    remote_valid: Any,
+    node_offset: int,
+) -> None:
+    """Publish the overlap edge-split routing for the in-region Edgewise."""
+    _OVERLAP_ROUTING[0] = (
+        local_idx, local_sender_owned, local_valid, remote_valid, node_offset,
+    )
+
+
+def get_overlap_routing() -> Any:
+    """Return the overlap edge-split routing tuple, or ``None``."""
+    return _OVERLAP_ROUTING[0]
+
+
+def clear_overlap_routing() -> None:
+    """Reset the overlap routing holder to ``None`` after the forward."""
+    _OVERLAP_ROUTING[0] = None
