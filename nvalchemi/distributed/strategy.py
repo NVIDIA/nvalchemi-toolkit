@@ -488,6 +488,10 @@ class HaloStrategy(ParallelizationStrategy):
             local_edges=edge_index[:, resident],
             remote_edges=edge_index[:, ~resident],
             n_receivers=meta.n_owned,
+            local_mask=resident,
+            remote_mask=~resident,
+            # ghost senders are already owned-indexed (padded owned block first).
+            local_sender_owned=edge_index[0][resident],
         )
 
     def async_exchange(self, meta: Any, halo_config: Any) -> Any:
@@ -575,13 +579,17 @@ class GraphPartitionStrategy(ParallelizationStrategy):
         sender, recv_local = edge_index[0], edge_index[1]
         resident = owner[sender] == self._rank
         nlo = int((owner < self._rank).sum())
-        local = torch.stack([local_index[sender[resident]], recv_local[resident]])
+        local_sender_owned = local_index[sender[resident]]
+        local = torch.stack([local_sender_owned, recv_local[resident]])
         remote = torch.stack([sender[~resident], recv_local[~resident] + nlo])
         return LocalityPartition(
             local_edges=local,
             remote_edges=remote,
             n_receivers=meta.n_owned,
             owned_offset=nlo,
+            local_mask=resident,
+            remote_mask=~resident,
+            local_sender_owned=local_sender_owned,
         )
 
     def async_exchange(self, meta: Any, halo_config: Any = None) -> Any:

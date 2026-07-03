@@ -92,12 +92,27 @@ class LocalityPartition:
     but the rank's block offset for graph-parallel (the all-gather concatenates
     owned blocks by rank). The local pass always scatters into ``[0:n_receivers]``
     of the owned tensor; the two buckets are summed over the owned rows.
+
+    ``local_edges`` / ``remote_edges`` serve the simple ``forward(features,
+    edge_index)`` message signature (the :func:`run_overlapped` driver). Layers
+    whose forward carries **extra per-edge tensors** (e.g. an eSCN conv's
+    ``x_edge`` / ``wigner`` alongside ``edge_index``) can't be driven by that
+    alone: their adapter must slice every per-edge input by the same split. For
+    those, ``local_mask`` / ``remote_mask`` are the boolean per-edge selectors
+    (over the original ``E`` edges) and ``local_sender_owned`` is the resident
+    senders remapped into owned-feature space (aligned with ``local_mask``); the
+    adapter slices its per-edge tensors by the masks, swaps in
+    ``local_sender_owned`` for the local pass, and leaves the receiver mapping to
+    the model's own scatter (e.g. the conv's ``node_offset``).
     """
 
     local_edges: torch.Tensor
     remote_edges: torch.Tensor
     n_receivers: int
     owned_offset: int = 0
+    local_mask: torch.Tensor | None = None
+    remote_mask: torch.Tensor | None = None
+    local_sender_owned: torch.Tensor | None = None
 
 
 # A model's message-module forward, invoked on an edge subset: it takes the node

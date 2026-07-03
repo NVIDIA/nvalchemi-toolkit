@@ -173,6 +173,68 @@ def test_halo_strategy_locality_partition() -> None:
     torch.testing.assert_close(got, ref, rtol=1e-10, atol=1e-10)
 
 
+def test_locality_masks_multi_per_edge_tensor() -> None:
+    """The edge masks + local_sender_owned drive a message layer with EXTRA
+    per-edge tensors, mirroring eSCN's ``forward_chunk``: the message reads the
+    feature tensor at BOTH edge ends (``x_source`` + ``x_target``) from ONE index
+    space and scatters into owned receivers via ``edge_index[1] - node_offset``.
+    Run at RANK 1 (nonzero ``node_offset``) so the owned-local receiver remap is
+    exercised — the exact case a rank-0-only test misses. The adapter slices every
+    per-edge input by the mask; the local pass indexes owned rows for BOTH ends
+    (receivers shifted into owned-local, ``node_offset=0``); the remote pass keeps
+    global ids with the real ``node_offset``. The two owned scatters sum to the
+    full reference's owned block. This is the UMA node-partition pattern."""
+    from nvalchemi.distributed._core.placement import ShardRouting
+    from nvalchemi.distributed._core.storage_policy import GraphParallelPolicy
+    from nvalchemi.distributed.strategy import GraphPartitionStrategy
+
+    def conv(features, n_out, edge_index, edge_wt, node_offset):
+        # eSCN-style: message reads BOTH endpoints from `features`; scatters into
+        # `n_out` rows at `edge_index[1] - node_offset` (the forward_chunk shape).
+        src, dst = edge_index[0], edge_index[1]
+        msg = (features[src] + 0.5 * features[dst]) * edge_wt
+        out = torch.zeros(n_out, features.shape[1], dtype=features.dtype)
+        idx = (dst - node_offset).unsqueeze(-1).expand_as(msg)
+        return out.scatter_add_(0, idx, msg)
+
+    rank, feat = 1, 5
+    n_owned, n_global = 15, 30
+    nlo = 15  # rank 1 owns global [15, 30)
+    owner_rank = torch.cat([torch.zeros(15, dtype=torch.long), torch.ones(15, dtype=torch.long)])
+    local_index = torch.cat([torch.arange(15), torch.arange(15)])
+    meta = ShardRouting(
+        n_owned=n_owned, n_global=n_global, owner_rank=owner_rank, local_index=local_index
+    )
+    g = torch.Generator().manual_seed(4)
+    full = torch.randn(n_global, feat, dtype=torch.float64, generator=g)
+    edges = torch.stack(
+        [torch.randint(0, n_global, (400,), generator=g),        # global senders
+         torch.randint(nlo, n_global, (400,), generator=g)]      # rank-1 owned receivers
+    )
+    edge_wt = torch.randn(400, feat, dtype=torch.float64, generator=g)
+
+    # Reference: full conv over all nodes, node_offset=0; take rank 1's owned block.
+    ref = conv(full, n_global, edges, edge_wt, 0)[nlo : nlo + n_owned]
+
+    strat = GraphPartitionStrategy(GraphParallelPolicy(), _mk_config(), rank=rank)
+    part = strat.locality_partition(edges, meta)
+    lm, rm = part.local_mask, part.remote_mask
+    assert lm is not None and part.local_sender_owned is not None
+    assert int(rm.sum()) > 0 and int(lm.sum()) > 0
+    # Local pass: owned features, BOTH ends owned-local (senders via
+    # local_sender_owned, receivers via `- node_offset`), scatter node_offset=0.
+    g_local = conv(
+        full[nlo : nlo + n_owned], n_owned,
+        torch.stack([part.local_sender_owned, edges[1][lm] - nlo]), edge_wt[lm], 0,
+    )
+    # Remote pass: full features, global ids on both ends, real node_offset.
+    g_remote = conv(
+        full, n_owned,
+        torch.stack([edges[0][rm], edges[1][rm]]), edge_wt[rm], nlo,
+    )
+    torch.testing.assert_close(g_local + g_remote, ref, rtol=1e-10, atol=1e-10)
+
+
 def test_overlap_all_local_is_noop_split() -> None:
     """When every sender is resident, remote bucket is empty and the result is
     just the local message (no exchange contribution)."""

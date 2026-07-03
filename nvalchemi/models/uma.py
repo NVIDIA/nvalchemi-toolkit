@@ -84,6 +84,7 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
 from __future__ import annotations
 
 import contextlib
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -559,6 +560,59 @@ def _distributed_edgewise_gather(
         wigner_inv_envelope,
         node_offset,
     )
+
+
+@distributed_method
+def _distributed_edgewise_gather_overlap(
+    ctx: Any,
+    original: Any,
+    edgewise_self: Any,
+    x: "torch.Tensor",
+    x_edge: "torch.Tensor",
+    edge_index: "torch.Tensor",
+    wigner: "torch.Tensor",
+    wigner_inv_envelope: "torch.Tensor",
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Async-overlap variant of :func:`_distributed_edgewise_gather`.
+
+    Splits the owned-receiver edges by whether their **sender** is resident on this
+    rank (:meth:`LocalityPartition`): the resident-sender messages compute from the
+    *owned* features (no all-gather); the remote-sender messages consume the
+    all-gathered full features. The conv scatters both passes into the same owned
+    receiver rows, and summing them is exact — ``forward_chunk`` is a per-edge
+    message plus a scatter-add, so a disjoint edge split sums to the whole.
+
+    Overlap is **OFF** (synchronous two-pass): the all-gather (``refresh_neighbors``)
+    is still awaited before the remote pass. This isolates the split correctness;
+    the actual compute/comm concurrency is a later flip (inductor's reorder pass).
+    Gated by ``NVALCHEMI_UMA_OVERLAP`` — the validated default path
+    (:func:`_distributed_edgewise_gather`) is unchanged when unset.
+    """
+    node_offset = kwargs.get("node_offset", 0)
+    n_owned = x.shape[0]
+    part = ctx.strategy.locality_partition(edge_index, ctx.gather_meta)
+    lm, rm = part.local_mask, part.remote_mask
+    recv = edge_index[1]
+    # Local pass. eSCN's message reads the feature tensor at BOTH edge ends
+    # (``cat(x_source, x_target)``) from one index space, so with owned features
+    # both ends must be owned-local: senders are resident here and receivers are
+    # always owned, so index owned rows for source AND target (receiver ids shifted
+    # by ``node_offset`` into owned-local) and scatter with ``node_offset=0``.
+    ei_local = torch.stack([part.local_sender_owned, recv[lm] - node_offset])
+    out = edgewise_self.forward_chunk(
+        x, n_owned, x_edge[lm], ei_local, wigner[lm], wigner_inv_envelope[lm], 0
+    )
+    # Remote pass: all-gathered full features; both endpoints keep their global ids
+    # and the scatter uses the real ``node_offset`` (owned receivers live at
+    # ``[nlo, nlo + n_owned)`` in the gathered set).
+    x_full = refresh_neighbors(x)
+    ei_remote = edge_index[:, rm]
+    out = out + edgewise_self.forward_chunk(
+        x_full, n_owned, x_edge[rm], ei_remote, wigner[rm], wigner_inv_envelope[rm], node_offset
+    )
+    return out
 
 
 def _distributed_reduce_node_to_system(
@@ -1242,11 +1296,20 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                 GraphParallelPolicy,
             )
 
+            # The conv gather has an async comm/compute-overlap variant (splits
+            # owned-receiver edges by sender residency; local senders compute during
+            # the all-gather). Off by default — the validated gather is unchanged —
+            # opt in with ``NVALCHEMI_UMA_OVERLAP``.
+            edgewise_gather = (
+                _distributed_edgewise_gather_overlap
+                if os.environ.get("NVALCHEMI_UMA_OVERLAP")
+                else _distributed_edgewise_gather
+            )
             partition_helpers = (
                 MethodAdapter(
                     eSCNMDBackbone, "_generate_graph", _distributed_partition_graph
                 ),
-                MethodAdapter(Edgewise, "forward", _distributed_edgewise_gather),
+                MethodAdapter(Edgewise, "forward", edgewise_gather),
                 PythonAdapter(
                     module_path="fairchem.core.models.uma.outputs",
                     attr_name="reduce_node_to_system",
