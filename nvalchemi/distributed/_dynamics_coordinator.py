@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dynamics distribution coordinator: globalize NHC / NPT / NPH under any strategy.
+"""Dynamics distribution coordinator: globalize NHC / NPT / NPH / FIRE under any strategy.
 
 ``DomainParallel`` integrates each rank's owned atom shard independently. That is
 exact for ensembles that depend only on local atom state (NVE, Langevin).
@@ -22,7 +22,11 @@ thermodynamic quantities — the system kinetic energy, the kinetic pressure
 tensor, and the degrees of freedom — which the single-process integrators compute
 from whatever atoms they are handed (a rank's shard under DD). Left alone, every
 rank would thermostat/barostat against a per-shard quantity and the trajectory
-would be wrong.
+would be wrong. FIRE / FIRE2 geometry optimizers are the same story: their
+velocity mixing and timestep adaptation are gated by **global** per-system
+power/norm scalars (``v·f``, ``v·v``, ``f·f``) reduced over all atoms, so each
+rank must mix against the same global values or the replicated relaxation
+desyncs.
 
 This module makes those ensembles correct without touching the integrators. The
 integrator **declares intent** as class metadata (``__dd_thermo_kind__``,
@@ -125,6 +129,12 @@ class DynamicsDistributionCoordinator:
         """
         if not self.active or self._dof_done:
             return
+        if self._kind == "fire":
+            # FIRE carries no DOF-derived controller state; its only global
+            # coupling is the per-step v·f / v·v / f·f reduction (see
+            # ``reduce_scope``). Nothing to globalize once, so this is inert.
+            self._dof_done = True
+            return
         state = getattr(self._dyn, "_state", None)
         if state is None:  # state not yet initialized — caller retries post-init
             return
@@ -202,7 +212,15 @@ class DynamicsDistributionCoordinator:
 
     def _install(self) -> None:
         strat = self._strategy
-        if self._kind == "nhc":
+        if self._kind == "fire":
+            # FIRE mixing is driven by global v·f / v·v / f·f. Patch the ops
+            # entry points the optimizer imported so each per-shard reduction is
+            # summed across the mesh and fed back via ``compute_reductions=False``.
+            from nvalchemi.dynamics.optimizers import fire as mod  # noqa: PLC0415
+
+            self._swap(mod, "fire_step", _make_global_fire_step(strat))
+            self._swap(mod, "fire_update", _make_global_fire_update(strat))
+        elif self._kind == "nhc":
             from nvalchemi.dynamics.integrators import (
                 nvt_nose_hoover as mod,  # noqa: PLC0415
             )
@@ -277,6 +295,173 @@ def _kb_ev() -> float:
 # quantity is reduced across the mesh (via the strategy) and fed back through the
 # ops flag that skips the in-kernel recompute.
 # ----------------------------------------------------------------------
+
+
+def _fire_local_reductions(
+    velocities: torch.Tensor,
+    forces: torch.Tensor,
+    batch_idx: torch.Tensor,
+    vf: torch.Tensor,
+    vv: torch.Tensor,
+    ff: torch.Tensor,
+    strategy: ParallelizationStrategy,
+) -> None:
+    """Fill ``vf/vv/ff`` with the mesh-global per-system power/norm sums.
+
+    Each rank accumulates its owned-atom partials — ``vf=Σ Fᵢ·vᵢ``,
+    ``vv=Σ vᵢ·vᵢ``, ``ff=Σ Fᵢ·Fᵢ`` — then reduces them SUM across the mesh via
+    the strategy (identity for node-replicate, all_reduce otherwise). The result
+    is fed straight into the ops kernel with ``compute_reductions=False`` so
+    every rank mixes velocities against the same global scalars.
+    """
+    bidx = batch_idx.long()
+    vf.zero_()
+    vv.zero_()
+    ff.zero_()
+    vf.index_add_(0, bidx, (forces * velocities).sum(-1))
+    vv.index_add_(0, bidx, (velocities * velocities).sum(-1))
+    ff.index_add_(0, bidx, (forces * forces).sum(-1))
+    strategy.reduce_system(vf, Reduce.SUM)
+    strategy.reduce_system(vv, Reduce.SUM)
+    strategy.reduce_system(ff, Reduce.SUM)
+
+
+def _make_global_fire_step(strategy: ParallelizationStrategy):
+    """Wrap the FIRE optimizer's ``fire_step`` so its velocity mixing uses the
+    mesh-global power/norm reductions rather than the owned shard's.
+
+    The MD integration, per-atom ``maxstep`` clamp, and energy/uphill handling
+    stay local/global exactly as in the single-process op (per-atom quantities
+    are correct under the shard; energy is already consolidated by the forward).
+    Only ``vf/vv/ff`` are reduced. For vanilla FIRE (``uphill=False``) the revert
+    is a no-op, so the pre-call reductions equal the post-revert ones the op
+    would compute.
+    """
+    from nvalchemi.dynamics._ops.fire import fire_step as _real  # noqa: PLC0415
+
+    def _global_fire_step(
+        positions,
+        velocities,
+        forces,
+        masses,
+        alpha,
+        dt,
+        n_steps_positive,
+        alpha_start,
+        f_alpha,
+        dt_min,
+        dt_max,
+        maxstep,
+        n_min,
+        f_dec,
+        f_inc,
+        uphill_flag,
+        *,
+        vf=None,
+        vv=None,
+        ff=None,
+        batch_idx=None,
+    ):
+        M = alpha.shape[0]
+        dev, dtype = velocities.device, velocities.dtype
+        if vf is None:
+            vf = torch.zeros(M, dtype=dtype, device=dev)
+        if vv is None:
+            vv = torch.zeros(M, dtype=dtype, device=dev)
+        if ff is None:
+            ff = torch.zeros(M, dtype=dtype, device=dev)
+        if batch_idx is None:
+            batch_idx = torch.zeros(
+                velocities.shape[0], dtype=torch.int32, device=dev
+            )
+        _fire_local_reductions(velocities, forces, batch_idx, vf, vv, ff, strategy)
+        _real(
+            positions,
+            velocities,
+            forces,
+            masses,
+            alpha,
+            dt,
+            n_steps_positive,
+            alpha_start,
+            f_alpha,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphill_flag,
+            vf=vf,
+            vv=vv,
+            ff=ff,
+            batch_idx=batch_idx,
+            compute_reductions=False,
+        )
+
+    return _global_fire_step
+
+
+def _make_global_fire_update(strategy: ParallelizationStrategy):
+    """Wrap the FIRE optimizer's ``fire_update`` (variable-cell mixing path) so
+    its velocity mixing uses the mesh-global ``vf/vv/ff``. The MD position/cell
+    step is applied separately (per-atom + replicated cell), so only the mixing
+    reduction needs globalizing here."""
+    from nvalchemi.dynamics._ops.fire import fire_update as _real  # noqa: PLC0415
+
+    def _global_fire_update(
+        velocities,
+        forces,
+        alpha,
+        dt,
+        n_steps_positive,
+        alpha_start,
+        f_alpha,
+        dt_min,
+        dt_max,
+        n_min,
+        f_dec,
+        f_inc,
+        *,
+        vf=None,
+        vv=None,
+        ff=None,
+        batch_idx=None,
+    ):
+        M = alpha.shape[0]
+        dev, dtype = velocities.device, velocities.dtype
+        if vf is None:
+            vf = torch.zeros(M, dtype=dtype, device=dev)
+        if vv is None:
+            vv = torch.zeros(M, dtype=dtype, device=dev)
+        if ff is None:
+            ff = torch.zeros(M, dtype=dtype, device=dev)
+        if batch_idx is None:
+            batch_idx = torch.zeros(
+                velocities.shape[0], dtype=torch.int32, device=dev
+            )
+        _fire_local_reductions(velocities, forces, batch_idx, vf, vv, ff, strategy)
+        _real(
+            velocities,
+            forces,
+            alpha,
+            dt,
+            n_steps_positive,
+            alpha_start,
+            f_alpha,
+            dt_min,
+            dt_max,
+            n_min,
+            f_dec,
+            f_inc,
+            vf=vf,
+            vv=vv,
+            ff=ff,
+            batch_idx=batch_idx,
+            compute_reductions=False,
+        )
+
+    return _global_fire_update
 
 
 def _make_global_nhc_chain_update(strategy: ParallelizationStrategy):
