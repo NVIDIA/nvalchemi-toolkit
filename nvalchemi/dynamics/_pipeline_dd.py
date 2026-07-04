@@ -109,6 +109,57 @@ def group_all_done(local_done: bool, domain_sub_mesh: Any) -> bool:
     return bool(flag.item())
 
 
+def handoff_forward(
+    full_batch: Any, sender_index: int, receiver_index: int, mesh: Any
+) -> Any:
+    """Hand a full system from one stage-group's lead to the next stage-group's lead.
+
+    The cross-stage hop is **per-system** (a system advances a stage only when its
+    stage finishes it), so it runs point-to-point between the two group **leads**
+    (domain-rank 0 of each stage) over the ``pipeline``-dim group — never the global
+    group, so on multi-node it routes over IB between the paired leads (proposal §0).
+    A full, mesh-consistent :class:`Batch` (produced by the sender's
+    ``DomainParallel.gather(dst=lead)``) is shipped as a picklable object; the
+    receiver then re-scatters it with ``DomainParallel.partition`` inside its group.
+
+    Only lead ranks participate; non-leads return ``None`` (they receive their owned
+    block from the receiver's ``partition``). On the send lead ``full_batch`` is the
+    gathered system; returns ``None``. On the recv lead returns the received system.
+
+    Parameters
+    ----------
+    full_batch : Batch | None
+        The gathered full system on the sender's lead; ignored elsewhere.
+    sender_index, receiver_index : int
+        Pipeline indices of the sending / receiving stage-groups.
+    mesh : DeviceMesh
+        The 2D ``(pipeline, domain)`` mesh.
+    """
+    from nvalchemi.distributed._core.gather_primitives import mesh_group
+
+    if not dist.is_initialized():
+        return full_batch  # single-process: hand straight through
+
+    if int(mesh["domain"].get_local_rank()) != 0:
+        return None  # non-lead ranks sit out the cross-stage hop
+
+    # ``mesh.mesh`` is the (n_pipeline, domain_size) global-rank layout; column 0 is
+    # the stage leads. The lead ranks share a ``pipeline``-dim group.
+    layout = mesh.mesh
+    lead_send = int(layout[sender_index, 0])
+    lead_recv = int(layout[receiver_index, 0])
+    group = mesh_group(mesh["pipeline"])
+    me = dist.get_rank()
+    if me == lead_send:
+        dist.send_object_list([full_batch], dst=lead_recv, group=group)
+        return None
+    if me == lead_recv:
+        box: list[Any] = [None]
+        dist.recv_object_list(box, src=lead_send, group=group)
+        return box[0]
+    return None
+
+
 def wire_stage_chain(stages: dict[int, StageGroup]) -> None:
     """Auto-wire ``prior_index``/``next_index`` into a linear pipeline chain.
 

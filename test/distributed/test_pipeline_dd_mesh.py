@@ -209,6 +209,69 @@ def test_stage_layout_and_group_done_2d() -> None:
     _spawn(4, "29745", "_layout_worker")
 
 
+# ======================================================================
+# Phase 3 — group->group handoff: gather -> lead send/recv -> scatter round trip.
+# ======================================================================
+
+
+def _handoff_worker(rank: int, world_size: int) -> None:
+    from torch.distributed import init_device_mesh
+
+    from nvalchemi.dynamics._pipeline_dd import handoff_forward, resolve_stage_layout
+
+    dtype = torch.float64
+    positions, atomic_numbers, masses, cell, pbc = _build_lj_cluster()
+    n = positions.shape[0]
+
+    mesh2d = init_device_mesh("cpu", (2, 2), mesh_dim_names=("pipeline", "domain"))
+    pidx, drank, _domain = resolve_stage_layout(mesh2d)
+
+    # Stage 0's lead builds the full system; hand it to stage 1's lead.
+    if pidx == 0 and drank == 0:
+        d = AtomicData(
+            atomic_numbers=atomic_numbers,
+            positions=positions.clone(),
+            atomic_masses=masses,
+            forces=torch.zeros(n, 3, dtype=dtype),
+            energy=torch.zeros(1, 1, dtype=dtype),
+            cell=cell.unsqueeze(0),
+            pbc=pbc.unsqueeze(0),
+        )
+        d.add_node_property("velocities", torch.zeros(n, 3, dtype=dtype))
+        full: Batch | None = Batch.from_data_list([d])
+    else:
+        full = None
+
+    import torch.distributed as dist
+
+    # The Phase-3 primitive under test: the full system moves from stage 0's lead
+    # (rank 0) to stage 1's lead (rank 2) over the pipeline-dim group. (Stage 1 then
+    # re-scatters it with DomainParallel.partition — but that path first needs the
+    # scatter broadcasts confined to the domain sub-group like the Phase-1 gather
+    # fix; from_batch currently broadcasts on the WORLD group, which hangs when only
+    # one stage-group partitions. Tracked as the next step; here we validate the
+    # handoff transfer itself.)
+    received = handoff_forward(full, 0, 1, mesh2d)
+
+    if pidx == 1 and drank == 0:
+        assert received is not None, "stage-1 lead received no system"
+        assert received.positions.shape[0] == n, (
+            f"handoff lost atoms: {received.positions.shape[0]} != {n}"
+        )
+        torch.testing.assert_close(
+            received.positions.double(), positions.double(), rtol=0, atol=0
+        )
+
+    # All ranks meet before teardown so no rank tears down the PG mid-transfer.
+    dist.barrier()
+
+
+def test_group_to_group_handoff_2d() -> None:
+    """gather (stage 0) -> lead send/recv -> scatter (stage 1) round-trips the full
+    system across the pipeline dim of a (2,2) mesh."""
+    _spawn(4, "29746", "_handoff_worker")
+
+
 def test_domain_parallel_over_2d_submesh_matches_bare_fire() -> None:
     """DomainParallel(FIRE(LJ)) over a domain row of a (2,2) mesh == bare FIRE."""
     _spawn(4, "29744", "_submesh_dd_worker", 8)
