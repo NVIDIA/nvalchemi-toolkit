@@ -96,7 +96,7 @@ uma = [
     "fairchem-core>=2.0.0",
 ]
 pet = [
-    # Sourced from a fork branch until released on PyPI — see
+    # Sourced from upstream main until released on PyPI — see
     # `[tool.uv.sources].metatrain`.
     "metatrain>=2025.10",
 ]
@@ -147,11 +147,11 @@ dependency-metadata = [
 
 [tool.uv.sources]
 nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "0.4.0-rc" }
-# Temporary: PETWrapper needs the pure-torch `PETBackend` from the
-# `extract-pet-core` branch of the fork. Drop this source pin (keep the plain
-# `metatrain>=...` requirement in the `pet` extra) once those changes land in a
-# tagged metatrain release on PyPI.
-metatrain = { git = "https://github.com/abmazitov/metatrain.git", rev = "extract-pet-core" }
+# Temporary: PETWrapper needs the pure-torch `PETBackend`, which was merged
+# into upstream metatrain's `main` in metatensor/metatrain#1180. Drop this
+# source pin (keep the plain `metatrain>=...` requirement in the `pet`
+# extra) once those changes land in a tagged metatrain release on PyPI.
+metatrain = { git = "https://github.com/metatensor/metatrain.git", rev = "main" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
