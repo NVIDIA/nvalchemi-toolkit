@@ -177,6 +177,38 @@ def _energy_and_forces(batch: Batch) -> tuple[float, torch.Tensor]:
     return float(out["energy"].sum().item()), out["forces"].detach().double()
 
 
+# ======================================================================
+# Phase 2 — StageGroup layout resolution + group-wise ``done`` reduction.
+# ======================================================================
+
+
+def _layout_worker(rank: int, world_size: int) -> None:
+    from torch.distributed import init_device_mesh
+
+    from nvalchemi.dynamics._pipeline_dd import group_all_done, resolve_stage_layout
+
+    # (pipeline=2, domain=2); row-major → global = pipeline_index*2 + domain_rank.
+    mesh2d = init_device_mesh("cpu", (2, 2), mesh_dim_names=("pipeline", "domain"))
+    pidx, drank, domain = resolve_stage_layout(mesh2d)
+    assert pidx == rank // 2, f"rank {rank}: pipeline_index {pidx} != {rank // 2}"
+    assert drank == rank % 2, f"rank {rank}: domain_rank {drank} != {rank % 2}"
+
+    # A stage-group finishes as a unit: group_all_done is True only when BOTH ranks
+    # of the domain row are done. Here domain-rank 0 is done, domain-rank 1 is not →
+    # the group is NOT done for either member.
+    partial = group_all_done(drank == 0, domain)
+    assert partial is False, f"rank {rank}: group_all_done(partial) should be False"
+    # Both ranks done → the group is done.
+    both = group_all_done(True, domain)
+    assert both is True, f"rank {rank}: group_all_done(all) should be True"
+
+
+def test_stage_layout_and_group_done_2d() -> None:
+    """resolve_stage_layout maps (pipeline_index, domain_rank) from a (2,2) mesh;
+    group_all_done MIN-reduces the done flag over each domain sub-mesh row."""
+    _spawn(4, "29745", "_layout_worker")
+
+
 def test_domain_parallel_over_2d_submesh_matches_bare_fire() -> None:
     """DomainParallel(FIRE(LJ)) over a domain row of a (2,2) mesh == bare FIRE."""
     _spawn(4, "29744", "_submesh_dd_worker", 8)
