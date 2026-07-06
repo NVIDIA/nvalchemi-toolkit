@@ -743,13 +743,31 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         smoothing_on = self.cutoff * (1.0 - self.smoothing_fraction)
         smoothing_off = self.cutoff
 
-        # Emit per-atom dispersion energies when the per-system total is
-        # assembled from them (PBC path) or when atomic_energies is requested;
-        # a plain non-PBC run takes the kernel's energy directly.
+        # Per-atom dispersion energies are needed when the per-system total is
+        # assembled from them; a plain non-PBC run takes the kernel's
+        # per-system energy directly.
+        #
+        # The kernel accumulates each atom's half-share into ``energy[batch_idx[i]]``
+        # and reads the PBC cell as ``cell[batch_idx[i]]``; interactions come from
+        # ``neighbor_matrix``, not ``batch_idx``. 
         want_atomic = (
             "atomic_energies" in self.model_config.active_outputs
             or cell_bohr is not None
         )
+        n_atoms = positions_bohr.shape[0]
+        if want_atomic:
+            eff_batch_idx = torch.arange(
+                n_atoms, device=positions.device, dtype=torch.int32
+            )
+            eff_cell = (
+                cell_bohr.index_select(0, batch_idx.to(torch.long))
+                if cell_bohr is not None
+                else None
+            )
+            eff_num_systems = n_atoms
+        else:
+            eff_batch_idx, eff_cell, eff_num_systems = batch_idx, cell_bohr, B
+
         result = dftd3(
             positions=positions_bohr,
             numbers=numbers,
@@ -763,39 +781,44 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             s5_smoothing_off=smoothing_off * ANGSTROM_TO_BOHR,
             d3_params=d3_params,
             fill_value=fill_value,
-            batch_idx=batch_idx,
-            cell=cell_bohr,
+            batch_idx=eff_batch_idx,
+            cell=eff_cell,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_matrix_shifts,
             compute_virial=compute_virial,
-            compute_atomic_energies=want_atomic,
-            num_systems=B,
+            num_systems=eff_num_systems,
         )
 
         # Return order (see ``dftd3``): energy, forces, coord_num, virial
-        # (if requested), atomic_energies always last (if requested).
+        # (if requested). Under the per-atom ``batch_idx`` these are per-atom.
         result = list(result)
         energy_ha = result[0]
         forces_ha_bohr = result[1]
-        virial_ha = result[3] if compute_virial else None
-        atomic_energy_ha = result[-1] if want_atomic else None
+        raw_virial_ha = result[3] if compute_virial else None
 
         # Convert units: Hartree -> eV, Hartree/Bohr -> eV/Å.
         atomic_energies_ev: torch.Tensor | None = None
+        virial_ha: torch.Tensor | None = None
         if want_atomic:
-            # Per-atom energies -> per-system totals; accumulate in fp64 so the
-            # total is order-independent.
-            atomic_energies_ev = atomic_energy_ha.to(torch.float64) * HARTREE_TO_EV
+            # ``energy_ha`` is per-atom here -> per-system totals in fp64 so the
+            # sum is order-independent.
+            atomic_energies_ev = energy_ha.to(torch.float64) * HARTREE_TO_EV
             energies_ev = (
                 torch.zeros(B, dtype=torch.float64, device=positions.device)
                 .scatter_add_(0, batch_idx.to(torch.long), atomic_energies_ev)
                 .to(positions.dtype)
                 .unsqueeze(-1)
             )  # (B, 1)
+            if raw_virial_ha is not None:
+                # Per-atom virial -> per-system by the real batch index.
+                virial_ha = torch.zeros(
+                    B, 3, 3, dtype=raw_virial_ha.dtype, device=positions.device
+                ).index_add_(0, batch_idx.to(torch.long), raw_virial_ha)
         else:
             energies_ev = (
                 energy_ha.to(positions.dtype) * HARTREE_TO_EV
             ).unsqueeze(-1)  # (B, 1)
+            virial_ha = raw_virial_ha
 
         forces_ev_ang = forces_ha_bohr.to(positions.dtype) * (
             HARTREE_TO_EV / BOHR_TO_ANGSTROM
