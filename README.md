@@ -33,11 +33,24 @@ NVIDIA GPUs.
   [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
   for GPU-optimized neighbor lists, dispersion, and electrostatics via
   NVIDIA `warp-lang`
-- Agents as first-class citizens; includes core `SKILLS.md` library that
-  teach agents how to use `nvalchemi` efficiently in agentic workflows.
-  Simply copy the `.claude/skills` folder contents to your project repository
-  or home directory depending on use case and agent platform (e.g. Claude
-  Code, Cursor, OpenCode).
+- Agents as first-class citizens; includes a core skills library that
+  teaches agents how to use `nvalchemi` efficiently in agentic workflows
+  (see [Using with AI coding agents](#using-with-ai-coding-agents))
+
+### Using with AI coding agents
+
+The repository ships agent-facing guidance at two levels:
+
+- **Skills** — task-specific API guides under `.claude/skills/`. Claude Code
+  discovers them automatically when working inside a clone; for other
+  platforms (e.g. Cursor, OpenCode), or to use them outside this repository,
+  copy the folder contents into your project's or home skills directory.
+- **`AGENTS.md`** — repository-wide guidance (setup, conventions, gotchas).
+  Agents that follow the `AGENTS.md` convention (e.g. Codex, Cursor,
+  OpenCode) load it natively. Claude Code auto-loads `CLAUDE.md` instead: to
+  get the same guidance there, add a `CLAUDE.md` to your clone containing the
+  single line `@AGENTS.md` (an import), or symlink it
+  (`ln -s AGENTS.md CLAUDE.md`).
 
 ### Example Snippets
 

@@ -9,9 +9,10 @@ workloads. It is built from four composable pieces: a **Reader** that pulls raw
 tensors from storage, a **Dataset** that validates them into
 {py:class}`nvalchemi.data.AtomicData` objects, a **DataLoader** that batches them
 into {py:class}`nvalchemi.data.Batch` objects, and an optional **Sampler** that
-controls batching strategy. A **MultiDataset** can also compose several datasets
-behind one global index space. Each layer adds exactly one concern, and you can
-swap any of them independently.
+controls batching strategy. An **InMemoryDataset** can replace Dataset when the
+full dataset fits comfortably in host memory, and a **MultiDataset** can compose
+several datasets behind one global index space. Each layer adds exactly one concern,
+and you can swap any of them independently.
 
 ```{note}
 The ``datapipes`` abstraction is shared with ``physicsnemo``: there are some
@@ -190,6 +191,60 @@ deciding which samples to group into a batch.
 `(num_atoms, num_edges)` for a given index without constructing the full
 `AtomicData`, keeping the overhead low.
 
+### In-memory datasets
+
+{py:class}`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset` keeps the
+entire dataset as one {py:class}`nvalchemi.data.Batch` and serves graph selections
+from that resident batch. Use it when a dataset is small enough to keep in host
+memory --- as a rule of thumb, on the order of a few GB after batching --- when
+data has already been materialized by another pipeline stage, or when
+benchmarking/training should avoid storage I/O after startup. For larger datasets
+that do not fit comfortably in host memory, use the regular
+{py:class}`~nvalchemi.data.datapipes.dataset.Dataset` so samples are loaded from
+storage on demand.
+
+You can pass a fully loaded batch directly, or provide a Reader and let the
+dataset materialize it once at construction time:
+
+```python
+from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, InMemoryDataset
+
+reader = AtomicDataZarrReader("/path/to/store.zarr")
+dataset = InMemoryDataset(
+    reader=reader,
+    chunk_size=32768,
+    device="cuda",
+    skip_validation=True,  # use for trusted stores written by the toolkit
+)
+
+loader = DataLoader(
+    dataset=dataset,
+    batch_size=64,
+    shuffle=True,
+    pin_memory=True,
+)
+```
+
+`InMemoryDataset` implements the same DataLoader-facing batch contract as
+`Dataset`: `load_batches(...)`, `prefetch_fused_batches(...)`,
+`get_fused_batches()`, `has_pending_fused_batches()`, and
+`cancel_prefetch(...)`.
+Reader-backed in-memory datasets keep the resident cache on CPU, while
+``device`` controls the emitted batch target device. With a CPU cache and CUDA
+target, fused prefetch enqueues the CPU-to-GPU transfer on the DataLoader CUDA
+stream. Per-batch transforms supplied at construction are applied while
+materializing Reader chunks; DataLoader `batch_transforms` still run on each
+emitted batch. Keep `pin_memory=True` for CPU-resident in-memory datasets that
+feed CUDA training; disable pinning if the in-memory batch already lives on CUDA.
+
+Like `Dataset`, `InMemoryDataset` validates reader samples by default while it
+materializes the resident batch. Pass `skip_validation=True` for trusted stores
+written by the toolkit to build chunks directly from raw tensor dictionaries via
+{py:meth}`~nvalchemi.data.Batch.from_raw_dicts`. This avoids per-sample
+Pydantic overhead during startup and matches the fastest Dataset loading path.
+Do not use it for untrusted stores or data whose schema has not already been
+validated.
+
 ## DataLoader: batching and iteration
 
 {py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` ties the pipeline
@@ -267,11 +322,18 @@ tensors before asynchronous transfer. See
 ## MultiDataset: composing datasets
 
 {py:class}`~nvalchemi.data.datapipes.multidataset.MultiDataset` concatenates
-multiple {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` instances behind
+multiple batch-loadable datasets, such as
+{py:class}`~nvalchemi.data.datapipes.dataset.Dataset` and
+{py:class}`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`, behind
 one global index space. It follows the PhysicsNeMo multidataset indexing contract
 while preserving the nvalchemi batch fast path: `load_batches(...)` routes each
 global batch to the relevant child datasets and recombines mixed-child batches in
 the requested sample order.
+
+You can mix reader-backed `Dataset` children with `InMemoryDataset` children in
+the same `MultiDataset`. This is covered by unit tests for correctness, but
+mixed in-memory/on-demand performance depends on the workload and has not yet
+been benchmarked.
 
 ```python
 from nvalchemi.data.datapipes import (
