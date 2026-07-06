@@ -101,6 +101,9 @@ consolidation handled by the framework).
    # 06 — MACE NPT (barostat) MD, evolving-cell trajectory written from rank 0
    torchrun --nproc_per_node=2 examples/distributed/06_mace_npt_distributed.py
 
+   # 07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed
+   torchrun --nproc_per_node=4 examples/distributed/07_fire_nvt_dd.py
+
 **03 — MACE NVT Distributed**
    End-to-end distributed MD with a stock
    :class:`~nvalchemi.models.mace.MACEWrapper`: a short
@@ -132,6 +135,22 @@ consolidation handled by the framework).
    broadcasts the replicated cell + barostat state each step, so the only
    user change from example 03 is requesting ``stress`` and swapping in
    ``NPT``.
+
+**07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed**
+   The 2-D generalization of example 01: a FIRE relaxation →
+   :class:`~nvalchemi.dynamics.NVTLangevin` MD pipeline where *each stage
+   is itself domain-decomposed*.  A ``(pipeline, domain)``
+   :class:`~torch.distributed.device_mesh.DeviceMesh` gives each stage a
+   whole domain sub-mesh row; a stage is just ``DomainParallel(dynamics)``
+   handed to ``DistributedPipeline(stages, mesh=mesh)``.  ``DomainParallel``
+   overrides the pipeline's communication seam so the group *lead* performs
+   the cross-stage hand-off (over the pipeline axis) while the group
+   scatters/gathers to its sub-mesh — no distributed-aware code in the model
+   or the integrators.  Keep the per-step **domain** dimension intra-node
+   (NVLink) and let the rare-hand-off **pipeline** dimension span nodes (IB);
+   ``4 GPUs`` = 2 stages × 2 domain.  FIRE's velocity mixing couples to
+   *global* power/norm scalars (``v·f`` / ``v·v`` / ``f·f``), which the
+   dynamics coordinator all-reduces within each stage's domain group.
 
 Benchmarks
 ----------

@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.distributed as dist
 
-from nvalchemi.distributed._core.collection import ShardedCollection
+from nvalchemi.distributed._core.collection import ShardedCollection, _global_src
 from nvalchemi.distributed._core.gather_primitives import mesh_group
 from nvalchemi.distributed._core.storage_policy import (
     PlainShard,
@@ -118,10 +118,16 @@ def _has_field(batch: Batch, name: str) -> bool:
 
 
 def _broadcast_float_dtype(
-    src_dtype: torch.dtype | None, device: torch.device, src: int
+    src_dtype: torch.dtype | None,
+    device: torch.device,
+    src: int,
+    group: Any = None,
 ) -> torch.dtype:
     """Broadcast a float dtype from ``src`` to every rank as an int code
     and decode back to a ``torch.dtype``. Non-src ranks pass ``None``.
+
+    ``src`` is group-local; it is mapped to a global rank for the collective
+    (which takes a global ``src=`` regardless of ``group``).
     """
     if src_dtype is not None and src_dtype not in _FLOAT_DTYPE_TO_CODE:
         raise ValueError(
@@ -131,7 +137,7 @@ def _broadcast_float_dtype(
     code = _FLOAT_DTYPE_TO_CODE.get(src_dtype, 0) if src_dtype else 0
     code_t = torch.tensor([code], dtype=torch.int32, device=device)
     if dist.is_initialized():
-        dist.broadcast(code_t, src=src)
+        dist.broadcast(code_t, src=_global_src(group, src), group=group)
     return _FLOAT_DTYPE_CODES[int(code_t.item())]
 
 
@@ -333,6 +339,11 @@ class ShardedBatch(ShardedCollection):
                 f"got {partition_mode!r}"
             )
         local_rank = mesh.get_local_rank()
+        # All scatter broadcasts run on the mesh's own group (the domain sub-mesh's
+        # group when this is a sliced sub-mesh of a larger pipeline × domain mesh),
+        # with the group-local ``src`` mapped to its global rank for the collective.
+        # 1-D whole-mesh: group is the world group and the map is the identity.
+        group = mesh_group(mesh)
 
         # --- Resolve device ---
         if batch is not None:
@@ -347,6 +358,7 @@ class ShardedBatch(ShardedCollection):
             batch.positions.dtype if batch is not None else None,
             device=device,
             src=src,
+            group=group,
         )
 
         # --- Broadcast cell + pbc + n_global from src ---
@@ -368,9 +380,10 @@ class ShardedBatch(ShardedCollection):
             n_global_t = torch.zeros(1, dtype=torch.int64, device=device)
 
         if dist.is_initialized():
-            dist.broadcast(cell, src=src)
-            dist.broadcast(pbc, src=src)
-            dist.broadcast(n_global_t, src=src)
+            global_src = _global_src(group, src)
+            dist.broadcast(cell, src=global_src, group=group)
+            dist.broadcast(pbc, src=global_src, group=group)
+            dist.broadcast(n_global_t, src=global_src, group=group)
         n_global = int(n_global_t.item())
 
         # --- Build partitioner from broadcast geometry + config ---
@@ -442,7 +455,9 @@ class ShardedBatch(ShardedCollection):
             list(source.keys()) if source is not None else None
         ]
         if dist.is_initialized():
-            dist.broadcast_object_list(names_holder, src=src)
+            dist.broadcast_object_list(
+                names_holder, src=_global_src(group, src), group=group
+            )
         field_names = names_holder[0]
         assert field_names is not None  # noqa: S101
 

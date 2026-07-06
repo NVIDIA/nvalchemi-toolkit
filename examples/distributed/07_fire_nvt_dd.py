@@ -12,51 +12,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
-FIRE relaxation → NVT MD, both domain-decomposed on one mesh
-============================================================
+2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed
+==============================================================
 
-A two-stage workflow — geometry relaxation with FIRE, then NVT Langevin
-molecular dynamics — where **each stage runs the model under**
-:class:`~nvalchemi.distributed.DomainParallel` **across the same set of GPUs**.
+A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where
+**each stage is itself domain-decomposed** across a group of GPUs. This is the
+2-D generalization of :ref:`01_distributed_pipeline`: that example maps one rank
+per stage; here each stage is a whole **domain sub-mesh** cooperating on one large
+system, and the two stages form the pipeline dimension.
 
-This is deliberately *not* a :class:`~nvalchemi.distributed.DistributedPipeline`.
-A pipeline maps one rank per stage (stage A on GPU 0, stage B on GPU 1, …) and
-streams systems through the stages; it cannot host a *domain-decomposed* stage,
-because a DD stage needs a whole sub-mesh of ranks cooperating on one system.
-Here both stages want the full 2-GPU mesh, and they run **sequentially in time**
-on it: FIRE relaxes the batch across both GPUs, then the relaxed configuration is
-handed to an NVT integrator that runs across the same two GPUs.
+.. rubric:: Topology
 
-The seam between the stages is deliberately simple and framework-native:
+.. graphviz::
+   :caption: FIRE (domain group {0,1}) → NVT (domain group {2,3}) on a 2×2 mesh.
 
-#. ``DomainParallel(FIRE).partition(full_batch)`` scatters the system, ``run``
-   relaxes it, and ``gather`` reconstructs the full relaxed batch on rank 0.
-#. That relaxed batch (with velocities zeroed and re-sampled to the target
-   temperature) is fed to ``DomainParallel(NVT).partition`` for the MD leg.
+   digraph topology {
+       rankdir=LR
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
 
-Both legs are correct under DD without any distributed-aware code in the model or
-the integrators: the FIRE velocity mixing is globalized by the dynamics
-coordinator (it reduces the ``v·f`` / ``v·v`` / ``f·f`` power/norm scalars over
-the mesh), exactly as NVT's kinetic-energy / DOF thermostat coupling is.
+       subgraph cluster_fire {
+           label="Stage 0 — FIRE (DomainParallel)"; style=dashed; color="#7f8c8d"
+           r0 [label="Rank 0\\ndomain-lead"]
+           r1 [label="Rank 1"]
+       }
+       subgraph cluster_nvt {
+           label="Stage 1 — NVT (DomainParallel)"; style=dashed; color="#7f8c8d"
+           r2 [label="Rank 2\\ndomain-lead" fillcolor="#f9e2ae"]
+           r3 [label="Rank 3" fillcolor="#f9e2ae"]
+       }
+
+       r0 -> r1 [dir=both style=dashed label="halo"]
+       r2 -> r3 [dir=both style=dashed label="halo"]
+       r0 -> r2 [style=bold color="#c0392b" penwidth=2 label="hand off\\n(lead→lead)"]
+   }
+
+The **domain** dimension is per-step and bandwidth-heavy (the halo exchange runs
+every MD step) — keep it intra-node (NVLink). The **pipeline** dimension is
+latency-tolerant (a system hands off only when it finishes a stage) — it may span
+nodes over IB. ``DeviceMesh`` is row-major, so ``("pipeline", "domain")`` puts the
+domain ranks contiguous (same node when ``domain_size ≤ gpus_per_node``); the
+lead→lead handoff then rides the pipeline axis.
+
+The whole thing is expressed with the *same* pieces as single-GPU dynamics: a
+stage is just ``DomainParallel(dynamics)`` — the same wrap used for standalone
+domain decomposition — handed to ``DistributedPipeline(stages, mesh=mesh2d)``.
+``DomainParallel`` overrides the pipeline's communication seam so the group lead
+performs the cross-stage handoff and the group scatters/gathers to its sub-mesh;
+no distributed-aware code leaks into the model or the integrators.
 
 System: alpha-quartz SiO2 supercell, periodic on all axes.
 
 .. note::
 
-    Requires 2 GPUs. Run with::
+    Requires 4 GPUs (2 pipeline stages × 2 domain ranks). Run with::
 
-        torchrun --nproc_per_node=2 examples/distributed/07_fire_nvt_dd.py
+        torchrun --nproc_per_node=4 examples/distributed/07_fire_nvt_dd.py
 
     For MACE + cuEquivariance across ranks, set the JIT-race guard::
 
         CUEQUIVARIANCE_OPS_PARALLEL_COMPILE=0 \\
-            torchrun --nproc_per_node=2 \\
+            torchrun --nproc_per_node=4 \\
             examples/distributed/07_fire_nvt_dd.py
 
-Outputs a relaxed-then-NVT trajectory at ``./fire_nvt_dd_trajectory.xyz``
-(rank 0 only).
+Outputs the NVT trajectory to ``./fire_nvt_dd_trajectory.xyz`` (NVT domain-lead).
 """
 
 from __future__ import annotations
@@ -73,14 +94,14 @@ from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed import DomainConfig, DomainParallel, HookScope
-from nvalchemi.dynamics import HostMemory, NVTLangevin
+from nvalchemi.dynamics import DistributedPipeline, HostMemory, NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import SnapshotHook
+from nvalchemi.dynamics.hooks import LoggingHook, SnapshotHook
 from nvalchemi.dynamics.optimizers.fire import FIRE
 from nvalchemi.hooks import NeighborListHook
 
-# Skip the heavy distributed launch during the Sphinx-Gallery docs build (it has
-# no torchrun environment), mirroring the other distributed examples.
+# Distributed examples are launcher-only: Sphinx sets this during docs builds
+# (no torchrun env), torchrun sets rank/world-size during real launches.
 _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
 _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
@@ -90,15 +111,11 @@ sys.path.insert(
 )
 from _benchmark_common import build_sio2_supercell  # noqa: E402
 
-# ----------------------------------------------------------------------
-# System construction (rank 0 — DomainParallel scatters from there)
-# ----------------------------------------------------------------------
-
 
 def build_initial_batch(
     repeats: tuple[int, int, int], dtype: torch.dtype, device: torch.device
 ) -> Batch:
-    # Perturb the lattice a little (seed=1) so FIRE has something to relax.
+    """A perturbed SiO2 supercell (seed=1) so FIRE has something to relax."""
     pos, numbers, masses, cell, _velocities = build_sio2_supercell(
         repeats=repeats, dtype=dtype, seed=1
     )
@@ -109,34 +126,12 @@ def build_initial_batch(
         cell=cell.to(device).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]], device=device),
     )
-    # FIRE integrates a fictitious velocity from rest.
     data.add_node_property("velocities", torch.zeros_like(pos).to(device))
     return Batch.from_data_list([data], device=device)
 
 
-def sample_maxwell_boltzmann(
-    batch: Batch, temperature_k: float, seed: int
-) -> None:
-    """Draw velocities from a Maxwell-Boltzmann distribution at
-    ``temperature_k`` and zero the net linear momentum, in place."""
-    from nvalchemi.dynamics.hooks._utils import KB_EV
-
-    gen = torch.Generator(device="cpu").manual_seed(seed)
-    masses = batch.atomic_masses.detach().cpu()
-    sigma = torch.sqrt(KB_EV * temperature_k / masses).unsqueeze(-1)
-    vel = torch.randn(masses.shape[0], 3, generator=gen) * sigma
-    vel = vel - vel.mean(dim=0, keepdim=True)
-    batch.velocities = vel.to(batch.positions.device, batch.positions.dtype)
-
-
-# ----------------------------------------------------------------------
-# Trajectory persistence (rank 0 only)
-# ----------------------------------------------------------------------
-
-
 def write_trajectory_xyz(sink: HostMemory, path: Path) -> int:
-    """Decode the :class:`HostMemory` sink into per-frame :class:`ase.Atoms`
-    and write an extxyz trajectory. Returns the number of frames written."""
+    """Decode a :class:`HostMemory` sink into an extxyz trajectory (lead only)."""
     from ase import Atoms
     from ase.io import write as ase_write
 
@@ -160,14 +155,40 @@ def write_trajectory_xyz(sink: HostMemory, path: Path) -> int:
     return n_frames
 
 
-# ----------------------------------------------------------------------
-# Main
-# ----------------------------------------------------------------------
+def make_step_trace_hook(
+    *, rank: int, gpu: int, pipeline_index: int, domain_rank: int,
+    stage_name: str, frequency: int,
+) -> LoggingHook:
+    """A :class:`~nvalchemi.dynamics.hooks.LoggingHook` that streams *where each
+    system is* to the console every ``frequency`` steps: for this rank's owned
+    shard it logs the step, energy, max force, and temperature, tagged with the
+    rank/GPU/stage so you can watch every group make progress in place. (Pair with
+    ``--verbose`` — which also enables the framework's GPU/stage hand-off trace.)"""
+    tag = f"rank {rank} · gpu {gpu} · {stage_name} (pipe {pipeline_index}/dom {domain_rank})"
+
+    def _writer(step: int, rows: list[dict[str, float]]) -> None:
+        for row in rows:
+            fields = []
+            if "energy" in row:
+                fields.append(f"E={row['energy']:.4f} eV")
+            if "fmax" in row:
+                fields.append(f"fmax={row['fmax']:.4f} eV/Å")
+            if "temperature" in row:
+                fields.append(f"T={row['temperature']:.1f} K")
+            logger.info(
+                "[step {s:>5} | {tag}] owned-shard: {f}",
+                s=int(row.get("step", step)), tag=tag, f="  ".join(fields),
+            )
+
+    return LoggingHook(
+        backend="custom", writer_fn=_writer, frequency=frequency,
+        stage=DynamicsStage.AFTER_STEP,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="FIRE relax → NVT MD, both under DomainParallel on one mesh."
+        description="FIRE → NVT as a 2-D-parallel (pipeline × domain) pipeline."
     )
     parser.add_argument("--checkpoint", default="medium-0b2")
     parser.add_argument("--repeats", type=int, nargs=3, default=[3, 3, 3])
@@ -181,16 +202,22 @@ def main() -> None:
     parser.add_argument(
         "--output-xyz", type=Path, default=Path("fire_nvt_dd_trajectory.xyz")
     )
+    parser.add_argument("--backend", default="nccl", help="Use 'gloo' on CPU envs.")
     parser.add_argument(
-        "--backend", default="nccl", help="Use 'gloo' on CPU-only envs."
+        "--verbose", action="store_true",
+        help="Trace where each system is at every step (per-rank/GPU/stage state) "
+        "and log every GPU/stage hand-off (enables the pipeline's debug_mode).",
+    )
+    parser.add_argument(
+        "--log-every", type=int, default=10,
+        help="Step interval for the per-system state trace under --verbose.",
     )
     args = parser.parse_args()
 
     if _DOCS_BUILD or not _DISTRIBUTED_ENV:
         logger.info(
-            "Not running under torchrun — skipping the distributed run. "
-            "Launch with: torchrun --nproc_per_node=2 "
-            "examples/distributed/07_fire_nvt_dd.py"
+            "Not running under torchrun — skipping. Launch with: torchrun "
+            "--nproc_per_node=4 examples/distributed/07_fire_nvt_dd.py"
         )
         return
 
@@ -206,33 +233,37 @@ def main() -> None:
         _patch_physicsnemo_all_to_all_for_gloo()
     local_rank = int(os.environ.get("LOCAL_RANK", rank))
     if torch.cuda.is_available():
-        device_index = local_rank % torch.cuda.device_count()
-        torch.cuda.set_device(device_index)
-        device = torch.device(f"cuda:{device_index}")
+        torch.cuda.set_device(local_rank % torch.cuda.device_count())
+        device = torch.device(f"cuda:{local_rank % torch.cuda.device_count()}")
     else:
         device = torch.device("cpu")
 
+    # ----- 2-D (pipeline, domain) mesh: 2 stages × (world/2) domain ranks -----
+    from torch.distributed.device_mesh import init_device_mesh
+
+    n_pipeline = 2
+    domain_size = world_size // n_pipeline
+    if world_size != n_pipeline * domain_size:
+        raise RuntimeError(
+            f"world_size {world_size} must be 2 × domain_size; launch with an even "
+            "--nproc_per_node (e.g. 4 = 2 stages × 2 domain)."
+        )
+    mesh = init_device_mesh(
+        device.type, (n_pipeline, domain_size), mesh_dim_names=("pipeline", "domain")
+    )
+    pipeline_index = int(mesh["pipeline"].get_local_rank())
+    is_domain_lead = int(mesh["domain"].get_local_rank()) == 0
+
     if rank == 0:
         logger.info(
-            "FIRE→NVT DD: world_size={ws} device={dev} checkpoint={ckpt} "
-            "repeats={r} fire_steps={fs} nvt_steps={ns} T={T}K",
-            ws=world_size, dev=device, ckpt=args.checkpoint,
+            "FIRE→NVT 2-D DD: world={ws} mesh=(pipeline={p}, domain={d}) "
+            "ckpt={c} repeats={r} fire={fs} nvt={ns} T={T}K",
+            ws=world_size, p=n_pipeline, d=domain_size, c=args.checkpoint,
             r=tuple(args.repeats), fs=args.fire_steps, ns=args.nvt_steps,
             T=args.temperature_k,
         )
 
-    # ----- One DeviceMesh shared by BOTH DD stages -----
-    from torch.distributed.device_mesh import DeviceMesh
-
-    backend_override = (("gloo", None),) if args.backend == "gloo" else None
-    mesh = DeviceMesh(
-        device.type,
-        list(range(world_size)),
-        mesh_dim_names=("domain",),
-        backend_override=backend_override,
-    )
-
-    # ----- Model (shared by both stages) -----
+    # ----- Model (one instance per rank; both stages use the same checkpoint) -----
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         from nvalchemi.models.mace import MACEWrapper
@@ -241,87 +272,90 @@ def main() -> None:
     wrapper = MACEWrapper.from_checkpoint(
         args.checkpoint, dtype=dtype, device=device
     ).eval()
-    domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh)
+    # Each stage's DomainParallel is bound to its domain sub-mesh row.
+    domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh["domain"])
 
     def _nl_hook() -> NeighborListHook:
-        # Fresh hook per stage — each integrator owns its own BEFORE_COMPUTE NL.
         return NeighborListHook(
             wrapper.model_config.neighbor_config,
             skin=0.5,
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
 
-    # ==================================================================
-    # STAGE 1 — FIRE relaxation across the full mesh
-    # ==================================================================
-    fire = FIRE(
-        model=wrapper,
-        dt=args.fire_dt,
-        hooks=[_nl_hook()],
-        n_steps=args.fire_steps,
-    )
-    fire_dd = DomainParallel(dynamics=fire, config=domain_cfg, n_steps=args.fire_steps)
-
-    initial_batch = (
-        build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
-        if rank == 0
+    # Per-step "where is my system" console trace (owned-shard view), tagged with
+    # rank/GPU/stage. Only under --verbose; None otherwise.
+    domain_rank = int(mesh["domain"].get_local_rank())
+    stage_name = "FIRE" if pipeline_index == 0 else "NVT"
+    trace_hook = (
+        make_step_trace_hook(
+            rank=rank, gpu=(device.index if device.type == "cuda" else 0),
+            pipeline_index=pipeline_index, domain_rank=domain_rank,
+            stage_name=stage_name, frequency=args.log_every,
+        )
+        if args.verbose
         else None
     )
-    fire_owned = fire_dd.partition(initial_batch)
-    if rank == 0:
-        logger.info("Stage 1 (FIRE): relaxing across {ws} ranks…", ws=world_size)
-    fire_dd.run(fire_owned)
 
-    # Reconstruct the full relaxed system on rank 0; the coordinator globalizes
-    # the FIRE power/norm reductions, so the relaxed config is mesh-consistent.
-    relaxed_full = fire_dd.gather(fire_owned, dst=0)
-    fire_dd.close()
-
-    # ==================================================================
-    # STAGE 2 — NVT Langevin MD on the SAME mesh, seeded from the relaxed batch
-    # ==================================================================
-    if rank == 0:
-        # Give the relaxed atoms a thermal velocity distribution for the MD leg.
-        sample_maxwell_boltzmann(relaxed_full, args.temperature_k, seed=0)
-        nvt_initial = relaxed_full
+    # ----- Build ONLY this rank's stage, keyed by its pipeline index -----
+    # A domain-decomposed stage is just DomainParallel(dynamics); the pipeline mesh
+    # drives lead resolution, the lead→lead handoff, and per-group completion.
+    if pipeline_index == 0:
+        fire = FIRE(model=wrapper, dt=args.fire_dt, hooks=[_nl_hook()])
+        outer_hooks = [trace_hook] if trace_hook is not None else []
+        stage: DomainParallel = DomainParallel(
+            dynamics=fire, config=domain_cfg, n_steps=args.fire_steps,
+            hooks=outer_hooks,
+        )
+        # The first stage's domain-lead seeds the system; the group scatters it.
+        if is_domain_lead:
+            stage._pending_input = build_initial_batch(
+                tuple(args.repeats), dtype=dtype, device=device
+            )
+        trajectory_sink = None
     else:
-        nvt_initial = None
-
-    n_frames_expected = (args.nvt_steps // args.snapshot_every) + 1
-    trajectory_sink = HostMemory(capacity=n_frames_expected)
-    snapshot_hook = SnapshotHook(sink=trajectory_sink, frequency=args.snapshot_every)
-    # RANK_ZERO: gather the FULL system onto rank 0 so each frame has every atom.
-    snapshot_hook.scope = HookScope.RANK_ZERO
-
-    nvt = NVTLangevin(
-        model=wrapper,
-        dt=args.nvt_dt_fs,
-        temperature=args.temperature_k,
-        friction=args.friction,
-        hooks=[_nl_hook()],
-        n_steps=args.nvt_steps,
-    )
-    nvt_dd = DomainParallel(
-        dynamics=nvt,
-        config=domain_cfg,
-        n_steps=args.nvt_steps,
-        hooks=[snapshot_hook],
-    )
-
-    nvt_owned = nvt_dd.partition(nvt_initial)
-    if rank == 0:
-        logger.info("Stage 2 (NVT): running MD across {ws} ranks…", ws=world_size)
-    nvt_dd.run(nvt_owned)
-
-    # ----- Persist + cleanup -----
-    if rank == 0:
-        n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
-        logger.info(
-            "Done. FIRE→NVT complete; wrote {f} xyz frames to {p}.",
-            f=n_frames, p=args.output_xyz,
+        # NVT production leg. A RANK_ZERO snapshot hook gathers the full system onto
+        # the domain-lead each frame so the trajectory has every atom. (The relaxed
+        # structure arrives with FIRE's fictitious velocities; the Langevin
+        # thermostat equilibrates it to the target temperature.)
+        n_frames = (args.nvt_steps // args.snapshot_every) + 1
+        trajectory_sink = HostMemory(capacity=n_frames)
+        snapshot_hook = SnapshotHook(sink=trajectory_sink, frequency=args.snapshot_every)
+        snapshot_hook.scope = HookScope.RANK_ZERO
+        nvt = NVTLangevin(
+            model=wrapper,
+            dt=args.nvt_dt_fs,
+            temperature=args.temperature_k,
+            friction=args.friction,
+            hooks=[_nl_hook()],
+        )
+        outer_hooks = [snapshot_hook]
+        if trace_hook is not None:
+            outer_hooks.append(trace_hook)
+        stage = DomainParallel(
+            dynamics=nvt, config=domain_cfg, n_steps=args.nvt_steps,
+            hooks=outer_hooks,
         )
 
-    nvt_dd.close()
+    # ----- Drive the 2-D pipeline: FIRE group relaxes → hands off → NVT group runs -----
+    # debug_mode surfaces the per-group step flow + every GPU/stage hand-off (the
+    # DomainParallel comm seam logs when a system is seeded, received, handed off,
+    # or retired) — the "when does each system change GPUs/stages" trace.
+    pipeline = DistributedPipeline(
+        stages={pipeline_index: stage}, mesh=mesh, debug_mode=args.verbose
+    )
+    if rank == 0:
+        logger.info("Running FIRE→NVT across the 2-D mesh…")
+    with pipeline:
+        pipeline.run()
+    if trace_hook is not None:
+        trace_hook.close()
+
+    # ----- Persist the NVT trajectory (its domain-lead) -----
+    if pipeline_index == 1 and is_domain_lead and trajectory_sink is not None:
+        n = write_trajectory_xyz(trajectory_sink, args.output_xyz)
+        logger.info("Done. Wrote {n} NVT frames to {p}.", n=n, p=args.output_xyz)
+
+    stage.close()
     dist.destroy_process_group()
 
 

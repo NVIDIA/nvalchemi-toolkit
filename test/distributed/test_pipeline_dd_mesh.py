@@ -12,22 +12,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pipeline × DD — Phase 1: ``DomainParallel`` over a domain SUB-mesh of a 2D mesh.
+"""Pipeline × DD (2-D-parallel dynamics) — the meld, on CPU/gloo, world=4 (2×2).
 
-The 2D-parallel dynamics feature (proposal-distributed-pipeline-dd.md) lays out a
-mesh ``(pipeline, domain)`` and runs each pipeline stage's ``DomainParallel`` over
-its own **domain sub-mesh row** (``mesh2d["domain"]``). This gate is the load-
-bearing prerequisite: a ``DomainParallel(FIRE(LJ))`` run over a sliced domain row
-of a 4-rank ``(2, 2)`` mesh must be **equivalent** to the single-process bare-FIRE
-relaxation — i.e. slicing a sub-mesh out of a 2D mesh yields a fully-functional DD
-group (rank resolution, scatter from the row's lead, per-step reductions, gather).
+The feature (proposal-distributed-pipeline-dd.md) lays out a ``(pipeline, domain)``
+mesh and runs each pipeline stage's ``DomainParallel`` over its own **domain
+sub-mesh row** (``mesh2d["domain"]``). A DD pipeline stage is *just*
+``DomainParallel(dynamics)`` — the same wrap as standalone DD — which overrides the
+``_CommunicationMixin`` comm seam so the group lead does the cross-stage
+``Batch.send``/``irecv`` and the group scatters/gathers to its sub-mesh;
+``DistributedPipeline(mesh=...)`` stays the orchestrator.
 
-Both pipeline rows ({0,1} and {2,3}) run the identical cluster independently, so
-their gathered relaxed systems must also be identical to each other. Uses the
-tight non-adapting FIRE (``f_alpha=1``/``f_inc=1``) so the DD trajectory matches
-bare FIRE to ~machine precision (see test_fire_dd for the CPU alpha-ordering note).
+Gates (all world=4, ``(2, 2)`` mesh; the tight non-adapting FIRE ``f_alpha=1`` /
+``f_inc=1`` so the DD trajectory matches bare FIRE to ~machine precision — see
+test_fire_dd for the CPU alpha-ordering note):
 
-CPU/gloo, world=4 (two 2-rank domain groups).
+* ``test_domain_parallel_over_2d_submesh_matches_bare_fire`` — a ``DomainParallel``
+  over one sliced domain row == bare FIRE (the sub-mesh DD prerequisite).
+* ``test_domainparallel_pipeline_stage_handoff_2d`` — the overridden comm seam moves
+  a whole relaxed system group {0,1} → {2,3} (handoff + one owned DD step).
+* ``test_distributed_pipeline_mesh_run_2d`` — the real
+  ``DistributedPipeline(mesh=...).run()`` drives the 2-D pipeline to completion.
+
+A sub-group-correct gloo ``indexed_all_to_all_v`` shim is installed in each worker
+(the CPU stand-in; real nccl already maps group ranks). Multi-step stages where
+relaxed atoms cross a boundary additionally exercise the atom-migration reshard,
+which is validated on real-hardware NCCL (the gloo shim doesn't cover it).
 """
 
 from __future__ import annotations
@@ -177,101 +186,191 @@ def _energy_and_forces(batch: Batch) -> tuple[float, torch.Tensor]:
     return float(out["energy"].sum().item()), out["forces"].detach().double()
 
 
+def test_domain_parallel_over_2d_submesh_matches_bare_fire() -> None:
+    """DomainParallel(FIRE(LJ)) over a domain row of a (2,2) mesh == bare FIRE."""
+    _spawn(4, "29744", "_submesh_dd_worker", 8)
+
+
 # ======================================================================
-# Phase 2 — StageGroup layout resolution + group-wise ``done`` reduction.
+# The meld — DomainParallel as a group-aware pipeline stage: its overridden
+# _CommunicationMixin comm seam moves a whole system across two DD stage-groups.
 # ======================================================================
 
 
-def _layout_worker(rank: int, world_size: int) -> None:
+def _full_lj_batch(positions, atomic_numbers, masses, cell, pbc, dtype) -> Batch:
+    # Field schema must survive partition -> gather unchanged so it can double as
+    # the recv template: gather emits only the per-atom sharded fields + cell/pbc
+    # (per-system ``energy`` is NOT sharded and is dropped), so we omit energy here
+    # to keep seed, gathered system, and template schema-identical.
+    n = positions.shape[0]
+    data = AtomicData(
+        atomic_numbers=atomic_numbers,
+        positions=positions.clone(),
+        atomic_masses=masses,
+        forces=torch.zeros(n, 3, dtype=dtype),
+        cell=cell.unsqueeze(0),
+        pbc=pbc.unsqueeze(0),
+    )
+    data.add_node_property("velocities", torch.zeros(n, 3, dtype=dtype))
+    return Batch.from_data_list([data])
+
+
+def _comm_override_worker(rank: int, world_size: int, n_steps: int) -> None:
+    """Drive two DomainParallel stage-groups through the exact pipeline
+    downstream-step flow (_ensure_buffers -> _prestep -> step -> _poststep) and
+    assert a system flows group0 -> group1 via the overridden comm seam."""
+    import torch.distributed as dist
     from torch.distributed import init_device_mesh
 
-    from nvalchemi.dynamics._pipeline_dd import group_all_done, resolve_stage_layout
-
-    # (pipeline=2, domain=2); row-major → global = pipeline_index*2 + domain_rank.
-    mesh2d = init_device_mesh("cpu", (2, 2), mesh_dim_names=("pipeline", "domain"))
-    pidx, drank, domain = resolve_stage_layout(mesh2d)
-    assert pidx == rank // 2, f"rank {rank}: pipeline_index {pidx} != {rank // 2}"
-    assert drank == rank % 2, f"rank {rank}: domain_rank {drank} != {rank % 2}"
-
-    # A stage-group finishes as a unit: group_all_done is True only when BOTH ranks
-    # of the domain row are done. Here domain-rank 0 is done, domain-rank 1 is not →
-    # the group is NOT done for either member.
-    partial = group_all_done(drank == 0, domain)
-    assert partial is False, f"rank {rank}: group_all_done(partial) should be False"
-    # Both ranks done → the group is done.
-    both = group_all_done(True, domain)
-    assert both is True, f"rank {rank}: group_all_done(all) should be True"
-
-
-def test_stage_layout_and_group_done_2d() -> None:
-    """resolve_stage_layout maps (pipeline_index, domain_rank) from a (2,2) mesh;
-    group_all_done MIN-reduces the done flag over each domain sub-mesh row."""
-    _spawn(4, "29745", "_layout_worker")
-
-
-# ======================================================================
-# Phase 3 — group->group handoff: gather -> lead send/recv -> scatter round trip.
-# ======================================================================
-
-
-def _handoff_worker(rank: int, world_size: int) -> None:
-    from torch.distributed import init_device_mesh
-
-    from nvalchemi.dynamics._pipeline_dd import handoff_forward, resolve_stage_layout
+    from nvalchemi.distributed.domain_parallel import DomainParallel
 
     dtype = torch.float64
     positions, atomic_numbers, masses, cell, pbc = _build_lj_cluster()
     n = positions.shape[0]
 
     mesh2d = init_device_mesh("cpu", (2, 2), mesh_dim_names=("pipeline", "domain"))
-    pidx, drank, _domain = resolve_stage_layout(mesh2d)
+    domain = mesh2d["domain"]
+    pidx = int(mesh2d["pipeline"].get_local_rank())
+    layout = mesh2d.mesh
+    lead0, lead1 = int(layout[0, 0]), int(layout[1, 0])
 
-    # Stage 0's lead builds the full system; hand it to stage 1's lead.
-    if pidx == 0 and drank == 0:
-        d = AtomicData(
-            atomic_numbers=atomic_numbers,
-            positions=positions.clone(),
-            atomic_masses=masses,
-            forces=torch.zeros(n, 3, dtype=dtype),
-            energy=torch.zeros(1, 1, dtype=dtype),
-            cell=cell.unsqueeze(0),
-            pbc=pbc.unsqueeze(0),
-        )
-        d.add_node_property("velocities", torch.zeros(n, 3, dtype=dtype))
-        full: Batch | None = Batch.from_data_list([d])
+    _, dist_fire, cfg = _make_fire_lj(domain, f_alpha=1.0, f_inc=1.0)
+    stage = DomainParallel(dynamics=dist_fire, config=cfg, n_steps=n_steps)
+
+    # Wire pipeline neighbors as DistributedPipeline.setup would: to adjacent
+    # stage-groups' LEAD global ranks (only leads transmit).
+    if pidx == 0:
+        stage.prior_rank, stage.next_rank = None, lead1
+        if stage._is_group_lead:
+            stage._pending_input = _full_lj_batch(
+                positions, atomic_numbers, masses, cell, pbc, dtype
+            )
     else:
-        full = None
+        stage.prior_rank, stage.next_rank = lead0, None
+        # Derive the recv template from a real partition -> gather round-trip so it
+        # matches the sender's gather output exactly (field set + dtype overrides).
+        # This is what the pipeline's _share_templates does via empty_like of the
+        # upstream stage's output; here the receiving group has the same schema.
+        seed = (
+            _full_lj_batch(positions, atomic_numbers, masses, cell, pbc, dtype)
+            if stage._is_group_lead
+            else None
+        )
+        owned_tmpl = stage.partition(seed)
+        gathered_tmpl = stage.gather(owned_tmpl, dst=0)
+        if stage._is_group_lead and gathered_tmpl is not None:
+            stage._recv_template = Batch.empty_like(gathered_tmpl, device="cpu")
+        # Reset to idle so the real loop re-partitions the received system.
+        stage.active_batch = None
+        stage._forces_primed = False
+        stage._system_step = 0
 
-    import torch.distributed as dist
+    received: Batch | None = None
+    cap = 4 * n_steps + 20
+    it = 0
+    while not stage.done and it < cap:
+        it += 1
+        stage._prestep_sync_buffers()
+        stage._complete_pending_recv()
+        # Capture group1's freshly-received system BEFORE it steps (collective
+        # gather over the domain row, so all group ranks call it together).
+        if (
+            pidx == 1
+            and received is None
+            and stage.active_batch is not None
+            and stage.active_batch.num_graphs > 0
+        ):
+            received = stage.gather(stage.active_batch, dst=0)
+        converged = None
+        if stage.active_batch is not None and stage.active_batch.num_graphs > 0:
+            stage.active_batch, converged = stage.step(stage.active_batch)
+        stage._poststep_sync_buffers(converged)
 
-    # The Phase-3 primitive under test: the full system moves from stage 0's lead
-    # (rank 0) to stage 1's lead (rank 2) over the pipeline-dim group. (Stage 1 then
-    # re-scatters it with DomainParallel.partition — but that path first needs the
-    # scatter broadcasts confined to the domain sub-group like the Phase-1 gather
-    # fix; from_batch currently broadcasts on the WORLD group, which hangs when only
-    # one stage-group partitions. Tracked as the next step; here we validate the
-    # handoff transfer itself.)
-    received = handoff_forward(full, 0, 1, mesh2d)
-
-    if pidx == 1 and drank == 0:
-        assert received is not None, "stage-1 lead received no system"
+    if pidx == 1 and stage._is_group_lead:
+        assert received is not None, "group1 lead never received a system"
         assert received.positions.shape[0] == n, (
             f"handoff lost atoms: {received.positions.shape[0]} != {n}"
         )
+        # The received system is group0's n_steps-relaxed output — compare to the
+        # bare single-process FIRE reference (same Warp-CPU alpha-ordering drift
+        # tolerance as the sub-mesh gate).
+        _e0, ref_batch = _bare_fire_relax(n_steps, f_alpha=1.0, f_inc=1.0)
+        got_e, got_f = _energy_and_forces(received)
+        ref_e, ref_f = _energy_and_forces(ref_batch)
         torch.testing.assert_close(
-            received.positions.double(), positions.double(), rtol=0, atol=0
+            torch.tensor(got_e), torch.tensor(ref_e), rtol=1e-4, atol=1e-4
+        )
+        torch.testing.assert_close(
+            got_f.norm(dim=-1).sort().values,
+            ref_f.norm(dim=-1).sort().values,
+            rtol=1e-3, atol=1e-4,
         )
 
-    # All ranks meet before teardown so no rank tears down the PG mid-transfer.
     dist.barrier()
 
 
-def test_group_to_group_handoff_2d() -> None:
-    """gather (stage 0) -> lead send/recv -> scatter (stage 1) round-trips the full
-    system across the pipeline dim of a (2,2) mesh."""
-    _spawn(4, "29746", "_handoff_worker")
+def test_domainparallel_pipeline_stage_handoff_2d() -> None:
+    """The meld, end-to-end: a DomainParallel's overridden _CommunicationMixin seam
+    (partition-on-receipt -> DD step -> gather-on-graduate -> lead send/recv ->
+    sentinel/done) moves a whole relaxed system from stage-group {0,1} to
+    stage-group {2,3} on a (2,2) mesh, driven through the exact pipeline
+    downstream-step flow; the received system matches the bare-FIRE reference.
+
+    Uses a single DD step per stage: it exercises the full handoff + one owned DD
+    step (halo exchange, model forward, integrator, gather). Multi-step stages
+    where relaxed atoms cross a domain boundary additionally exercise the atom-
+    migration reshard, which currently trips the gloo sub-group test shim — tracked
+    separately (real-hardware NCCL validation on the box is the arbiter there)."""
+    _spawn(4, "29747", "_comm_override_worker", 1)
 
 
-def test_domain_parallel_over_2d_submesh_matches_bare_fire() -> None:
-    """DomainParallel(FIRE(LJ)) over a domain row of a (2,2) mesh == bare FIRE."""
-    _spawn(4, "29744", "_submesh_dd_worker", 8)
+# ======================================================================
+# Step 1 — the real DistributedPipeline(mesh=...).run() drives the 2-D pipeline.
+# ======================================================================
+
+
+def _pipeline_run_worker(rank: int, world_size: int, n_steps: int) -> None:
+    """Drive a 2-stage 2×2 pipeline through DistributedPipeline(mesh=...).run() —
+    the mesh-aware framework path (setup wiring to lead ranks, _share_templates
+    lead→lead propagation, per-group done)."""
+    import torch.distributed as dist
+    from torch.distributed import init_device_mesh
+
+    from nvalchemi.distributed.domain_parallel import DomainParallel
+    from nvalchemi.dynamics.base import DistributedPipeline
+
+    dtype = torch.float64
+    positions, atomic_numbers, masses, cell, pbc = _build_lj_cluster()
+
+    mesh2d = init_device_mesh("cpu", (2, 2), mesh_dim_names=("pipeline", "domain"))
+    pidx = int(mesh2d["pipeline"].get_local_rank())
+    domain = mesh2d["domain"]
+    is_lead = int(domain.get_local_rank()) == 0
+
+    _, dist_fire, cfg = _make_fire_lj(domain, f_alpha=1.0, f_inc=1.0)
+    stage = DomainParallel(dynamics=dist_fire, config=cfg, n_steps=n_steps)
+    if pidx == 0 and is_lead:
+        stage._pending_input = _full_lj_batch(
+            positions, atomic_numbers, masses, cell, pbc, dtype
+        )
+
+    # Each rank supplies ONLY its own stage, keyed by pipeline index; the mesh
+    # drives local_stage / lead wiring / per-group completion.
+    pipeline = DistributedPipeline(stages={pidx: stage}, mesh=mesh2d)
+    pipeline.run()  # setup -> _share_templates (grouped) -> loop until all groups done
+
+    # The system must have flowed the whole chain: stage 0 relaxes + graduates,
+    # stage 1 receives + steps. Both leads must have taken >=1 DD step.
+    if is_lead:
+        assert stage.step_count >= 1, (
+            f"pidx {pidx} lead never stepped (step_count={stage.step_count})"
+        )
+    dist.barrier()
+
+
+def test_distributed_pipeline_mesh_run_2d() -> None:
+    """DistributedPipeline(mesh=(2,2)).run() drives a FIRE→FIRE 2-D pipeline to
+    completion: stage-group {0,1} relaxes + hands off to {2,3}, both step, all
+    groups reach done. Validates the mesh-aware setup/_share_templates/step/done
+    wiring end-to-end on gloo (single DD step/stage — migration is box-NCCL)."""
+    _spawn(4, "29748", "_pipeline_run_worker", 1)

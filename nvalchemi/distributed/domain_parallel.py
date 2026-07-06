@@ -105,6 +105,21 @@ class DomainParallel(BaseDynamics):
         self._n_owned: int = 0
         self._forces_primed: bool = False
 
+        # Pipeline-stage state (2D pipeline × domain). A DomainParallel used as a
+        # DistributedPipeline stage spans a domain sub-mesh; the group lead does
+        # the cross-stage isend/irecv while the group scatters/gathers the full
+        # system to/from its sub-mesh (see the comm-override section below). Inert
+        # unless the pipeline sets prior_rank/next_rank.
+        self._pending_input: "Batch | None" = None  # first stage's seed system
+        self._first_stage_seeded: bool = False
+        self._system_step: int = 0
+        self._sentinel_sent: bool = False
+        # Process group for cross-stage hand-offs (the pipeline-dim / leads' group),
+        # set by DistributedPipeline in grouped mode. ``None`` = default group (the
+        # single-stage / test paths). Never the world group in a 2-D pipeline —
+        # NCCL requires consistent op ordering per communicator (see base.py).
+        self._pipeline_group: Any = None
+
         # Deferred-migration state. The strategy issues an async consensus
         # all_reduce at the END of step N and consumes it at the START of step
         # N+1, hiding its latency under the intervening hooks + pre_update.
@@ -608,6 +623,162 @@ class DomainParallel(BaseDynamics):
         finally:
             self._close_hooks()
         return batch
+
+    # ------------------------------------------------------------------
+    # Pipeline-stage communication (group-aware _CommunicationMixin override)
+    # ------------------------------------------------------------------
+    # A DomainParallel used as a DistributedPipeline stage spans a whole domain
+    # sub-mesh. The pipeline drives every stage through the identical
+    # _CommunicationMixin API (_ensure_buffers -> _prestep_sync_buffers -> step ->
+    # _poststep_sync_buffers, plus done/is_first_stage/is_last_stage); these
+    # overrides make that API group-aware. The group LEAD (domain-rank 0) performs
+    # the cross-stage isend/irecv to adjacent stage-groups' leads; the group then
+    # scatters/gathers the full system to/from its sub-mesh. Non-lead ranks do no
+    # cross-stage I/O. Granularity: one DD step per pipeline iteration; a system
+    # graduates on the iteration it finishes (converged, or its step budget spent),
+    # so a group re-partitions only when a system arrives — never every step.
+
+    @property
+    def _is_group_lead(self) -> bool:
+        """Whether this rank is its stage-group's lead (domain-rank 0), the only
+        rank that transmits full systems across stages."""
+        return self._domain_rank == 0
+
+    def _bcast_group_flag(self, flag: bool) -> bool:
+        """Broadcast a bool from the group lead to the whole domain sub-mesh so all
+        ranks take the same partition/idle control flow (single-process: identity)."""
+        group = mesh_group(self._config.mesh)
+        if not dist.is_initialized() or group is None:
+            return flag
+        t = torch.tensor([1 if flag else 0], dtype=torch.int32, device=self.device)
+        dist.broadcast(t, src=dist.get_global_rank(group, 0), group=group)
+        return bool(t.item())
+
+    def _system_finished(self, converged: Any) -> bool:
+        """A resident system leaves this stage when it converges (FIRE) or spends
+        its per-system step budget (``n_steps``, e.g. an NVT leg)."""
+        if converged:
+            return True
+        return self.n_steps is not None and self._system_step >= self.n_steps
+
+    def _dd_event(self, msg: str) -> None:
+        """Emit a stage-transition line — a system arriving, finishing, or being
+        handed to another GPU/stage — when ``debug_mode`` is on. This is the "where
+        is each system and when does it change GPUs/stages" trace for 2-D pipelines.
+        """
+        if not getattr(self, "debug_mode", False):
+            return
+        from loguru import logger as _logger
+
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        _logger.info("[DD rank {}] {}", rank, msg)
+
+    def _ensure_buffers(self, template: "Batch") -> None:
+        """No-op: a DD stage hands off whole systems via ``Batch.send``/``irecv``
+        (template-driven), not the streaming fixed-capacity send/recv buffers."""
+        return
+
+    def _prestep_sync_buffers(self) -> None:
+        """Pull the next system into this stage when idle (whole-system-in-flight).
+
+        First stage: seed once from the injected initial batch. Downstream stage:
+        the lead ``irecv``s the next full system from the prior stage's lead (a
+        0-graph sentinel means the upstream is exhausted), then the group
+        ``partition``s it across the domain sub-mesh.
+        """
+        if self.active_batch is not None and self.active_batch.num_graphs > 0:
+            return  # still working the current system
+
+        if self.prior_rank is None:
+            # First stage: seed from _pending_input exactly once, then it's spent.
+            if not self._first_stage_seeded:
+                self._first_stage_seeded = True
+                self._system_step = 0
+                seed = self._pending_input if self._is_group_lead else None
+                self._pending_input = None
+                self.active_batch = self.partition(seed)
+                self._dd_event(
+                    f"seeded initial system → scattered across the domain group "
+                    f"(n_owned={self._n_owned})"
+                )
+            else:
+                self.done = True
+                self._send_sentinel()  # tell the next stage no more systems are coming
+                self._dd_event("first stage exhausted → done (drain signal sent)")
+            return
+
+        # Downstream stage: lead receives the next full system from the prior lead.
+        from nvalchemi.data.batch import Batch
+
+        received = None
+        got_system = True
+        if self._is_group_lead:
+            received = Batch.irecv(
+                src=self.prior_rank, device=self.device,
+                template=self._recv_template, group=self._pipeline_group,
+            ).wait()
+            got_system = received.num_graphs > 0  # 0-graph sentinel = upstream done
+        got_system = self._bcast_group_flag(got_system)
+        if not got_system:
+            self.active_batch = None
+            self.done = True
+            self._send_sentinel()  # forward the drain signal down the chain
+            self._dd_event(
+                f"upstream (rank {self.prior_rank}) drained → stage done"
+            )
+            return
+        self._system_step = 0
+        self.active_batch = self.partition(received if self._is_group_lead else None)
+        self._dd_event(
+            f"received a system from rank {self.prior_rank} → scattered across the "
+            f"domain group (n_owned={self._n_owned})"
+        )
+
+    def _send_sentinel(self) -> None:
+        """Lead sends a one-shot 0-graph batch to the next stage's lead — the drain
+        signal that unblocks its ``irecv`` and propagates ``done`` down the chain
+        (``Batch.isend`` of an empty batch ships only the meta header)."""
+        if self.next_rank is None or not self._is_group_lead or self._sentinel_sent:
+            return
+        from nvalchemi.data.batch import Batch
+
+        self._sentinel_sent = True
+        Batch(device=self.device).isend(
+            dst=self.next_rank, group=self._pipeline_group
+        ).wait()
+
+    def _complete_pending_recv(self) -> None:
+        """No-op: the lead completes its ``irecv`` inline in
+        :meth:`_prestep_sync_buffers` (nothing is deferred)."""
+        return
+
+    def _poststep_sync_buffers(self, converged: Any = None) -> None:
+        """Graduate the resident system when it finishes this stage: gather it to
+        the group lead, which ``send``s it to the next stage's lead. The stage then
+        goes idle so the next system can enter. The last stage (no ``next_rank``)
+        just retires the finished system — its trajectory is already captured by
+        hooks/sinks."""
+        if self.active_batch is None:
+            return
+        self._system_step += 1
+        if not self._system_finished(converged):
+            return
+        reason = "converged" if converged else f"reached its {self.n_steps}-step budget"
+        if self.next_rank is not None:
+            full = self.gather(self.active_batch, dst=0)
+            if self._is_group_lead and full is not None:
+                full.send(dst=self.next_rank, group=self._pipeline_group)
+            self._dd_event(
+                f"system {reason} after {self._system_step} steps → gathered + "
+                f"handed off to the next stage's lead (rank {self.next_rank})"
+            )
+        else:
+            self._dd_event(
+                f"system {reason} after {self._system_step} steps → retired "
+                "(final stage)"
+            )
+        self.active_batch = None
+        self._system_step = 0
 
     # ------------------------------------------------------------------
     # Teardown

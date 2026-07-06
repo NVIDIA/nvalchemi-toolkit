@@ -48,11 +48,35 @@ def _world_size(mesh: Any) -> int:
     return dist.get_world_size()
 
 
-def _broadcast_object(obj: Any, src: int) -> Any:
+def _mesh_group(mesh: Any) -> Any:
+    """The mesh's process group, or ``None`` if it isn't group-capable.
+
+    All scatter broadcasts run on *this* group (the domain sub-mesh's group when
+    the mesh is a sliced sub-mesh), not the world group — so a scatter confined
+    to one sub-mesh of a larger (e.g. pipeline × domain) mesh doesn't stall the
+    ranks outside it.
+    """
+    get_group = getattr(mesh, "get_group", None)
+    return get_group() if get_group is not None else None
+
+
+def _global_src(group: Any, src: int) -> int:
+    """Map a **group-local** ``src`` rank to the global rank ``dist`` collectives
+    expect for their ``src=`` argument (global regardless of ``group``).
+
+    Identity when there's no group or distribution isn't initialized (the 1-D
+    whole-mesh case, where group-local == global).
+    """
+    if group is None or not dist.is_initialized():
+        return src
+    return dist.get_global_rank(group, src)
+
+
+def _broadcast_object(obj: Any, src: int, group: Any = None) -> Any:
     if not dist.is_initialized():
         return obj
     holder = [obj]
-    dist.broadcast_object_list(holder, src=src)
+    dist.broadcast_object_list(holder, src=_global_src(group, src), group=group)
     return holder[0]
 
 
@@ -63,11 +87,12 @@ def _broadcast_sizes(
     device: torch.device,
     src: int,
     local_rank: int,
+    group: Any = None,
 ) -> list[int]:
     src_sizes = sizes if (local_rank == src and sizes is not None) else [0] * world_size
     sizes_t = torch.tensor(src_sizes, dtype=torch.int64, device=device)
     if dist.is_initialized():
-        dist.broadcast(sizes_t, src=src)
+        dist.broadcast(sizes_t, src=_global_src(group, src), group=group)
     return [int(x) for x in sizes_t.tolist()]
 
 
@@ -80,6 +105,7 @@ def _broadcast_full(
     device: torch.device,
     src: int,
     local_rank: int,
+    group: Any = None,
 ) -> torch.Tensor:
     """Broadcast a full ``(n_global, *trailing)`` tensor from *src* to all ranks.
 
@@ -96,7 +122,7 @@ def _broadcast_full(
     else:
         full_t = torch.empty(full_shape, dtype=dtype, device=device)
     if dist.is_initialized():
-        dist.broadcast(full_t, src=src)
+        dist.broadcast(full_t, src=_global_src(group, src), group=group)
     return full_t
 
 
@@ -160,9 +186,18 @@ class ShardedCollection:
         """
         local_rank = mesh.get_local_rank()
         world_size = _world_size(mesh)
+        # Every broadcast below runs on the mesh's own group with ``src`` mapped
+        # group-local -> global, so a scatter over a sliced sub-mesh doesn't
+        # broadcast on (and stall) the world group.
+        group = _mesh_group(mesh)
 
         sizes = _broadcast_sizes(
-            sizes, world_size=world_size, device=device, src=src, local_rank=local_rank
+            sizes,
+            world_size=world_size,
+            device=device,
+            src=src,
+            local_rank=local_rank,
+            group=group,
         )
         n_global = int(sum(sizes))
 
@@ -179,7 +214,7 @@ class ShardedCollection:
                 }
                 for n in names
             ]
-        schema = _broadcast_object(schema, src)
+        schema = _broadcast_object(schema, src, group)
         if schema is None:
             raise RuntimeError("schema broadcast returned None on a non-source rank")
 
@@ -194,6 +229,7 @@ class ShardedCollection:
                 device=device,
                 src=src,
                 local_rank=local_rank,
+                group=group,
             )
             fields[name] = policies[name].place_from_full(
                 full_t, mesh=mesh, sizes=sizes, local_rank=local_rank
