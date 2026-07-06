@@ -98,7 +98,8 @@ uma = [
 pet = [
     # Sourced from upstream main until released on PyPI — see
     # `[tool.uv.sources].metatrain`.
-    "metatrain>=2025.10",
+    "metatrain",
+    "upet",
 ]
 
 [tool.hatch.build.targets.wheel]

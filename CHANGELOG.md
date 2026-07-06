@@ -66,6 +66,10 @@
   PETWrapper can be installed with `pip install 'nvalchemi-toolkit[pet]'`,
   that will pull an extra `metatrain` dependency. See more details on
   how to run simulations with PET in the `examples/advanced/10_pet_nvt.py`.
+  `PETWrapper.from_checkpoint` can also fetch named checkpoints (e.g.
+  `pet-mad-xs-v1.6.0`) directly from the `lab-cosmo/upet` HuggingFace
+  repository via the new `upet` dependency (also pulled by the `pet` extra),
+  in addition to loading local checkpoint files.
 - **UMA (fairchem-core) wrapper** — new `UMAWrapper` exposes UMA
   (Universal Models for Atoms) foundation models (`uma-s-1p1`,
   `uma-s-1p2`, `uma-m-1p1`) through the `BaseModelMixin` interface,

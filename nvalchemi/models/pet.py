@@ -36,13 +36,25 @@ adds only the nvalchemi-specific glue:
 
 Usage
 -----
-Load a PET checkpoint (e.g. ``pet-mad-xs-v1.5.0.ckpt``)::
+Fetch a named model directly from the ``lab-cosmo/upet`` HuggingFace
+repository (requires the optional ``upet`` dependency; see
+https://github.com/lab-cosmo/upet for available names, or list them
+programmatically via ``upet.list_upet()``)::
 
     from nvalchemi.models.pet import PETWrapper
     import torch
 
     model = PETWrapper.from_checkpoint(
-        "pet-mad-xs-v1.5.0.ckpt",
+        device=torch.device("cuda"),
+        dtype=torch.float32,
+    )
+    # or, pick a specific model/version:
+    model = PETWrapper.from_checkpoint(model="pet-mad-xs", version="1.5.0")
+
+Or load a local checkpoint file directly (e.g. ``pet-mad-xs-v1.5.0.ckpt``)::
+
+    model = PETWrapper.from_checkpoint(
+        checkpoint_path="pet-mad-xs-v1.5.0.ckpt",
         device=torch.device("cuda"),
         dtype=torch.float32,
     )
@@ -266,6 +278,88 @@ def _ignore_nonleaf_grad_warning():
             category=UserWarning,
         )
         yield
+
+
+# ---------------------------------------------------------------------------
+# HuggingFace checkpoint resolution
+# ---------------------------------------------------------------------------
+
+_UPET_HF_REPO_ID = "lab-cosmo/upet"
+_UPET_HF_SUBFOLDER = "models"
+_UPET_INSTALL_HINT = (
+    "Fetching a named PET checkpoint from HuggingFace requires the 'upet' package. "
+    "Install it with: pip install 'nvalchemi-toolkit[pet]'"
+)
+
+
+def _fetch_pet_checkpoint(
+    model: str | None,
+    version: str | None,
+) -> Path:
+    """Fetch a PET checkpoint from HuggingFace, and caching it locally
+    for subsequent runs.
+
+    Parameters
+    ----------
+    model : str | None
+        Model name (e.g. ``"pet-mad-s"`` or bare ``"pet-mad"``), used when
+        *checkpoint_path* isn't a local file or doesn't parse as a magic
+        string.
+    version : str | None
+        Model version, or ``"latest"`` / ``None`` for the newest available.
+
+    Returns
+    -------
+    Path
+        Local path to the checkpoint file.
+
+    Raises
+    ------
+    ImportError
+        When ``upet`` is not installed.
+    FileNotFoundError
+        When *checkpoint_path* is neither an existing local file nor a
+        parseable ``<model>-<size>-v<version>.ckpt`` name.
+    ValueError
+        When neither *checkpoint_path* nor *model* is given, or when the
+        requested model/size/version isn't available on HuggingFace.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+        from upet._models import upet_resolve_model
+        from upet._version import DEPRECATED_MODELS as _UPET_DEPRECATED_MODELS
+    except ImportError as e:
+        raise ImportError(_UPET_INSTALL_HINT) from e
+
+    model_name, size = model.rsplit("-", 1)
+
+    requested_version = (
+        None if (version is None or version == "latest") else str(version)
+    )
+    size, version = upet_resolve_model(
+        model=model_name,
+        requested_size=size,
+        requested_version=requested_version,
+    )
+
+    upet_model_name = f"{model_name}-{size}-v{version}"
+
+    if upet_model_name in _UPET_DEPRECATED_MODELS:
+        warn_msg = (
+            f"Model {upet_model_name} is deprecated and may not be supported in "
+            "future versions. Please switch to a newer model for better "
+            "performance and support."
+        )
+        warnings.warn(warn_msg, category=DeprecationWarning, stacklevel=2)
+
+    model_string = f"{upet_model_name}.ckpt"
+
+    path = hf_hub_download(
+        repo_id=_UPET_HF_REPO_ID,
+        filename=model_string,
+        subfolder=_UPET_HF_SUBFOLDER,
+    )
+    return Path(path)
 
 
 # ---------------------------------------------------------------------------
@@ -810,38 +904,54 @@ class PETWrapper(nn.Module, BaseModelMixin):
     @classmethod
     def from_checkpoint(
         cls,
-        checkpoint_path: Path | str,
-        device: torch.device = torch.device("cpu"),
+        model: str | None = None,
+        version: str | None = "latest",
         dtype: torch.dtype | None = None,
+        checkpoint_path: Path | str | None = None,
+        device: torch.device = torch.device("cpu"),
         compile_model: bool = False,
         **compile_kwargs: Any,
     ) -> "PETWrapper":
-        """Load a PET checkpoint from disk and return a wrapped instance.
+        """Load a PET checkpoint from disk or HuggingFace and return a wrapped instance.
 
-        Expects a ``torch.load``-friendly dict written by
-        :class:`metatrain.pet.PET`. The outer dict is an LLPR wrapper; the
-        PET core lives in ``wrapped_model_checkpoint`` if that key is present,
-        otherwise directly at the top level. The (possibly old) checkpoint is
-        brought to the current layout via
-        :meth:`metatrain.pet.PET.upgrade_checkpoint` before its hypers /
-        ``state_dict`` are read — old checkpoints (e.g. ``pet-mad-xs-v1.5.0``,
-        version 11) predate the ``backend.`` state-dict prefix.
+        Expects a model and, optionally, a version to fetch the model checkpoint and
+        expose it as a :class:`PETWrapper` instance. The list of available models and
+        their versions can be found in the `upet repository <https://github.com/lab-cosmo/upet>`_.
+        The full list of models and versions can be listed programmatically via ``upet.list_upet()``.
 
-        Metatomic's torch extension **must** be importable before
-        :func:`torch.load` is called, otherwise the checkpoint's
-        ``ScriptObject`` metadata fails to unpickle. We import
-        :mod:`metatomic.torch` lazily here to enforce that without polluting
-        module import time.
+        Alternatively, a local checkpoint file can be provided via the *checkpoint_path* argument.
+        In this case the *model* and *version* arguments are ignored.
+
+        :class:`PETWrapper` supports the compilation of the PET backend building blocks
+        (``preprocess`` / ``calculate_features`` / ``predict``) via ``torch.compile``, which is
+        controlled by the *compile_model* argument. The ``fullgraph`` compilation mode can be
+        enabled by passing ``fullgraph=True`` as an argument. Note that models using the
+        ``'grid'`` adaptive-cutoff method (for example, ``pet-mad`` v1.5.0) cannot be compiled
+        because of a break in the autograd backward.
+
+
 
         Parameters
         ----------
-        checkpoint_path : Path | str
-            Path to a PET checkpoint file (``.ckpt`` / ``.pt``).
-        device : torch.device, optional
-            Target device. Defaults to CPU.
+        model : str
+            Model name to fetch from HuggingFace, either a combined
+            ``<model>-<size>`` name (e.g. ``"pet-mad-s"``, ``"pet-mad-xs"``)
+            or a bare base name (e.g. ``"pet-mad"``, resolved to ``upet``'s
+            own default size preference). Used when *checkpoint_path* is
+            ``None``; ignored otherwise.
+        version : str | None, optional
+            Model version to fetch, or ``"latest"`` / ``None`` for the newest
+            available. Ignored when *checkpoint_path* is given.
+            Defaults to ``"latest"``.
         dtype : torch.dtype | None, optional
             If set, cast the backend and composition/scaler buffers to this
             dtype before returning.
+        checkpoint_path : Path | str | None
+            Path to a local PET checkpoint file (``.ckpt`` / ``.pt``), or a
+            named model such as ``"pet-mad-xs-v1.6.0"`` to fetch from
+            HuggingFace. If ``None``, *model* must be given instead.
+        device : torch.device, optional
+            Target device. Defaults to CPU.
         compile_model : bool, optional
             ``torch.compile`` the three backend building blocks
             (``preprocess`` / ``calculate_features`` / ``predict``). Sets eval
@@ -855,11 +965,11 @@ class PETWrapper(nn.Module, BaseModelMixin):
             be set, which :meth:`forward` applies via ``torch._dynamo.config``
             patching at call time (see :meth:`_backend_ctx`).
 
-            Models using the ``'grid'`` adaptive-cutoff method (pet-mad
-            <= v1.5.0) cannot be compiled at all — autograd backward through the
-            compiled grid cutoff aborts — so ``compile_model=True`` for such a
-            model raises ``ValueError``. Use a ``'solver'``-method checkpoint
-            (pet-mad >= v1.6.0) to compile, or run the grid model eagerly.
+            Models using the ``'grid'`` adaptive-cutoff method (for example,
+            ``pet-mad v1.5.0``) cannot be compiled at all — autograd backward
+            through the compiled grid cutoff aborts — so ``compile_model=True``
+            for such a model raises ``ValueError``. Use a ``'solver'``-method
+            checkpoint (pet-mad >= v1.6.0) to compile, or run the grid model eagerly.
         **compile_kwargs
             Forwarded verbatim to each ``torch.compile`` call, so the caller
             chooses the compilation options (e.g. ``fullgraph=True``,
@@ -873,9 +983,15 @@ class PETWrapper(nn.Module, BaseModelMixin):
         ------
         OptionalDependencyError
             When :mod:`metatrain` is not installed.
+        ImportError
+            When fetching a named model and ``upet`` is not installed.
         ValueError
             When ``compile_model`` is requested for a ``'grid'`` adaptive-cutoff
-            model (see ``compile_model`` above).
+            model (see ``compile_model`` above), or when neither
+            *checkpoint_path* nor *model* is given.
+        FileNotFoundError
+            When *checkpoint_path* is neither an existing local file nor a
+            parseable named model.
         """
         if not OptionalDependency.PET.is_available():
             OptionalDependency.PET._raise_error(f"{cls.__qualname__}.from_checkpoint")
@@ -884,7 +1000,18 @@ class PETWrapper(nn.Module, BaseModelMixin):
         import metatomic.torch  # noqa: F401
         from metatrain.pet import PET
 
+        if checkpoint_path is not None and Path(checkpoint_path).is_file():
+            checkpoint_path = str(checkpoint_path)
+        elif model is not None and version is not None:
+            checkpoint_path = _fetch_pet_checkpoint(model, version)
+        else:
+            raise ValueError(
+                "PETWrapper.from_checkpoint requires either `checkpoint_path` (a "
+                "local file path, or `model` (e.g. 'pet-mad-s', optionally with `version`). "
+            )
+
         raw = torch.load(str(checkpoint_path), weights_only=False, map_location=device)
+
         if isinstance(raw, dict) and "wrapped_model_checkpoint" in raw:
             raw = raw["wrapped_model_checkpoint"]
 
@@ -895,13 +1022,14 @@ class PETWrapper(nn.Module, BaseModelMixin):
         model_data = raw["model_data"]
         hypers = dict(model_data["model_hypers"])
         atomic_types = list(model_data["dataset_info"].atomic_types)
-        # Prefer the latest weights (``model_state_dict``); fall back to the best
-        # epoch (``best_model_state_dict``). Exported / best-only checkpoints
-        # (e.g. pet-mad-xs-v1.6.0) carry only the latter.
-        raw_sd = raw.get("model_state_dict") or raw.get("best_model_state_dict")
+        # Prefer the best weights (``best_model_state_dict``); fall back to the last
+        # epoch (``model_state_dict``). Exported / best-only checkpoints
+        # (e.g. pet-mad-xs-v1.6.0) carry only the former.
+        raw_sd = raw.get("best_model_state_dict") or raw.get("model_state_dict")
         if raw_sd is None:
             raise KeyError(
-                "Checkpoint has neither 'model_state_dict' nor 'best_model_state_dict'."
+                "Checkpoint has neither 'best_model_state_dict' nor 'model_state_dict' "
+                "keys. Checkpoint may be corrupted or not a PET checkpoint."
             )
 
         composition_values = _decode_tensor_map_values(

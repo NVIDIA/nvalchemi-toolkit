@@ -694,7 +694,7 @@ class TestFromCheckpointErrors:
 
         monkeypatch.setattr(OptionalDependency.PET, "_available", False)
         with pytest.raises(ImportError):
-            PETWrapper.from_checkpoint("nonexistent.ckpt")
+            PETWrapper.from_checkpoint(checkpoint_path="nonexistent.ckpt")
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +702,10 @@ class TestFromCheckpointErrors:
 # ---------------------------------------------------------------------------
 
 
-_CHECKPOINT_PATH = "pet-mad-xs-v1.5.0.ckpt"  # 'grid' adaptive cutoff
+# Fetched from the `lab-cosmo/upet` HuggingFace repo (see PETWrapper.from_checkpoint).
+_CHECKPOINT_MODEL = "pet-mad-xs"
+_CHECKPOINT_VERSION = "1.5.0"  # 'grid' adaptive cutoff
+# Not yet published on HuggingFace; must be provided locally to run this test.
 _SOLVER_CHECKPOINT_PATH = "pet-mad-xs-v1.6.0.ckpt"  # 'solver' adaptive cutoff
 _CUTOFF = 7.5
 
@@ -727,20 +730,16 @@ def _batch(dtype: torch.dtype = torch.float32) -> Batch:
 
 @pytest.fixture(scope="session")
 def real_wrapper_cpu():
-    """Load the pet-mad-xs checkpoint once per session."""
-    import os
-
-    if not os.path.exists(_CHECKPOINT_PATH):
-        pytest.skip(
-            f"Checkpoint {_CHECKPOINT_PATH} not found — "
-            "download from HuggingFace to enable the slow tests."
-        )
+    """Fetch the pet-mad-xs checkpoint from HuggingFace once per session."""
     try:
         return PETWrapper.from_checkpoint(
-            _CHECKPOINT_PATH, device=torch.device("cpu"), dtype=torch.float32
+            model=_CHECKPOINT_MODEL,
+            version=_CHECKPOINT_VERSION,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
         )
     except Exception as e:
-        pytest.skip(f"Could not load PET checkpoint: {e}")
+        pytest.skip(f"Could not fetch/load PET checkpoint: {e}")
 
 
 @pytest.mark.slow
@@ -822,8 +821,17 @@ class TestRealCheckpoint:
         from metatrain.pet import PET
         from metatrain.utils.neighbor_lists import get_system_with_neighbor_lists
 
+        from nvalchemi.models.pet import _fetch_pet_checkpoint
+
+        try:
+            checkpoint_path = _fetch_pet_checkpoint(
+                model=_CHECKPOINT_MODEL, version=_CHECKPOINT_VERSION
+            )
+        except Exception as e:
+            pytest.skip(f"Could not fetch PET checkpoint: {e}")
+
         # metatrain PET (float64) with its native "feature" output.
-        raw = torch.load(_CHECKPOINT_PATH, weights_only=False, map_location="cpu")
+        raw = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
         wrapped = raw.get("wrapped_model_checkpoint", raw)
         PET.upgrade_checkpoint(wrapped)
         pet = PET.load_checkpoint(wrapped, context="export").to(torch.float64).eval()
@@ -844,7 +852,9 @@ class TestRealCheckpoint:
         )
 
         # nvalchemi embeddings (float64) on the same structure.
-        wrapper = PETWrapper.from_checkpoint(_CHECKPOINT_PATH, dtype=torch.float64)
+        wrapper = PETWrapper.from_checkpoint(
+            checkpoint_path=checkpoint_path, dtype=torch.float64
+        )
         batch = Batch.from_data_list([_crystal()])
         batch["positions"] = batch.positions.to(torch.float64)
         batch["cell"] = batch.cell.to(torch.float64)
@@ -870,10 +880,19 @@ class TestRealCheckpoint:
         ``from_checkpoint`` raises a clear error rather than letting it crash at
         the first backward. Both the plain and ``fullgraph=True`` requests raise.
         """
+        from nvalchemi.models.pet import _fetch_pet_checkpoint
+
+        try:
+            checkpoint_path = _fetch_pet_checkpoint(
+                model=_CHECKPOINT_MODEL, version=_CHECKPOINT_VERSION
+            )
+        except Exception as e:
+            pytest.skip(f"Could not fetch PET checkpoint: {e}")
+
         for extra in ({}, {"fullgraph": True}):
             with pytest.raises(ValueError, match="grid"):
                 PETWrapper.from_checkpoint(
-                    _CHECKPOINT_PATH,
+                    checkpoint_path=checkpoint_path,
                     device=torch.device("cpu"),
                     dtype=torch.float32,
                     compile_model=True,
@@ -893,7 +912,9 @@ class TestRealCheckpoint:
             pytest.skip(f"Checkpoint {_SOLVER_CHECKPOINT_PATH} not found.")
 
         eager = PETWrapper.from_checkpoint(
-            _SOLVER_CHECKPOINT_PATH, device=torch.device("cpu"), dtype=torch.float64
+            checkpoint_path=_SOLVER_CHECKPOINT_PATH,
+            device=torch.device("cpu"),
+            dtype=torch.float64,
         )
         assert eager.backend.adaptive_cutoff_method.lower() == "solver"
         out_eager = eager.forward(_batch(torch.float64))
@@ -901,7 +922,7 @@ class TestRealCheckpoint:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             compiled = PETWrapper.from_checkpoint(
-                _SOLVER_CHECKPOINT_PATH,
+                checkpoint_path=_SOLVER_CHECKPOINT_PATH,
                 device=torch.device("cpu"),
                 dtype=torch.float64,
                 compile_model=True,
@@ -926,7 +947,16 @@ class TestRealCheckpoint:
         from metatrain.utils.io import load_model
         from metatrain.utils.neighbor_lists import get_system_with_neighbor_lists
 
-        mt_model = load_model(_CHECKPOINT_PATH)
+        from nvalchemi.models.pet import _fetch_pet_checkpoint
+
+        try:
+            checkpoint_path = _fetch_pet_checkpoint(
+                model=_CHECKPOINT_MODEL, version=_CHECKPOINT_VERSION
+            )
+        except Exception as e:
+            pytest.skip(f"Could not fetch PET checkpoint: {e}")
+
+        mt_model = load_model(checkpoint_path)
         data = _crystal()
         atoms = ase.Atoms(
             positions=data.positions.cpu().numpy(),
