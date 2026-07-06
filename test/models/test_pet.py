@@ -81,6 +81,7 @@ def _tiny_hypers() -> dict:
         "featurizer_type": "feedforward",
         "num_neighbors_adaptive": None,
         "adaptive_cutoff_method": "grid",
+        "system_conditioning": False,
     }
 
 

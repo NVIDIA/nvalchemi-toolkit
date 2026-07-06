@@ -141,8 +141,9 @@ _ENERGY_OUTPUT_SHAPES: dict[str, list[int]] = {"energy___0": [1]}
 def _normalize_hypers(hypers: dict[str, Any]) -> dict[str, Any]:
     """Validate *hypers* and fill in the keys ``PETBackend`` reads directly.
 
-    Returns a copy with ``num_neighbors_adaptive`` / ``adaptive_cutoff_method``
-    defaulted when absent (checkpoints already carry these after
+    Returns a copy with ``num_neighbors_adaptive`` / ``adaptive_cutoff_method`` /
+    ``cutoff_width_adaptive`` / ``system_conditioning`` defaulted when absent
+    (checkpoints already carry these after
     :meth:`metatrain.pet.PET.upgrade_checkpoint`; hand-built hypers may not).
 
     Parameters
@@ -167,6 +168,8 @@ def _normalize_hypers(hypers: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(hypers)
     normalized.setdefault("num_neighbors_adaptive", None)
     normalized.setdefault("adaptive_cutoff_method", "grid")
+    normalized.setdefault("cutoff_width_adaptive", 1.0)
+    normalized.setdefault("system_conditioning", False)
     return normalized
 
 
@@ -327,6 +330,10 @@ class PETWrapper(nn.Module, BaseModelMixin):
 
         self.atomic_types = list(atomic_types)
         self.hypers = _normalize_hypers(hypers)
+        # Width of the adaptive-cutoff smooth taper; not cached on ``PETBackend``
+        # itself (unlike the other hypers), so the wrapper keeps its own copy
+        # to pass into ``preprocess`` at call time.
+        self._cutoff_width_adaptive = float(self.hypers["cutoff_width_adaptive"])
 
         # Build the core from hypers + atomic species and register the single
         # scalar energy output (heads + last layers).
@@ -644,6 +651,7 @@ class PETWrapper(nn.Module, BaseModelMixin):
                 inputs["cells"],
                 inputs["cell_shifts"],
                 inputs["system_indices"],
+                self._cutoff_width_adaptive,
             )
             node_features_list, edge_features_list = self.backend.calculate_features(
                 batch_data
@@ -759,6 +767,7 @@ class PETWrapper(nn.Module, BaseModelMixin):
                     inputs["cells"],
                     inputs["cell_shifts"],
                     inputs["system_indices"],
+                    self._cutoff_width_adaptive,
                 )
                 node_features_list, edge_features_list = (
                     self.backend.calculate_features(batch_data)
