@@ -57,6 +57,15 @@ mechanical reference data.
   - ✓
   - charge, spin
   - COO
+* - {py:class}`~nvalchemi.models.pet.PETWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✓
+  - —
+  - COO
 * - {py:class}`~nvalchemi.models.demo.DemoModelWrapper`
   - ✓
   - ✓
@@ -175,6 +184,15 @@ the original publications for the underlying methods.
   - Batatia, I. *et al.* "A foundation model for atomistic materials chemistry."
     *arXiv:2401.00096*, 2023.
     [doi:10.48550/arXiv.2401.00096](https://doi.org/10.48550/arXiv.2401.00096)
+* - **PET** (Point-Edge Transformer)
+  - Pozdnyakov, S. N. & Ceriotti, M. "Smooth, exact rotational symmetrization
+    for deep learning on point clouds." *Advances in Neural Information
+    Processing Systems (NeurIPS)*, 2023.
+    [openreview.net/forum?id=WYlNCXFbis](https://openreview.net/forum?id=WYlNCXFbis)
+* - **PET-MAD** (foundation)
+  - Mazitov, A. *et al.* "PET-MAD, a universal interatomic potential for
+    advanced materials modeling." *arXiv:2503.14118*, 2025.
+    [doi:10.48550/arXiv.2503.14118](https://doi.org/10.48550/arXiv.2503.14118)
 * - **AIMNet2**
   - Anstine, D. M., Zubatyuk, R. & Isayev, O. "AIMNet2: a neural network potential
     to meet your neutral, charged, organic, and elemental-organic needs."

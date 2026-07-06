@@ -60,6 +60,15 @@ Machine-learned potentials
 
    UMAWrapper
 
+.. currentmodule:: nvalchemi.models.pet
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   PETWrapper
+
 Physical / classical models
 ---------------------------
 
