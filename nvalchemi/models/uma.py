@@ -84,7 +84,6 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
 from __future__ import annotations
 
 import contextlib
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -487,65 +486,6 @@ def _node_partition_bounds(ctx: Any) -> tuple[int, int]:
     return sum(counts[:rank]), counts[rank]
 
 
-def _publish_overlap_routing(
-    ctx: Any, edge_index: "torch.Tensor", nlo: int, n_owned: int
-) -> None:
-    """Compute + publish the async-overlap edge split (eager, per forward).
-
-    Runs in the ``@torch._dynamo.disable`` partition-graph adapter, where the
-    owned-receiver ``edge_index`` is available and ``int()`` / ``nonzero`` are free.
-    Splits edges by sender residency (``owner_rank[sender] == rank``): the resident
-    edges go into a fixed-cap LOCAL bucket (``index_select`` subset, run on owned
-    features during the collective); the rest are computed in the full REMOTE pass.
-    Any resident edges that overflow the cap stay remote (``remote_valid`` keeps
-    them on), so the cap is a pure overlap knob — never a correctness risk. The
-    published index tensors let the compiled Edgewise do the split with no
-    host-sync / boolean-mask (hence no graph break). See
-    :func:`_distributed_edgewise_gather_overlap`.
-    """
-    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
-        set_overlap_routing,
-    )
-
-    dev = edge_index.device
-    meta = ctx.gather_meta
-    owner = meta.owner_rank.to(dev)
-    local_index = meta.local_index.to(dev)
-    sender = edge_index[0]
-    n_edges = edge_index.shape[1]
-    world = max(ctx.world_size, 1)
-    resident = owner[sender] == ctx.rank
-    # Argsort edges resident-first (sync-free, fixed-shape) → a DISJOINT split:
-    # local = the first L_cap (all resident), remote = the rest. L_cap = E/(2·world)
-    # sits comfortably below the resident count (≈E/world), so local is all-resident
-    # and remote is its exact complement — total conv work stays E (no full-E remote
-    # + masking). Any resident beyond L_cap simply compute in the remote pass (on
-    # the gathered features, correct). ``stable`` keeps it deterministic across ranks.
-    order = torch.argsort(resident.to(torch.uint8), descending=True, stable=True)
-    l_cap = max(1, n_edges // (2 * world))
-    n_res = int(resident.sum())  # one sync (per forward) to guard the degenerate case
-    if n_res >= l_cap:
-        # Common case: local is all-resident, remote is the disjoint complement.
-        local_idx = order[:l_cap]
-        remote_idx = order[l_cap:]
-        local_valid = torch.ones(l_cap, device=dev)
-        remote_valid = torch.ones(n_edges - l_cap, device=dev)
-        local_sender_owned = local_index[sender[local_idx]]
-    else:
-        # Degenerate (n_resident < L_cap, e.g. a rank with all-remote neighbours):
-        # fall back to a full-E remote with the resident edges zeroed, so nothing is
-        # dropped. Exact; different remote shape (rare → at most one extra compile).
-        local_idx = order[:l_cap]
-        remote_idx = torch.arange(n_edges, device=dev)
-        local_valid = resident[local_idx].to(torch.float32)
-        remote_valid = torch.ones(n_edges, device=dev)
-        remote_valid[local_idx] = 1.0 - local_valid  # local-handled off; leaked stay on
-        local_sender_owned = local_index[sender[local_idx]].clamp_(0, max(n_owned - 1, 0))
-    set_overlap_routing(
-        local_idx, local_sender_owned, local_valid, remote_idx, remote_valid, nlo
-    )
-
-
 @torch._dynamo.disable  # type: ignore[misc]
 @distributed_method
 def _distributed_partition_graph(
@@ -578,10 +518,6 @@ def _distributed_partition_graph(
     finally:
         backbone_self.otf_graph = saved_otf
     nlo, n_owned = _node_partition_bounds(ctx)
-    # Async-overlap: precompute + publish the edge split here (eager) so the
-    # compiled Edgewise reads it as a pure index_select (no graph break).
-    if os.environ.get("NVALCHEMI_UMA_OVERLAP"):
-        _publish_overlap_routing(ctx, gd["edge_index"], nlo, n_owned)
     data_dict["atomic_numbers"] = data_dict["atomic_numbers"][nlo : nlo + n_owned]
     data_dict["batch"] = data_dict["batch"][nlo : nlo + n_owned]
     data_dict["gp_node_offset"] = nlo
@@ -627,92 +563,6 @@ def _distributed_edgewise_gather(
         wigner_inv_envelope,
         node_offset,
     )
-
-
-@distributed_method
-def _distributed_edgewise_gather_overlap(
-    ctx: Any,
-    original: Any,
-    edgewise_self: Any,
-    x: "torch.Tensor",
-    x_edge: "torch.Tensor",
-    edge_index: "torch.Tensor",
-    wigner: "torch.Tensor",
-    wigner_inv_envelope: "torch.Tensor",
-    *args: Any,
-    **kwargs: Any,
-) -> Any:
-    """Async-overlap variant of :func:`_distributed_edgewise_gather`.
-
-    Splits the owned-receiver edges by whether their **sender** is resident on this
-    rank (:meth:`LocalityPartition`): the resident-sender messages compute from the
-    *owned* features (no all-gather); the remote-sender messages consume the
-    all-gathered full features. The conv scatters both passes into the same owned
-    receiver rows, and summing them is exact — ``forward_chunk`` is a per-edge
-    message plus a scatter-add, so a disjoint edge split sums to the whole.
-
-    Overlap is **OFF** (synchronous two-pass): the all-gather (``refresh_neighbors``)
-    is still awaited before the remote pass. This isolates the split correctness;
-    the actual compute/comm concurrency is a later flip (inductor's reorder pass).
-    Gated by ``NVALCHEMI_UMA_OVERLAP`` — the validated default path
-    (:func:`_distributed_edgewise_gather`) is unchanged when unset.
-    """
-    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
-        get_overlap_routing,
-    )
-
-    node_offset = kwargs.get("node_offset", 0)
-    n_owned = x.shape[0]
-    routing = get_overlap_routing()
-    if routing is None:
-        # No split published (not a node-partition forward) — stock gather.
-        x_full = refresh_neighbors(x)
-        return edgewise_self.forward_chunk(
-            x_full, n_owned, x_edge, edge_index, wigner, wigner_inv_envelope, node_offset
-        )
-    local_idx, lso, local_valid, remote_idx, remote_valid, nlo = routing
-
-    def _bcast(mask: "torch.Tensor", ref: "torch.Tensor") -> "torch.Tensor":
-        return mask.view((-1,) + (1,) * (ref.dim() - 1))
-
-    # LOCAL bucket: resident-sender edges, an ``index_select`` subset run on the
-    # OWNED features with both ends in owned-local space (sender via ``lso``,
-    # receiver shifted by ``nlo``) and ``node_offset=0``. No all-gather needed — this
-    # is the compute overlapped with the collective (P2). ``local_valid`` zeros any
-    # pad rows through ``wigner_inv_envelope`` (the output rotation) → exactly zero.
-    winv_l = wigner_inv_envelope.index_select(0, local_idx) * _bcast(
-        local_valid, wigner_inv_envelope
-    )
-    ei_local = torch.stack([lso, edge_index[1].index_select(0, local_idx) - nlo])
-    out = edgewise_self.forward_chunk(
-        x,
-        n_owned,
-        x_edge.index_select(0, local_idx),
-        ei_local,
-        wigner.index_select(0, local_idx),
-        winv_l,
-        0,
-    )
-    # REMOTE pass: the DISJOINT complement (``remote_idx``) on the all-gathered
-    # features. Disjoint from the local bucket ⇒ every edge is computed exactly once
-    # (total conv work = E, no full-E recompute/masking). Slice every per-edge tensor
-    # by ``remote_idx``; ``remote_valid`` only masks pad rows in the degenerate
-    # fallback.
-    x_full = refresh_neighbors(x)
-    winv_r = wigner_inv_envelope.index_select(0, remote_idx) * _bcast(
-        remote_valid, wigner_inv_envelope
-    )
-    ei_remote = edge_index.index_select(1, remote_idx)
-    out = out + edgewise_self.forward_chunk(
-        x_full,
-        n_owned,
-        x_edge.index_select(0, remote_idx),
-        ei_remote,
-        wigner.index_select(0, remote_idx),
-        winv_r,
-        node_offset,
-    )
-    return out
 
 
 def _distributed_reduce_node_to_system(
@@ -1396,20 +1246,11 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                 GraphParallelPolicy,
             )
 
-            # The conv gather has an async comm/compute-overlap variant (splits
-            # owned-receiver edges by sender residency; local senders compute during
-            # the all-gather). Off by default — the validated gather is unchanged —
-            # opt in with ``NVALCHEMI_UMA_OVERLAP``.
-            edgewise_gather = (
-                _distributed_edgewise_gather_overlap
-                if os.environ.get("NVALCHEMI_UMA_OVERLAP")
-                else _distributed_edgewise_gather
-            )
             partition_helpers = (
                 MethodAdapter(
                     eSCNMDBackbone, "_generate_graph", _distributed_partition_graph
                 ),
-                MethodAdapter(Edgewise, "forward", edgewise_gather),
+                MethodAdapter(Edgewise, "forward", _distributed_edgewise_gather),
                 PythonAdapter(
                     module_path="fairchem.core.models.uma.outputs",
                     attr_name="reduce_node_to_system",

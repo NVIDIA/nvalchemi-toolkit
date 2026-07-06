@@ -50,7 +50,6 @@ __all__ = [
     "Scope",
     "distributed_method",
     "neighbor_refresh_adapters",
-    "overlap_adapters",
     "localize",
     "refresh_neighbors",
     "scatter_to_owners",
@@ -186,49 +185,6 @@ def neighbor_refresh_adapters(
         cls = type(m)
         seen.setdefault((cls.__module__, cls.__qualname__), cls)
     return tuple(MethodAdapter(cls, "forward", _refresh) for cls in seen.values())
-
-
-def overlap_adapters(
-    modules: Any, *, feature_arg: int = 0, edge_arg: int = 1
-) -> tuple:
-    """Build per-instance adapters that add async comm/compute overlap to each
-    message module's ``forward`` (proposal §3.0).
-
-    Pass the live message-passing sub-modules (e.g. ``model.layers``). Each gets a
-    :class:`ModuleForwardAdapter` whose replacement routes the module's *own*
-    forward through :func:`overlapped_message`: the active strategy's per-layer
-    exchange (all-gather / halo borrow) is split by sender residency and the
-    module is called once per bucket — the resident-sender messages compute while
-    the exchange is in flight, the remote-sender messages consume the exchanged
-    features, and the two are summed. The model body is never edited; overlap is
-    added purely by naming the module here and declaring these on the spec via
-    :meth:`MLIPSpec.with_adapters`. Outside a distributed forward it is the
-    identity (single-process runs unchanged).
-
-    ``feature_arg`` / ``edge_arg`` index the node-feature tensor and the ``(2, E)``
-    edge tensor in the module's ``forward`` signature (defaults ``(x, edge_index)``).
-    """
-    from nvalchemi.distributed._core.adapter import (
-        ModuleForwardAdapter,  # noqa: PLC0415
-    )
-    from nvalchemi.distributed._core.overlap import overlapped_message  # noqa: PLC0415
-
-    def _make(original: Any) -> Any:
-        def _replacement(*args: Any, **kwargs: Any) -> Any:
-            features = args[feature_arg]
-            edge_index = args[edge_arg]
-            return overlapped_message(
-                lambda f, e: original(f, e), features, edge_index
-            )
-
-        return _replacement
-
-    return tuple(
-        ModuleForwardAdapter(
-            module=m, replacement=_make(m.forward), label="overlap"
-        )
-        for m in modules
-    )
 
 
 def refresh_neighbors(x: torch.Tensor) -> torch.Tensor:

@@ -35,9 +35,6 @@ __all__ = [
     "set_gp_compile_routing",
     "get_gp_compile_routing",
     "clear_gp_compile_routing",
-    "set_overlap_routing",
-    "get_overlap_routing",
-    "clear_overlap_routing",
 ]
 
 # Single-slot holder. ``None`` = not inside a compiled DD region (helpers use
@@ -111,44 +108,3 @@ def get_gp_compile_routing() -> Any:
 def clear_gp_compile_routing() -> None:
     """Reset the graph-parallel routing holder to ``None`` after the forward."""
     _GP_COMPILE_ROUTING[0] = None
-
-
-# Single-slot holder for the async-overlap edge split (node-partition GP). ``None``
-# = overlap off. A tuple ``(local_idx, local_sender_owned, local_valid, remote_idx,
-# remote_valid, node_offset)`` computed eagerly per forward from the owned-receiver
-# ``edge_index`` and read inside the compiled Edgewise so the split is a pure
-# ``index_select`` + elementwise mask — no ``int()`` / boolean-mask indexing, hence
-# no graph break. The edges are argsort-partitioned (resident-first) into two
-# DISJOINT fixed-shape buckets: LOCAL (``local_idx``, resident senders → computed on
-# owned features during the collective) and REMOTE (``remote_idx``, the complement →
-# computed on the gathered features). Disjoint ⇒ total conv work is ``E`` (no
-# recompute) — unlike a full-E remote with masking. ``*_valid`` are per-edge {0,1}
-# masks on ``wigner_inv_envelope`` (the output rotation) so any pad rows contribute
-# exactly zero. Topology drifts per step, so this is refreshed every forward; the
-# bucket caps are fixed, so no recompile.
-_OVERLAP_ROUTING: list[Any] = [None]
-
-
-def set_overlap_routing(
-    local_idx: Any,
-    local_sender_owned: Any,
-    local_valid: Any,
-    remote_idx: Any,
-    remote_valid: Any,
-    node_offset: int,
-) -> None:
-    """Publish the overlap edge-split routing for the in-region Edgewise."""
-    _OVERLAP_ROUTING[0] = (
-        local_idx, local_sender_owned, local_valid, remote_idx, remote_valid,
-        node_offset,
-    )
-
-
-def get_overlap_routing() -> Any:
-    """Return the overlap edge-split routing tuple, or ``None``."""
-    return _OVERLAP_ROUTING[0]
-
-
-def clear_overlap_routing() -> None:
-    """Reset the overlap routing holder to ``None`` after the forward."""
-    _OVERLAP_ROUTING[0] = None

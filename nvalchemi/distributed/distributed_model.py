@@ -117,8 +117,6 @@ def _configure_dd_dynamo() -> None:
        ``__init__``), so a launcher should set them from ``LOCAL_RANK`` at process
        start; this call is the in-process best effort.
     """
-    import os  # noqa: PLC0415
-
     import torch._dynamo as _td  # noqa: PLC0415
 
     for _attr, _val in (
@@ -130,18 +128,6 @@ def _configure_dd_dynamo() -> None:
         if hasattr(_td.config, _attr):
             setattr(_td.config, _attr, max(getattr(_td.config, _attr), _val))
     _td.config.force_parameter_static_shapes = False
-
-    # Inductor compute/comm overlap (proposal §3.B, "P2"). A message adapter that
-    # splits its edges by sender residency (e.g. UMA's overlap Edgewise) exposes
-    # local-sender compute that is independent of the per-layer collective; this
-    # inductor pass reorders the schedule to run that compute *during* the
-    # collective. Env-gated OFF — the two-pass split is exact either way, this only
-    # turns the synchronous version into an overlapped one.
-    if os.environ.get("NVALCHEMI_DD_OVERLAP_REORDER"):
-        import torch._inductor.config as _ind  # noqa: PLC0415
-
-        if hasattr(_ind, "reorder_for_compute_comm_overlap"):
-            _ind.reorder_for_compute_comm_overlap = True
 
     isolate_compile_cache_per_rank()
 
@@ -1109,7 +1095,6 @@ class DistributedModel:
         # (``refresh_neighbors`` gates the fixed gather on ``is_compiling``).
         from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
             clear_gp_compile_routing,
-            clear_overlap_routing,
             set_gp_compile_routing,
         )
 
@@ -1126,10 +1111,6 @@ class DistributedModel:
                 output = _padder.unpad(output)
         finally:
             clear_gp_compile_routing()
-            # The overlap edge split (if any) is republished every forward by the
-            # partition-graph adapter; clear it so a later non-partition forward
-            # can't read stale routing.
-            clear_overlap_routing()
             # Restore the backbone's ``otf_graph`` flag the padder flipped, even on
             # a forward error, so the next step isn't stuck on the fixed-shape path.
             if _padder is not None:
