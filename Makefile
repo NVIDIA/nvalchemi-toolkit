@@ -21,9 +21,16 @@
 
 # Keep `uv run` aligned with the selected CUDA stack. Bare `uv run` performs a
 # sync without extras, which can replace a CUDA 12 environment with the default.
+# The cuXX extras only ship CUDA wheels for Linux, so only default to cu13 there;
+# other platforms (e.g. macOS) fall back to the native (non-CUDA) torch build.
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
 CUDA_EXTRA ?= cu13
+else
+CUDA_EXTRA ?=
+endif
 OPTIONAL_EXTRAS ?=
-UV_EXTRA_FLAGS = --extra $(CUDA_EXTRA) $(foreach extra,$(OPTIONAL_EXTRAS),--extra $(extra))
+UV_EXTRA_FLAGS = $(if $(CUDA_EXTRA),--extra $(CUDA_EXTRA)) $(foreach extra,$(OPTIONAL_EXTRAS),--extra $(extra))
 UV_SYNC ?= uv sync $(UV_EXTRA_FLAGS)
 UV_RUN ?= uv run $(UV_EXTRA_FLAGS)
 
