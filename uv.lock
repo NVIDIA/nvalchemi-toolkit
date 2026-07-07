@@ -211,7 +211,7 @@ wheels = [
 
 [[package]]
 name = "aimnet"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -227,9 +227,9 @@ dependencies = [
     { name = "torch", version = "2.12.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu13' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma')" },
     { name = "warp-lang" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/25/411b7ff66d5352ecc47f7845a5a0c99f0d23b4314d1b588106840a9621d2/aimnet-0.1.1.tar.gz", hash = "sha256:3fb57ccbb4cad85badd52d40bd776a9ed479ea4f8216ea656ca599a6fdd199f8", size = 524652, upload-time = "2026-04-05T05:45:33.503Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/9c/17d5c0d1b697312ad7563a6a7728a48f9663bb553ac2e4a7f032bebeadda/aimnet-0.2.0.tar.gz", hash = "sha256:0dfcd7e9f6ff723e92730764dea871473b8b17108a0b5a88625f27962e75e57e", size = 548028, upload-time = "2026-05-03T16:26:34.017Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/5b/d5ba646b6b25fe3dc82921504b0b8ab096aeb249ef06622c09b48c32a55c/aimnet-0.1.1-py3-none-any.whl", hash = "sha256:9d990ab241efe3257db033de2cc7e1c70e5e372d0b005546223605735b9fa827", size = 550318, upload-time = "2026-04-05T05:45:35.151Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/94/0b04042453950e157bf6b741df20820624b09887cfa442206d657d2aa4f7/aimnet-0.2.0-py3-none-any.whl", hash = "sha256:98b56538f31f781571083e5b1b66be85f26b31647ce743078182298143810264", size = 575236, upload-time = "2026-05-03T16:26:32.444Z" },
 ]
 
 [[package]]
