@@ -25,6 +25,7 @@ Tests all composition cases from the proposal:
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 
 import pytest
@@ -575,6 +576,29 @@ class TestPipelineAutogradGroup:
         assert a.model_config.active_outputs == {"energy", "forces"}
         assert b.model_config.active_outputs == {"energy", "forces"}
 
+    def test_deepcopy_refreshes_step_caches_on_forward(self, simple_batch):
+        """Deep-copied pipelines rebuild id-keyed step caches on first forward."""
+        model = MockAutogradEnergyModel()
+        model.model_config.active_outputs = {"energy", "forces"}
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        original_step_id = id(pipe.groups[0].steps[0])
+        assert original_step_id in pipe._step_active_overrides
+        assert "forces" not in pipe._step_active_overrides[original_step_id]
+
+        ema_pipe = copy.deepcopy(pipe)
+        copied_step_id = id(ema_pipe.groups[0].steps[0])
+        assert copied_step_id != original_step_id
+        assert copied_step_id not in ema_pipe._step_active_overrides
+
+        ema_pipe.model_config.active_outputs = {"energy", "forces"}
+        ema_pipe(simple_batch)
+
+        assert copied_step_id in ema_pipe._step_active_overrides
+        assert "forces" not in ema_pipe._step_active_overrides[copied_step_id]
+        assert model.model_config.active_outputs == {"energy", "forces"}
+
 
 class TestPipelineDependentAutograd:
     """Case 2b: A predicts charges+energy, B uses charges for energy.
@@ -812,6 +836,27 @@ class TestPipelineNeighborAdaptationApi:
                 groups=[PipelineGroup(steps=[MockEnergyForceModel()])],
                 max_cutoff_ratio=0.99,
             )
+
+    def test_forwards_neighbor_list_method(self):
+        class _NLModel(MockEnergyForceModel):
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "forces"}),
+                    needs_pbc=False,
+                    neighbor_config=NeighborConfig(cutoff=5.0),
+                    active_outputs={"energy", "forces"},
+                )
+
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[_NLModel()]),
+            ]
+        )
+        hooks = pipe.make_neighbor_hooks(neighbor_list_method="cell_list")
+
+        assert len(hooks) == 1
+        assert hooks[0].method == "cell_list"
 
 
 # ===========================================================================
@@ -1100,6 +1145,26 @@ class TestPipelineNeighborAdaptation:
             assert 3 not in valid.tolist(), (
                 f"atom {atom_idx} should not see atom 3 at cutoff 4"
             )
+
+    def test_deepcopy_preserves_neighbor_adaptation(self):
+        """Deep-copied pipelines still filter neighbors per sub-model cutoff."""
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[wide, tight])])
+        tight_step_id = id(pipe.groups[0].steps[1])
+        assert pipe._step_neighbor_plans[tight_step_id].needs_cutoff_adaptation is True
+
+        copied = copy.deepcopy(pipe)
+        tight_copy = copied.groups[0].steps[1].model
+        copied_tight_step_id = id(copied.groups[0].steps[1])
+        assert copied_tight_step_id not in copied._step_neighbor_plans
+
+        batch = _make_neighbor_batch()
+        copied(batch)
+
+        assert copied_tight_step_id in copied._step_neighbor_plans
+        expected_nn = torch.tensor([2, 2, 2, 0], dtype=torch.int32)
+        torch.testing.assert_close(tight_copy.captured_num_neighbors, expected_nn)
 
     def test_matrix_to_coo_conversion(self):
         """COO model in a MATRIX pipeline receives converted neighbor list."""

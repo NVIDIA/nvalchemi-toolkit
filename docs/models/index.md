@@ -48,6 +48,15 @@ mechanical reference data.
   - ✓
   - charge
   - MATRIX
+* - {py:class}`~nvalchemi.models.uma.UMAWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✓
+  - charge, spin
+  - COO
 * - {py:class}`~nvalchemi.models.demo.DemoModelWrapper`
   - ✓
   - ✓

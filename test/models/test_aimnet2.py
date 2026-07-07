@@ -21,6 +21,7 @@ requiring the actual model.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -52,8 +53,8 @@ class _MockAIMNet2Model(nn.Module):
     def forward(self, model_input: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         coord = model_input["coord"]
         n_atoms = coord.shape[0]
-        # Simple energy: sum of squared positions (differentiable)
-        energy = (coord**2).sum().unsqueeze(0)
+        # Include trainable weights so force losses can update model parameters.
+        energy = ((coord**2).sum() + self.linear(coord).sum()).unsqueeze(0)
         return {
             "energy": energy,
             "charges": torch.ones(n_atoms, dtype=coord.dtype, device=coord.device)
@@ -65,11 +66,15 @@ class _MockAIMNet2Model(nn.Module):
 class _MockAIMNet2Calculator:
     """Minimal mock of aimnet.calculators.AIMNet2Calculator."""
 
+    calls: list[dict[str, Any]] = []
+
     def __init__(self, model: Any = None, device: str = "cpu", **kwargs):
-        self.model = model if model is not None else _MockAIMNet2Model()
+        self.model = model if isinstance(model, nn.Module) else _MockAIMNet2Model()
         self.device = device
+        self.kwargs = kwargs
         self.keys_out = ["energy", "charges"]
         self.atom_feature_keys = ["charges"]
+        self.calls.append({"model": model, "device": device, **kwargs})
 
     def mol_flatten(self, data: dict) -> dict:
         """Pass through — already flat for single-system batches."""
@@ -115,31 +120,29 @@ def simple_batch():
     return Batch.from_data_list([data])
 
 
-def _make_wrapper(model: _MockAIMNet2Model) -> Any:
-    """Construct an AIMNet2Wrapper with mock AIMNet2Calculator."""
+@contextmanager
+def _mock_aimnet_dependency():
+    """Temporarily install the mock AIMNet dependency."""
     import sys
 
     from nvalchemi._optional import OptionalDependency
 
     dep = OptionalDependency.AIMNET
     orig_available = dep._available
-
-    # Mock the aimnet.calculators module so the import inside __init__ works
-    mock_calculators = MagicMock()
-    mock_calculators.AIMNet2Calculator = _MockAIMNet2Calculator
     orig_mod = sys.modules.get("aimnet.calculators")
     orig_aimnet = sys.modules.get("aimnet")
+
+    # Mock the aimnet.calculators module so imports inside the wrapper work.
+    mock_calculators = MagicMock()
+    mock_calculators.AIMNet2Calculator = _MockAIMNet2Calculator
     sys.modules["aimnet"] = MagicMock()
     sys.modules["aimnet.calculators"] = mock_calculators
-
     dep._available = True
+    _MockAIMNet2Calculator.calls = []
     try:
-        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
-
-        wrapper = AIMNet2Wrapper(model)
+        yield
     finally:
         dep._available = orig_available
-        # Restore original module state
         if orig_mod is None:
             sys.modules.pop("aimnet.calculators", None)
         else:
@@ -148,7 +151,14 @@ def _make_wrapper(model: _MockAIMNet2Model) -> Any:
             sys.modules.pop("aimnet", None)
         else:
             sys.modules["aimnet"] = orig_aimnet
-    return wrapper
+
+
+def _make_wrapper(model: _MockAIMNet2Model, train: bool | None = None) -> Any:
+    """Construct an AIMNet2Wrapper with mock AIMNet2Calculator."""
+    with _mock_aimnet_dependency():
+        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+        return AIMNet2Wrapper(model, train=train)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +188,43 @@ class TestAIMNet2WrapperInit:
         wrapper = _make_wrapper(mock_model)
         assert wrapper.model is mock_model
         assert isinstance(wrapper.model_config, ModelConfig)
+
+    def test_construction_uses_model_training_mode_by_default(self, mock_model):
+        """Default calculator train flag follows the model training mode."""
+        mock_model.eval()
+
+        _make_wrapper(mock_model)
+
+        assert _MockAIMNet2Calculator.calls[-1]["train"] is False
+
+    def test_construction_allows_explicit_train_flag(self, mock_model):
+        """Explicit train flag overrides the model training mode."""
+        mock_model.eval()
+
+        _make_wrapper(mock_model, train=True)
+
+        assert _MockAIMNet2Calculator.calls[-1]["train"] is True
+
+    def test_from_checkpoint_trainable_when_not_compiled(self):
+        """Checkpoint loading keeps parameters trainable without compilation."""
+        with _mock_aimnet_dependency():
+            from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+            wrapper = AIMNet2Wrapper.from_checkpoint("mock", compile_model=False)
+
+        assert wrapper.model.training
+        assert _MockAIMNet2Calculator.calls[0]["train"] is True
+        assert _MockAIMNet2Calculator.calls[1]["train"] is True
+
+    def test_from_checkpoint_frozen_when_compiled(self):
+        """Compiled checkpoint loading keeps inference-only calculator mode."""
+        with _mock_aimnet_dependency():
+            from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+            AIMNet2Wrapper.from_checkpoint("mock", compile_model=True)
+
+        assert _MockAIMNet2Calculator.calls[0]["train"] is False
+        assert _MockAIMNet2Calculator.calls[1]["train"] is False
 
     def test_nse_detection_standard(self, mock_model):
         """Standard model (1 charge channel) is not NSE."""
@@ -329,8 +376,41 @@ class TestAIMNet2WrapperMockForward:
         out = self.wrapper(batch)
 
         assert len(calls) == 1
+        assert calls[0][1]["training"] is True
         assert out["forces"].shape == (3, 3)
         assert out["stress"].shape == (1, 3, 3)
+
+    def test_adapt_input_normalizes_single_system_cell(self):
+        """Single-system cells are promoted to AIMNet2 batch shape."""
+        data = MagicMock()
+        data.positions = torch.zeros(3, 3)
+        data.atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long)
+        data.batch_idx = torch.zeros(3, dtype=torch.long)
+        data.charge = torch.zeros(1, 1)
+        data.cell = torch.eye(3) * 15.0
+        data.num_nodes = 3
+        data.num_graphs = 1
+        data.neighbor_matrix = None
+
+        inp = self.wrapper.adapt_input(data)
+
+        assert inp["cell"].shape == (1, 3, 3)
+
+    def test_force_loss_updates_weights_in_train_mode(self, simple_batch):
+        """Force-only losses keep a graph back to trainable parameters."""
+        self.wrapper.train()
+        self.wrapper.model_config.active_outputs = {"energy", "forces"}
+        optimizer = torch.optim.SGD(self.wrapper.model.parameters(), lr=0.1)
+        before = self.wrapper.model.linear.weight.detach().clone()
+
+        out = self.wrapper(simple_batch)
+        loss = out["forces"].square().sum()
+        loss.backward()
+        optimizer.step()
+
+        after = self.wrapper.model.linear.weight.detach()
+        assert self.wrapper.model.linear.weight.grad is not None
+        assert not torch.allclose(after, before)
 
 
 @pytest.mark.skipif(
@@ -508,6 +588,36 @@ class TestAIMNet2Integration:
         out2 = wrapper(batch)
         assert torch.isfinite(out2["energy"]).all()
         assert torch.isfinite(out2["forces"]).all()
+
+    def test_force_loss_updates_real_checkpoint_weights(self, wrapper, batch):
+        """A force loss can update parameters from a real AIMNet2 checkpoint."""
+        wrapper.train()
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        params = [
+            param
+            for param in wrapper.model.parameters()
+            if param.requires_grad and param.is_floating_point()
+        ]
+        assert params
+        before = [param.detach().clone() for param in params]
+        optimizer = torch.optim.SGD(params, lr=1e-4)
+
+        _build_nl(batch, wrapper)
+        optimizer.zero_grad()
+        out = wrapper(batch)
+        loss = out["forces"].square().mean()
+        loss.backward()
+        grads = [param.grad for param in params]
+        assert any(
+            grad is not None and torch.count_nonzero(grad).item() for grad in grads
+        )
+
+        optimizer.step()
+
+        assert any(
+            grad is not None and not torch.equal(param.detach(), old_param)
+            for param, old_param, grad in zip(params, before, grads, strict=True)
+        )
 
     # -- compute_embeddings --
 

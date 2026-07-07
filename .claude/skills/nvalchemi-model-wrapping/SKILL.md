@@ -1,6 +1,12 @@
 ---
 name: nvalchemi-model-wrapping
-description: How to wrap an arbitrary MLIP (Machine Learning Interatomic Potential) using the BaseModelMixin interface to standardize inputs, outputs, and embeddings.
+description: >-
+  How to wrap an arbitrary MLIP (Machine Learning Interatomic Potential) using
+  the BaseModelMixin interface to standardize inputs, outputs, and embeddings.
+  Use when integrating a model such as MACE or AIMNet2 (e.g. MACEWrapper,
+  loading pretrained checkpoints) so dynamics, training, or fine-tuning stages
+  can call it, or when exposing energies, forces, or embeddings from a custom
+  PyTorch model.
 ---
 
 # nvalchemi Model Wrapping
@@ -22,7 +28,7 @@ from nvalchemi.data import AtomicData, Batch
 
 A wrapped model uses **multiple inheritance**: your PyTorch model class + `BaseModelMixin`.
 
-```
+```text
 ┌──────────────────────┐    ┌──────────────────┐
 │  YourModel(nn.Module)│    │  BaseModelMixin   │
 │  - forward()         │    │  - model_card     │

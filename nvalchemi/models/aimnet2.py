@@ -105,6 +105,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         An AIMNet2 model (loaded from checkpoint or instantiated
         directly).  Use :meth:`from_checkpoint` for the common
         construction path.
+    train : bool | None, optional
+        Whether AIMNet2Calculator should keep the model trainable. Defaults
+        to the wrapped module's current training mode.
 
     Attributes
     ----------
@@ -118,11 +121,12 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 
     model: nn.Module
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: nn.Module, train: bool | None = None) -> None:
         from aimnet.calculators import AIMNet2Calculator
 
         super().__init__()
         self.model = model
+        calculator_train = model.training if train is None else train
 
         # Build a calculator for its pad_input / unpad_output utilities.
         # We no longer use it for neighbor list construction.
@@ -132,7 +136,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             needs_coulomb=False,
             needs_dispersion=False,
             compile_model=False,
-            train=False,
+            train=calculator_train,
         )
 
         # Detect NSE (Neutral Spin Equilibrated) models.
@@ -205,6 +209,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         """
         from aimnet.calculators import AIMNet2Calculator
 
+        train = not compile_model
         calc = AIMNet2Calculator(
             model=str(checkpoint_path),
             device=str(device),
@@ -212,12 +217,12 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             needs_dispersion=False,
             compile_model=compile_model,
             compile_kwargs=compile_kwargs,
-            train=False,
+            train=train,
         )
         raw_model = calc.model
         if hasattr(raw_model, "_orig_mod"):
             raw_model = raw_model._orig_mod
-        return cls(raw_model)
+        return cls(raw_model, train=train)
 
     @staticmethod
     def _extract_cutoff(raw_model: nn.Module) -> float:
@@ -330,6 +335,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         # -- PBC cell --
         cell = getattr(data, "cell", None)
         if cell is not None:
+            # AIMNet2 expects one cell matrix per system, even for single systems.
+            if cell.ndim == 2:
+                cell = cell.unsqueeze(0)
             result["cell"] = cell.to(torch.float32)
 
         # -- NSE multiplicity --
@@ -481,6 +489,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 displacement,
                 orig_cell,
                 data.num_graphs,
+                training=self.training,
             )
             result["forces"] = forces
             result["stress"] = stress
@@ -490,8 +499,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 energy,
                 data.positions,
                 grad_outputs=torch.ones_like(energy),
-                create_graph=False,
-                retain_graph=compute_stresses,
+                create_graph=self.training,
+                retain_graph=compute_stresses or self.training,
             )[0]
             result["forces"] = forces
         elif compute_stresses and displacement is not None:
@@ -500,6 +509,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 displacement,
                 orig_cell,
                 data.num_graphs,
+                training=self.training,
             )
 
         # Restore original positions/cell if strain was applied.

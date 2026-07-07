@@ -64,6 +64,121 @@ _EXCLUDED_KEYS = frozenset({"batch_idx", "batch_ptr", "device", "dtype", "info"}
 _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
 
 
+def _build_batch_storage(
+    samples: Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]],
+    *,
+    node_keys: frozenset[str] | set[str],
+    edge_keys: frozenset[str] | set[str],
+    system_keys: frozenset[str] | set[str],
+    device: torch.device,
+    validate: bool,
+    attr_map: LevelSchema,
+    field_levels: dict[str, str] | None = None,
+    fallback_level: str | None = None,
+) -> tuple[MultiLevelStorage, dict[str, set[str]]]:
+    """Shared batch-construction pipeline for from_data_list / from_raw_dicts.
+
+    Parameters
+    ----------
+    samples : Iterator
+        Yields ``(key_value_pairs, num_nodes, num_edges)`` per sample.
+        ``key_value_pairs`` is an iterator of ``(key, tensor)`` pairs.
+    node_keys, edge_keys, system_keys : set-like
+        Key sets for level classification.
+    device : torch.device
+        Target device for tensors.
+    validate : bool
+        Whether to validate storage shapes.
+    attr_map : LevelSchema
+        Attribute registry.
+    field_levels : dict[str, str] or None, default=None
+        Explicit per-field level overrides (``"atom"`` / ``"edge"`` /
+        ``"system"``), typically from reader metadata.  Checked for keys
+        not found in the static key sets.
+    fallback_level : str or None, default=None
+        Level to assign keys not in any key set and not in
+        *field_levels*.  ``"system"`` for raw-dict paths.
+        ``None`` to silently drop unclassified keys.
+
+    Returns
+    -------
+    tuple[MultiLevelStorage, dict[str, set[str]]]
+        The constructed storage and tracked key sets.
+    """
+    node_tensors: dict[str, list[Tensor]] = defaultdict(list)
+    edge_tensors: dict[str, list[Tensor]] = defaultdict(list)
+    system_tensors: dict[str, list[Tensor]] = defaultdict(list)
+    node_counts: list[int] = []
+    edge_counts: list[int] = []
+
+    def _classify(key: str) -> str | None:
+        if key in node_keys:
+            return "atom"
+        if key in edge_keys:
+            return "edge"
+        if key in system_keys:
+            return "system"
+        if field_levels is not None and key in field_levels:
+            return field_levels[key]
+        return fallback_level
+
+    node_offset = 0
+    for key_value_pairs, n_nodes, n_edges in samples:
+        node_counts.append(n_nodes)
+        edge_counts.append(n_edges)
+        for key, value in key_value_pairs:
+            level = _classify(key)
+            if level is None:
+                continue
+            value = value.to(device, non_blocking=True)
+            if level == "atom":
+                node_tensors[key].append(value)
+            elif level == "edge":
+                if key in _INDEX_KEYS:
+                    value = value + node_offset
+                edge_tensors[key].append(value)
+            else:
+                system_tensors[key].append(value)
+        node_offset += n_nodes
+
+    atoms_data = {k: torch.cat(v, dim=0) for k, v in node_tensors.items()}
+    edges_data = {k: torch.cat(v, dim=0) for k, v in edge_tensors.items()}
+    system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
+
+    groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
+    if atoms_data:
+        groups["atoms"] = SegmentedLevelStorage(
+            data=atoms_data,
+            device=device,
+            segment_lengths=node_counts,
+            validate=validate,
+            attr_map=attr_map,
+        )
+    if edges_data:
+        groups["edges"] = SegmentedLevelStorage(
+            data=edges_data,
+            device=device,
+            segment_lengths=edge_counts,
+            validate=validate,
+            attr_map=attr_map,
+        )
+    if system_data:
+        groups["system"] = UniformLevelStorage(
+            data=system_data,
+            device=device,
+            validate=validate,
+            attr_map=attr_map,
+        )
+
+    storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=validate)
+    tracked_keys = {
+        "node": set(node_tensors.keys()),
+        "edge": set(edge_tensors.keys()),
+        "system": set(system_tensors.keys()),
+    }
+    return storage, tracked_keys
+
+
 class Batch(DataMixin):
     """Graph-aware batch built on :class:`MultiLevelStorage`.
 
@@ -277,6 +392,7 @@ class Batch(DataMixin):
         skip_validation: bool = False,
         attr_map: LevelSchema | None = None,
         exclude_keys: list[str] | None = None,
+        field_levels: dict[str, str] | None = None,
     ) -> Batch:
         """Construct a batch from a list of :class:`AtomicData` objects.
 
@@ -292,6 +408,10 @@ class Batch(DataMixin):
             Attribute registry.  Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
+        field_levels : dict[str, str], optional
+            Explicit per-field level map (``"atom"`` / ``"edge"`` /
+            ``"system"``), typically from :attr:`Reader.field_levels`.
+            Used to classify custom keys not in the data class key sets.
 
         Returns
         -------
@@ -309,87 +429,131 @@ class Batch(DataMixin):
 
         representative = data_list[0]
         data_cls = representative.__class__
-        node_keys = representative.__node_keys__
-        edge_keys = representative.__edge_keys__
-        system_keys = representative.__system_keys__
+        node_key_set = representative.__node_keys__
+        edge_key_set = representative.__edge_keys__
+        system_key_set = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
         actual_keys = set(data_list[0].model_dump(exclude_none=True).keys()) - excluded
 
-        node_tensors: dict[str, list[Tensor]] = defaultdict(list)
-        edge_tensors: dict[str, list[Tensor]] = defaultdict(list)
-        system_tensors: dict[str, list[Tensor]] = defaultdict(list)
-        node_counts: list[int] = []
-        edge_counts: list[int] = []
+        def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
+            for data in data_list:
+                pairs = (
+                    (key, value)
+                    for key in actual_keys
+                    if isinstance((value := getattr(data, key, None)), Tensor)
+                )
+                yield pairs, data.num_nodes, data.num_edges
 
-        node_offset = 0
-        for data in data_list:
-            n_nodes = data.num_nodes
-            n_edges = data.num_edges
-            node_counts.append(n_nodes)
-            edge_counts.append(n_edges)
-
-            for key in actual_keys:
-                value = getattr(data, key, None)
-                if not isinstance(value, Tensor):
-                    continue
-                value = value.to(device)
-
-                if key in node_keys:
-                    node_tensors[key].append(value)
-                elif key in edge_keys:
-                    if key in _INDEX_KEYS:
-                        value = value + node_offset
-                    edge_tensors[key].append(value)
-                elif key in system_keys:
-                    system_tensors[key].append(value)
-
-            node_offset += n_nodes
-
-        atoms_data = {k: torch.cat(v, dim=0) for k, v in node_tensors.items()}
-        edges_data: dict[str, Tensor] = {}
-        for k, v in edge_tensors.items():
-            edges_data[k] = torch.cat(v, dim=0)
-        system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
-
-        validate = not skip_validation
-        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
-        if atoms_data:
-            groups["atoms"] = SegmentedLevelStorage(
-                data=atoms_data,
-                device=device,
-                segment_lengths=node_counts,
-                validate=validate,
-                attr_map=attr_map,
-            )
-        if edges_data:
-            groups["edges"] = SegmentedLevelStorage(
-                data=edges_data,
-                device=device,
-                segment_lengths=edge_counts,
-                validate=validate,
-                attr_map=attr_map,
-            )
-        if system_data:
-            groups["system"] = UniformLevelStorage(
-                data=system_data,
-                device=device,
-                validate=validate,
-                attr_map=attr_map,
-            )
-
-        storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=validate)
-
-        tracked_keys = {
-            "node": set(node_tensors.keys()),
-            "edge": set(edge_tensors.keys()),
-            "system": set(system_tensors.keys()),
-        }
+        storage, tracked_keys = _build_batch_storage(
+            _iter_samples(),
+            node_keys=node_key_set,
+            edge_keys=edge_key_set,
+            system_keys=system_key_set,
+            device=device,
+            validate=not skip_validation,
+            attr_map=attr_map,
+            field_levels=field_levels,
+        )
         batch = cls._construct(
             device=device,
             keys=tracked_keys,
             storage=storage,
             data_class=data_cls,
+        )
+        return batch._make_contiguous()
+
+    @classmethod
+    def from_raw_dicts(
+        cls,
+        data_list: list[dict[str, Tensor]],
+        device: torch.device | str | None = None,
+        attr_map: LevelSchema | None = None,
+        exclude_keys: list[str] | None = None,
+        field_levels: dict[str, str] | None = None,
+    ) -> Batch:
+        """Construct a batch directly from raw tensor dictionaries.
+
+        Bypasses :class:`AtomicData` construction and Pydantic validation
+        entirely, using ``AtomicData._default_*_keys`` for level
+        classification.  Keys not found in the default key sets are
+        classified using *field_levels* (e.g. from
+        :attr:`Reader.field_levels`).  This is significantly faster when
+        the data is already known to be well-formed (e.g. read from a
+        validated Zarr store).
+
+        Parameters
+        ----------
+        data_list : list[dict[str, Tensor]]
+            Per-sample tensor dictionaries.
+        device : torch.device | str, optional
+            Target device.  Inferred from first dict if ``None``.
+        attr_map : LevelSchema, optional
+            Attribute registry.  Defaults to ``LevelSchema()``.
+        exclude_keys : list[str], optional
+            Keys to exclude from batching.
+        field_levels : dict[str, str], optional
+            Explicit per-field level map (``"atom"`` / ``"edge"`` /
+            ``"system"``), typically from :attr:`Reader.field_levels`.
+            Used to classify custom keys not in the default key sets.
+
+        Returns
+        -------
+        Batch
+        """
+        if not data_list:
+            raise ValueError("Cannot create batch from empty data list")
+
+        first = data_list[0]
+        if device is None:
+            for v in first.values():
+                if isinstance(v, Tensor):
+                    device = v.device
+                    break
+            else:
+                device = torch.device("cpu")
+        device = torch.device(device) if isinstance(device, str) else device
+
+        if attr_map is None:
+            attr_map = LevelSchema()
+
+        node_key_set = AtomicData._default_node_keys
+        edge_key_set = AtomicData._default_edge_keys
+        system_key_set = AtomicData._default_system_keys
+
+        excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
+        actual_keys = [
+            k for k in first if k not in excluded and isinstance(first[k], Tensor)
+        ]
+
+        def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
+            for data in data_list:
+                n_nodes = data["atomic_numbers"].shape[0]
+                nl = data.get("neighbor_list")
+                n_edges = nl.shape[0] if isinstance(nl, Tensor) else 0
+                pairs = (
+                    (key, value)
+                    for key in actual_keys
+                    if isinstance((value := data.get(key)), Tensor)
+                )
+                yield pairs, n_nodes, n_edges
+
+        storage, tracked_keys = _build_batch_storage(
+            _iter_samples(),
+            node_keys=node_key_set,
+            edge_keys=edge_key_set,
+            system_keys=system_key_set,
+            device=device,
+            validate=False,
+            attr_map=attr_map,
+            field_levels=field_levels,
+            fallback_level="system",
+        )
+        batch = cls._construct(
+            device=device,
+            keys=tracked_keys,
+            storage=storage,
+            data_class=AtomicData,
         )
         return batch._make_contiguous()
 
@@ -1114,14 +1278,14 @@ class Batch(DataMixin):
         dtype : torch.dtype, optional
             Ignored (present for API compatibility).
         non_blocking : bool
-            Ignored (present for API compatibility).
+            Whether tensor copies may be asynchronous when supported.
 
         Returns
         -------
         Batch
         """
         new = self.clone()
-        new._storage.to_device(device)
+        new._storage.to_device(device, non_blocking=non_blocking)
         new.device = torch.device(device) if isinstance(device, str) else device
         return new
 

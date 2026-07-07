@@ -103,10 +103,13 @@ class TestTrainContext:
         mock_optimizer = MagicMock()
         mock_scheduler = MagicMock()
         mock_gradients = {"param": torch.tensor([1.0, 2.0])}
+        mock_scaler = MagicMock(spec=torch.amp.GradScaler)
 
         ctx = TrainContext(
             batch=mock_batch,
             step_count=42,
+            batch_count=43,
+            epoch_step_count=2,
             epoch=5,
             loss=mock_loss,
             losses=mock_losses,
@@ -114,11 +117,14 @@ class TestTrainContext:
             optimizers=[mock_optimizer],
             lr_schedulers=[mock_scheduler],
             gradients=mock_gradients,
+            grad_scaler=mock_scaler,
             global_rank=2,
         )
 
         assert ctx.batch is mock_batch
         assert ctx.step_count == 42
+        assert ctx.batch_count == 43
+        assert ctx.epoch_step_count == 2
         assert ctx.epoch == 5
         assert ctx.loss is mock_loss
         assert ctx.losses is mock_losses
@@ -126,6 +132,7 @@ class TestTrainContext:
         assert ctx.optimizers == [mock_optimizer]
         assert ctx.lr_schedulers == [mock_scheduler]
         assert ctx.gradients is mock_gradients
+        assert ctx.grad_scaler is mock_scaler
         assert ctx.global_rank == 2
 
     def test_default_values_for_training_fields(self):
@@ -133,10 +140,19 @@ class TestTrainContext:
         ctx = TrainContext(batch=mock_batch)
 
         assert ctx.step_count == 0
+        assert ctx.batch_count == 0
+        assert ctx.epoch_step_count == 0
         assert ctx.epoch == 0
         assert ctx.loss is None
         assert ctx.losses is None
         assert ctx.models is None
-        assert ctx.optimizers is None
-        assert ctx.lr_schedulers is None
+        assert ctx.optimizers == []
+        assert ctx.lr_schedulers == []
         assert ctx.gradients is None
+        assert ctx.grad_scaler is None
+
+    def test_optimizers_default_is_independent_per_instance(self):
+        ctx_a = TrainContext(batch=MagicMock())
+        ctx_b = TrainContext(batch=MagicMock())
+        ctx_a.optimizers.append(MagicMock())
+        assert ctx_b.optimizers == []

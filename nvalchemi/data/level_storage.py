@@ -826,13 +826,17 @@ class BaseLevelStorage(ABC):
             validate=False,
         )
 
-    def to_device(self, device: DeviceType) -> BaseLevelStorage:
+    def to_device(
+        self, device: DeviceType, *, non_blocking: bool = False
+    ) -> BaseLevelStorage:
         """Move all tensors to *device* (in-place).
 
         Parameters
         ----------
         device : DeviceType
             Target device.
+        non_blocking : bool, default False
+            Whether tensor copies may be asynchronous when supported.
 
         Returns
         -------
@@ -841,7 +845,7 @@ class BaseLevelStorage(ABC):
         """
         device = torch.device(device)
         self.device = device
-        self._data = self._data.to(device)
+        self._data = self._data.to(device, non_blocking=non_blocking)
         return self
 
 
@@ -1226,9 +1230,11 @@ class UniformLevelStorage(BaseLevelStorage):
     def is_segmented(self) -> bool:
         return False
 
-    def to_device(self, device: DeviceType) -> UniformLevelStorage:
+    def to_device(
+        self, device: DeviceType, *, non_blocking: bool = False
+    ) -> UniformLevelStorage:
         """Move all tensors to *device* (in-place)."""
-        super().to_device(device)
+        super().to_device(device, non_blocking=non_blocking)
         return self
 
     def clone(self) -> UniformLevelStorage:
@@ -1619,7 +1625,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
     # -- Device / copy ------------------------------------------------------
 
-    def to_device(self, device: DeviceType) -> SegmentedLevelStorage:
+    def to_device(
+        self, device: DeviceType, *, non_blocking: bool = False
+    ) -> SegmentedLevelStorage:
         """Move all tensors (including bookkeeping) to *device*.
 
         Returns
@@ -1627,14 +1635,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
         Self
             For method chaining.
         """
-        super().to_device(device)
-        self.segment_lengths = self.segment_lengths.to(device)
+        super().to_device(device, non_blocking=non_blocking)
+        self.segment_lengths = self.segment_lengths.to(
+            device, non_blocking=non_blocking
+        )
         if self._batch_idx is not None:
-            self._batch_idx = self._batch_idx.to(device)
+            self._batch_idx = self._batch_idx.to(device, non_blocking=non_blocking)
         if self._batch_ptr is not None:
-            self._batch_ptr = self._batch_ptr.to(device)
+            self._batch_ptr = self._batch_ptr.to(device, non_blocking=non_blocking)
         if self._segment_indices is not None:
-            self._segment_indices = self._segment_indices.to(device)
+            self._segment_indices = self._segment_indices.to(
+                device, non_blocking=non_blocking
+            )
         self._batch_ptr_np = None
         return self
 
@@ -2190,7 +2202,9 @@ class MultiLevelStorage:
         """Return ``True`` if any group is segmented."""
         return any(g.is_segmented() for g in self.groups.values())
 
-    def to_device(self, device: DeviceType) -> MultiLevelStorage:
+    def to_device(
+        self, device: DeviceType, *, non_blocking: bool = False
+    ) -> MultiLevelStorage:
         """Move all groups to *device*.
 
         Returns
@@ -2201,7 +2215,7 @@ class MultiLevelStorage:
         device = torch.device(device)
         self.device = device
         for group in self.groups.values():
-            group.to_device(device)
+            group.to_device(device, non_blocking=non_blocking)
         return self
 
     def clone(self) -> MultiLevelStorage:

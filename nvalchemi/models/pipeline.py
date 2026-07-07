@@ -714,8 +714,32 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
            source list, then filters or converts it only when the plan
            requires a model-specific cutoff or format.
         """
-        override = self._step_active_overrides.get(id(step))
-        neighbor_plan = self._step_neighbor_plans.get(id(step))
+        step_id = id(step)
+        current_step_ids = {
+            id(candidate) for group in self.groups for candidate in group.steps
+        }
+        stale_active_overrides = bool(self._step_active_overrides) and not (
+            self._step_active_overrides.keys() & current_step_ids
+        )
+        stale_neighbor_plans = bool(self._step_neighbor_plans) and not (
+            self._step_neighbor_plans.keys() & current_step_ids
+        )
+        if stale_active_overrides or stale_neighbor_plans:
+            # After copy.deepcopy (e.g. EMA AveragedModel), which clones
+            # the dicts but creates new PipelineStep objects with new ids,
+            # the lookup tables are stale so we rebuild them.
+            self._build_neighbor_plan(
+                [
+                    (candidate, candidate.model.model_config.neighbor_config)
+                    for group in self.groups
+                    for candidate in group.steps
+                    if candidate.model.model_config.neighbor_config is not None
+                ]
+            )
+            self._configure_sub_models()
+            step_id = id(step)
+        override = self._step_active_overrides.get(step_id)
+        neighbor_plan = self._step_neighbor_plans.get(step_id)
 
         saved_neighbors: dict[str, Any] | None = None
         saved_active: set[str] | None = None
@@ -888,7 +912,11 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor hook factory
     # ------------------------------------------------------------------
 
-    def make_neighbor_hooks(self, max_neighbors: int | None = None) -> list[Hook]:
+    def make_neighbor_hooks(
+        self,
+        max_neighbors: int | None = None,
+        neighbor_list_method: str | None = None,
+    ) -> list[Hook]:
         """Return neighbor hooks required by the pipeline's neighbor-list plan.
 
         Parameters
@@ -896,6 +924,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         max_neighbors : int | None, optional
             Maximum neighbors per atom for MATRIX format.  When ``None``
             (default), auto-estimated from the cutoff at first use.
+        neighbor_list_method : str | None, optional
+            Explicit ``nvalchemiops`` neighbor-list method to use.  When
+            ``None`` (default), the hook selects an appropriate method.
         """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
 
@@ -907,6 +938,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 source.config,
                 skin=source.config.skin,
                 max_neighbors=max_neighbors,
+                method=neighbor_list_method,
                 stage=DynamicsStage.BEFORE_COMPUTE,
             )
             for source in self._neighbor_sources

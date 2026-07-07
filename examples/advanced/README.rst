@@ -25,3 +25,7 @@ the ``+`` operator; PipelineModelWrapper for dependent pipelines.
 
 **08 — AIMNet2 + Ewald Pipeline**: Composing AIMNet2 with Ewald
 electrostatics and DFTD3 dispersion in a multi-group pipeline.
+
+**09 — UMA NVE/NVT**: Driving the fairchem UMA foundation model through
+NVE / NVT dynamics with energy-drift tracking; OMat crystals and OMol
+molecules via task selection on ``UMAWrapper.from_checkpoint``.

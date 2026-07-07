@@ -14,8 +14,9 @@ license = {file="LICENSE"}
 dependencies = [
     "nvalchemi-toolkit-ops>=0.3.1",
     "torch>=2.8",
+    "click",
     "loguru",
-    "numpy",
+    "numpy<2.4",
     "jaxtyping>=0.3.2",
     "tensordict>=0.11.0",
     "pydantic>=2.11.7",
@@ -24,6 +25,7 @@ dependencies = [
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
+    "plotext",
     "nvidia-physicsnemo>=2.0.0",
 ]
 keywords = [
@@ -52,6 +54,7 @@ include = ["nvalchemi/**/*.py"]
 
 [project.scripts]
 nvalchemi-io-test = "nvalchemi.data.io_test:main"
+nvalchemi-training = "nvalchemi.training.cli:main"
 
 [project.urls]
 
@@ -68,6 +71,7 @@ cu12 = [
     "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
@@ -75,6 +79,7 @@ cu13 = [
     "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
 pymatgen = [
@@ -83,6 +88,12 @@ pymatgen = [
 mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
+]
+tensorboard = [
+    "tensorboard",
+]
+uma = [
+    "fairchem-core>=2.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -99,23 +110,43 @@ conflicts = [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
+  # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
+  # (via toolkit-ops), so UMA forks a separate env (`uv sync --extra uma`).
+  [
+    { extra = "cu12" },
+    { extra = "uma" },
+  ],
+  [
+    { extra = "cu13" },
+    { extra = "uma" },
+  ],
+  # MACE 0.3.15 pins e3nn==0.4.4; fairchem-core (UMA) needs e3nn>=0.5 —
+  # mutually exclusive, so install one extra per environment.
+  [
+    { extra = "mace" },
+    { extra = "uma" },
+  ],
 ]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
 dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.3.1", requires-dist = [
-    "warp-lang >= 1.10.0",
+  { name = "nvalchemi-toolkit-ops", version = "0.4.0", requires-dist = [
+    "warp-lang >= 1.13.0",
     "numpy",
-    "torch>=2.11.0 ; extra == 'torch'",
-    "torch>=2.11.0 ; extra == 'torch-cu12'",
-    "torch>=2.11.0 ; extra == 'torch-cu13'",
+    "torch>=2.8.0 ; extra == 'torch'",
+    "torch>=2.8.0 ; extra == 'torch-cu12'",
+    "torch>=2.8.0 ; extra == 'torch-cu13'",
   ], provides-extra = ["torch", "torch-cu12", "torch-cu13"] },
 ]
 
 [tool.uv.sources]
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "7a73c012b7fd5bc649701d2aec802b4b9511a355" }
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "0.4.0-rc" }
 torch = [
+  { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+]
+torchvision = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
 ]
@@ -124,7 +155,9 @@ torch = [
 [dependency-groups]
 build = [
     "ninja>=1.11.1.4",
-    "setuptools>=70.0.0",
+    # setuptools 81 dropped pkg_resources, which fairchem-core's torchtnt
+    # imports at load — pin <81 so the UMA stack imports.
+    "setuptools>=70.0.0,<81",
 ]
 dev = [
     "pre-commit",

@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-from torch import distributed as dist
-
 from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
@@ -119,9 +117,16 @@ class HookRegistryMixin:
                 f"(type {type(hook.stage).__name__}), but this engine "
                 f"only accepts {expected} stages."
             )
+        on_register = getattr(hook, "on_register", None)
+        if on_register is not None:
+            if not callable(on_register):
+                raise TypeError(
+                    f"Hook {type(hook).__name__}.on_register must be callable."
+                )
+            on_register(self)
         self.hooks.append(hook)
 
-    def _build_context(self, batch: Batch) -> HookContext:
+    def _build_context(self, batch: Batch | None) -> HookContext:
         """Build a base HookContext for the current state.
 
         Override in subclasses to return a workflow-specific context
@@ -130,26 +135,24 @@ class HookRegistryMixin:
 
         Parameters
         ----------
-        batch : Batch
-            Current batch being processed.
+        batch : Batch | None
+            Current batch being processed, if available.
 
         Returns
         -------
         HookContext
             Context object for hooks.
         """
-        if dist.is_available() and dist.is_initialized():
-            global_rank = dist.get_rank()
-        else:
-            global_rank = 0
+        from nvalchemi.training.distributed import get_rank
+
         return HookContext(
             batch=batch,
             model=getattr(self, "model", None),
-            global_rank=global_rank,
+            global_rank=get_rank(None),
             workflow=self,
         )
 
-    def _call_hooks(self, stage: Enum, batch: Batch) -> None:
+    def _call_hooks(self, stage: Enum, batch: Batch | None) -> None:
         """Call hooks registered for the given stage, gated by frequency.
 
         Hooks fire when ``self.step_count % hook.frequency == 0``.
@@ -161,8 +164,8 @@ class HookRegistryMixin:
         ----------
         stage : Enum
             Current workflow stage.
-        batch : Batch
-            Current batch being processed.
+        batch : Batch | None
+            Current batch being processed, if available.
         """
         ctx = self._build_context(batch)
         for hook in self.hooks:

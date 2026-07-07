@@ -1,6 +1,10 @@
 ---
 name: nvalchemi-dynamics-implementation
-description: How to implement a dynamics integrator by subclassing BaseDynamics and overriding pre_update() and post_update() methods.
+description: >-
+  How to implement a dynamics integrator by subclassing BaseDynamics and
+  overriding pre_update() and post_update() methods. Use when creating a
+  custom integrator, optimizer, or sampler that the built-in stages do not
+  provide; for configuring existing dynamics, see nvalchemi-dynamics-api.
 ---
 
 # nvalchemi Dynamics Implementation
@@ -22,7 +26,7 @@ from nvalchemi.data import Batch
 
 Each call to `step(batch)` executes:
 
-```
+```text
 1. BEFORE_STEP hooks
 2. BEFORE_PRE_UPDATE hooks  →  pre_update(batch)  →  AFTER_PRE_UPDATE hooks
 3. BEFORE_COMPUTE hooks     →  compute(batch)      →  AFTER_COMPUTE hooks

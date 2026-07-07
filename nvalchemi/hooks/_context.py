@@ -16,11 +16,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.nn import ModuleDict
+from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -37,8 +38,9 @@ class HookContext:
 
     Attributes
     ----------
-    batch : Batch
-        Current batch being processed.
+    batch : Batch | None
+        Current batch being processed. ``None`` is used for lifecycle stages
+        that run before the first batch is available.
     model : BaseModelMixin | None
         Model being used (if applicable).
     global_rank : int
@@ -48,7 +50,7 @@ class HookContext:
         the workflow does not inject itself.
     """
 
-    batch: Batch
+    batch: Batch | None
     model: BaseModelMixin | None = None
     global_rank: int = 0
     workflow: Any = None
@@ -78,7 +80,14 @@ class TrainContext(HookContext):
     Attributes
     ----------
     step_count : int
-        Current optimizer step number.
+        Current optimizer step number on this worker.
+    global_step_count : int
+        Current optimizer step number across all data-parallel workers.
+    batch_count : int
+        Number of training batches consumed, including batches whose
+        optimizer step was skipped by update hooks.
+    epoch_step_count : int
+        Number of batches consumed within the current training epoch.
     epoch : int
         Current training epoch.
     loss : torch.Tensor | None
@@ -92,19 +101,39 @@ class TrainContext(HookContext):
         key/model mapping should be semantic, e.g. 'student' and
         'teacher' in distillation workflows, with 'student' being
         the intended 'main' model.
-    optimizers : list[torch.optim.Optimizer] | None
-        Optimizers participating in the training step.
-    lr_schedulers : list[object] | None
+    optimizers : list[torch.optim.Optimizer]
+        Optimizers participating in the training step. Empty when no
+        optimizer is attached (e.g. eval-only or manually-driven hook
+        contexts); ``TrainingUpdateOrchestrator`` and similar consumers
+        treat an empty list as a no-op.
+    lr_schedulers : list[torch.optim.lr_scheduler.LRScheduler | None]
         Learning rate schedulers participating in the training step.
+        Aligned positionally with ``optimizers`` when populated; entries
+        may be ``None`` when an optimizer has no scheduler. Empty when no
+        scheduler is attached.
     gradients : dict[str, torch.Tensor] | None
         Parameter gradients for the current step.
+    grad_scaler : torch.amp.GradScaler | None
+        AMP gradient scaler for mixed-precision training; ``None`` when
+        AMP is not in use.
+    validation : dict[str, Any] | None
+        Latest validation summary produced by the training strategy's
+        validation checkpoint (``TrainingStrategy.validate()``).
+        ``None`` until validation has run or after the latest summary is
+        consumed by metric-driven schedulers. In distributed runs, the reduced
+        summary is available on every rank.
     """
 
     step_count: int = 0
+    global_step_count: int = 0
+    batch_count: int = 0
+    epoch_step_count: int = 0
     epoch: int = 0
     loss: torch.Tensor | None = None
     losses: dict[str, torch.Tensor] | None = None
     models: dict[str, BaseModelMixin] | ModuleDict | None = None
-    optimizers: list[torch.optim.Optimizer] | None = None
-    lr_schedulers: list[object] | None = None
+    optimizers: list[torch.optim.Optimizer] = field(default_factory=list)
+    lr_schedulers: list[LRScheduler | None] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
+    grad_scaler: torch.amp.GradScaler | None = None
+    validation: dict[str, Any] | None = None

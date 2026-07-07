@@ -18,6 +18,8 @@ hooks that are useful regardless of the specific engine type.
      patterns.
    - **Dynamics hooks**: :ref:`dynamics-hooks` — hooks and stages
      specific to dynamics simulations.
+   - **Training update hooks**: :ref:`training-update-hooks` — update-stage
+     ownership, veto semantics, and constraints for training hooks.
 
 
 The Hook protocol
@@ -49,11 +51,41 @@ use it as a type hint and check membership with ``isinstance``:
 
    assert isinstance(MyHook(), Hook)  # True ✓
 
-.. tip::
+CheckpointableHook
+------------------
 
-   **No subclassing required.** The protocol approach means any
-   class---or even a frozen ``dataclass``---that provides
-   ``frequency``, ``stage``, and ``__call__`` works as a hook.
+:class:`~nvalchemi.hooks.CheckpointableHook` is an optional second protocol
+for hooks that carry restart-critical runtime state. ``Hook`` is required by
+every hook; ``CheckpointableHook`` is opt-in — only hooks that implement both
+``state_dict()`` and ``load_state_dict()`` participate in checkpoint save and
+restore. Developers should meet the checkpointable protocol if the hook has
+state that needs to be persisted and restartable.
+
+The two required methods:
+
+- ``state_dict() -> dict`` — return a serializable snapshot of all runtime
+  state that must survive a restart: accumulated counters, learned parameters,
+  and runtime tensors. Do not include configuration already captured by the
+  constructor; those are restored at construction time.
+- ``load_state_dict(state: Mapping) -> None`` — restore state from a
+  ``state_dict()`` snapshot. Validate critical configuration fields (such as
+  decay rate or step frequency) before restoring runtime tensors to catch
+  checkpoint/config mismatches early.
+
+The training checkpoint loader calls ``state_dict()`` on every hook that
+satisfies this protocol and stores the results alongside model and optimizer
+state. On resume via ``TrainingStrategy.load_checkpoint(path, hooks=[...])``,
+``load_state_dict()`` is called on each matching hook by class name. Hooks that
+do not implement ``CheckpointableHook`` are silently skipped; they restart from
+their initial state, which is correct for purely stateless hooks.
+
+``isinstance(hook, CheckpointableHook)`` is ``True`` for any hook that provides
+both methods, with no subclassing required.
+
+.. seealso::
+
+   :ref:`training-update-hooks` — a concrete ``CheckpointableHook`` pattern
+   with Pydantic fields and private runtime tensors.
 
 
 Context dataclasses
@@ -64,77 +96,23 @@ workflow-specific subclass. The base dataclass contains only fields shared by
 all hook-enabled engines; specialized contexts add fields that are meaningful
 only for one workflow category.
 
-.. list-table:: HookContext fields
-   :widths: 20 25 55
-   :header-rows: 1
+**HookContext** (base, all engines)
 
-   * - Field
-     - Type
-     - Description
-   * - ``batch``
-     - ``Batch``
-     - Current batch being processed (all engines).
-   * - ``model``
-     - ``BaseModelMixin | None``
-     - Model being used (if applicable).
-   * - ``global_rank``
-     - ``int``
-     - Distributed rank of this process.
-   * - ``workflow``
-     - ``Any``
-     - Back-reference to the engine running the hooks.
+.. dataclass-table:: nvalchemi.hooks.HookContext
 
-.. list-table:: DynamicsContext fields
-   :widths: 20 25 55
-   :header-rows: 1
+**DynamicsContext** (dynamics workflows)
 
-   * - Field
-     - Type
-     - Description
-   * - ``step_count``
-     - ``int``
-     - Current dynamics step.
-   * - ``converged_mask``
-     - ``torch.Tensor | None``
-     - Boolean mask of samples that converged at the current hook stage.
+.. dataclass-table:: nvalchemi.hooks.DynamicsContext
 
-.. list-table:: TrainContext fields
-   :widths: 20 25 55
-   :header-rows: 1
+**TrainContext** (training workflows)
 
-   * - Field
-     - Type
-     - Description
-   * - ``step_count``
-     - ``int``
-     - Current optimizer step.
-   * - ``epoch``
-     - ``int``
-     - Current training epoch.
-   * - ``loss``
-     - ``torch.Tensor | None``
-     - Aggregate loss for the current step.
-   * - ``losses``
-     - ``dict[str, torch.Tensor] | None``
-     - Named loss components.
-   * - ``models``
-     - ``dict[str, BaseModelMixin] | ModuleDict[str, BaseModelMixin] | None``
-     - Models participating in the training step.
-   * - ``optimizers``
-     - ``list[torch.optim.Optimizer] | None``
-     - Optimizers participating in the training step.
-   * - ``lr_schedulers``
-     - ``list[object] | None``
-     - Learning-rate schedulers.
-   * - ``gradients``
-     - ``dict[str, torch.Tensor] | None``
-     - Parameter gradients.
+.. dataclass-table:: nvalchemi.hooks.TrainContext
 
 
 Registration and dispatch
 -------------------------
 
-Hooks are registered either at construction or via ``register_hook()``.
+Hooks are registered either at construction or manually via ``register_hook()``.
 The :class:`~nvalchemi.hooks.HookRegistryMixin` provides flat-list
 storage and dispatch logic for any engine.
 
@@ -158,25 +136,24 @@ The dispatch logic for each hook is:
 .. note::
 
    At ``step_count == 0`` all hooks fire (since ``0 % n == 0`` for
-   any ``n``), making step 0 a good point for initialization logic.
+   any ``n``).
 
 
-Task-category specialization
------------------------------
+Stage enums and multi-stage hooks
+-----------------------------------
 
-The hook system supports multiple task categories through stage enums.
-Each engine declares which stage types it accepts via ``_stage_type``.
-For example:
+Each workflow engine fires hooks at named lifecycle points defined by a stage
+enum. The two built-in enums are:
 
-- **Dynamics**: :class:`~nvalchemi.dynamics.base.DynamicsStage` — 9
-  stages from ``BEFORE_STEP`` through ``ON_CONVERGE``.
-- **Custom pipelines**: Any custom ``Enum`` type — the system accepts
-  arbitrary enum types.
+- :class:`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
+  ``BEFORE_STEP`` through ``ON_CONVERGE``. See :ref:`dynamics-hooks`.
+- :class:`~nvalchemi.training.TrainingStage` — stages from ``SETUP``
+  through ``AFTER_TRAINING``. See :ref:`training-hooks-api`.
 
-For multi-stage hooks, define a ``_runs_on_stage(stage) -> bool``
-method. Hooks that need to support multiple enum types can use
-`plum-dispatch <https://github.com/wesselb/plum>`_ to overload
-``__call__``. See :ref:`hooks_guide` for full examples.
+Custom pipelines may use any ``Enum`` type. For hooks that fire at more
+than one stage, define ``_runs_on_stage(stage) -> bool`` instead of a
+single ``stage`` attribute. Hooks that must support multiple enum types
+can overload ``__call__`` with plum-dispatch; see :ref:`hooks_guide`.
 
 
 General-purpose hooks
@@ -203,6 +180,46 @@ that uses the hook system, not just dynamics.
      - Wrap atomic positions back into the unit cell under PBC.
        Fires at ``AFTER_POST_UPDATE``, respects per-system
        ``batch.pbc`` flags.
+   * - :class:`~nvalchemi.hooks.StageTimingHook`
+     - Measure elapsed time between hook stages, with optional NVTX ranges, CSV
+       output, and console summaries.
+   * - :class:`~nvalchemi.hooks.TorchProfilerHook`
+     - Capture PyTorch profiler Chrome traces for training and dynamics through
+       PhysicsNeMo's profiler wrapper, with rank-specific output directories.
+
+
+Reporting
+---------
+
+:class:`~nvalchemi.hooks.ReportingOrchestrator` is a standard hook that fans
+reporting events to a list of reporter objects at a configured stage and
+frequency. The ``Reporter`` protocol requires one method:
+
+.. code-block:: python
+
+   def report(ctx: HookContext, stage: Enum, state: ReportingState) -> None: ...
+
+Two optional class attributes control distributed behavior:
+
+- ``rank_zero_only = True`` — the orchestrator does not call the reporter
+  on nonzero ranks.
+- ``requires_all_ranks = True`` — all ranks participate in a collective
+  reduction; only rank zero calls ``report()`` with the merged snapshot.
+
+:func:`~nvalchemi.hooks.collect_scalars` assembles a
+:class:`~nvalchemi.hooks.ScalarSnapshot` — a frozen payload of scalar
+values, counters, and metadata — from the current hook context. Custom
+reporters call it directly; built-in reporters call it internally.
+
+:class:`~nvalchemi.hooks.TensorBoardReporter` and
+:class:`~nvalchemi.hooks.RichReporter` are provided implementations.
+:class:`~nvalchemi.hooks.RichLayout` and
+:class:`~nvalchemi.hooks.BaseRichLayout` control the dashboard surface for
+``RichReporter``.
+
+.. seealso::
+
+   :doc:`/userguide/reporting` — setup, layout design, and custom reporters.
 
 
 API Reference
@@ -218,6 +235,7 @@ Protocol
    :nosignatures:
 
    Hook
+   CheckpointableHook
    HookContext
    DynamicsContext
    TrainContext
@@ -232,4 +250,25 @@ General-purpose hooks
 
    BiasedPotentialHook
    NeighborListHook
+   StageTimingHook
+   TorchProfilerHook
    WrapPeriodicHook
+
+Reporting
+~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   Reporter
+   ReportingOrchestrator
+   ReportingState
+   ScalarSnapshot
+   collect_scalars
+   TensorBoardReporter
+   RichReporter
+   RichLayout
+   BaseRichLayout
+   TrainingRichLayout
+   DynamicsRichLayout

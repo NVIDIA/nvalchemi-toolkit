@@ -111,80 +111,156 @@ hook-firing points within a single dynamics step:
 Built-in dynamics hooks
 ------------------------
 
-The ``nvalchemi.dynamics.hooks`` package ships production-ready hooks
-organized into four categories. General-purpose hooks
-(:class:`~nvalchemi.hooks.NeighborListHook`,
-:class:`~nvalchemi.hooks.BiasedPotentialHook`,
-:class:`~nvalchemi.hooks.WrapPeriodicHook`) are documented in
-:ref:`hooks-api`.
+The ``nvalchemi.dynamics.hooks`` package ships production-ready hooks in three
+categories. :class:`~nvalchemi.hooks.NeighborListHook`,
+:class:`~nvalchemi.hooks.BiasedPotentialHook`, and
+:class:`~nvalchemi.hooks.WrapPeriodicHook` are general-purpose hooks documented
+in :ref:`hooks-api`.
 
-Observer hooks (read-only, fire at ``AFTER_STEP``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Observer hooks
+~~~~~~~~~~~~~~
 
-These hooks **do not** modify the batch — they record, log, or
-monitor simulation state.
+Observer hooks fire at ``AFTER_STEP`` and do not modify the batch.
 
-.. list-table::
-   :widths: 25 75
-   :header-rows: 1
+LoggingHook
+...........
 
-   * - Hook
-     - Purpose
-   * - :class:`~nvalchemi.dynamics.hooks.LoggingHook`
-     - Log scalar observables (energy, fmax, temperature) to
-       ``loguru``, CSV, TensorBoard, or a custom backend.
-   * - :class:`~nvalchemi.dynamics.hooks.SnapshotHook`
-     - Write the full batch state to a
-       :class:`~nvalchemi.dynamics.DataSink`
-       (``GPUBuffer``, ``HostMemory``, or ``ZarrData``).
-   * - :class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook`
-     - Write only newly converged samples to a
-       :class:`~nvalchemi.dynamics.DataSink`. Fires at
-       ``ON_CONVERGE``; ideal for persisting optimized structures
-       from :class:`~nvalchemi.dynamics.FusedStage` pipelines.
-   * - :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook`
-     - Track cumulative energy drift in NVE runs; warn or halt on
-       excessive drift.
-   * - :class:`~nvalchemi.dynamics.hooks.ProfilerHook`
-     - Instrument steps with NVTX ranges and wall-clock timing for
-       Nsight Systems profiling. Fires at multiple stages via
-       ``_runs_on_stage`` and uses ``plum`` dispatch to support
-       dynamics and custom workflows.
+:class:`~nvalchemi.dynamics.hooks.LoggingHook` writes per-step scalar
+observables to a backend. The default scalars are energy (per atom), ``fmax``
+(maximum force component across all atoms), temperature (derived from kinetic
+energy when velocities are present), and ``converged_fraction`` (fraction of
+samples that have met the convergence criterion).
 
-Post-compute hooks (modify batch, fire at ``AFTER_COMPUTE``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``backend`` selects the output destination:
 
-These hooks modify the batch **after** the model forward pass and
-**before** the velocity update.
+- ``"loguru"`` (default) — emits a formatted line to the loguru logger. Use
+  for live console monitoring during interactive or short runs.
+- ``"csv"`` — writes one row per step to ``log_path``. Use when you need
+  per-step data for post-run analysis in Python or a spreadsheet.
+- ``"tensorboard"`` — writes scalar events to ``log_path`` as a TensorBoard
+  event file. Use when comparing scalar trends across experiments.
+- A callable ``fn(scalars: dict) -> None`` — routes each snapshot to a custom
+  backend, such as W&B or MLflow.
 
-.. list-table::
-   :widths: 25 75
-   :header-rows: 1
+``frequency`` throttles writes to every N steps. For long runs,
+``frequency=10`` or higher keeps output manageable without losing trends.
 
-   * - Hook
-     - Purpose
-   * - :class:`~nvalchemi.dynamics.hooks.NaNDetectorHook`
-     - Detect NaN/Inf in forces and energy; raise with
-       diagnostic info (affected graph indices, step count).
-   * - :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook`
-     - Clamp per-atom force magnitudes to a safe maximum,
-       preserving force direction. Prevents numerical explosions.
+SnapshotHook
+............
 
-Constraint hooks (modify batch, fire at ``BEFORE_PRE_UPDATE``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook` writes the full batch state
+— positions, velocities, forces, energy, cell, and atom types — to a
+:class:`~nvalchemi.dynamics.DataSink` at a specified frequency.
 
-These hooks enforce geometric constraints across integration steps.
+``sink`` accepts one of three DataSink types:
 
-.. list-table::
-   :widths: 25 75
-   :header-rows: 1
+- :class:`~nvalchemi.dynamics.GPUBuffer` — stores batches in GPU memory. Fastest
+  write path; capacity bounded by GPU memory.
+- :class:`~nvalchemi.dynamics.HostMemory` — stores in pinned CPU memory.
+  Slightly slower; larger capacity and works without GPU.
+- :class:`~nvalchemi.dynamics.ZarrData` — streams to disk in Zarr format.
+  Unbounded capacity; suitable for long trajectories and persistent storage.
 
-   * - Hook
-     - Purpose
-   * - :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`
-     - Freeze atoms by category (e.g. substrate, boundary). Snapshots
-       positions at ``BEFORE_PRE_UPDATE`` and restores them (with
-       zeroed velocities) at ``AFTER_POST_UPDATE``.
+After the run, call ``sink.read()`` to retrieve the accumulated trajectory as a
+:class:`~nvalchemi.data.Batch`. Use this hook when you need full atomic-detail
+trajectories for analysis, visualization, or continuation from a specific frame.
+
+ConvergedSnapshotHook
+.....................
+
+:class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook` writes only
+newly-converged samples at ``ON_CONVERGE`` — once per sample, exactly when
+convergence is detected — rather than periodically. The same DataSink types
+apply as for :class:`~nvalchemi.dynamics.hooks.SnapshotHook`.
+
+This hook is designed for :class:`~nvalchemi.dynamics.FusedStage` pipelines
+where samples converge at different steps. A periodic snapshot would produce
+ragged data or miss samples; this hook captures each sample exactly once. Call
+``sink.read()`` after the run to collect all converged structures.
+
+EnergyDriftMonitorHook
+......................
+
+:class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` tracks cumulative
+energy drift in NVE (constant-energy) simulations and takes a configurable
+action when drift exceeds a threshold.
+
+Key arguments:
+
+- ``threshold`` — allowed drift, in the model's energy output units.
+- ``metric`` — how drift is measured. ``"per_atom_per_step"`` normalises by
+  system size and simulation length, making the threshold transferable across
+  systems and time steps.
+- ``action`` — ``"raise"`` (default) halts the run; ``"warn"`` logs and
+  continues. Use ``"warn"`` in production, ``"raise"`` during model
+  validation.
+- ``frequency`` — check every N steps. Checking every step is accurate but
+  adds overhead for large batches; ``frequency=100`` is typical.
+
+StageTimingHook and TorchProfilerHook are described in :ref:`hooks-api`.
+
+Post-compute hooks
+~~~~~~~~~~~~~~~~~~
+
+Post-compute hooks fire at ``AFTER_COMPUTE``, after forces and energy are
+written to the batch but before the velocity update. They may modify the batch.
+
+NaNDetectorHook
+...............
+
+:class:`~nvalchemi.dynamics.hooks.NaNDetectorHook` checks energy and forces for
+NaN or Inf values after the model forward pass. On detection it raises a
+``RuntimeError`` that includes the affected graph indices and the current step
+count so the offending sample can be identified.
+
+``extra_keys`` extends the check to additional batch fields beyond energy and
+forces. For models that output stress tensors, pass
+``extra_keys=["stress"]``.
+
+When used with :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook`, register
+the clamping hook first so the detector sees the clamped values and only catches
+what clamping did not prevent.
+
+MaxForceClampHook
+.................
+
+:class:`~nvalchemi.dynamics.hooks.MaxForceClampHook` rescales per-atom forces
+whose magnitude exceeds ``max_force`` back to the threshold, preserving
+direction. Energy is not modified.
+
+``max_force`` is in the same units as the model's force output (typically
+eV/Å). Set ``log_clamps=True`` to emit a loguru warning each time clamping
+occurs, including which atoms were affected — useful during model development
+to identify problem configurations.
+
+Clamping prevents numerical blow-up from large forces in high-energy or
+poorly-sampled configurations. It is a safety net, not a model fix: if
+clamping fires frequently, the model has accuracy problems for those
+structures.
+
+Constraint hooks
+~~~~~~~~~~~~~~~~
+
+Constraint hooks enforce geometric constraints across integration steps. They
+fire at both ``BEFORE_PRE_UPDATE`` (to snapshot positions) and
+``AFTER_POST_UPDATE`` (to restore them).
+
+FreezeAtomsHook
+...............
+
+:class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` keeps selected atoms fixed:
+it snapshots their positions at ``BEFORE_PRE_UPDATE`` and restores them —
+with zeroed velocities — at ``AFTER_POST_UPDATE``. The integrator runs
+normally and the positions are overwritten afterward, so no integrator
+modification is required.
+
+``categories`` is a string or list of strings matching atom type categories in
+the batch (for example, ``"substrate"`` or ``["substrate", "boundary"]``). Only
+atoms in the listed categories are frozen; all others evolve freely.
+
+Use this hook for partial-system relaxations (freeze the substrate, relax the
+adsorbate), slab calculations (freeze bottom layers), or any configuration
+where part of the system must remain rigid.
 
 
 Usage examples
@@ -215,8 +291,11 @@ Recording trajectories to a data sink
    dynamics.run(batch)   # 100 snapshots
    trajectory = sink.read()
 
-Safety: NaN detection + force clamping
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Safety: NaN detection and force clamping
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registration order determines execution order at the same stage. Clamp before
+checking so the detector sees the corrected forces:
 
 .. code-block:: python
 
@@ -226,59 +305,10 @@ Safety: NaN detection + force clamping
        model=model,
        dt=0.5,
        hooks=[
-           # Clamp first, then check — both fire at AFTER_COMPUTE
-           # in registration order.
            MaxForceClampHook(max_force=50.0, log_clamps=True),
            NaNDetectorHook(extra_keys=["stress"]),
        ],
    )
-
-Enhanced sampling with a bias potential
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nvalchemi.hooks import BiasedPotentialHook
-   from nvalchemi.dynamics.base import DynamicsStage
-
-   def harmonic_restraint(batch):
-       """Restrain center of mass to the origin."""
-       k = 10.0  # eV/Å²
-       com = batch.positions.mean(dim=0, keepdim=True)
-       bias_energy = 0.5 * k * (com ** 2).sum().unsqueeze(0).unsqueeze(0)
-       bias_forces = -k * com.expand_as(batch.positions) / batch.num_nodes
-       return bias_energy, bias_forces
-
-   hook = BiasedPotentialHook(bias_fn=harmonic_restraint, stage=DynamicsStage.AFTER_COMPUTE)
-   dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
-
-Profiling with Nsight Systems
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nvalchemi.dynamics.hooks import ProfilerHook
-
-   hook = ProfilerHook(enable_nvtx=True, enable_timer=True, frequency=10)
-   dynamics = DemoDynamics(model=model, n_steps=1_000, dt=0.5, hooks=[hook])
-
-   # Run under: nsys profile python my_script.py
-   dynamics.run(batch)
-
-NVE energy drift monitoring
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nvalchemi.dynamics.hooks import EnergyDriftMonitorHook
-
-   hook = EnergyDriftMonitorHook(
-       threshold=1e-5,
-       metric="per_atom_per_step",
-       action="raise",    # or "warn" for production
-       frequency=100,
-   )
-   dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
 
 
 Hooks inside ``FusedStage``
@@ -377,3 +407,23 @@ Hook ordering inside a fused step:
        AFTER_POST -> AFTER_STEP
        AFTER_STEP -> conv_check
    }
+
+
+API reference
+-------------
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   LoggingHook
+   SnapshotHook
+   ConvergedSnapshotHook
+   EnergyDriftMonitorHook
+   NaNDetectorHook
+   MaxForceClampHook
+   FreezeAtomsHook
+   StageTimingHook
+   TorchProfilerHook

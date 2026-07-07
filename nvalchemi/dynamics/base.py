@@ -1475,7 +1475,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         For hooks that support the context-manager protocol, calls
         ``__exit__(None, None, None)``.  For hooks that only expose a
-        ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``
+        ``close()`` method (e.g. ``TorchProfilerHook``), calls ``close()``
         directly.  A ``seen`` set prevents double-closing hooks.
 
         Called automatically at the end of :meth:`run`.
@@ -2047,6 +2047,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             device = result.device
             for key, default_fn in self._bookkeeping_keys.items():
                 new_tensor = default_fn(n_total, device)
+                # Preserve values already carried by appended replacements before
+                # restoring the prefix for systems that stayed active.
+                result_vals = getattr(result, key, None)
+                if result_vals is not None:
+                    result_vals = (
+                        result_vals.unsqueeze(-1)
+                        if result_vals.dim() == 1
+                        else result_vals
+                    )
+                    if result_vals.shape == new_tensor.shape:
+                        new_tensor.copy_(result_vals)
+                    else:
+                        raise RuntimeError(
+                            f"Bookkeeping key '{key}' has shape {result_vals.shape} "
+                            f"after refill, expected {new_tensor.shape}."
+                        )
                 remaining_vals = getattr(batch, key, None)
                 if remaining_vals is not None and n_remaining > 0:
                     src = remaining_vals[remaining_indices]

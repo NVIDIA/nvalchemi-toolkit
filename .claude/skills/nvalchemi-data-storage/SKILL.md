@@ -1,6 +1,12 @@
 ---
 name: nvalchemi-data-storage
-description: How to write, read, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).
+description: >-
+  How to write, read, compose, and load atomic data using nvalchemi's
+  composable Zarr-backed storage pipeline (Writer, Reader, Dataset,
+  MultiDataset, DataLoader). Use when saving simulation outputs or
+  trajectories to disk, converting structures (e.g. ASE / extxyz) into Zarr
+  stores, assembling datasets for training or inference, or wiring a
+  DataLoader to stream batches to the GPU.
 ---
 
 # nvalchemi Data Storage
@@ -9,15 +15,17 @@ description: How to write, read, and load atomic data using nvalchemi's composab
 
 `nvalchemi` provides a composable pipeline for persisting and loading atomic data:
 
-```
+```text
 Writer                          Reader
 (AtomicData/Batch -> Zarr)      (Zarr -> dict[str, Tensor])
                                     |
                                 Dataset
-                                (dict -> AtomicData, device transfer, prefetch)
+                                (dict -> AtomicData, load_batches, prefetch)
+                                    |
+                    optional MultiDataset composition
                                     |
                                 DataLoader
-                                (AtomicData -> Batch, batching, iteration)
+                                (Batch iteration)
 ```
 
 ```python
@@ -25,7 +33,9 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     AtomicDataZarrReader,
     Dataset,
+    MultiDataset,
     DataLoader,
+    MultiDatasetBatchSampler,
 )
 ```
 
@@ -33,7 +43,8 @@ from nvalchemi.data.datapipes import (
 
 ## Writing Data
 
-`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or `Batch` into a Zarr store.
+`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or
+`Batch` into a Zarr store.
 
 ```python
 from nvalchemi.data import AtomicData, Batch
@@ -82,7 +93,7 @@ writer.defragment()      # rebuild store without deleted samples
 
 ### Zarr store layout
 
-```
+```text
 dataset.zarr/
 ├── meta/
 │   ├── atoms_ptr       # int64 [N+1] — cumulative node counts
@@ -144,6 +155,10 @@ atomic_data, metadata = ds[0]   # AtomicData on target device
 # Lightweight metadata (no full construction)
 num_atoms, num_edges = ds.get_metadata(0)
 
+# Explicit batch loading. This is the canonical synchronous batch API.
+batches = ds.load_batches([[0, 3, 2], [4, 1, 5]])
+batch0 = batches[0]
+
 len(ds)    # number of samples
 ds.close()
 
@@ -171,15 +186,38 @@ ds.cancel_prefetch()       # cancel all
 ds.cancel_prefetch(0)      # cancel specific index
 ```
 
+### In-memory datasets
+
+When advising on dataset choice, suggest `InMemoryDataset` if the full dataset is
+small enough to fit comfortably in host memory. A good rule of thumb is "on the
+order of a few GB after batching." This avoids storage I/O after startup and can
+speed up training or benchmarking.
+
+If the dataset is larger than host memory, or if keeping an extra resident copy
+would pressure the training job, recommend regular reader-backed `Dataset`
+instead so samples are loaded from storage on demand.
+
+```python
+from nvalchemi.data.datapipes import AtomicDataZarrReader, InMemoryDataset
+
+reader = AtomicDataZarrReader("dataset.zarr")
+ds = InMemoryDataset(
+    reader=reader,
+    chunk_size=32768,
+    device="cuda",          # emitted batch target; resident cache stays on CPU
+    skip_validation=True,   # only for trusted toolkit-written stores
+)
+```
+
 ### High-level: DataLoader
 
-Iterates over a `Dataset` in batches, producing `Batch` objects.
+Iterates over a batch-loadable dataset in batches, producing `Batch` objects.
 
 ```python
 from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader
 
-reader = AtomicDataZarrReader("dataset.zarr")
-ds = Dataset(reader, device="cuda", num_workers=4)
+reader = AtomicDataZarrReader("dataset.zarr", pin_memory=True)
+ds = Dataset(reader, device="cuda", num_workers=1)
 
 loader = DataLoader(
     ds,
@@ -187,10 +225,13 @@ loader = DataLoader(
     shuffle=True,
     drop_last=False,
     sampler=None,              # optional torch Sampler
-    prefetch_factor=2,         # batches to prefetch ahead
-    num_streams=4,             # CUDA streams for prefetching
+    prefetch_factor=16,        # fuse 16 batches per read_many call
+    num_streams=2,             # CUDA streams for prefetching
     use_streams=True,          # enable stream prefetching
 )
+
+# For throughput tuning (skip_validation, prefetch_factor, chunk/shard
+# sizing), load the nvalchemi-zarr-perf agent skill.
 
 for batch in loader:
     # batch is a Batch with concatenated tensors on target device
@@ -199,6 +240,46 @@ for batch in loader:
 len(loader)                    # number of batches
 loader.set_epoch(epoch)        # for distributed sampler
 ```
+
+Use `prefetch_factor=0` to disable async fused prefetch while still reading each
+emitted batch through `Dataset.load_batches([indices])`. For explicit/manual
+batch reads, use `load_batches(...)`.
+
+### Composing multiple datasets
+
+Use `MultiDataset` to concatenate multiple batch-loadable datasets, including
+reader-backed `Dataset` and `InMemoryDataset`, behind one global index space
+while keeping the same `load_batches(...)` fast path:
+
+```python
+from nvalchemi.data.datapipes import (
+    AtomicDataZarrReader,
+    DataLoader,
+    Dataset,
+    MultiDataset,
+    MultiDatasetBatchSampler,
+)
+
+ds_a = Dataset(AtomicDataZarrReader("dataset_a.zarr"), device="cuda")
+ds_b = Dataset(AtomicDataZarrReader("dataset_b.zarr"), device="cuda")
+dataset = MultiDataset(ds_a, ds_b, output_strict=True)
+
+batch_sampler = MultiDatasetBatchSampler.balanced(
+    dataset,
+    batch_size=64,
+    epoch_policy="max_size",  # oversample smaller datasets when replacement=True
+    replacement=True,
+)
+
+loader = DataLoader(dataset, batch_sampler=batch_sampler, prefetch_factor=16)
+```
+
+Sampler notes:
+
+- `samples_per_dataset` accepts integer counts or float ratios.
+- `epoch_policy="min_size"` stops at the smallest contributing dataset.
+- `epoch_policy="max_size"` covers the largest dataset and oversamples smaller
+  datasets when `replacement=True`.
 
 ---
 
@@ -216,6 +297,10 @@ class MyReader(Reader):
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor dict for a single sample."""
+        ...
+
+    def _load_many_samples(self, indices) -> list[dict[str, torch.Tensor]]:
+        """Optional fast path for coalesced batch reads."""
         ...
 
     def __len__(self) -> int:

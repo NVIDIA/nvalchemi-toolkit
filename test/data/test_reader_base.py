@@ -60,6 +60,29 @@ class MinimalReader(Reader):
         return len(self._data)
 
 
+class ManyOnlyReader(Reader):
+    """Reader implementation that only supports batch-oriented raw loading."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._data = [{"x": torch.tensor([float(i)])} for i in range(3)]
+        self.calls: list[list[int]] = []
+
+    def _load_many_samples(self, indices) -> list[dict[str, torch.Tensor]]:
+        self.calls.append(list(indices))
+        return [self._data[index] for index in indices]
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+class NoLoadHookReader(Reader):
+    """Reader implementation without a raw loading hook."""
+
+    def __len__(self) -> int:
+        return 1
+
+
 class FailingReader(MinimalReader):
     """Reader that raises ``ValueError`` when a specific index is loaded."""
 
@@ -190,6 +213,31 @@ class TestReaderGetItem:
         assert data_dict["x"].is_pinned()
 
 
+class TestReaderLoadHooks:
+    """Tests for optional single-sample and multi-sample loading hooks."""
+
+    def test_read_uses_many_sample_hook_when_available(self):
+        """A reader can implement only _load_many_samples."""
+        reader = ManyOnlyReader()
+        data_dict, metadata = reader.read(1)
+        assert torch.allclose(data_dict["x"], torch.tensor([1.0]))
+        assert metadata["index"] == 1
+        assert reader.calls == [[1]]
+
+    def test_read_many_uses_many_sample_hook_once(self):
+        """read_many delegates one request to _load_many_samples."""
+        reader = ManyOnlyReader()
+        samples = reader.read_many([2, -3])
+        assert [metadata["index"] for _, metadata in samples] == [2, -3]
+        assert reader.calls == [[2, -3]]
+
+    def test_reader_without_load_hook_raises_not_implemented(self):
+        """A concrete reader still needs at least one raw loading hook."""
+        reader = NoLoadHookReader()
+        with pytest.raises(NotImplementedError):
+            reader.read(0)
+
+
 # ---------------------------------------------------------------------------
 # TestReaderGetSampleMetadata
 # ---------------------------------------------------------------------------
@@ -282,3 +330,15 @@ class TestReaderRepr:
         reader_pin = MinimalReader(pin_memory=True)
         assert "False" in repr(reader_no_pin)
         assert "True" in repr(reader_pin)
+
+
+class TestReaderStandaloneState:
+    """Tests for standalone reader state."""
+
+    def test_reader_tracks_compatibility_options(self):
+        """nvalchemi readers keep compatibility options without external bases."""
+        reader = MinimalReader()
+
+        assert reader.pin_memory is False
+        assert reader.include_index_in_metadata is True
+        assert reader.coordinated_subsampling is None

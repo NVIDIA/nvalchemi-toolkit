@@ -17,19 +17,64 @@
 from __future__ import annotations
 
 from nvalchemi.hooks._context import DynamicsContext, HookContext, TrainContext
-from nvalchemi.hooks._protocol import Hook
+from nvalchemi.hooks._protocol import CheckpointableHook, Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.hooks.periodic import WrapPeriodicHook
+from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
+from nvalchemi.hooks.reporting import (
+    BaseRichLayout,
+    DynamicsRichLayout,
+    Reporter,
+    ReporterMessage,
+    ReportingErrorPolicy,
+    ReportingOrchestrator,
+    ReportingState,
+    RichLayout,
+    RichReporter,
+    ScalarCallback,
+    ScalarSnapshot,
+    TensorBoardReporter,
+    TensorBoardWriter,
+    TrainingRichLayout,
+    collect_scalars,
+    extract_dynamics_scalars,
+    extract_loss_scalars,
+    extract_optimizer_lr_scalars,
+    extract_scalars,
+)
+from nvalchemi.hooks.stage_timing import StageTimingHook
 
 __all__ = [
+    "BaseRichLayout",
     "BiasedPotentialHook",
+    "CheckpointableHook",
     "DynamicsContext",
+    "DynamicsRichLayout",
     "Hook",
     "HookContext",
     "HookRegistryMixin",
     "NeighborListHook",
+    "Reporter",
+    "ReporterMessage",
+    "ReportingErrorPolicy",
+    "ReportingOrchestrator",
+    "ReportingState",
+    "RichLayout",
+    "RichReporter",
+    "ScalarCallback",
+    "ScalarSnapshot",
+    "TensorBoardReporter",
+    "TensorBoardWriter",
+    "StageTimingHook",
+    "TorchProfilerHook",
     "TrainContext",
+    "TrainingRichLayout",
     "WrapPeriodicHook",
+    "collect_scalars",
+    "extract_dynamics_scalars",
+    "extract_loss_scalars",
+    "extract_optimizer_lr_scalars",
+    "extract_scalars",
 ]
