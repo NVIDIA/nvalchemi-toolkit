@@ -10,7 +10,8 @@ and supported features in `nvalchemi`.
 
 ## Quick Start
 
-The quickest way to install ALCHEMI Toolkit:
+The quickest way to install ALCHEMI Toolkit, without specifying optional
+dependencies or CUDA version:
 
 ```bash
 $ pip install nvalchemi-toolkit
@@ -21,6 +22,8 @@ Make sure it is importable:
 ```bash
 $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 ```
+
+For install options, refer to the install guide below.
 
 ## About
 
