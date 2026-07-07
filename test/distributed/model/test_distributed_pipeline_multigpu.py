@@ -72,8 +72,10 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 
 def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
-    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 4))
-    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 12.0))
+    # Non-degenerate: max cutoff 6 Å + skin 4 Å -> ghost 10 Å, so a 2-rank split
+    # needs box > 40 Å. 48 Å / 12 = 4 Å spacing.
+    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 12))
+    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 48.0))
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
@@ -152,7 +154,10 @@ def _pipeline_worker(rank: int, world_size: int) -> None:
 
     # --- Distributed composite over ONE shared partition (built at max cutoff) ---
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    base_config = DomainConfig(cutoff=max(_DFTD3_CUT, _EWALD_CUT), skin=_SKIN, mesh=mesh)
+    base_config = DomainConfig(
+        cutoff=max(_DFTD3_CUT, _EWALD_CUT), skin=_SKIN, mesh=mesh,
+        require_nondegenerate=True,
+    )
     full = (
         Batch.from_data_list([_make_data(an, positions, masses, charges, cell, pbc, device, dtype)])
         if rank == 0

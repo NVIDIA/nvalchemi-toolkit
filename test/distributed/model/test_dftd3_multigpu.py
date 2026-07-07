@@ -28,10 +28,11 @@ all-reduce); forces are direct per-atom (PER_NODE, OWNED).
 One subtlety vs LJ: a ghost atom's coordination number (and the CN-gradient
 force term) depend on the ghost's own neighbors, which reach beyond the
 dispersion cutoff. Exact forces therefore need a halo a little deeper than the
-cutoff — set here via ``DomainConfig.skin``. The default small box is a
-degenerate partition (every rank's halo covers all atoms), which makes CN
-exact trivially; set ``NVALCHEMI_DFTD3_BOX`` / ``NVALCHEMI_DFTD3_N_SIDE`` for a
-genuinely decomposed run.
+cutoff — set here via ``DomainConfig.skin``. The default box is sized
+non-degenerate (box > 4*(cutoff+skin) so every rank develops remote atoms) and
+``require_nondegenerate=True`` makes a trivial partition fail loud; override the
+system via ``NVALCHEMI_DFTD3_BOX`` / ``NVALCHEMI_DFTD3_N_SIDE`` (keep it larger
+than 4*(cutoff+skin)).
 
 Requires 2+ CUDA GPUs and ``nvalchemiops`` with the DFTD3 kernels.
 
@@ -90,8 +91,11 @@ def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
     forces are non-trivial (a symmetric lattice gives ~zero forces and a
     vacuous check).
     """
-    n_side = int(os.environ.get("NVALCHEMI_DFTD3_N_SIDE", 3))
-    box = float(os.environ.get("NVALCHEMI_DFTD3_BOX", 8.0))
+    # Non-degenerate: cutoff caps at 5 Å, CN-skin 4 Å -> ghost 9 Å, so a 2-rank
+    # split needs box > 36 Å. 44 Å / 14 = 3.14 Å spacing, 2744 atoms (DFTD3 is
+    # cheap — no neural net).
+    n_side = int(os.environ.get("NVALCHEMI_DFTD3_N_SIDE", 14))
+    box = float(os.environ.get("NVALCHEMI_DFTD3_BOX", 44.0))
 
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
@@ -172,7 +176,9 @@ def _dftd3_equivalence_worker(rank: int, world_size: int) -> None:
     # ---- Distributed forward ----
     dist_wrapper = DFTD3ModelWrapper(a1=_A1, a2=_A2, s8=_S8, cutoff=cutoff)
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    domain_config = DomainConfig(cutoff=cutoff, skin=cn_skin, mesh=mesh)
+    domain_config = DomainConfig(
+        cutoff=cutoff, skin=cn_skin, mesh=mesh, require_nondegenerate=True
+    )
 
     if rank == 0:
         full_batch = Batch.from_data_list(

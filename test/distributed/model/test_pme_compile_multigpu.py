@@ -67,8 +67,10 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 
 def _build_nacl(dtype: torch.dtype = torch.float32, seed: int = 0):
-    n_side = int(os.environ.get("NVALCHEMI_PME_N_SIDE", 10))
-    box = float(os.environ.get("NVALCHEMI_PME_BOX", 32.0))
+    # Non-degenerate: cutoff 6 Å + skin 2 Å -> ghost 8 Å, so a 2-rank split
+    # needs box > 32 Å (32 Å was exactly at the threshold -> ~0 remote). 40 Å.
+    n_side = int(os.environ.get("NVALCHEMI_PME_N_SIDE", 12))
+    box = float(os.environ.get("NVALCHEMI_PME_BOX", 40.0))
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
@@ -160,7 +162,9 @@ def _compile_worker(rank: int, world_size: int) -> None:
         "PME(hybrid_forces=False) must declare a forces_via_autograd CompilePolicy"
     )
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    cfg = DomainConfig(cutoff=_PME_CUT, skin=2.0, mesh=mesh)
+    cfg = DomainConfig(
+        cutoff=_PME_CUT, skin=2.0, mesh=mesh, require_nondegenerate=True
+    )
     partitioner = SpatialPartitioner(
         config=cfg,
         cell_matrix=cell.to(device=device, dtype=dtype).unsqueeze(0),

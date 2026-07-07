@@ -72,8 +72,10 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 
 def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
-    n_side = int(os.environ.get("NVALCHEMI_SHARED_N_SIDE", 6))
-    box = float(os.environ.get("NVALCHEMI_SHARED_BOX", 18.0))
+    # Non-degenerate: max cutoff 5 Å + CN-skin 4 Å -> ghost 9 Å, so a 2-rank
+    # split needs box > 36 Å. 44 Å / 14 = 3.14 Å spacing.
+    n_side = int(os.environ.get("NVALCHEMI_SHARED_N_SIDE", 14))
+    box = float(os.environ.get("NVALCHEMI_SHARED_BOX", 44.0))
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
@@ -158,7 +160,9 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
     # ONE shared owned partition, built at the MAX ghost width so the partition
     # cells comfortably hold every model's ghost layer.
-    shared_config = DomainConfig(cutoff=max_cut, skin=_CN_SKIN, mesh=mesh)
+    shared_config = DomainConfig(
+        cutoff=max_cut, skin=_CN_SKIN, mesh=mesh, require_nondegenerate=True
+    )
     full = (
         Batch.from_data_list(
             [_make_data(atomic_numbers, positions, masses, cell, pbc, device, dtype)]
@@ -184,7 +188,9 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
         # owned partition; the owned set is never recomputed.
         sharded.invalidate_padded_view()
         wrapper = DFTD3ModelWrapper(a1=_A1, a2=_A2, s8=_S8, cutoff=cut)
-        cfg = DomainConfig(cutoff=cut, skin=_CN_SKIN, mesh=mesh)
+        cfg = DomainConfig(
+            cutoff=cut, skin=_CN_SKIN, mesh=mesh, require_nondegenerate=True
+        )
         with DistributedModel(wrapper, cfg) as dm:
             out = dm(sharded)
         e_local = out["energy"].sum().detach()

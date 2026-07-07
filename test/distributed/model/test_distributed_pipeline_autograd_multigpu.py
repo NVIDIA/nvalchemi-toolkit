@@ -80,9 +80,11 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 def _build_lattice(dtype: torch.dtype = torch.float64, seed: int = 0):
     # Default box (30 Å) keeps the DFTD3 cutoff (12 Å) under the minimum-image
-    # half-box (15 Å); enlarge via env for a genuinely non-degenerate partition.
-    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 10))
-    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 30.0))
+    # Non-degenerate: DFTD3's deep CN halo (cutoff 12 Å + skin 4 Å -> ghost 16 Å)
+    # means a 2-rank split needs box > 64 Å. 68 Å / 14 = 4.86 Å spacing keeps the
+    # atom count bounded (2744) while every rank still develops remote atoms.
+    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 14))
+    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 68.0))
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
@@ -178,7 +180,9 @@ def _autograd_pipeline_worker(rank: int, world_size: int) -> None:
     pipeline = _build_pipeline(mace_cut, device, dtype)
     max_cut = max(mace_cut[0], _DFTD3_CUT)
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    base_config = DomainConfig(cutoff=max_cut, skin=_SKIN, mesh=mesh)
+    base_config = DomainConfig(
+        cutoff=max_cut, skin=_SKIN, mesh=mesh, require_nondegenerate=True
+    )
     full = (
         Batch.from_data_list([_make_data(an, positions, masses, cell, pbc, device, dtype)])
         if rank == 0

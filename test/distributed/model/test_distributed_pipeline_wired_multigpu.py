@@ -79,7 +79,9 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 def _methane_packing(dtype: torch.dtype = torch.float32, seed: int = 0):
     """``n_per_side**3`` methane molecules (5 atoms each) on a cubic PBC lattice,
     rattled so net forces are non-trivial."""
-    n_per_side = int(os.environ.get("NVALCHEMI_WIRED_N_SIDE", 4))
+    # Non-degenerate: PME cutoff 6 Å + skin 0.5 Å -> ghost 6.5 Å, so a 2-rank
+    # split needs box > 26 Å. 7 * 4.4 = 30.8 Å (7**3 * 5 = 1715 atoms).
+    n_per_side = int(os.environ.get("NVALCHEMI_WIRED_N_SIDE", 7))
     spacing = float(os.environ.get("NVALCHEMI_WIRED_SPACING", 4.4))
     box = float(n_per_side) * spacing
     bond = 1.087
@@ -168,7 +170,9 @@ def _wired_pipeline_worker(rank: int, world_size: int) -> None:
     pipeline = _build_pipeline(aim_cut, device, dtype)
     max_cut = max(aim_cut[0], _PME_CUT)
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    base_config = DomainConfig(cutoff=max_cut, skin=_SKIN, mesh=mesh)
+    base_config = DomainConfig(
+        cutoff=max_cut, skin=_SKIN, mesh=mesh, require_nondegenerate=True
+    )
     full = (
         Batch.from_data_list([_make_data(an, positions, cell, pbc, device, dtype)])
         if rank == 0

@@ -42,8 +42,11 @@ Run with::
 
     pytest test/distributed/test_pme_multigpu.py -v
 
-Override the test system via env:
-    NVALCHEMI_PME_BOX=12.0 NVALCHEMI_PME_N_SIDE=3 pytest ...
+The default system is non-degenerate (remote atoms on every rank) and the
+DomainConfig sets ``require_nondegenerate=True`` so a trivial partition fails
+loud rather than passing vacuously. Override the system via env (keep it
+non-degenerate: box > 4*(cutoff+skin)):
+    NVALCHEMI_PME_BOX=28.0 NVALCHEMI_PME_N_SIDE=10 pytest ...
 """
 
 from __future__ import annotations
@@ -99,8 +102,11 @@ def _build_nacl(dtype: torch.dtype = torch.float32, seed: int = 0):
     """Same layout as the Ewald multigpu test — PME's real-space path
     reuses the Ewald kernel, so the two tests cover identical geometry
     with different k-space algorithms."""
-    n_side = int(os.environ.get("NVALCHEMI_PME_N_SIDE", 2))
-    box = float(os.environ.get("NVALCHEMI_PME_BOX", 5.64))
+    # Non-degenerate by default: cutoff caps at 5 Å (skin 0), so box must clear
+    # 4*ghost = 20 Å for a 2-rank split to develop remote atoms. 28 Å / 10 = 2.8 Å
+    # spacing (~NaCl), 1000 atoms.
+    n_side = int(os.environ.get("NVALCHEMI_PME_N_SIDE", 10))
+    box = float(os.environ.get("NVALCHEMI_PME_BOX", 28.0))
 
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
@@ -196,7 +202,9 @@ def _pme_equivalence_worker(rank: int, world_size: int) -> None:
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
 
     cutoff = float(dist_wrapper.cutoff)
-    domain_config = DomainConfig(cutoff=cutoff, skin=0.0, mesh=mesh)
+    domain_config = DomainConfig(
+        cutoff=cutoff, skin=0.0, mesh=mesh, require_nondegenerate=True
+    )
 
     if rank == 0:
         full_batch = Batch.from_data_list(

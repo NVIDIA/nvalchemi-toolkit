@@ -192,6 +192,55 @@ def _partition_health_verdict(
     return bool(flags[0].item()), bool(flags[1].item()), n_global
 
 
+def _resolve_partition_health(
+    any_empty: bool,
+    any_trivial: bool,
+    n_global: int,
+    *,
+    world_size: int,
+    require_nondegenerate: bool,
+    rank: int,
+) -> None:
+    """Act on a collective partition-health verdict, identically on every rank.
+
+    * ``any_empty`` (a rank owns 0 atoms) is always fatal — the geometry can't
+      fill this many ranks.
+    * ``any_trivial`` (some rank's halo covers all atoms, 0 remote) means DD
+      isn't exercised: fatal when ``require_nondegenerate`` (a force-equivalence
+      check there proves nothing), otherwise a rank-0 warning.
+
+    Pure (no collectives) so the empty/trivial branches are unit-testable on
+    CPU; the verdict flags are already reduced across the mesh by the caller, so
+    every rank passes the same values and raises identically (no desync)."""
+    if any_empty:
+        raise RuntimeError(
+            "Degenerate domain decomposition: a rank was assigned 0 owned "
+            f"atoms (world_size={world_size}, total atoms={n_global}). There "
+            "are more ranks than this geometry can partition — use fewer ranks "
+            "or a larger system."
+        )
+    if not any_trivial:
+        return
+    msg = (
+        "Degenerate (trivial) domain decomposition: every rank's halo already "
+        f"covers all {n_global} atoms (0 remote atoms), so domain parallelism "
+        "gains nothing here — each rank does the full system's work. This "
+        "happens when box/ranks <= ~2*ghost_width (ghost_width = cutoff + "
+        "skin); use fewer ranks or a larger system to actually decompose."
+    )
+    # Opt-in strict mode (tests, guaranteed-decomposed runs): a trivial
+    # partition can't validate the halo path, so fail loud.
+    if require_nondegenerate:
+        raise RuntimeError(
+            msg + " (require_nondegenerate=True — refusing to run a partition "
+            "that doesn't exercise the halo boundary.)"
+        )
+    if rank == 0:
+        from loguru import logger  # noqa: PLC0415
+
+        logger.warning(msg + " (results are still correct.)")
+
+
 def _mark_halo_receiver_edges_as_padding(padded_batch: "Batch", n_owned: int) -> None:
     """Rewrite ``neighbor_list`` so halo-receiver edges look like the
     padding-sentinel rows ``compute_neighbors`` already emits.
@@ -777,31 +826,21 @@ class DistributedModel:
         any_empty, any_trivial, n_global = _partition_health_verdict(
             int(meta.n_owned), int(meta.n_padded), group, device
         )
-        if any_empty:
-            raise RuntimeError(
-                "Degenerate domain decomposition: a rank was assigned 0 owned "
-                f"atoms (world_size={self._world_size}, total atoms={n_global}). "
-                "There are more ranks than this geometry can partition — use "
-                "fewer ranks or a larger system."
-            )
-        if any_trivial:
-            rank = (
-                self._config.mesh.get_local_rank()
-                if self._config.mesh is not None
-                else 0
-            )
-            if rank == 0:
-                from loguru import logger  # noqa: PLC0415
-
-                logger.warning(
-                    "Degenerate (trivial) domain decomposition: every rank's "
-                    f"halo already covers all {n_global} atoms (0 remote atoms), "
-                    "so domain parallelism gains nothing here — results are still "
-                    "correct, but each rank does the full system's work. This "
-                    "happens when box/ranks <= ~2*ghost_width (ghost_width = "
-                    "cutoff + skin); use fewer ranks or a larger system to "
-                    "actually decompose."
-                )
+        rank = (
+            self._config.mesh.get_local_rank()
+            if self._config.mesh is not None
+            else 0
+        )
+        _resolve_partition_health(
+            any_empty,
+            any_trivial,
+            n_global,
+            world_size=self._world_size,
+            require_nondegenerate=getattr(
+                self._config, "require_nondegenerate", False
+            ),
+            rank=rank,
+        )
 
     def _graph_parallel_owned_edges(
         self, sharded: "ShardedBatch", meta: Any, rank: int

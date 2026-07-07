@@ -77,3 +77,54 @@ def test_partition_health_verdict_2ranks(scenario: str) -> None:
     """The verdict is shared identically across ranks: empty shard -> any_empty,
     full-coverage -> any_trivial, real split -> neither."""
     mp.spawn(_verdict_worker, args=(2, scenario), nprocs=2)
+
+
+# ---------------------------------------------------------------------------
+# Acting on the verdict (_resolve_partition_health) — pure, no collectives.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_partition_health_empty_always_raises() -> None:
+    """An empty shard is fatal regardless of require_nondegenerate."""
+    from nvalchemi.distributed.distributed_model import _resolve_partition_health
+
+    for strict in (False, True):
+        with pytest.raises(RuntimeError, match="0 owned"):
+            _resolve_partition_health(
+                any_empty=True,
+                any_trivial=False,
+                n_global=10,
+                world_size=2,
+                require_nondegenerate=strict,
+                rank=0,
+            )
+
+
+def test_resolve_partition_health_trivial_strict_raises() -> None:
+    """A trivial (0-remote) partition raises when require_nondegenerate=True."""
+    from nvalchemi.distributed.distributed_model import _resolve_partition_health
+
+    with pytest.raises(RuntimeError, match="require_nondegenerate=True"):
+        _resolve_partition_health(
+            any_empty=False,
+            any_trivial=True,
+            n_global=10,
+            world_size=2,
+            require_nondegenerate=True,
+            rank=0,
+        )
+
+
+def test_resolve_partition_health_trivial_lenient_warns_not_raises() -> None:
+    """Without the flag a trivial partition only warns (still correct)."""
+    from nvalchemi.distributed.distributed_model import _resolve_partition_health
+
+    # Must not raise; a healthy verdict must be a no-op too.
+    _resolve_partition_health(
+        any_empty=False, any_trivial=True, n_global=10,
+        world_size=2, require_nondegenerate=False, rank=0,
+    )
+    _resolve_partition_health(
+        any_empty=False, any_trivial=False, n_global=100,
+        world_size=2, require_nondegenerate=True, rank=0,
+    )
