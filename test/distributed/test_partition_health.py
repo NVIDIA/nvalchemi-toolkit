@@ -121,10 +121,18 @@ def test_resolve_partition_health_trivial_lenient_warns_not_raises() -> None:
 
     # Must not raise; a healthy verdict must be a no-op too.
     _resolve_partition_health(
-        any_empty=False, any_trivial=True, n_global=10,
-        world_size=2, require_nondegenerate=False, rank=0,
+        any_empty=False,
+        any_trivial=True,
+        n_global=10,
+        world_size=2,
+        require_nondegenerate=False,
+        rank=0,
     )
     _resolve_partition_health(
-        any_empty=False, any_trivial=False, n_global=100,
-        world_size=2, require_nondegenerate=True, rank=0,
+        any_empty=False,
+        any_trivial=False,
+        n_global=100,
+        world_size=2,
+        require_nondegenerate=True,
+        rank=0,
     )

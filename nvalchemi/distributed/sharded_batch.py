@@ -417,9 +417,9 @@ class ShardedBatch(ShardedCollection):
 
             n_atoms_src = batch.positions.shape[0]
             if partition_mode == "spatial":
-                rank_assignment = partitioner.assign_atoms_to_ranks(
-                    batch.positions
-                ).to(torch.int64)
+                rank_assignment = partitioner.assign_atoms_to_ranks(batch.positions).to(
+                    torch.int64
+                )
                 # Stable sort so atoms within a rank keep their original order.
                 sorted_idx = torch.argsort(rank_assignment, stable=True)
             else:  # contiguous_block
@@ -433,8 +433,7 @@ class ShardedBatch(ShardedCollection):
 
             sorted_assignment = rank_assignment[sorted_idx]
             sizes_list = [
-                int((sorted_assignment == r).sum().item())
-                for r in range(world_size)
+                int((sorted_assignment == r).sum().item()) for r in range(world_size)
             ]
 
             # Discover every per-atom field (positions, atomic_numbers, masses,
@@ -451,9 +450,7 @@ class ShardedBatch(ShardedCollection):
 
         # --- Broadcast the field order so every rank can build the policy
         # map keyed by field name, then delegate the scatter. ---
-        names_holder: list[Any] = [
-            list(source.keys()) if source is not None else None
-        ]
+        names_holder: list[Any] = [list(source.keys()) if source is not None else None]
         if dist.is_initialized():
             dist.broadcast_object_list(
                 names_holder, src=_global_src(group, src), group=group

@@ -70,10 +70,14 @@ def test_metadata_from_assignment_roundtrip() -> None:
     # Local indices are contiguous 0..k-1 per rank (in argsort-stable order).
     expected_local = torch.tensor([0, 0, 1, 1, 2, 0, 1], dtype=torch.long)
     torch.testing.assert_close(meta.local_index, expected_local)
+
+
 def _mock_config() -> Any:
     cfg = MagicMock()
     cfg.mesh.get_group.return_value = None
     return cfg
+
+
 def test_index_select_single_process_degenerate() -> None:
     """Without dist init the primitive does a plain local index_select."""
     n_owned = 5
@@ -88,6 +92,8 @@ def test_index_select_single_process_degenerate() -> None:
 
     got = distributed_index_select(x, indices, meta, _mock_config())
     torch.testing.assert_close(got, x.index_select(0, indices))
+
+
 def test_scatter_add_single_process_degenerate() -> None:
     n_owned = 4
     self_t = torch.zeros(n_owned, 2, dtype=torch.float64)
@@ -103,25 +109,35 @@ def test_scatter_add_single_process_degenerate() -> None:
     expected = torch.zeros(n_owned, 2, dtype=torch.float64)
     expected.scatter_add_(0, indices.unsqueeze(-1).expand(-1, 2), src)
     torch.testing.assert_close(out, expected)
+
+
 def _init_gloo(rank: int, world_size: int, port: str = "29521") -> None:
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = port
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+
 def _worker(rank: int, world_size: int, fn: Any, *args: Any) -> None:
     _init_gloo(rank, world_size)
     try:
         fn(rank, world_size, *args)
     finally:
         dist.destroy_process_group()
+
+
 class _MeshStub:
     def get_group(self) -> Any:
         return None
+
+
 def _cfg() -> Any:
     cfg = MagicMock()
     cfg.mesh = _MeshStub()
     return cfg
+
+
 def _test_index_select_forward(rank: int, world_size: int) -> None:
     """Each rank owns a contiguous slice of a global atom space; each
     rank requests a mix of local + remote global indices. Result must
@@ -154,10 +170,16 @@ def _test_index_select_forward(rank: int, world_size: int) -> None:
     ref_full = torch.cat(all_shards, dim=0)
     expected = ref_full.index_select(0, global_indices)
     torch.testing.assert_close(got, expected)
+
+
 def test_index_select_forward_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_index_select_forward), nprocs=2)
+
+
 def test_index_select_forward_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_index_select_forward), nprocs=4)
+
+
 def _test_scatter_add_forward(rank: int, world_size: int) -> None:
     """Each rank scatter-adds contributions at global indices; the
     combined result (gathered across ranks) must match a single-rank
@@ -195,6 +217,8 @@ def _test_scatter_add_forward(rank: int, world_size: int) -> None:
     # Compare rank r's owned slice to ref_full[rank*per_rank : (rank+1)*per_rank].
     expected = ref_full[rank * per_rank : (rank + 1) * per_rank]
     torch.testing.assert_close(my_shard, expected)
+
+
 def _test_scatter_add_fp64_accumulation(rank: int, world_size: int) -> None:
     """fp32 contributions are folded in fp64 (downcast at the end), so small
     terms survive against a large one. All contributions target a single owned
@@ -236,8 +260,12 @@ def test_scatter_add_fp64_accumulation_2ranks() -> None:
 
 def test_scatter_add_forward_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_scatter_add_forward), nprocs=2)
+
+
 def test_scatter_add_forward_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_scatter_add_forward), nprocs=4)
+
+
 def _test_index_select_adjoint(rank: int, world_size: int) -> None:
     """<y, f(x)>_global == <f^T(y), x>_global for f = distributed_index_select.
     Random per-rank y, random per-rank x. The adjoint test fixes the
@@ -268,10 +296,16 @@ def _test_index_select_adjoint(rank: int, world_size: int) -> None:
     dist.all_reduce(global_lhs, op=dist.ReduceOp.SUM)
     dist.all_reduce(global_rhs, op=dist.ReduceOp.SUM)
     torch.testing.assert_close(global_lhs, global_rhs, rtol=1e-10, atol=1e-10)
+
+
 def test_index_select_adjoint_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_index_select_adjoint), nprocs=2)
+
+
 def test_index_select_adjoint_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_index_select_adjoint), nprocs=4)
+
+
 def _test_index_select_local_loss(rank: int, world_size: int) -> None:
     """Each rank computes a LOCAL scalar loss from its gathered rows.
     Summing local losses across ranks yields the single-rank total loss.
@@ -319,10 +353,16 @@ def _test_index_select_local_loss(rank: int, world_size: int) -> None:
     # Rank r's shard grad should match ref_grad_full[r*per_rank:(r+1)*per_rank].
     expected = ref_grad_full[rank * per_rank : (rank + 1) * per_rank]
     torch.testing.assert_close(grad_my_shard, expected, rtol=1e-10, atol=1e-10)
+
+
 def test_index_select_local_loss_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_index_select_local_loss), nprocs=2)
+
+
 def test_index_select_local_loss_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_index_select_local_loss), nprocs=4)
+
+
 def _test_scatter_add_adjoint(rank: int, world_size: int) -> None:
     """Scatter-add forward f(src; idx): accumulates into self_t.
     backward grad_src[k] = grad_self_t[idx[k]] (gathered across ranks).
@@ -357,10 +397,16 @@ def _test_scatter_add_adjoint(rank: int, world_size: int) -> None:
     # the total loss.
     expected = torch.ones_like(src)
     torch.testing.assert_close(grad_src, expected, rtol=1e-10, atol=1e-10)
+
+
 def test_scatter_add_adjoint_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_scatter_add_adjoint), nprocs=2)
+
+
 def test_scatter_add_adjoint_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_scatter_add_adjoint), nprocs=4)
+
+
 def _fake_halo_meta_cfg(n_owned: int) -> tuple[Any, Any]:
     halo_meta = MagicMock()
     halo_meta.n_owned = n_owned
@@ -368,6 +414,8 @@ def _fake_halo_meta_cfg(n_owned: int) -> tuple[Any, Any]:
     cfg = MagicMock()
     cfg.mesh = _MeshStub()
     return halo_meta, cfg
+
+
 def _test_dispatch_index_select(rank: int, world_size: int) -> None:
     """``t.index_select(0, global_idx)`` auto-dispatches to the distributed
     gather when the tensor carries ``gather_meta``."""
@@ -406,8 +454,12 @@ def _test_dispatch_index_select(rank: int, world_size: int) -> None:
     ref_full = torch.cat(all_shards, dim=0)
     expected = ref_full.index_select(0, global_indices)
     torch.testing.assert_close(got.unwrap(), expected)
+
+
 def test_dispatch_index_select_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_dispatch_index_select), nprocs=2)
+
+
 def _test_dispatch_scatter_add(rank: int, world_size: int) -> None:
     """``zeros.scatter_add_(0, global_idx, src)`` auto-dispatches to the
     distributed scatter when the accumulator carries ``gather_meta``."""
@@ -452,8 +504,12 @@ def _test_dispatch_scatter_add(rank: int, world_size: int) -> None:
         )
     expected = ref_full[rank * per_rank : (rank + 1) * per_rank]
     torch.testing.assert_close(my_shard.unwrap(), expected)
+
+
 def test_dispatch_scatter_add_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_dispatch_scatter_add), nprocs=2)
+
+
 def _test_dispatch_fallthrough_without_gather_meta(rank: int, world_size: int) -> None:
     """Without ``gather_meta`` on the tensor, ShardTensor falls through
     to plain-tensor behavior — index_select is local, not distributed."""
@@ -474,10 +530,13 @@ def _test_dispatch_fallthrough_without_gather_meta(rank: int, world_size: int) -
         got.unwrap(),
         my_shard.unwrap().index_select(0, local_indices),
     )
+
+
 def test_dispatch_fallthrough_without_gather_meta_2ranks() -> None:
     mp.spawn(
         _worker, args=(2, _test_dispatch_fallthrough_without_gather_meta), nprocs=2
     )
+
 
 class SyntheticAIMNet2Gather(nn.Module):
     """AIMNet2-shaped reference model with every cross-rank op expressed
@@ -579,6 +638,8 @@ class SyntheticAIMNet2Gather(nn.Module):
 
         per_atom_e = self.readout(x).squeeze(-1)
         return per_atom_e
+
+
 def _build_edges(
     positions: torch.Tensor, cutoff: float
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -591,6 +652,8 @@ def _build_edges(
     edge_d = d[src, dst]
     w = 0.5 * (torch.cos(torch.pi * edge_d / cutoff) + 1.0)
     return src, dst, w
+
+
 def _run_gather_synthetic(rank: int, world_size: int) -> None:
     """One molecule (8 atoms) split across 2 ranks. Positions chosen so
     that edges span the rank boundary — the gather has real work to do."""
@@ -689,8 +752,11 @@ def _run_gather_synthetic(rank: int, world_size: int) -> None:
     # autograd nodes as in halo mode's index_select dispatch. Compare to
     # the halo path in test_aimnet2_real.py Case 2, which tolerates 1e-2.
     torch.testing.assert_close(forces_dist, forces_ref_owned, rtol=1e-12, atol=1e-14)
+
+
 def test_gather_synthetic_aimnet2_2ranks() -> None:
     mp.spawn(_worker, args=(2, _run_gather_synthetic), nprocs=2)
+
 
 def _fixed_a2a_worker(rank: int, world_size: int, queue, cap: int) -> None:
     from torch.distributed.device_mesh import init_device_mesh
@@ -714,14 +780,20 @@ def _fixed_a2a_worker(rank: int, world_size: int, queue, cap: int) -> None:
         if not torch.allclose(block, torch.full((cap, feat), expected)):
             ok = False
     queue.put((rank, ok))
+
+
 def test_fixed_a2a_roundtrip_2ranks() -> None:
     results = run_gloo(world_size=2, fn=_fixed_a2a_worker, args=(3,))
     assert len(results) == 2
     assert all(ok for _rank, ok in results), results
+
+
 def test_fixed_a2a_roundtrip_4ranks() -> None:
     results = run_gloo(world_size=4, fn=_fixed_a2a_worker, args=(2,))
     assert len(results) == 4
     assert all(ok for _rank, ok in results), results
+
+
 def _fixed_index_select_worker(rank: int, world_size: int, queue) -> None:
     """Compare the fullgraph fixed-size gather against the trusted variable
     ``distributed_index_select`` AND the analytic expectation."""
@@ -756,21 +828,32 @@ def _fixed_index_select_worker(rank: int, world_size: int, queue) -> None:
     cap = int(owner.bincount(minlength=world_size).max().item())
 
     out_fixed = funcol_fixed_index_select(
-        sharded_input, global_indices, meta.owner_rank, meta.local_index,
-        cap, world_size, mesh,
+        sharded_input,
+        global_indices,
+        meta.owner_rank,
+        meta.local_index,
+        cap,
+        world_size,
+        mesh,
     )
     out_var = distributed_index_select(sharded_input, global_indices, meta, config)
 
     ok = torch.allclose(out_fixed, expected) and torch.allclose(out_fixed, out_var)
     queue.put((rank, ok))
+
+
 def test_fixed_index_select_matches_variable_2ranks() -> None:
     results = run_gloo(world_size=2, fn=_fixed_index_select_worker)
     assert len(results) == 2
     assert all(ok for _rank, ok in results), results
+
+
 def test_fixed_index_select_matches_variable_4ranks() -> None:
     results = run_gloo(world_size=4, fn=_fixed_index_select_worker)
     assert len(results) == 4
     assert all(ok for _rank, ok in results), results
+
+
 def _fixed_autograd_worker(rank: int, world_size: int, queue) -> None:
     """Fixed gather path matches the trusted variable path on BOTH value and
     gradient (validates ``_FixedDistributedIndexSelect`` forward + backward)."""
@@ -805,14 +888,20 @@ def _fixed_autograd_worker(rank: int, world_size: int, queue) -> None:
 
     ok = torch.allclose(out_var, out_fix) and torch.allclose(g_var, g_fix)
     queue.put((rank, ok))
+
+
 def test_fixed_index_select_autograd_matches_variable_2ranks() -> None:
     results = run_gloo(world_size=2, fn=_fixed_autograd_worker)
     assert len(results) == 2
     assert all(ok for _rank, ok in results), results
+
+
 def test_fixed_index_select_autograd_matches_variable_4ranks() -> None:
     results = run_gloo(world_size=4, fn=_fixed_autograd_worker)
     assert len(results) == 4
     assert all(ok for _rank, ok in results), results
+
+
 def _fixed_scatter_autograd_worker(rank: int, world_size: int, queue) -> None:
     """Fixed scatter-add path matches the variable path on value + gradient
     (validates ``_FixedDistributedScatterAdd`` forward + backward directly)."""
@@ -846,25 +935,36 @@ def _fixed_scatter_autograd_worker(rank: int, world_size: int, queue) -> None:
 
     s_fix = src_base.clone().requires_grad_(True)
     out_fix = distributed_scatter_add(
-        torch.zeros(n_owned, feat, dtype=torch.float64), gi, s_fix, meta, config,
+        torch.zeros(n_owned, feat, dtype=torch.float64),
+        gi,
+        s_fix,
+        meta,
+        config,
         cap=cap,
     )
     (g_fix,) = torch.autograd.grad(out_fix.pow(2).sum(), s_fix)
 
     ok = torch.allclose(out_var, out_fix) and torch.allclose(g_var, g_fix)
     queue.put((rank, ok))
+
+
 def test_fixed_scatter_add_autograd_matches_variable_2ranks() -> None:
     results = run_gloo(world_size=2, fn=_fixed_scatter_autograd_worker)
     assert len(results) == 2
     assert all(ok for _rank, ok in results), results
 
+
 pytestmark = pytest.mark.usefixtures("_session_gloo_pg")
+
+
 def _cpu_mesh_config() -> types.SimpleNamespace:
     """Minimal real config: per_system_reduce only reads ``config.mesh``."""
     from torch.distributed.device_mesh import init_device_mesh
 
     mesh = init_device_mesh("cpu", (1,))
     return types.SimpleNamespace(mesh=mesh)
+
+
 def test_per_system_reduce_compiles_fwd_bwd() -> None:
     """``per_system_reduce`` (setup_context + funcol) traces under compile."""
     config = _cpu_mesh_config()
@@ -886,6 +986,8 @@ def test_per_system_reduce_compiles_fwd_bwd() -> None:
     compiled_grad = torch.autograd.grad(compiled(local_vals_c), local_vals_c)[0]
 
     torch.testing.assert_close(eager_grad, compiled_grad, atol=1e-10, rtol=1e-10)
+
+
 def test_distributed_all_reduce_compiles_fwd_bwd() -> None:
     """``distributed_all_reduce`` (setup_context + funcol) traces under compile."""
     config = _cpu_mesh_config()
@@ -902,6 +1004,8 @@ def test_distributed_all_reduce_compiles_fwd_bwd() -> None:
     compiled_grad = torch.autograd.grad(compiled(x_c), x_c)[0]
 
     torch.testing.assert_close(eager_grad, compiled_grad, atol=1e-10, rtol=1e-10)
+
+
 def test_funcol_all_to_all_v_rows_compiles() -> None:
     """The funcol ``all_to_all_single`` row helper (powering the halo exchange)
     traces under fullgraph compile. Non-autograd by design — the halo
@@ -918,6 +1022,8 @@ def test_funcol_all_to_all_v_rows_compiles() -> None:
     torch._dynamo.reset()
     compiled = torch.compile(fn, fullgraph=True, dynamic=False, backend="aot_eager")
     torch.testing.assert_close(compiled(x), fn(x))
+
+
 def test_funcol_all_to_all_fixed_compiles_fullgraph() -> None:
     """Fixed-size (uniform-split) all_to_all — the fullgraph workaround for the
     data-dependent sharded gather. Unlike the all-to-all-**v** helper, the split
@@ -934,6 +1040,8 @@ def test_funcol_all_to_all_fixed_compiles_fullgraph() -> None:
     torch._dynamo.reset()
     compiled = torch.compile(fn, fullgraph=True, dynamic=False, backend="aot_eager")
     torch.testing.assert_close(compiled(x), eager)
+
+
 def test_funcol_fixed_index_select_compiles_fullgraph() -> None:
     """The full static-bucketing distributed gather (partition + fixed-size
     all_to_all) traces under fullgraph — the AIMNet2 sharded-gather workaround.
@@ -942,9 +1050,7 @@ def test_funcol_fixed_index_select_compiles_fullgraph() -> None:
     mesh = _cpu_mesh_config().mesh
     world_size = 1
     n = 6
-    meta = ShardRouting.from_assignment(
-        torch.zeros(n, dtype=torch.long), rank=0
-    )
+    meta = ShardRouting.from_assignment(torch.zeros(n, dtype=torch.long), rank=0)
     owner_rank, local_index = meta.owner_rank, meta.local_index
     global_indices = torch.tensor([0, 2, 4, 1, 5])
     cap = n
@@ -960,7 +1066,11 @@ def test_funcol_fixed_index_select_compiles_fullgraph() -> None:
     compiled = torch.compile(fn, fullgraph=True, dynamic=False, backend="aot_eager")
     torch.testing.assert_close(compiled(sharded), eager)
     # Sanity: gather of index g returns row g.
-    torch.testing.assert_close(eager, global_indices.to(torch.float64).unsqueeze(1).repeat(1, 3))
+    torch.testing.assert_close(
+        eager, global_indices.to(torch.float64).unsqueeze(1).repeat(1, 3)
+    )
+
+
 def test_fixed_index_select_function_compiles_fwd_bwd() -> None:
     """The production ``_FixedDistributedIndexSelect`` autograd Function (the
     AIMNet2 fullgraph gather) traces forward + backward under fullgraph compile,
@@ -968,9 +1078,7 @@ def test_fixed_index_select_function_compiles_fwd_bwd() -> None:
     mesh = _cpu_mesh_config().mesh
     world_size = 1
     n = 6
-    meta = ShardRouting.from_assignment(
-        torch.zeros(n, dtype=torch.long), rank=0
-    )
+    meta = ShardRouting.from_assignment(torch.zeros(n, dtype=torch.long), rank=0)
     owner_rank, local_index = meta.owner_rank, meta.local_index
     global_indices = torch.tensor([0, 2, 4, 1, 5, 3])
     cap = n

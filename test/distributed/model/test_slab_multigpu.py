@@ -93,9 +93,7 @@ def _build_slab(dtype: torch.dtype = torch.float32, seed: int = 0):
     n = positions.shape[0]
 
     g = torch.Generator().manual_seed(seed)
-    positions = positions + 0.1 * torch.randn(
-        positions.shape, dtype=dtype, generator=g
-    )
+    positions = positions + 0.1 * torch.randn(positions.shape, dtype=dtype, generator=g)
     # Wrap only the periodic in-plane axes; leave z inside the slab.
     positions[:, 0] = positions[:, 0] % box_xy
     positions[:, 1] = positions[:, 1] % box_xy
@@ -130,9 +128,7 @@ def _make_wrapper(method: str):
         )
     from nvalchemi.models.ewald import EwaldModelWrapper
 
-    return EwaldModelWrapper(
-        cutoff=_CUTOFF, hybrid_forces=False, slab_correction=True
-    )
+    return EwaldModelWrapper(cutoff=_CUTOFF, hybrid_forces=False, slab_correction=True)
 
 
 def _slab_equivalence_worker(rank: int, world_size: int, method: str) -> None:

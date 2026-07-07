@@ -172,7 +172,8 @@ def _submesh_dd_worker(rank: int, world_size: int, n_steps: int) -> None:
     torch.testing.assert_close(
         got_f.norm(dim=-1).sort().values,
         ref_f.norm(dim=-1).sort().values,
-        rtol=1e-3, atol=1e-4,
+        rtol=1e-3,
+        atol=1e-4,
     )
 
 
@@ -303,7 +304,8 @@ def _comm_override_worker(rank: int, world_size: int, n_steps: int) -> None:
         torch.testing.assert_close(
             got_f.norm(dim=-1).sort().values,
             ref_f.norm(dim=-1).sort().values,
-            rtol=1e-3, atol=1e-4,
+            rtol=1e-3,
+            atol=1e-4,
         )
 
     dist.barrier()

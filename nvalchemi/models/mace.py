@@ -435,10 +435,12 @@ def _mace_cueq_spec() -> Any:
     # compiled energy-only forward.
     _MACE_CUEQ_SPEC_CACHE = SPEC_MPNN_HALO.with_adapters(
         *_custom_ops, *_marshal
-    ).with_compile(CompilePolicy(
+    ).with_compile(
+        CompilePolicy(
             static_shapes=True,
             force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
-        ))
+        )
+    )
     return _MACE_CUEQ_SPEC_CACHE
 
 
@@ -645,9 +647,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # adapter unfuses it under eager DD (external-scatter path, joining
             # plain MACE) and keeps it fused under compiled DD (memory parity
             # with single-GPU; halo handled by the refresh adapter).
-            halo_conv = (
-                _cueq_conv_unfuse_adapters(self.model) if uses_cueq else ()
-            )
+            halo_conv = _cueq_conv_unfuse_adapters(self.model) if uses_cueq else ()
             cached = base.with_adapters(*refresh, *halo_conv)
             self._dist_spec_cache = cached
         return cached
@@ -1078,7 +1078,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             _apply_atomic_energies(model, atomic_energy_overrides)
 
         # Step 3: torch.compile the model for single-process inference —
-        # inference-only after this point. 
+        # inference-only after this point.
         if compile_model:
             # Apply the e3nn compile-compat shim before tracing. (It is also
             # applied idempotently in __init__, but compile runs first here.)

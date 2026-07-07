@@ -26,6 +26,7 @@ which uniformly scales grads under AOT for BOTH paths — an artifact of this
 synthetic harness, not the ops. The real MACE path is covered by
 ``test_mace_cueq_multigpu``.)
 """
+
 import os
 import sys
 import traceback
@@ -77,7 +78,9 @@ def _build_rank_halo(mesh, rank, world_size, ghost_width=5.0):
     cell = torch.eye(3, dtype=torch.float64) * (n_side * lattice)
     pbc = torch.ones(3, dtype=torch.bool)
     dc = DomainConfig(cutoff=ghost_width, mesh=mesh)
-    part = SpatialPartitioner(config=dc, cell_matrix=cell.unsqueeze(0), pbc=pbc.unsqueeze(0))
+    part = SpatialPartitioner(
+        config=dc, cell_matrix=cell.unsqueeze(0), pbc=pbc.unsqueeze(0)
+    )
     hc = ParticleHaloConfig(ghost_width=ghost_width, partitioner=part, mesh=mesh)
     assignment = part.assign_atoms_to_ranks(positions)
     local_pos = positions[assignment == rank].contiguous()
@@ -113,14 +116,19 @@ def _worker(rank, world_size):
         gather_idx = torch.arange(n_padded)
 
         def make_packed(device):
-            si, rd, rr, no = build_halo_meta_tensors(meta, rank, max_send, n_padded, device)
+            si, rd, rr, no = build_halo_meta_tensors(
+                meta, rank, max_send, n_padded, device
+            )
             return pack_halo_meta(si, rd, rr, no)
 
         def make_x(owned, packed):
             with mesh:
                 padded = halo_forward_exchange(owned, meta, config)
                 return ShardTensor.wrap(
-                    padded, meta=meta, config=config, spec=SPEC_MPNN_HALO,
+                    padded,
+                    meta=meta,
+                    config=config,
+                    spec=SPEC_MPNN_HALO,
                     halo_meta_packed=packed,
                 )
 
@@ -155,15 +163,22 @@ def _worker(rank, world_size):
         torch._dynamo.reset()
         cf = torch.compile(fn, backend="aot_eager", fullgraph=True)
         with mesh:
-            base = cf(make_x(owned0.clone(), make_packed(owned0.device))).unwrap().detach()
+            base = (
+                cf(make_x(owned0.clone(), make_packed(owned0.device))).unwrap().detach()
+            )
             pert = make_packed(owned0.device).clone()
             wm = pert.shape[0] // 3
             pert[2 * wm :] = 0  # zero recv_real -> ghosts gather nothing
             out_p = cf(make_x(owned0.clone(), pert)).unwrap().detach()
         differs = (out_p - base).abs().max().item() > 1e-6
-        assert differs, "perturbed _halo_meta_packed gave the same result -> baked, not a graph input"
+        assert differs, (
+            "perturbed _halo_meta_packed gave the same result -> baked, not a graph input"
+        )
 
-        print(f"[r{rank}] OK static==list[int] (eager & aot_eager, fwd+bwd); graph-input verified", flush=True)
+        print(
+            f"[r{rank}] OK static==list[int] (eager & aot_eager, fwd+bwd); graph-input verified",
+            flush=True,
+        )
     except Exception as e:  # noqa: BLE001
         print(f"[r{rank}] FAILED: {type(e).__name__}: {str(e)[:400]}", flush=True)
         for line in traceback.format_exc().splitlines()[-25:]:

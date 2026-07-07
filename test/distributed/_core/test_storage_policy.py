@@ -113,9 +113,13 @@ def test_merge_two_halo_specs_takes_more_permissive_modes():
     assert merged.distribution.policy.scatter_mode == "halo_correction"
 
 
-
-
 def test_merge_system_reductions_is_or():
-    a = MLIPSpec(distribution=DistributionSpec(policy=HaloStoragePolicy()), system_reductions=False)
-    b = MLIPSpec(distribution=DistributionSpec(policy=HaloStoragePolicy()), system_reductions=True)
+    a = MLIPSpec(
+        distribution=DistributionSpec(policy=HaloStoragePolicy()),
+        system_reductions=False,
+    )
+    b = MLIPSpec(
+        distribution=DistributionSpec(policy=HaloStoragePolicy()),
+        system_reductions=True,
+    )
     assert a.merge(b).system_reductions is True

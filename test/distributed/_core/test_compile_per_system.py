@@ -19,12 +19,12 @@ bypassed under compile; the scatter routes through __torch_dispatch__ to the
 custom op, which carries the cross-rank all_reduce adjoint in register_autograd.
 Asserts compiled == eager (forward AND backward), == the global per-system sum,
 and the correct all_reduced grad. 2-rank gloo."""
-import pytest
 
 import os
 import sys
 import traceback
 
+import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -97,9 +97,7 @@ def _worker_per_system(rank, world_size):
         dist.all_gather(all_idx, sys_idx)
         ref = torch.zeros(n_systems, F, dtype=torch.float64)
         for r in range(world_size):
-            ref.scatter_add_(
-                0, all_idx[r].unsqueeze(-1).expand(-1, F), all_pa[r]
-            )
+            ref.scatter_add_(0, all_idx[r].unsqueeze(-1).expand(-1, F), all_pa[r])
         torch.testing.assert_close(out_e_local, ref, rtol=1e-9, atol=1e-9)
         # grad sanity: out is replicated (forward all_reduce), so the backward
         # all_reduces the upstream grad y; grad = (Σ_r y_r)[sys_idx].

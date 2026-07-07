@@ -139,9 +139,7 @@ def _ewald_gp_equivalence_worker(rank: int, world_size: int) -> None:
         ref_wrapper = EwaldModelWrapper(
             cutoff=min(5.0, 0.45 * cell[0, 0].item()), hybrid_forces=False
         )
-        ref_pos = (
-            positions.to(device=device, dtype=dtype).clone().requires_grad_(True)
-        )
+        ref_pos = positions.to(device=device, dtype=dtype).clone().requires_grad_(True)
         ref_data = AtomicData(
             atomic_numbers=atomic_numbers.to(device),
             positions=ref_pos,
@@ -233,13 +231,17 @@ def _ewald_gp_equivalence_worker(rank: int, world_size: int) -> None:
     # Normalize dtype + shape so the comparison is purely on values (the GP path
     # may return a different fp width / rank than the single-GPU reference).
     torch.testing.assert_close(
-        e_local.reshape(-1).double(), e_ref.reshape(-1).double(),
-        rtol=5e-4, atol=5e-4,
+        e_local.reshape(-1).double(),
+        e_ref.reshape(-1).double(),
+        rtol=5e-4,
+        atol=5e-4,
         msg=f"rank {rank}: energy mismatch Δ={e_delta:+.3e}",
     )
     torch.testing.assert_close(
-        f_owned.reshape(-1).double(), f_ref_owned.reshape(-1).double(),
-        rtol=1e-3, atol=5e-4,
+        f_owned.reshape(-1).double(),
+        f_ref_owned.reshape(-1).double(),
+        rtol=1e-3,
+        atol=5e-4,
         msg=f"rank {rank}: force mismatch max|ΔF|={abs_diff.max().item():.3e}",
     )
 

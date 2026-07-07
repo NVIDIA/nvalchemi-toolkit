@@ -202,10 +202,22 @@ def _fire_reduction_worker(rank: int, world_size: int) -> None:
     try:
         wrapped = dcm._make_global_fire_step(strat)
         wrapped(
-            vel0[lo:hi].clone(), v_sh, f_sh, m_sh, st["alpha"], st["dt"],
-            st["n_steps_positive"], st["alpha_start"], st["f_alpha"],
-            st["dt_min"], st["dt_max"], st["maxstep"], st["n_min"], st["f_dec"],
-            st["f_inc"], st["uphill_flag"],
+            vel0[lo:hi].clone(),
+            v_sh,
+            f_sh,
+            m_sh,
+            st["alpha"],
+            st["dt"],
+            st["n_steps_positive"],
+            st["alpha_start"],
+            st["f_alpha"],
+            st["dt_min"],
+            st["dt_max"],
+            st["maxstep"],
+            st["n_min"],
+            st["f_dec"],
+            st["f_inc"],
+            st["uphill_flag"],
             batch_idx=torch.zeros(hi - lo, dtype=torch.int32),
         )
     finally:

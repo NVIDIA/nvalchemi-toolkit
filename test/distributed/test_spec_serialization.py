@@ -285,7 +285,9 @@ class TestMLIPSpecDict:
         assert d["version"] == 2
 
         loaded = MLIPSpec.from_dict(d)
-        assert isinstance(loaded.distribution.policy, type(SPEC_MPNN_HALO.distribution.policy))
+        assert isinstance(
+            loaded.distribution.policy, type(SPEC_MPNN_HALO.distribution.policy)
+        )
         assert loaded.distribution.policy == SPEC_MPNN_HALO.distribution.policy
         assert loaded.system_reductions == SPEC_MPNN_HALO.system_reductions
 

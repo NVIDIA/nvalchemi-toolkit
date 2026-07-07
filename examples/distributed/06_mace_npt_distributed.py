@@ -374,9 +374,7 @@ def main() -> None:
             n=args.n_steps,
         )
         n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
-        logger.info(
-            "Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz
-        )
+        logger.info("Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz)
 
     dynamics.close()
     dist.destroy_process_group()

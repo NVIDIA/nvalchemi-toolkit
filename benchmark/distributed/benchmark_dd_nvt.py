@@ -82,7 +82,9 @@ from _benchmark_common import (  # noqa: E402
 )
 
 
-def make_nvt_harness(cfg: BenchConfig, *, dd_compile: bool = False) -> Callable[..., Any]:
+def make_nvt_harness(
+    cfg: BenchConfig, *, dd_compile: bool = False
+) -> Callable[..., Any]:
     """Build the ``build_nvt_harness`` callback for an NVT benchmark config.
 
     ``dd_compile`` requests the framework-owned compiled DD forward (fixed-shape
@@ -169,8 +171,12 @@ def make_nvt_harness(cfg: BenchConfig, *, dd_compile: bool = False) -> Callable[
         # pick both the scatter layout and the model's per-strategy spec.
         strategy_kind, _ = resolve_strategy(cfg.system.strategy)
         dd_config = DomainConfig(
-            cutoff=cutoff, skin=skin, mesh=mesh, mesh_dim="domain",
-            strategy=strategy_kind, compile=dd_compile,
+            cutoff=cutoff,
+            skin=skin,
+            mesh=mesh,
+            mesh_dim="domain",
+            strategy=strategy_kind,
+            compile=dd_compile,
         )
         dd = DomainParallel(nvt, config=dd_config)
 
@@ -223,9 +229,7 @@ def main() -> None:
     compile_model = want_compile and not is_dd
     load_wrapper = build_loader(cfg, compile_model=compile_model)
     build_nvt_harness = make_nvt_harness(cfg, dd_compile=dd_compile)
-    run_nvt_main(
-        cfg.model, load_wrapper, build_nvt_harness, args, dtype=torch.float32
-    )
+    run_nvt_main(cfg.model, load_wrapper, build_nvt_harness, args, dtype=torch.float32)
 
 
 if __name__ == "__main__":

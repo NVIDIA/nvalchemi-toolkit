@@ -140,6 +140,7 @@ def test_base_distribution_spec_is_strategy_parameterized_method():
     # halo), returning None for a model that declares no DD support.
     m = BaseModelMixin.distribution_spec
     assert callable(m)
+
     # A bare object exposing the base method returns None for any strategy.
     class _Bare(BaseModelMixin):
         pass

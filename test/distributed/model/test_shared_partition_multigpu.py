@@ -86,10 +86,14 @@ def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
     sign = torch.ones(n, dtype=torch.long)
     sign[1::2] = -1
     atomic_numbers = torch.where(
-        sign > 0, torch.full((n,), 11, dtype=torch.long), torch.full((n,), 17, dtype=torch.long)
+        sign > 0,
+        torch.full((n,), 11, dtype=torch.long),
+        torch.full((n,), 17, dtype=torch.long),
     )
     masses = torch.where(
-        sign > 0, torch.full((n,), 22.99, dtype=dtype), torch.full((n,), 35.45, dtype=dtype)
+        sign > 0,
+        torch.full((n,), 22.99, dtype=dtype),
+        torch.full((n,), 35.45, dtype=dtype),
     )
     cell = torch.eye(3, dtype=dtype) * box
     pbc = torch.ones(3, dtype=torch.bool)
@@ -144,9 +148,7 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
             refs[tag] = _single_ref(
                 w, atomic_numbers, positions, masses, cell, pbc, device, dtype
             )
-    e_ref = {
-        t: torch.zeros(1, dtype=dtype, device=device) for t in ("a", "b")
-    }
+    e_ref = {t: torch.zeros(1, dtype=dtype, device=device) for t in ("a", "b")}
     f_ref = {
         t: torch.zeros(n_global, 3, dtype=dtype, device=device) for t in ("a", "b")
     }
@@ -170,7 +172,9 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
         if rank == 0
         else None
     )
-    sharded = ShardedBatch.from_batch(batch=full, mesh=mesh, config=shared_config, src=0)
+    sharded = ShardedBatch.from_batch(
+        batch=full, mesh=mesh, config=shared_config, src=0
+    )
 
     # Owned slice of this rank under the SHARED partition (one assignment, reused
     # by both models).
@@ -180,7 +184,8 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
         pbc=pbc.to(device).unsqueeze(0),
     )
     local_mask = (
-        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype)) == rank
+        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype))
+        == rank
     )
 
     for tag, cut in (("a", cut_a), ("b", cut_b)):
@@ -205,11 +210,17 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
             flush=True,
         )
         torch.testing.assert_close(
-            e_local.view(1), e_ref[tag], rtol=1e-4, atol=1e-4,
+            e_local.view(1),
+            e_ref[tag],
+            rtol=1e-4,
+            atol=1e-4,
             msg=f"rank {rank} model {tag}: energy mismatch ΔE={de:.3e}",
         )
         torch.testing.assert_close(
-            f_owned, f_ref_owned, rtol=1e-3, atol=1e-4,
+            f_owned,
+            f_ref_owned,
+            rtol=1e-3,
+            atol=1e-4,
             msg=f"rank {rank} model {tag}: force mismatch |ΔF|max={df:.3e}",
         )
 

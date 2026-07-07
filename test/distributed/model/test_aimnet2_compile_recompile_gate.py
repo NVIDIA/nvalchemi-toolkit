@@ -176,7 +176,10 @@ def _aimnet2_recompile_worker(rank: int, world_size: int) -> None:
             if step == 0:
                 # Equivalence: compiled DD == eager DD on the same partition.
                 torch.testing.assert_close(
-                    f_owned.cpu(), f_eager_owned, rtol=3e-3, atol=3e-3,
+                    f_owned.cpu(),
+                    f_eager_owned,
+                    rtol=3e-3,
+                    atol=3e-3,
                     msg=f"rank {rank}: compiled DD forces != eager DD reference",
                 )
             _ = f_owned.sum().item()

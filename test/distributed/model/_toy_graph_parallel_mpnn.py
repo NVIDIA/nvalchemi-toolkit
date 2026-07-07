@@ -43,9 +43,7 @@ from nvalchemi.neighbors import NeighborConfig, NeighborListFormat
 class ToyGraphParallelMPNNWrapper(nn.Module, BaseModelMixin):
     """2-layer message-passing MLIP for the graph-parallel strategy."""
 
-    def __init__(
-        self, hidden: int = 8, n_layers: int = 2, cutoff: float = 2.5
-    ) -> None:
+    def __init__(self, hidden: int = 8, n_layers: int = 2, cutoff: float = 2.5) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.embed = nn.Embedding(100, hidden)

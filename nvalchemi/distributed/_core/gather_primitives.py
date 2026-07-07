@@ -201,9 +201,7 @@ def funcol_fixed_index_select(
     return rows_back.index_select(0, flat_safe)  # (K, *F)
 
 
-def _fixed_bucket_slots(
-    owner: Any, cap: int, world_size: int
-) -> tuple[Any, Any]:
+def _fixed_bucket_slots(owner: Any, cap: int, world_size: int) -> tuple[Any, Any]:
     """Per-request destination slot in a ``(world_size * cap)`` buffer.
 
     ``owner`` is ``(K,)`` rank-of-each-request. Returns ``(flat_safe, in_range)``
@@ -297,6 +295,7 @@ def funcol_all_to_all_v_rows(
     total_recv = sum(recv_counts)
     return flat_recv.reshape((total_recv,) + trailing)
 
+
 # ======================================================================
 # Collective helpers (plain-tensor, no autograd).
 # ======================================================================
@@ -347,9 +346,7 @@ def _isend_irecv_v_1d(
     # here, so production cuda runs are unaffected.
     on_cuda = send_tensor.is_cuda
     send_buf = send_tensor.cpu() if on_cuda else send_tensor
-    recv_buf = (
-        torch.empty_like(recv_tensor, device="cpu") if on_cuda else recv_tensor
-    )
+    recv_buf = torch.empty_like(recv_tensor, device="cpu") if on_cuda else recv_tensor
 
     send_offsets = [0]
     for c in send_counts:
@@ -695,7 +692,9 @@ class _DistributedIndexSelect(torch.autograd.Function):
         return grad_input, None, None, None
 
 
-def _fp64_index_add_(acc: torch.Tensor, index: torch.Tensor, values: torch.Tensor) -> None:
+def _fp64_index_add_(
+    acc: torch.Tensor, index: torch.Tensor, values: torch.Tensor
+) -> None:
     """In-place ``acc.index_add_(0, index, values)`` that accumulates in fp64
     when ``acc`` is fp32 (downcast back in place), so summing many contributions
     into one row does not drift. Matches the fp64 convention of
@@ -846,7 +845,13 @@ def fixed_gather_to_replicate(
     max owned-row count over ranks (a graph constant); the node-partition routing
     is static across MD steps, so it never recompiles at fixed ``N``."""
     return _FixedDistributedIndexSelect.apply(
-        owned_rows, global_indices, owner_rank, local_index, cap, world_size, mesh,
+        owned_rows,
+        global_indices,
+        owner_rank,
+        local_index,
+        cap,
+        world_size,
+        mesh,
     )
 
 
@@ -870,15 +875,26 @@ class _FixedDistributedIndexSelect(torch.autograd.Function):
         mesh: Any,
     ) -> torch.Tensor:
         return funcol_fixed_index_select(
-            sharded_input, global_indices, owner_rank, local_index,
-            cap, world_size, mesh,
+            sharded_input,
+            global_indices,
+            owner_rank,
+            local_index,
+            cap,
+            world_size,
+            mesh,
         )
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple, output: torch.Tensor) -> None:
-        sharded_input, global_indices, owner_rank, local_index, cap, world_size, mesh = (
-            inputs
-        )
+        (
+            sharded_input,
+            global_indices,
+            owner_rank,
+            local_index,
+            cap,
+            world_size,
+            mesh,
+        ) = inputs
         ctx.save_for_backward(global_indices, owner_rank, local_index)
         ctx.cap = cap
         ctx.world_size = world_size
@@ -889,8 +905,14 @@ class _FixedDistributedIndexSelect(torch.autograd.Function):
     def backward(ctx: Any, grad_output: torch.Tensor) -> tuple[Any, ...]:
         global_indices, owner_rank, local_index = ctx.saved_tensors
         grad_input = funcol_fixed_scatter_add(
-            grad_output.contiguous(), global_indices, owner_rank, local_index,
-            ctx.cap, ctx.world_size, ctx.mesh, ctx.n_owned,
+            grad_output.contiguous(),
+            global_indices,
+            owner_rank,
+            local_index,
+            ctx.cap,
+            ctx.world_size,
+            ctx.mesh,
+            ctx.n_owned,
         )
         # (sharded_input, global_indices, owner_rank, local_index, cap, world_size, mesh)
         return grad_input, None, None, None, None, None, None
@@ -915,15 +937,29 @@ class _FixedDistributedScatterAdd(torch.autograd.Function):
         mesh: Any,
     ) -> torch.Tensor:
         contrib = funcol_fixed_scatter_add(
-            src, global_indices, owner_rank, local_index,
-            cap, world_size, mesh, self_t.shape[0],
+            src,
+            global_indices,
+            owner_rank,
+            local_index,
+            cap,
+            world_size,
+            mesh,
+            self_t.shape[0],
         )
         return self_t + contrib
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple, output: torch.Tensor) -> None:
-        (_self_t, global_indices, _src, owner_rank, local_index, cap, world_size,
-         mesh) = inputs
+        (
+            _self_t,
+            global_indices,
+            _src,
+            owner_rank,
+            local_index,
+            cap,
+            world_size,
+            mesh,
+        ) = inputs
         ctx.save_for_backward(global_indices, owner_rank, local_index)
         ctx.cap = cap
         ctx.world_size = world_size
@@ -933,8 +969,13 @@ class _FixedDistributedScatterAdd(torch.autograd.Function):
     def backward(ctx: Any, grad_out: torch.Tensor) -> tuple[Any, ...]:
         global_indices, owner_rank, local_index = ctx.saved_tensors
         grad_src = funcol_fixed_index_select(
-            grad_out.contiguous(), global_indices, owner_rank, local_index,
-            ctx.cap, ctx.world_size, ctx.mesh,
+            grad_out.contiguous(),
+            global_indices,
+            owner_rank,
+            local_index,
+            ctx.cap,
+            ctx.world_size,
+            ctx.mesh,
         )
         # (self_t, global_indices, src, owner_rank, local_index, cap, world_size, mesh)
         return grad_out, None, grad_src, None, None, None, None, None
@@ -1000,8 +1041,14 @@ def _dis_isel_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     global_indices, owner_rank, local_index = ctx.saved_tensors
     cap = _fixed_cap(global_indices, owner_rank, ctx.world_size)
     grad_input = funcol_fixed_scatter_add(
-        grad_out.contiguous(), global_indices, owner_rank, local_index,
-        cap, ctx.world_size, None, ctx.n_owned,
+        grad_out.contiguous(),
+        global_indices,
+        owner_rank,
+        local_index,
+        cap,
+        ctx.world_size,
+        None,
+        ctx.n_owned,
     )
     return grad_input, None, None, None, None
 
@@ -1024,7 +1071,13 @@ def distributed_scatter_add_op(
     ``self_t + scatter_add(src @ global_indices)``; adjoint of the gather."""
     cap = _fixed_cap(global_indices, owner_rank, world_size)
     contrib = funcol_fixed_scatter_add(
-        src, global_indices, owner_rank, local_index, cap, world_size, None,
+        src,
+        global_indices,
+        owner_rank,
+        local_index,
+        cap,
+        world_size,
+        None,
         self_t.shape[0],
     )
     return self_t + contrib
@@ -1047,8 +1100,13 @@ def _dis_sadd_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     global_indices, owner_rank, local_index = ctx.saved_tensors
     cap = _fixed_cap(global_indices, owner_rank, ctx.world_size)
     grad_src = funcol_fixed_index_select(
-        grad_out.contiguous(), global_indices, owner_rank, local_index,
-        cap, ctx.world_size, None,
+        grad_out.contiguous(),
+        global_indices,
+        owner_rank,
+        local_index,
+        cap,
+        ctx.world_size,
+        None,
     )
     # (self_t, global_indices, src, owner_rank, local_index, world_size)
     return grad_out, None, grad_src, None, None, None
@@ -1104,8 +1162,13 @@ def distributed_index_select(
         else 1
     )
     return _FixedDistributedIndexSelect.apply(
-        sharded_input, global_indices, meta.owner_rank, meta.local_index,
-        cap, world_size, config.mesh,
+        sharded_input,
+        global_indices,
+        meta.owner_rank,
+        meta.local_index,
+        cap,
+        world_size,
+        config.mesh,
     )
 
 
@@ -1128,8 +1191,14 @@ def distributed_scatter_add(
         else 1
     )
     return _FixedDistributedScatterAdd.apply(
-        self_t, global_indices, src, meta.owner_rank, meta.local_index,
-        cap, world_size, config.mesh,
+        self_t,
+        global_indices,
+        src,
+        meta.owner_rank,
+        meta.local_index,
+        cap,
+        world_size,
+        config.mesh,
     )
 
 

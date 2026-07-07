@@ -64,7 +64,9 @@ def test_overflow_regrows_with_grow_factor():
     # real exceeds cap -> regrow with grow_factor (1.30), ceil to 16.
     # 200 * 1.30 -> 260, +1 -> 261, ceil 16 -> 272.
     assert (
-        resolve_cap(state, "atoms", 200, initial_factor=1.15, grow_factor=1.30, stride=16)
+        resolve_cap(
+            state, "atoms", 200, initial_factor=1.15, grow_factor=1.30, stride=16
+        )
         == 272
     )
 
@@ -74,7 +76,12 @@ def test_strict_gt_false_requires_strictly_larger_cap():
     # dead row lives at index cap-1 (real must be < cap).
     state = {"atoms": 128}
     out = resolve_cap(
-        state, "atoms", 128, initial_factor=1.15, grow_factor=1.30, stride=16,
+        state,
+        "atoms",
+        128,
+        initial_factor=1.15,
+        grow_factor=1.30,
+        stride=16,
         strict_gt=False,
     )
     assert out > 128
@@ -122,7 +129,12 @@ def test_matches_uma_resolve_cap():
         mine: dict[str, int] = {}
         legacy: dict[str, int] = {}
         got = resolve_cap(
-            mine, key, real, initial_factor=1.15, grow_factor=1.15, stride=stride,
+            mine,
+            key,
+            real,
+            initial_factor=1.15,
+            grow_factor=1.15,
+            stride=stride,
             extra=extra,
         )
         exp = _legacy_uma_resolve(legacy, key, real, extra, stride)
@@ -208,9 +220,7 @@ def test_densepadder_pads_rows_repoints_sentinel_and_unpads():
     assert (out["mol_idx"][n_in:] == 1).all()
     # unpad strips per-atom outputs to the real count (sent_old), leaving
     # non-atom outputs (per-system energy) untouched.
-    stripped = padder.unpad(
-        {"forces": torch.randn(n_cap, 3), "energy": torch.randn(2)}
-    )
+    stripped = padder.unpad({"forces": torch.randn(n_cap, 3), "energy": torch.randn(2)})
     assert stripped["forces"].shape[0] == sent_old
     assert stripped["energy"].shape[0] == 2
 

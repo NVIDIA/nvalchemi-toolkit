@@ -249,9 +249,5 @@ def _consolidate_node_energy(node_e: Any, batch: Any, n_graphs: int) -> Any:
     ctx = current_dd_context()
     if ctx.is_halo and node_e_local.shape[0] > ctx.n_owned:
         return system_sum(node_e_local, batch, n_graphs, scope=Scope.OWNED)
-    energy = torch.zeros(
-        n_graphs, dtype=node_e_local.dtype, device=node_e_local.device
-    )
+    energy = torch.zeros(n_graphs, dtype=node_e_local.dtype, device=node_e_local.device)
     return energy.index_add_(0, batch, node_e_local)
-
-

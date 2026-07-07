@@ -207,9 +207,7 @@ def _plain_compile_dd(*tensors: Any) -> "tuple[Any, Any] | None":
     return n_owned, config
 
 
-def _owned_charge_mask(
-    charges: torch.Tensor, n_owned: Any
-) -> torch.Tensor:
+def _owned_charge_mask(charges: torch.Tensor, n_owned: Any) -> torch.Tensor:
     """Zero the ghost rows of a per-atom charge vector, fixed-shape.
 
     Returns ``charges`` with rows ``>= n_owned`` set to zero via an element-wise
@@ -783,9 +781,7 @@ def particle_mesh_ewald_from_total_charge(
             compute_virial=compute_virial,
         )
         slab_tuple = slab if isinstance(slab, tuple) else (slab,)
-        results = [
-            r + s.to(r.dtype) for r, s in zip(results, slab_tuple)
-        ]
+        results = [r + s.to(r.dtype) for r, s in zip(results, slab_tuple)]
 
     if len(results) == 1:
         return results[0]

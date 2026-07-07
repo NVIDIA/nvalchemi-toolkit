@@ -1154,7 +1154,9 @@ class ModuleForwardAdapter:
             object.__setattr__(self, "install_site", _capture_call_site())
 
     def _target_str(self) -> str:
-        return f"{type(self.module).__module__}.{type(self.module).__qualname__}.forward"
+        return (
+            f"{type(self.module).__module__}.{type(self.module).__qualname__}.forward"
+        )
 
     def install(self) -> dict[str, Any]:
         """Set ``module.forward = replacement``, capturing the prior binding.
@@ -1194,7 +1196,11 @@ class ModuleForwardAdapter:
         round-trip; the wrapper rebuilds this from ``distribution_spec`` per
         process. Emits a marker so :meth:`DistributionSpec.to_dict` doesn't fail.
         """
-        return {"kind": "module_forward", "target": self._target_str(), "label": self.label}
+        return {
+            "kind": "module_forward",
+            "target": self._target_str(),
+            "label": self.label,
+        }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ModuleForwardAdapter":

@@ -189,7 +189,7 @@ def detect_scripted_ops(
         for attr in dir(pymod):
             try:
                 obj = getattr(pymod, attr)
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 S112
                 continue
             if _is_script_function(obj):
                 key = (mod_path, attr)

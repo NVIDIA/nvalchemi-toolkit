@@ -749,7 +749,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         #
         # The kernel accumulates each atom's half-share into ``energy[batch_idx[i]]``
         # and reads the PBC cell as ``cell[batch_idx[i]]``; interactions come from
-        # ``neighbor_matrix``, not ``batch_idx``. 
+        # ``neighbor_matrix``, not ``batch_idx``.
         want_atomic = (
             "atomic_energies" in self.model_config.active_outputs
             or cell_bohr is not None
@@ -815,9 +815,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                     B, 3, 3, dtype=raw_virial_ha.dtype, device=positions.device
                 ).index_add_(0, batch_idx.to(torch.long), raw_virial_ha)
         else:
-            energies_ev = (
-                energy_ha.to(positions.dtype) * HARTREE_TO_EV
-            ).unsqueeze(-1)  # (B, 1)
+            energies_ev = (energy_ha.to(positions.dtype) * HARTREE_TO_EV).unsqueeze(
+                -1
+            )  # (B, 1)
             virial_ha = raw_virial_ha
 
         forces_ev_ang = forces_ha_bohr.to(positions.dtype) * (

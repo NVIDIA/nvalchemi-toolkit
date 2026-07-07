@@ -65,9 +65,7 @@ def test_byo_examples_exist() -> None:
     assert files, f"no *_byo_*.py examples found under {_EXAMPLES_DIR}"
 
 
-@pytest.mark.parametrize(
-    "example", _byo_example_files(), ids=lambda p: p.name
-)
+@pytest.mark.parametrize("example", _byo_example_files(), ids=lambda p: p.name)
 def test_byo_example_imports_only_public_api(example: Path) -> None:
     offenders = _private_imports(example.read_text())
     assert not offenders, (

@@ -25,7 +25,12 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-__all__ = ["_MockMesh", "_LocalShardSpec", "_LocalShardTensor", "make_gloo_sharded_batch"]
+__all__ = [
+    "_MockMesh",
+    "_LocalShardSpec",
+    "_LocalShardTensor",
+    "make_gloo_sharded_batch",
+]
 
 
 class _MockMesh:

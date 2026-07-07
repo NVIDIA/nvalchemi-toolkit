@@ -129,9 +129,7 @@ class DistributionSpec:
     # (plain-interior — promote nothing). Always a concrete tuple (no ``None``
     # sentinel) so ``()`` "promote nothing" can never collapse to the default
     # under truthiness. ``compare=False`` keeps the dataclass hashable.
-    shard_fields: tuple[str, ...] = field(
-        default=DEFAULT_SHARD_FIELDS, compare=False
-    )
+    shard_fields: tuple[str, ...] = field(default=DEFAULT_SHARD_FIELDS, compare=False)
 
     def __post_init__(self) -> None:
         """Lower the unified :attr:`adapters` tuple onto the two canonical
@@ -160,6 +158,7 @@ class DistributionSpec:
         than as an opaque failure mid-forward. Conservative on purpose — it only
         rejects what is unambiguously wrong (bad types, an op handle that does
         not resolve), never a merely-incomplete-but-valid spec."""
+
         # Duck-type the StoragePolicy interface (``scatter`` + ``to_local`` are
         # its defining op-behavior). ``isinstance`` against the runtime_checkable
         # Protocol is unreliable here because the Protocol declares a

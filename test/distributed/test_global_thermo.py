@@ -100,18 +100,39 @@ def test_nhc_wrapper_matches_bare_single_rank(_session_gloo_pg) -> None:
     v = vel0.clone()
     args = _nhc_inputs(v, mass, bidx, M, ndof)
     nhc_chain_update(
-        v, mass, args["eta"], args["eta_dot"], args["Q"], args["temperature"],
-        args["dt"], args["ndof"], args["ke2"], args["total_scale"],
-        args["step_scale"], args["dt_chain"], bidx.int(), compute_ke=True,
+        v,
+        mass,
+        args["eta"],
+        args["eta_dot"],
+        args["Q"],
+        args["temperature"],
+        args["dt"],
+        args["ndof"],
+        args["ke2"],
+        args["total_scale"],
+        args["step_scale"],
+        args["dt_chain"],
+        bidx.int(),
+        compute_ke=True,
     )
     v_bare = v.clone()
 
     v = vel0.clone()
     args = _nhc_inputs(v, mass, bidx, M, ndof)
     gt._make_global_nhc_chain_update(_halo_strategy())(
-        v, mass, args["eta"], args["eta_dot"], args["Q"], args["temperature"],
-        args["dt"], args["ndof"], args["ke2"], args["total_scale"],
-        args["step_scale"], args["dt_chain"], bidx.int(),
+        v,
+        mass,
+        args["eta"],
+        args["eta_dot"],
+        args["Q"],
+        args["temperature"],
+        args["dt"],
+        args["ndof"],
+        args["ke2"],
+        args["total_scale"],
+        args["step_scale"],
+        args["dt_chain"],
+        bidx.int(),
     )
     assert torch.equal(v_bare, v)
 
@@ -183,9 +204,20 @@ def _nhc_2rank_worker(rank: int, world_size: int) -> None:
         v_full = vel0.clone()
         a = _nhc_inputs(v_full, mass, bidx_full, M, ndof)
         nhc_chain_update(
-            v_full, mass, a["eta"], a["eta_dot"], a["Q"], a["temperature"],
-            a["dt"], a["ndof"], a["ke2"], a["total_scale"], a["step_scale"],
-            a["dt_chain"], bidx_full.int(), compute_ke=True,
+            v_full,
+            mass,
+            a["eta"],
+            a["eta_dot"],
+            a["Q"],
+            a["temperature"],
+            a["dt"],
+            a["ndof"],
+            a["ke2"],
+            a["total_scale"],
+            a["step_scale"],
+            a["dt_chain"],
+            bidx_full.int(),
+            compute_ke=True,
         )
 
         # DD: this rank owns half the atoms; the wrapper sums 2*KE across ranks.
@@ -203,13 +235,21 @@ def _nhc_2rank_worker(rank: int, world_size: int) -> None:
 
         mesh = DeviceMesh("cpu", list(range(world_size)), mesh_dim_names=("domain",))
         gt._make_global_nhc_chain_update(_halo_strategy(mesh=mesh, rank=rank))(
-            v_sh, m_sh, a["eta"], a["eta_dot"], a["Q"], a["temperature"],
-            a["dt"], a["ndof"], a["ke2"], a["total_scale"], a["step_scale"],
-            a["dt_chain"], bidx_sh.int(),
+            v_sh,
+            m_sh,
+            a["eta"],
+            a["eta_dot"],
+            a["Q"],
+            a["temperature"],
+            a["dt"],
+            a["ndof"],
+            a["ke2"],
+            a["total_scale"],
+            a["step_scale"],
+            a["dt_chain"],
+            bidx_sh.int(),
         )
-        torch.testing.assert_close(
-            v_sh, v_full[lo:hi], rtol=1e-12, atol=1e-12
-        )
+        torch.testing.assert_close(v_sh, v_full[lo:hi], rtol=1e-12, atol=1e-12)
     finally:
         dist.destroy_process_group()
 

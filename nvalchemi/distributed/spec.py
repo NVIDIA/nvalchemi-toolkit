@@ -99,9 +99,7 @@ def _merge_policies(a: StoragePolicy | None, b: StoragePolicy | None) -> Any:
         scatter_order = ("local", "halo_correction")
         gather_order = ("local", "halo_read")
         return HaloStoragePolicy(
-            scatter_mode=max(
-                a.scatter_mode, b.scatter_mode, key=scatter_order.index
-            ),
+            scatter_mode=max(a.scatter_mode, b.scatter_mode, key=scatter_order.index),
             gather_mode=max(a.gather_mode, b.gather_mode, key=gather_order.index),
         )
     if type(a) is type(b):
@@ -408,12 +406,15 @@ class MLIPSpec:
         declare a compatible :class:`CompilePolicy` (see
         :func:`_merge_compile_policies`), else ``None`` with a warning.
         """
-        merged_policy = _merge_policies(self.distribution.policy, other.distribution.policy)
+        merged_policy = _merge_policies(
+            self.distribution.policy, other.distribution.policy
+        )
         merged_core = DistributionSpec(
             policy=merged_policy,
             custom_ops=self.distribution.custom_ops + other.distribution.custom_ops,
             third_party_helpers=(
-                self.distribution.third_party_helpers + other.distribution.third_party_helpers
+                self.distribution.third_party_helpers
+                + other.distribution.third_party_helpers
             ),
             # Union: the composed model promotes whatever either side promotes.
             shard_fields=tuple(
@@ -547,6 +548,7 @@ class MLIPSpec:
         from pathlib import Path  # noqa: PLC0415
 
         return cls.from_dict(json.loads(Path(path).read_text()))
+
 
 # ======================================================================
 # Presets — one-liners for the model families we target directly.

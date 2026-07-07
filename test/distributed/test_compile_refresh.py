@@ -145,15 +145,16 @@ def test_insert_halo_refresh_reports_one_site():
     m = _TwoScatterMP()
     gm = torch.fx.symbolic_trace(m)
     report = insert_halo_refresh(
-        gm, correction_op=_MARK3, world_size=2, routing_names=_ROUTING,
+        gm,
+        correction_op=_MARK3,
+        world_size=2,
+        routing_names=_ROUTING,
         require_routing=True,
     )
     assert report.n_sites == 1, (report.n_sites, report.site_names)
     assert report.routing_present
     # the inserted op is now in the graph
-    assert any(
-        n.op == "call_function" and n.target is _MARK3 for n in gm.graph.nodes
-    )
+    assert any(n.op == "call_function" and n.target is _MARK3 for n in gm.graph.nodes)
 
 
 def test_backend_fails_safe_when_routing_present_but_no_site():
@@ -164,8 +165,13 @@ def test_backend_fails_safe_when_routing_present_but_no_site():
             # routing threaded + kept live (returned), edge_index consumed, but NO
             # scatter keyed on it -> the backend must fail safe.
             live = torch.stack(
-                [_halo_si.sum(), _halo_rd.sum(), _halo_rr.sum(),
-                 _halo_no.sum(), edge_index.sum().float()]
+                [
+                    _halo_si.sum(),
+                    _halo_rd.sum(),
+                    _halo_rr.sum(),
+                    _halo_no.sum(),
+                    edge_index.sum().float(),
+                ]
             )
             return x * 2.0, live
 

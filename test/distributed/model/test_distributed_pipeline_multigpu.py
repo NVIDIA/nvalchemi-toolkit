@@ -87,10 +87,14 @@ def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
     sign[1::2] = -1.0
     charges = sign  # globally neutral for even n
     atomic_numbers = torch.where(
-        sign > 0, torch.full((n,), 11, dtype=torch.long), torch.full((n,), 17, dtype=torch.long)
+        sign > 0,
+        torch.full((n,), 11, dtype=torch.long),
+        torch.full((n,), 17, dtype=torch.long),
     )
     masses = torch.where(
-        sign > 0, torch.full((n,), 22.99, dtype=dtype), torch.full((n,), 35.45, dtype=dtype)
+        sign > 0,
+        torch.full((n,), 22.99, dtype=dtype),
+        torch.full((n,), 35.45, dtype=dtype),
     )
     cell = torch.eye(3, dtype=dtype) * box
     pbc = torch.ones(3, dtype=torch.bool)
@@ -145,8 +149,12 @@ def _pipeline_worker(rank: int, world_size: int) -> None:
     e_ref = torch.zeros(1, dtype=dtype, device=device)
     f_ref = torch.zeros(n_global, 3, dtype=dtype, device=device)
     if rank == 0:
-        e_d, f_d = _single_ref(_mk_dftd3(), an, positions, masses, charges, cell, pbc, device, dtype)
-        e_e, f_e = _single_ref(_mk_ewald(), an, positions, masses, charges, cell, pbc, device, dtype)
+        e_d, f_d = _single_ref(
+            _mk_dftd3(), an, positions, masses, charges, cell, pbc, device, dtype
+        )
+        e_e, f_e = _single_ref(
+            _mk_ewald(), an, positions, masses, charges, cell, pbc, device, dtype
+        )
         e_ref.copy_((e_d + e_e).view(1))
         f_ref.copy_(f_d + f_e)
     dist.broadcast(e_ref, src=0)
@@ -155,11 +163,15 @@ def _pipeline_worker(rank: int, world_size: int) -> None:
     # --- Distributed composite over ONE shared partition (built at max cutoff) ---
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
     base_config = DomainConfig(
-        cutoff=max(_DFTD3_CUT, _EWALD_CUT), skin=_SKIN, mesh=mesh,
+        cutoff=max(_DFTD3_CUT, _EWALD_CUT),
+        skin=_SKIN,
+        mesh=mesh,
         require_nondegenerate=True,
     )
     full = (
-        Batch.from_data_list([_make_data(an, positions, masses, charges, cell, pbc, device, dtype)])
+        Batch.from_data_list(
+            [_make_data(an, positions, masses, charges, cell, pbc, device, dtype)]
+        )
         if rank == 0
         else None
     )
@@ -179,7 +191,8 @@ def _pipeline_worker(rank: int, world_size: int) -> None:
         pbc=pbc.to(device).unsqueeze(0),
     )
     local_mask = (
-        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype)) == rank
+        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype))
+        == rank
     )
     f_ref_owned = f_ref[local_mask]
 
@@ -191,11 +204,17 @@ def _pipeline_worker(rank: int, world_size: int) -> None:
         flush=True,
     )
     torch.testing.assert_close(
-        e_local.view(1), e_ref, rtol=1e-4, atol=1e-3,
+        e_local.view(1),
+        e_ref,
+        rtol=1e-4,
+        atol=1e-3,
         msg=f"rank {rank}: composite energy mismatch ΔE={de:.3e}",
     )
     torch.testing.assert_close(
-        f_owned, f_ref_owned, rtol=1e-3, atol=1e-4,
+        f_owned,
+        f_ref_owned,
+        rtol=1e-3,
+        atol=1e-4,
         msg=f"rank {rank}: composite forces mismatch |ΔF|max={df:.3e}",
     )
 

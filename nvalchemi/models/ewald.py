@@ -855,9 +855,9 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 v_slab = slab_tuple[idx]
 
         # Sum real + reciprocal + slab; scale by the Coulomb constant.
-        per_atom_energies = (
-            (e_real + e_recip + e_slab).to(positions.dtype) * self.coulomb_constant
-        )
+        per_atom_energies = (e_real + e_recip + e_slab).to(
+            positions.dtype
+        ) * self.coulomb_constant
 
         forces: torch.Tensor | None = None
         if compute_forces and f_real is not None and f_recip is not None:

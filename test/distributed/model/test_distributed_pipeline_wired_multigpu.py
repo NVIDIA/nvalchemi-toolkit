@@ -99,7 +99,9 @@ def _methane_packing(dtype: torch.dtype = torch.float32, seed: int = 0):
     positions = (centres.unsqueeze(1) + offsets.unsqueeze(0)).reshape(-1, 3)
     n = positions.shape[0]
     g = torch.Generator().manual_seed(seed)
-    positions = positions + 0.05 * torch.randn(positions.shape, dtype=dtype, generator=g)
+    positions = positions + 0.05 * torch.randn(
+        positions.shape, dtype=dtype, generator=g
+    )
     positions = positions % box
     atomic_numbers = torch.tensor([6, 1, 1, 1, 1] * (n // 5), dtype=torch.long)
     cell = torch.eye(3, dtype=dtype) * box
@@ -157,7 +159,9 @@ def _wired_pipeline_worker(rank: int, world_size: int) -> None:
     f_ref = torch.zeros(n_global, 3, dtype=dtype, device=device)
     if rank == 0:
         ref_pipe = _build_pipeline(aim_cut, device, dtype)
-        batch = Batch.from_data_list([_make_data(an, positions, cell, pbc, device, dtype)])
+        batch = Batch.from_data_list(
+            [_make_data(an, positions, cell, pbc, device, dtype)]
+        )
         compute_neighbors(batch, config=ref_pipe.model_config.neighbor_config)
         out = ref_pipe(batch)
         e_ref.copy_(out["energy"].sum().detach().view(1))
@@ -191,7 +195,8 @@ def _wired_pipeline_worker(rank: int, world_size: int) -> None:
         pbc=pbc.to(device).unsqueeze(0),
     )
     local_mask = (
-        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype)) == rank
+        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype))
+        == rank
     )
     f_ref_owned = f_ref[local_mask]
 
@@ -209,11 +214,17 @@ def _wired_pipeline_worker(rank: int, world_size: int) -> None:
     # energy is fp64 (the per-system reductions accumulate in fp64 for
     # order-independence); cast to the reference dtype before comparing.
     torch.testing.assert_close(
-        e_local.view(1).to(e_ref.dtype), e_ref, rtol=1e-5, atol=0.1,
+        e_local.view(1).to(e_ref.dtype),
+        e_ref,
+        rtol=1e-5,
+        atol=0.1,
         msg=f"rank {rank}: wired composite energy mismatch ΔE={de:.3e}",
     )
     torch.testing.assert_close(
-        f_owned, f_ref_owned, rtol=1e-2, atol=2e-3,
+        f_owned,
+        f_ref_owned,
+        rtol=1e-2,
+        atol=2e-3,
         msg=f"rank {rank}: wired composite forces mismatch |ΔF|max={df:.3e}",
     )
 

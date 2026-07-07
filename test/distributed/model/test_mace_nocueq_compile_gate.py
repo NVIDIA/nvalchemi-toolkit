@@ -231,7 +231,10 @@ def _nocueq_gate_worker(rank: int, world_size: int) -> None:
                     flush=True,
                 )
                 torch.testing.assert_close(
-                    f_owned.cpu(), f_eager_owned, rtol=1e-6, atol=1e-7,
+                    f_owned.cpu(),
+                    f_eager_owned,
+                    rtol=1e-6,
+                    atol=1e-7,
                     msg=f"rank {rank}: compiled non-cueq DD forces != eager DD",
                 )
             _ = f_owned.sum().item()

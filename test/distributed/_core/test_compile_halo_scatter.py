@@ -186,9 +186,7 @@ def _worker_compile_halo_scatter(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not dist.is_gloo_available(), reason="gloo backend required"
-)
+@pytest.mark.skipif(not dist.is_gloo_available(), reason="gloo backend required")
 def _worker_inductor_marker_lowering(rank: int, world_size: int) -> None:
     """Forward-only: the halo-correction scatter must LOWER under inductor. The
     custom op's marker indices ride as int[] constants; a real-Tensor marker
@@ -314,9 +312,7 @@ def _worker_pass_halo_refresh(rank: int, world_size: int) -> None:
 
         # Routing tensors the pass wires the inserted op to.
         max_send = max((max(r) for r in meta.send_sizes), default=0)
-        si, rd, rr, no = build_halo_meta_tensors(
-            meta, rank, max_send, n_padded, device
-        )
+        si, rd, rr, no = build_halo_meta_tensors(meta, rank, max_send, n_padded, device)
 
         def fn(agg0, edge_index, src, _halo_si, _halo_rd, _halo_rr, _halo_no):
             # Anchor routing as live graph inputs (no-subclass bridge's job), then
@@ -453,8 +449,8 @@ def _worker_pass_two_layer_mpnn(rank: int, world_size: int) -> None:
                 halo_reverse_exchange(t, meta, config), meta, config
             )
 
-        ref = model(x0, edge_index, refresh=_correct)        # eager, corrected
-        nocorr = model(x0, edge_index, refresh=None)         # eager, NO correction
+        ref = model(x0, edge_index, refresh=_correct)  # eager, corrected
+        nocorr = model(x0, edge_index, refresh=None)  # eager, NO correction
         # Load-bearing: a stale layer-1 ghost must change layer-2 OWNED outputs.
         owned_gap = (ref[:n_owned] - nocorr[:n_owned]).abs().max()
         assert owned_gap > 1e-4, (
@@ -480,9 +476,7 @@ def _worker_pass_two_layer_mpnn(rank: int, world_size: int) -> None:
         (grad_c,) = torch.autograd.grad(out_c[:n_owned].sum(), xc)
 
         # The auto-placed refresh reproduces the eager-corrected OWNED outputs...
-        torch.testing.assert_close(
-            out_c[:n_owned], ref[:n_owned], rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(out_c[:n_owned], ref[:n_owned], rtol=1e-4, atol=1e-4)
         # ...and NOT the uncorrected ones (so the pass genuinely inserted it).
         assert not torch.allclose(
             out_c[:n_owned], nocorr[:n_owned], rtol=1e-4, atol=1e-4
@@ -656,9 +650,7 @@ def _worker_holder_self_refresh_two_layer(rank: int, world_size: int) -> None:
         assert (ref[:n_owned] - nocorr[:n_owned]).abs().max() > 1e-4
 
         max_send = max((max(r) for r in meta.send_sizes), default=0)
-        si, rd, rr, no = build_halo_meta_tensors(
-            meta, rank, max_send, n_padded, device
-        )
+        si, rd, rr, no = build_halo_meta_tensors(meta, rank, max_send, n_padded, device)
 
         # The model self-refreshes via the compile-aware helper: inside the
         # compiled region it reads the holder the bridge publishes and emits the
@@ -685,9 +677,7 @@ def _worker_holder_self_refresh_two_layer(rank: int, world_size: int) -> None:
         out_c = bridge(inputs)
         (grad_c,) = torch.autograd.grad(out_c[:n_owned].sum(), xc)
 
-        torch.testing.assert_close(
-            out_c[:n_owned], ref[:n_owned], rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(out_c[:n_owned], ref[:n_owned], rtol=1e-4, atol=1e-4)
         assert not torch.allclose(
             out_c[:n_owned], nocorr[:n_owned], rtol=1e-4, atol=1e-4
         )

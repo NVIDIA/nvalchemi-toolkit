@@ -313,9 +313,7 @@ def system_sum(
         _, _, _, n_owned_t, _ = routing
         rowidx = torch.arange(vals.shape[0], device=vals.device)
         owned = (
-            (rowidx < n_owned_t)
-            .reshape((-1,) + (1,) * (vals.ndim - 1))
-            .to(vals.dtype)
+            (rowidx < n_owned_t).reshape((-1,) + (1,) * (vals.ndim - 1)).to(vals.dtype)
         )
         masked = vals * owned
         if scope is Scope.OWNED:

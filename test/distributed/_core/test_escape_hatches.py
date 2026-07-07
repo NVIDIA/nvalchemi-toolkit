@@ -162,5 +162,3 @@ def test_wrap_custom_op_recursion_guard() -> None:
     finally:
         clear_handlers(op)
         clear_handlers(torch.ops.nvalchemi_test.recurse_guard_op)
-
-

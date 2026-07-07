@@ -81,24 +81,31 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 def _build_lattice(dtype: torch.dtype = torch.float64, seed: int = 0):
     # Default box (30 Å) keeps the DFTD3 cutoff (12 Å) under the minimum-image
     # Non-degenerate: DFTD3's deep CN halo (cutoff 12 Å + skin 4 Å -> ghost 16 Å)
-    # means a 2-rank split needs box > 64 Å. 68 Å / 14 = 4.86 Å spacing keeps the
-    # atom count bounded (2744) while every rank still develops remote atoms.
-    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 14))
-    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 68.0))
+    # means the remote band (box/2 - 2*ghost) must exceed the lattice spacing, i.e.
+    # box > 4*ghost + 2*spacing ~ 74 Å (not just 64). 88 Å / 16 = 5.5 Å spacing
+    # leaves a ~12 Å (2-plane) remote band; 4096 atoms.
+    n_side = int(os.environ.get("NVALCHEMI_PIPE_N_SIDE", 16))
+    box = float(os.environ.get("NVALCHEMI_PIPE_BOX", 88.0))
     coords = torch.arange(n_side, dtype=dtype) * (box / n_side)
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
     n = positions.shape[0]
     g = torch.Generator().manual_seed(seed)
-    positions = positions + 0.15 * torch.randn(positions.shape, dtype=dtype, generator=g)
+    positions = positions + 0.15 * torch.randn(
+        positions.shape, dtype=dtype, generator=g
+    )
     positions = positions % box
     sign = torch.ones(n, dtype=dtype)
     sign[1::2] = -1.0
     atomic_numbers = torch.where(
-        sign > 0, torch.full((n,), 11, dtype=torch.long), torch.full((n,), 17, dtype=torch.long)
+        sign > 0,
+        torch.full((n,), 11, dtype=torch.long),
+        torch.full((n,), 17, dtype=torch.long),
     )
     masses = torch.where(
-        sign > 0, torch.full((n,), 22.99, dtype=dtype), torch.full((n,), 35.45, dtype=dtype)
+        sign > 0,
+        torch.full((n,), 22.99, dtype=dtype),
+        torch.full((n,), 35.45, dtype=dtype),
     )
     cell = torch.eye(3, dtype=dtype) * box
     pbc = torch.ones(3, dtype=torch.bool)
@@ -184,7 +191,9 @@ def _autograd_pipeline_worker(rank: int, world_size: int) -> None:
         cutoff=max_cut, skin=_SKIN, mesh=mesh, require_nondegenerate=True
     )
     full = (
-        Batch.from_data_list([_make_data(an, positions, masses, cell, pbc, device, dtype)])
+        Batch.from_data_list(
+            [_make_data(an, positions, masses, cell, pbc, device, dtype)]
+        )
         if rank == 0
         else None
     )
@@ -201,7 +210,8 @@ def _autograd_pipeline_worker(rank: int, world_size: int) -> None:
         pbc=pbc.to(device).unsqueeze(0),
     )
     local_mask = (
-        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype)) == rank
+        partitioner.assign_atoms_to_ranks(positions.to(device=device, dtype=dtype))
+        == rank
     )
     f_ref_owned = f_ref[local_mask]
 
@@ -214,11 +224,17 @@ def _autograd_pipeline_worker(rank: int, world_size: int) -> None:
         flush=True,
     )
     torch.testing.assert_close(
-        e_local.view(1), e_ref, rtol=1e-5, atol=1e-4,
+        e_local.view(1),
+        e_ref,
+        rtol=1e-5,
+        atol=1e-4,
         msg=f"rank {rank}: composite energy mismatch ΔE={de:.3e}",
     )
     torch.testing.assert_close(
-        f_owned, f_ref_owned, rtol=1e-4, atol=1e-4,
+        f_owned,
+        f_ref_owned,
+        rtol=1e-4,
+        atol=1e-4,
         msg=f"rank {rank}: composite forces mismatch |ΔF|max={df:.3e}",
     )
 

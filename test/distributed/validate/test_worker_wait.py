@@ -106,8 +106,11 @@ def test_hard_crash_without_payload_reports_exit_code():
     survivor = _FakeProc(0, exit_at=float("inf"), exitcode=None, clock=clk)
     crashed = _FakeProc(1, exit_at=0.05, exitcode=1, clock=clk)
     received, error = _await_worker_results(
-        [survivor, crashed], _FakeQueue(), timeout_sec=120.0,
-        monotonic=clk, sleep=clk.sleep,
+        [survivor, crashed],
+        _FakeQueue(),
+        timeout_sec=120.0,
+        monotonic=clk,
+        sleep=clk.sleep,
     )
     assert error is not None
     assert "exited with code 1" in error
@@ -116,7 +119,9 @@ def test_hard_crash_without_payload_reports_exit_code():
 
 def test_symmetric_hang_falls_through_to_timeout():
     clk = _Clock()
-    procs = [_FakeProc(p, exit_at=float("inf"), exitcode=None, clock=clk) for p in (7, 8)]
+    procs = [
+        _FakeProc(p, exit_at=float("inf"), exitcode=None, clock=clk) for p in (7, 8)
+    ]
     received, error = _await_worker_results(
         procs, _FakeQueue(), timeout_sec=1.0, monotonic=clk, sleep=clk.sleep
     )

@@ -190,7 +190,10 @@ def _find_source(args: Any) -> "ShardTensor | None":
     :func:`torch.cat` / :func:`torch.stack` whose first argument is a
     sequence of tensors.
     """
-    if isinstance(args, ShardTensor) and getattr(args, "_distribution_spec", None) is not None:
+    if (
+        isinstance(args, ShardTensor)
+        and getattr(args, "_distribution_spec", None) is not None
+    ):
         return args
     if isinstance(args, (tuple, list)):
         for a in args:
@@ -268,7 +271,10 @@ def _propagate_attrs(result: Any, source: "ShardTensor") -> None:
     def _apply(t: Any) -> None:
         if isinstance(t, _UpstreamShardTensor) and not isinstance(t, ShardTensor):
             t.__class__ = ShardTensor
-        if isinstance(t, ShardTensor) and getattr(t, "_distribution_spec", None) is None:
+        if (
+            isinstance(t, ShardTensor)
+            and getattr(t, "_distribution_spec", None) is None
+        ):
             for attr in _PROPAGATED_ATTRS:
                 setattr(t, attr, getattr(source, attr))
             # _halo_meta_packed propagates separately (flatten inner tensor, not
@@ -333,7 +339,8 @@ class _AutogradPreservingWrap(torch.autograd.Function):
         # outer wrapper (no inner ``view_as`` as DTensor uses) because a view
         # inner triggers ``_automatic_dynamic`` recursion on ``e._base`` under
         # compile.
-        return ShardTensor(local_tensor=local_tensor,
+        return ShardTensor(
+            local_tensor=local_tensor,
             spec=spec,
             requires_grad=local_tensor.requires_grad,
         )
@@ -459,7 +466,8 @@ def _wrap_back_to_shardtensor(result: Any, source: "ShardTensor") -> Any:
             # ``torch.autograd.grad(wrapper, leaf)`` can't find ``leaf``.
             out = _AutogradPreservingWrap.apply(t, out_spec)
         else:
-            out = ShardTensor(local_tensor=t,
+            out = ShardTensor(
+                local_tensor=t,
                 spec=out_spec,
                 requires_grad=False,
             )
@@ -508,7 +516,8 @@ def _make_handler_output(result: torch.Tensor, source: "ShardTensor") -> "ShardT
     if result.requires_grad:
         out = _AutogradPreservingWrap.apply(result, out_spec)
     else:
-        out = ShardTensor(local_tensor=result,
+        out = ShardTensor(
+            local_tensor=result,
             spec=out_spec,
             requires_grad=False,
         )
@@ -608,7 +617,10 @@ def _debug_log_unrouted_scatter(func: Any, args: tuple, kwargs: dict) -> None:
     if source is None:
         return
     policy = source._storage_policy
-    if not isinstance(policy, HaloStoragePolicy) or policy.scatter_mode != "halo_correction":
+    if (
+        not isinstance(policy, HaloStoragePolicy)
+        or policy.scatter_mode != "halo_correction"
+    ):
         return
     dim = args[1] if len(args) > 1 and isinstance(args[1], int) else kwargs.get("dim")
     logger.debug(
@@ -638,8 +650,7 @@ def _shard_gather_branch(input_t: Any) -> str | None:
         isinstance(policy, HaloStoragePolicy)
         and policy.gather_mode == "halo_read"
         and input_t._meta is not None
-        and input_t.shape[0]
-        == input_t._meta.n_padded + input_t._extra_suffix_padding
+        and input_t.shape[0] == input_t._meta.n_padded + input_t._extra_suffix_padding
     ):
         return "halo"
 
@@ -1088,7 +1099,9 @@ def _allow_real_constants(ref: Any):
         fm.allow_non_fake_inputs = prev
 
 
-def _dispatch_distributed_scatter(func: Any, args: tuple, kwargs: dict, source: Any) -> Any:
+def _dispatch_distributed_scatter(
+    func: Any, args: tuple, kwargs: dict, source: Any
+) -> Any:
     """Compile-path distributed scatter-add via the custom op, or ``None``."""
     if (
         source is None
@@ -1119,7 +1132,9 @@ def _dispatch_distributed_scatter(func: Any, args: tuple, kwargs: dict, source: 
         )
 
 
-def _dispatch_distributed_gather(func: Any, args: tuple, kwargs: dict, source: Any) -> Any:
+def _dispatch_distributed_gather(
+    func: Any, args: tuple, kwargs: dict, source: Any
+) -> Any:
     """Compile-path distributed index_select via the custom op, or ``None``."""
     if (
         source is None
@@ -1515,8 +1530,7 @@ class ShardTensor(_UpstreamShardTensor):
         if flatten_spec is None or (
             expected_type is not None
             and not (
-                isinstance(expected_type, type)
-                and issubclass(expected_type, _Upstream)
+                isinstance(expected_type, type) and issubclass(expected_type, _Upstream)
             )
         ):
             return self._local_tensor
@@ -1669,7 +1683,8 @@ class ShardTensor(_UpstreamShardTensor):
                 # ``torch.autograd.grad(out, t)`` works across the boundary.
                 out = _AutogradPreservingWrap.apply(t, shard_spec)
             else:
-                out = ShardTensor(local_tensor=t,
+                out = ShardTensor(
+                    local_tensor=t,
                     spec=shard_spec,
                     requires_grad=False,
                 )
@@ -1839,9 +1854,7 @@ class ShardTensor(_UpstreamShardTensor):
             The reconstructed global tensor.
         """
         if self._storage_policy is not None:
-            return self._storage_policy.full_tensor(
-                self, mesh=self._spec.mesh, dst=dst
-            )
+            return self._storage_policy.full_tensor(self, mesh=self._spec.mesh, dst=dst)
         return super().full_tensor()
 
     def local_sum(self) -> torch.Tensor:
@@ -2188,9 +2201,7 @@ def _install_aot_plain_tangent_coercion() -> None:
         return _orig(x, meta)
 
     _process_runtime_tangent._mlip_plain_tangent_shim = True  # type: ignore[attr-defined]
-    AOTDispatchAutograd.process_runtime_tangent = staticmethod(
-        _process_runtime_tangent
-    )
+    AOTDispatchAutograd.process_runtime_tangent = staticmethod(_process_runtime_tangent)
 
 
 _install_aot_plain_tangent_coercion()

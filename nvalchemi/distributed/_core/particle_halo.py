@@ -758,11 +758,15 @@ def _halo_scatter_correct_dense(
         n = int(send_sizes[rank][j])
         if n == 0:
             continue
-        owned = owned.index_add(0, send_indices[j], received_back[off : off + n].to(_acc_dt))
+        owned = owned.index_add(
+            0, send_indices[j], received_back[off : off + n].to(_acc_dt)
+        )
         off += n
     owned = owned.to(padded.dtype)  # downcast before the move-only forward broadcast
     # forward: refresh halo rows from the (now corrected) owners.
-    halo_new = _halo_a2a_v_default_group(owned, send_indices, send_sizes, rank, world_size)
+    halo_new = _halo_a2a_v_default_group(
+        owned, send_indices, send_sizes, rank, world_size
+    )
     return torch.cat([owned, halo_new], dim=0)
 
 
@@ -813,9 +817,7 @@ def halo_scatter_correct_op(
         summed back into its owner row.
     """
     _flat_t = torch.tensor(send_idx_flat, dtype=torch.int64, device=padded.device)
-    send_indices = (
-        list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []
-    )
+    send_indices = list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []
     send_sizes = [
         [send_sizes_flat[i * world_size + j] for j in range(world_size)]
         for i in range(world_size)
@@ -907,9 +909,7 @@ def halo_forward_op(
         peers' owned rows (ordered by source rank).
     """
     _flat_t = torch.tensor(send_idx_flat, dtype=torch.int64, device=owned.device)
-    send_indices = (
-        list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []
-    )
+    send_indices = list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []
     send_sizes = [
         [send_sizes_flat[i * world_size + j] for j in range(world_size)]
         for i in range(world_size)
@@ -961,9 +961,13 @@ def _halo_forward_backward(ctx, grad_padded):  # type: ignore[no-untyped-def]
         )
         off += n
     rev_sizes = [[int(send_sizes[j][i]) for j in range(ws)] for i in range(ws)]
-    received_back = _halo_a2a_v_default_group(halo, rev_indices, rev_sizes, ctx.rank, ws)
+    received_back = _halo_a2a_v_default_group(
+        halo, rev_indices, rev_sizes, ctx.rank, ws
+    )
     _acc_dt = (
-        torch.float64 if grad_owned_direct.dtype == torch.float32 else grad_owned_direct.dtype
+        torch.float64
+        if grad_owned_direct.dtype == torch.float32
+        else grad_owned_direct.dtype
     )
     grad_owned = grad_owned_direct.to(_acc_dt)
     off = 0
@@ -1111,17 +1115,21 @@ def build_halo_meta_tensors(
     for j in range(world_size):
         cnt = int(sizes[rank][j])
         if cnt > max_send:
-            raise ValueError(f"halo send count {cnt} (rank {rank}->{j}) exceeds max_send={max_send}")
-        if cnt:
-            send_index[j * max_send : j * max_send + cnt] = markers.send_indices_owned[j].to(
-                device=device, dtype=torch.int64
+            raise ValueError(
+                f"halo send count {cnt} (rank {rank}->{j}) exceeds max_send={max_send}"
             )
+        if cnt:
+            send_index[j * max_send : j * max_send + cnt] = markers.send_indices_owned[
+                j
+            ].to(device=device, dtype=torch.int64)
 
     off = meta.n_owned
     for i in range(world_size):
         cnt = int(sizes[i][rank])
         if cnt > max_send:
-            raise ValueError(f"halo recv count {cnt} (rank {i}->{rank}) exceeds max_send={max_send}")
+            raise ValueError(
+                f"halo recv count {cnt} (rank {i}->{rank}) exceeds max_send={max_send}"
+            )
         if cnt:
             recv_dest[i * max_send : i * max_send + cnt] = torch.arange(
                 off, off + cnt, device=device, dtype=torch.int64
@@ -1188,7 +1196,9 @@ def halo_forward_static_op(
 
 
 @halo_forward_static_op.register_fake
-def _halo_forward_static_fake(padded_in, send_index, recv_dest, recv_real, n_owned, world_size):
+def _halo_forward_static_fake(
+    padded_in, send_index, recv_dest, recv_real, n_owned, world_size
+):
     return torch.empty_like(padded_in)
 
 
@@ -1204,9 +1214,9 @@ def _hfs_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     rowidx = torch.arange(grad_out.shape[0], device=grad_out.device)
     ghostmask = _row_mask_like(rowidx >= n_owned, grad_out)
     grad_ghost = grad_out * ghostmask.to(grad_out.dtype)
-    grad_recv = grad_ghost.index_select(0, recv_dest) * _row_mask_like(recv_real, grad_out).to(
-        grad_out.dtype
-    )
+    grad_recv = grad_ghost.index_select(0, recv_dest) * _row_mask_like(
+        recv_real, grad_out
+    ).to(grad_out.dtype)
     grad_send = funcol_all_to_all_fixed(grad_recv, ws, None)
     grad_in = grad_out * (~ghostmask).to(grad_out.dtype)
     grad_in = grad_in.index_add(0, send_index, grad_send)
@@ -1270,7 +1280,9 @@ def _hscs_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     return grad_in, None, None, None, None, None
 
 
-halo_scatter_correct_static_op.register_autograd(_hscs_backward, setup_context=_hscs_setup)
+halo_scatter_correct_static_op.register_autograd(
+    _hscs_backward, setup_context=_hscs_setup
+)
 
 
 def halo_forward_static_from_meta(
@@ -1298,7 +1310,9 @@ def halo_scatter_correct_static_from_meta(
     si, rd, rr, no = build_halo_meta_tensors(
         meta, rank, max_send, padded_in.shape[0], padded_in.device
     )
-    return halo_scatter_correct_static_op(padded_in, si, rd, rr, no, len(meta.send_sizes))
+    return halo_scatter_correct_static_op(
+        padded_in, si, rd, rr, no, len(meta.send_sizes)
+    )
 
 
 def halo_reverse_exchange(

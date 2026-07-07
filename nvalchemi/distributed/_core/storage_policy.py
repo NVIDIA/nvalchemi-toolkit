@@ -566,5 +566,3 @@ def policy_from_dict(d: dict[str, Any]) -> Any:
     if builder is None:
         raise ValueError(f"policy_from_dict: unknown kind {kind!r}")
     return builder(d)
-
-

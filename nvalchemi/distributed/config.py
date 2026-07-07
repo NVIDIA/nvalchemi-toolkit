@@ -116,10 +116,7 @@ class DomainConfig(BaseModel):
     # boundary) — the padder is gated on this flag.
     compile: bool = False
     # When True, a *degenerate* partition — one where some rank's halo already
-    # covers every atom (0 remote atoms), so the halo boundary exchange never
-    # fires — is a hard error instead of a warning. A force-equivalence check on
-    # such a partition proves nothing about DD, so tests (and users who want a
-    # guaranteed-decomposed run) set this to fail loud rather than pass trivially.
+    # covers every atom (0 remote atoms) is a hard error instead of a warning.
     require_nondegenerate: bool = False
     # DeviceMesh | None at runtime; typed ``Any`` so pydantic doesn't reject the
     # ducktyped test-harness mock meshes the collectives (mesh_group) also accept.

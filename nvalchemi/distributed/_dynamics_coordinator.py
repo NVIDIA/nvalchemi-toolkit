@@ -142,9 +142,9 @@ class DynamicsDistributionCoordinator:
         M = state.dt.shape[0]
         dev = local_batch.positions.device
         dtype = local_batch.positions.dtype
-        global_counts = torch.bincount(
-            local_batch.batch_idx, minlength=M
-        ).to(dtype=torch.int64, device=dev)
+        global_counts = torch.bincount(local_batch.batch_idx, minlength=M).to(
+            dtype=torch.int64, device=dev
+        )
         # Per-system owned-atom count → mesh-global via the strategy (identity for
         # node-replicate, where the shard already holds every atom).
         self._reduce_sum(global_counts)
@@ -187,9 +187,7 @@ class DynamicsDistributionCoordinator:
                 device=dev,
             )
         W = torch.zeros(global_counts.shape[0], dtype=dtype, device=dev)
-        compute_barostat_mass(
-            kT, state.barostat_time, global_counts.to(torch.int32), W
-        )
+        compute_barostat_mass(kT, state.barostat_time, global_counts.to(torch.int32), W)
         state.W.copy_(W / 3)
 
     # ------------------------------------------------------------------
@@ -225,9 +223,7 @@ class DynamicsDistributionCoordinator:
                 nvt_nose_hoover as mod,  # noqa: PLC0415
             )
 
-            self._swap(
-                mod, "nhc_chain_update", _make_global_nhc_chain_update(strat)
-            )
+            self._swap(mod, "nhc_chain_update", _make_global_nhc_chain_update(strat))
         else:  # npt / nph
             mod_name = "npt" if self._kind == "npt" else "nph"
             mod = __import__(
@@ -371,9 +367,7 @@ def _make_global_fire_step(strategy: ParallelizationStrategy):
         if ff is None:
             ff = torch.zeros(M, dtype=dtype, device=dev)
         if batch_idx is None:
-            batch_idx = torch.zeros(
-                velocities.shape[0], dtype=torch.int32, device=dev
-            )
+            batch_idx = torch.zeros(velocities.shape[0], dtype=torch.int32, device=dev)
         _fire_local_reductions(velocities, forces, batch_idx, vf, vv, ff, strategy)
         _real(
             positions,
@@ -437,9 +431,7 @@ def _make_global_fire_update(strategy: ParallelizationStrategy):
         if ff is None:
             ff = torch.zeros(M, dtype=dtype, device=dev)
         if batch_idx is None:
-            batch_idx = torch.zeros(
-                velocities.shape[0], dtype=torch.int32, device=dev
-            )
+            batch_idx = torch.zeros(velocities.shape[0], dtype=torch.int32, device=dev)
         _fire_local_reductions(velocities, forces, batch_idx, vf, vv, ff, strategy)
         _real(
             velocities,

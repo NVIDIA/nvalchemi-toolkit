@@ -45,9 +45,7 @@ from nvalchemi.neighbors import NeighborConfig, NeighborListFormat
 class ToyGraphParallelDenseWrapper(nn.Module, BaseModelMixin):
     """2-layer dense-``neighbor_matrix`` MLIP for the graph-parallel strategy."""
 
-    def __init__(
-        self, hidden: int = 8, n_layers: int = 2, cutoff: float = 2.5
-    ) -> None:
+    def __init__(self, hidden: int = 8, n_layers: int = 2, cutoff: float = 2.5) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.embed = nn.Embedding(100, hidden)
@@ -103,8 +101,8 @@ class ToyGraphParallelDenseWrapper(nn.Module, BaseModelMixin):
         k = nbmat.shape[1]
         # Mask padded columns (num_neighbors) and clamp sender ids in range —
         # padded entries contribute zero, so the clamped index is never used.
-        valid = (
-            torch.arange(k, device=nbmat.device).unsqueeze(0) < num.unsqueeze(1)
+        valid = torch.arange(k, device=nbmat.device).unsqueeze(0) < num.unsqueeze(
+            1
         )  # (n, K)
         sender = nbmat.clamp(max=n_global - 1)  # (n, K)
 

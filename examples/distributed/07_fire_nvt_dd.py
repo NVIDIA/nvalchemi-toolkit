@@ -156,8 +156,13 @@ def write_trajectory_xyz(sink: HostMemory, path: Path) -> int:
 
 
 def make_step_trace_hook(
-    *, rank: int, gpu: int, pipeline_index: int, domain_rank: int,
-    stage_name: str, frequency: int,
+    *,
+    rank: int,
+    gpu: int,
+    pipeline_index: int,
+    domain_rank: int,
+    stage_name: str,
+    frequency: int,
 ) -> LoggingHook:
     """A :class:`~nvalchemi.dynamics.hooks.LoggingHook` that streams *where each
     system is* to the console every ``frequency`` steps: for this rank's owned
@@ -177,11 +182,15 @@ def make_step_trace_hook(
                 fields.append(f"T={row['temperature']:.1f} K")
             logger.info(
                 "[step {s:>5} | {tag}] owned-shard: {f}",
-                s=int(row.get("step", step)), tag=tag, f="  ".join(fields),
+                s=int(row.get("step", step)),
+                tag=tag,
+                f="  ".join(fields),
             )
 
     return LoggingHook(
-        backend="custom", writer_fn=_writer, frequency=frequency,
+        backend="custom",
+        writer_fn=_writer,
+        frequency=frequency,
         stage=DynamicsStage.AFTER_STEP,
     )
 
@@ -204,12 +213,15 @@ def main() -> None:
     )
     parser.add_argument("--backend", default="nccl", help="Use 'gloo' on CPU envs.")
     parser.add_argument(
-        "--verbose", action="store_true",
+        "--verbose",
+        action="store_true",
         help="Trace where each system is at every step (per-rank/GPU/stage state) "
         "and log every GPU/stage hand-off (enables the pipeline's debug_mode).",
     )
     parser.add_argument(
-        "--log-every", type=int, default=10,
+        "--log-every",
+        type=int,
+        default=10,
         help="Step interval for the per-system state trace under --verbose.",
     )
     args = parser.parse_args()
@@ -258,8 +270,13 @@ def main() -> None:
         logger.info(
             "FIRE→NVT 2-D DD: world={ws} mesh=(pipeline={p}, domain={d}) "
             "ckpt={c} repeats={r} fire={fs} nvt={ns} T={T}K",
-            ws=world_size, p=n_pipeline, d=domain_size, c=args.checkpoint,
-            r=tuple(args.repeats), fs=args.fire_steps, ns=args.nvt_steps,
+            ws=world_size,
+            p=n_pipeline,
+            d=domain_size,
+            c=args.checkpoint,
+            r=tuple(args.repeats),
+            fs=args.fire_steps,
+            ns=args.nvt_steps,
             T=args.temperature_k,
         )
 
@@ -273,7 +290,9 @@ def main() -> None:
         args.checkpoint, dtype=dtype, device=device
     ).eval()
     # Each stage's DomainParallel is bound to its domain sub-mesh row.
-    domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh["domain"])
+    domain_cfg = DomainConfig(
+        cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh["domain"]
+    )
 
     def _nl_hook() -> NeighborListHook:
         return NeighborListHook(
@@ -288,9 +307,12 @@ def main() -> None:
     stage_name = "FIRE" if pipeline_index == 0 else "NVT"
     trace_hook = (
         make_step_trace_hook(
-            rank=rank, gpu=(device.index if device.type == "cuda" else 0),
-            pipeline_index=pipeline_index, domain_rank=domain_rank,
-            stage_name=stage_name, frequency=args.log_every,
+            rank=rank,
+            gpu=(device.index if device.type == "cuda" else 0),
+            pipeline_index=pipeline_index,
+            domain_rank=domain_rank,
+            stage_name=stage_name,
+            frequency=args.log_every,
         )
         if args.verbose
         else None
@@ -303,7 +325,9 @@ def main() -> None:
         fire = FIRE(model=wrapper, dt=args.fire_dt, hooks=[_nl_hook()])
         outer_hooks = [trace_hook] if trace_hook is not None else []
         stage: DomainParallel = DomainParallel(
-            dynamics=fire, config=domain_cfg, n_steps=args.fire_steps,
+            dynamics=fire,
+            config=domain_cfg,
+            n_steps=args.fire_steps,
             hooks=outer_hooks,
         )
         # The first stage's domain-lead seeds the system; the group scatters it.
@@ -319,7 +343,9 @@ def main() -> None:
         # thermostat equilibrates it to the target temperature.)
         n_frames = (args.nvt_steps // args.snapshot_every) + 1
         trajectory_sink = HostMemory(capacity=n_frames)
-        snapshot_hook = SnapshotHook(sink=trajectory_sink, frequency=args.snapshot_every)
+        snapshot_hook = SnapshotHook(
+            sink=trajectory_sink, frequency=args.snapshot_every
+        )
         snapshot_hook.scope = HookScope.RANK_ZERO
         nvt = NVTLangevin(
             model=wrapper,
@@ -332,7 +358,9 @@ def main() -> None:
         if trace_hook is not None:
             outer_hooks.append(trace_hook)
         stage = DomainParallel(
-            dynamics=nvt, config=domain_cfg, n_steps=args.nvt_steps,
+            dynamics=nvt,
+            config=domain_cfg,
+            n_steps=args.nvt_steps,
             hooks=outer_hooks,
         )
 

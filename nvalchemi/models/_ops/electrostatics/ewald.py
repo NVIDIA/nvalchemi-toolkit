@@ -225,9 +225,11 @@ def _green(
     """``G[s,k] = 8π/V_s · exp(-k²/4α_s²) / k²`` (masked ``k² < 1e-10``), shape ``(S, K)``."""
     ksq = (k_vectors_2d * k_vectors_2d).sum(-1)  # (S, K)
     a = alpha.reshape(-1, 1).to(torch.float64)  # (S, 1)
-    g = (EIGHTPI / volume.reshape(-1, 1).to(torch.float64)) * torch.exp(
-        -ksq * (0.25 / (a * a))
-    ) / ksq
+    g = (
+        (EIGHTPI / volume.reshape(-1, 1).to(torch.float64))
+        * torch.exp(-ksq * (0.25 / (a * a)))
+        / ksq
+    )
     return torch.where(ksq < 1e-10, torch.zeros_like(g), g)
 
 
@@ -827,8 +829,15 @@ def _reciprocal_torch_dd(
     imag_sf = distributed_all_reduce(imag_sf, config)
     total_charge = distributed_all_reduce(total_charge, config)
     return ewald_energy_from_structure_factors(
-        positions, charges, cell, k_vectors, alpha,
-        real_sf, imag_sf, total_charge, batch_idx=batch_idx,
+        positions,
+        charges,
+        cell,
+        k_vectors,
+        alpha,
+        real_sf,
+        imag_sf,
+        total_charge,
+        batch_idx=batch_idx,
     )
 
 
@@ -878,8 +887,14 @@ def ewald_reciprocal_contribution(
         )
 
         e_recip = ewald_reciprocal_space(
-            positions, charges, cell, k_vectors, alpha,
-            batch_idx=bidx, compute_forces=False, hybrid_forces=False,
+            positions,
+            charges,
+            cell,
+            k_vectors,
+            alpha,
+            batch_idx=bidx,
+            compute_forces=False,
+            hybrid_forces=False,
         )
         return e_recip, None, None
 
@@ -887,9 +902,17 @@ def ewald_reciprocal_contribution(
         positions, charges, cell, k_vectors, alpha, batch_idx=batch_idx
     )
     recip = ewald_reciprocal_space_from_structure_factors(
-        positions, charges, cell, k_vectors, alpha,
-        real_sf, imag_sf, total_charge, batch_idx=batch_idx,
-        compute_forces=compute_forces, compute_virial=compute_virial,
+        positions,
+        charges,
+        cell,
+        k_vectors,
+        alpha,
+        real_sf,
+        imag_sf,
+        total_charge,
+        batch_idx=batch_idx,
+        compute_forces=compute_forces,
+        compute_virial=compute_virial,
         hybrid_forces=hybrid_forces,
     )
     if isinstance(recip, torch.Tensor):

@@ -126,7 +126,12 @@ def _worker(rank: int, world_size: int) -> None:
         )
 
         mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-        cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.0, mesh=mesh, strategy=StrategyKind.GRAPH_PARTITION)
+        cfg = DomainConfig(
+            cutoff=float(wrapper.cutoff),
+            skin=0.0,
+            mesh=mesh,
+            strategy=StrategyKind.GRAPH_PARTITION,
+        )
         full = _mk() if rank == 0 else None
         sharded = ShardedBatch.from_batch(
             full, mesh=mesh, config=cfg, src=0, partition_mode="contiguous_block"

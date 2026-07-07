@@ -674,9 +674,7 @@ class TestForward:
         out = wrapper.forward(pbc_batch)
         assert out["energy"].shape == (1, 1)
 
-    def test_training_flag_passed_to_model_is_always_false(
-        self, wrapper, single_batch
-    ):
+    def test_training_flag_passed_to_model_is_always_false(self, wrapper, single_batch):
         # The wrapper forward passes ``training=False`` to the inner MACE
         # forward unconditionally ("Only inference supported right now",
         # mace.py), independent of the wrapper's train/eval mode. The inner

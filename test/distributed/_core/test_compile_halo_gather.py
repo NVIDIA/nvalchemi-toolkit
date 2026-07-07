@@ -16,12 +16,12 @@
 """Halo gather (index_select on a halo ShardTensor) under torch.compile
 via the nvalchemi::halo_forward custom op. Compiled (dispatch) == eager (TF) for
 forward AND backward. 2-rank gloo."""
-import pytest
 
 import os
 import sys
 import traceback
 
+import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -68,7 +68,9 @@ def _build_rank_halo(mesh, rank, world_size, ghost_width=5.0):
     cell = torch.eye(3, dtype=torch.float64) * (n_side * lattice)
     pbc = torch.ones(3, dtype=torch.bool)
     dc = DomainConfig(cutoff=ghost_width, mesh=mesh)
-    part = SpatialPartitioner(config=dc, cell_matrix=cell.unsqueeze(0), pbc=pbc.unsqueeze(0))
+    part = SpatialPartitioner(
+        config=dc, cell_matrix=cell.unsqueeze(0), pbc=pbc.unsqueeze(0)
+    )
     hc = ParticleHaloConfig(ghost_width=ghost_width, partitioner=part, mesh=mesh)
     assignment = part.assign_atoms_to_ranks(positions)
     local_pos = positions[assignment == rank].contiguous()
@@ -100,9 +102,14 @@ def _worker_halo_gather(rank, world_size):
         def make_x(owned):
             # padded [owned | stale-halo]; the gather refreshes the halo.
             with mesh:
-                from nvalchemi.distributed._core.particle_halo import halo_forward_exchange
+                from nvalchemi.distributed._core.particle_halo import (
+                    halo_forward_exchange,
+                )
+
                 padded = halo_forward_exchange(owned, meta, config)
-                return ShardTensor.wrap(padded, meta=meta, config=config, spec=SPEC_MPNN_HALO)
+                return ShardTensor.wrap(
+                    padded, meta=meta, config=config, spec=SPEC_MPNN_HALO
+                )
 
         def fn(x):
             return x.index_select(0, gather_idx)

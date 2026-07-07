@@ -47,9 +47,7 @@ from nvalchemi.distributed.validate.worker import _worker_main
 __all__ = ["_validate_spec", "_infer_spec_from_trace"]
 
 
-def _infer_spec_from_trace(
-    wrapper: Any, trace: list[dict[str, Any]]
-) -> MLIPSpec:
+def _infer_spec_from_trace(wrapper: Any, trace: list[dict[str, Any]]) -> MLIPSpec:
     """Build a candidate spec.
 
     Strategy: take the wrapper's existing ``distribution_spec`` (if
@@ -127,9 +125,7 @@ def _await_worker_results(
             received.append(queue.get_nowait())
         if all(not p.is_alive() for p in procs):
             break
-        got_error_payload = any(
-            len(m) >= 2 and isinstance(m[1], str) for m in received
-        )
+        got_error_payload = any(len(m) >= 2 and isinstance(m[1], str) for m in received)
         if got_error_payload and any(not p.is_alive() for p in procs):
             # Asymmetric crash: a rank failed and left a survivor deadlocked.
             # Leave ``error`` unset — the payload carries the traceback.
@@ -269,7 +265,9 @@ def _validate_spec(
                 already_wrapped_fns = {
                     (h.module_path, h.attr_name)
                     for h in spec.distribution.third_party_helpers
-                    if hasattr(h, "attr_name")  # module-level helpers only (not MethodAdapter)
+                    if hasattr(
+                        h, "attr_name"
+                    )  # module-level helpers only (not MethodAdapter)
                 }
                 partial_helper_diags = classify(
                     ref_helper_calls,

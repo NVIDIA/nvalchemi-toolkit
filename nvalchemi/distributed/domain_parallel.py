@@ -232,9 +232,7 @@ class DomainParallel(BaseDynamics):
 
         # Coordinator globalizes NHC/NPT/NPH thermodynamic state via the
         # strategy's reductions (integrator declares intent; inert otherwise).
-        self._thermo = DynamicsDistributionCoordinator(
-            self._dynamics, self._strategy
-        )
+        self._thermo = DynamicsDistributionCoordinator(self._dynamics, self._strategy)
 
         # Scatter the full batch across the mesh. The strategy chooses the
         # partition layout (spatial for halo, contiguous-block for graph
@@ -407,7 +405,9 @@ class DomainParallel(BaseDynamics):
             # prime it here before the external exchange.
             from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
 
-            if isinstance(self._dist_model._spec.distribution.policy, HaloStoragePolicy):
+            if isinstance(
+                self._dist_model._spec.distribution.policy, HaloStoragePolicy
+            ):
                 from nvalchemi.distributed.particle_halo import halo_exchange
 
                 self._dist_model._ensure_initialized(self._sharded_batch)
@@ -745,8 +745,10 @@ class DomainParallel(BaseDynamics):
         got_system = True
         if self._is_group_lead:
             received = Batch.irecv(
-                src=self.prior_rank, device=self.device,
-                template=self._recv_template, group=self._pipeline_group,
+                src=self.prior_rank,
+                device=self.device,
+                template=self._recv_template,
+                group=self._pipeline_group,
             ).wait()
             got_system = received.num_graphs > 0  # 0-graph sentinel = upstream done
         got_system = self._bcast_group_flag(got_system)
@@ -754,9 +756,7 @@ class DomainParallel(BaseDynamics):
             self.active_batch = None
             self.done = True
             self._send_sentinel()  # forward the drain signal down the chain
-            self._dd_event(
-                f"upstream (rank {self.prior_rank}) drained → stage done"
-            )
+            self._dd_event(f"upstream (rank {self.prior_rank}) drained → stage done")
             return
         self._system_step = 0
         self.active_batch = self.partition(received if self._is_group_lead else None)

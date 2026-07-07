@@ -109,7 +109,9 @@ def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
     sign = torch.ones(n, dtype=torch.long)
     sign[1::2] = -1
     atomic_numbers = torch.where(
-        sign > 0, torch.full((n,), 11, dtype=torch.long), torch.full((n,), 17, dtype=torch.long)
+        sign > 0,
+        torch.full((n,), 11, dtype=torch.long),
+        torch.full((n,), 17, dtype=torch.long),
     )
     masses = torch.where(
         sign > 0,
@@ -160,7 +162,9 @@ def _dftd3_equivalence_worker(rank: int, world_size: int) -> None:
     f_ref_host = torch.zeros(n_global, 3, dtype=dtype)
     if rank == 0:
         ref_wrapper = DFTD3ModelWrapper(a1=_A1, a2=_A2, s8=_S8, cutoff=cutoff)
-        ref_data = _make_data(atomic_numbers, positions, masses, cell, pbc, device, dtype)
+        ref_data = _make_data(
+            atomic_numbers, positions, masses, cell, pbc, device, dtype
+        )
         ref_batch = Batch.from_data_list([ref_data])
         compute_neighbors(ref_batch, config=ref_wrapper.model_config.neighbor_config)
         ref_out = ref_wrapper(ref_batch)
@@ -187,7 +191,9 @@ def _dftd3_equivalence_worker(rank: int, world_size: int) -> None:
     else:
         full_batch = None
 
-    sharded = ShardedBatch.from_batch(batch=full_batch, mesh=mesh, config=domain_config, src=0)
+    sharded = ShardedBatch.from_batch(
+        batch=full_batch, mesh=mesh, config=domain_config, src=0
+    )
     local_n = sharded.n_owned
 
     with DistributedModel(dist_wrapper, domain_config) as dist_model:
@@ -225,11 +231,17 @@ def _dftd3_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
     torch.testing.assert_close(
-        e_local.view(1), e_ref, rtol=1e-4, atol=1e-4,
+        e_local.view(1),
+        e_ref,
+        rtol=1e-4,
+        atol=1e-4,
         msg=f"rank {rank}: energy mismatch Δ={e_delta:+.3e}",
     )
     torch.testing.assert_close(
-        f_owned, f_ref_owned, rtol=1e-3, atol=1e-4,
+        f_owned,
+        f_ref_owned,
+        rtol=1e-3,
+        atol=1e-4,
         msg=f"rank {rank}: per-atom forces disagree, max |ΔF|={diff.abs().max().item():.3e}",
     )
 

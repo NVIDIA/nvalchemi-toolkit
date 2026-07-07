@@ -104,6 +104,7 @@ def keep_routing_live(x: Any, si: Any, rd: Any, rr: Any, no: Any) -> Any:
     """
     return torch.ops.nvalchemi.halo_keepalive.default(x, si, rd, rr, no)
 
+
 # The four halo-routing tensors the inserted op consumes, in argument order after
 # ``node_feats``. The bridge threads + anchors these as live graph inputs.
 # ``world_size`` is baked into the inserted call as a literal, not a routing input.
@@ -117,9 +118,7 @@ DEFAULT_EDGE_INDEX_NAMES: tuple[str, ...] = ("edge_index", "nbmat", "neighbor_li
 
 # FX targets recognized as a node-aggregation scatter; both aggregate ``src`` rows
 # into ``self`` at rows given by ``index`` (arg 2).
-_SCATTER_METHODS = frozenset(
-    {"scatter_add", "scatter_add_", "index_add", "index_add_"}
-)
+_SCATTER_METHODS = frozenset({"scatter_add", "scatter_add_", "index_add", "index_add_"})
 
 
 @dataclass
@@ -156,9 +155,7 @@ def _placeholders_matching(
     return out
 
 
-def _traces_to(
-    node: Any, targets: set, _seen: set | None = None
-) -> bool:
+def _traces_to(node: Any, targets: set, _seen: set | None = None) -> bool:
     """Whether ``node``'s data-flow reaches any node in ``targets`` (DFS over
     ``all_input_nodes``)."""
     if _seen is None:
@@ -238,9 +235,7 @@ def insert_halo_refresh(
         if index_arg is None or not _traces_to(index_arg, ei_nodes):
             continue
         with g.inserting_after(node):
-            new = g.call_function(
-                correction_op, args=(node, *routing_args, world_size)
-            )
+            new = g.call_function(correction_op, args=(node, *routing_args, world_size))
         node.replace_all_uses_with(new)
         new.update_arg(0, node)  # undo the self-reference replace_all just made
         report.n_sites += 1
@@ -297,10 +292,15 @@ def make_dd_halo_backend(
                 "compile-refresh fragment #%d: placeholders=%d scatters_seen=%d "
                 "scatters_edge_keyed=%d edge_inputs=%s routing_present=%s "
                 "routing_missing=%s -> n_sites=%d %s",
-                fragment_counter[0], report.n_placeholders, report.scatters_seen,
-                report.scatters_edge_keyed, report.edge_index_inputs or "none",
-                report.routing_present, report.routing_missing or "none",
-                report.n_sites, report.site_names,
+                fragment_counter[0],
+                report.n_placeholders,
+                report.scatters_seen,
+                report.scatters_edge_keyed,
+                report.edge_index_inputs or "none",
+                report.routing_present,
+                report.routing_missing or "none",
+                report.n_sites,
+                report.site_names,
             )
         if strict and report.routing_present and report.n_sites == 0:
             raise RuntimeError(

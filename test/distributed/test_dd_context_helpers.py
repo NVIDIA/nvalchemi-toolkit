@@ -374,7 +374,9 @@ def _test_system_sum_owned_matches_global(rank: int, world_size: int) -> None:
     torch.testing.assert_close(got, prim, rtol=0, atol=0)
 
     # (b) equals the centralized reference (all_gather owned, scatter centrally).
-    all_vals = [torch.zeros(n_owned, feat_dim, dtype=torch.float64) for _ in range(world_size)]
+    all_vals = [
+        torch.zeros(n_owned, feat_dim, dtype=torch.float64) for _ in range(world_size)
+    ]
     all_idx = [torch.zeros(n_owned, dtype=torch.long) for _ in range(world_size)]
     dist.all_gather(all_vals, vals[:n_owned].contiguous())
     dist.all_gather(all_idx, idx[:n_owned].contiguous())

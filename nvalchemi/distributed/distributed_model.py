@@ -268,7 +268,11 @@ def _mark_halo_receiver_edges_as_padding(padded_batch: "Batch", n_owned: int) ->
 
 
 def _build_halo_meta_packed(
-    meta: "Any", config: "Any", device: "Any", n_pad: int, max_send_cap: "int | None" = None
+    meta: "Any",
+    config: "Any",
+    device: "Any",
+    n_pad: int,
+    max_send_cap: "int | None" = None,
 ) -> "Any":
     """Build the fixed-shape halo routing tensor from the per-step ``meta``, or
     ``None`` when there is no cross-rank halo.
@@ -455,9 +459,7 @@ class DistributedModel:
         if spec is None:
             _ds = getattr(wrapper, "distribution_spec", None)
             spec = (
-                _ds(getattr(domain_config, "strategy", None))
-                if callable(_ds)
-                else _ds
+                _ds(getattr(domain_config, "strategy", None)) if callable(_ds) else _ds
             )
         if spec is None:
             raise DistributionError(
@@ -578,6 +580,7 @@ class DistributedModel:
         from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
             _clear_exchange_counts_cache,
         )
+
         # The exchange-counts cache key is per-rank, so ranks with different
         # send histories could diverge and deadlock. Resetting symmetrically
         # each forward avoids this at the cost of one redundant collective
@@ -766,7 +769,8 @@ class DistributedModel:
                 a
                 for a in adapters
                 if not (
-                    isinstance(a, JitAdapter) and getattr(a, "mode", "eager") == "marshal"
+                    isinstance(a, JitAdapter)
+                    and getattr(a, "mode", "eager") == "marshal"
                 )
             ]
         self.adapter_registry.install(adapters)
@@ -827,18 +831,14 @@ class DistributedModel:
             int(meta.n_owned), int(meta.n_padded), group, device
         )
         rank = (
-            self._config.mesh.get_local_rank()
-            if self._config.mesh is not None
-            else 0
+            self._config.mesh.get_local_rank() if self._config.mesh is not None else 0
         )
         _resolve_partition_health(
             any_empty,
             any_trivial,
             n_global,
             world_size=self._world_size,
-            require_nondegenerate=getattr(
-                self._config, "require_nondegenerate", False
-            ),
+            require_nondegenerate=getattr(self._config, "require_nondegenerate", False),
             rank=rank,
         )
 
@@ -1024,9 +1024,7 @@ class DistributedModel:
             halo_config=SimpleNamespace(mesh=mesh),
         )
 
-    def _graph_parallel_internal(
-        self, sharded: "ShardedBatch"
-    ) -> dict[str, Any]:
+    def _graph_parallel_internal(self, sharded: "ShardedBatch") -> dict[str, Any]:
         """Node-partition graph-parallel for models that compute forces internally.
 
         Each rank owns a balanced index slice of the atoms. The full geometry is

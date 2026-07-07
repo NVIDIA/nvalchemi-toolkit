@@ -677,8 +677,7 @@ def main() -> None:
     _ensure_neighbors(sample_batch, plain_wrapper)
     out = plain_wrapper(sample_batch)
     logger.info(
-        "  forward OK: energy={e:.4f}  |  "
-        "forces shape={fs}, ‖forces‖∞={fmax:.4f}",
+        "  forward OK: energy={e:.4f}  |  forces shape={fs}, ‖forces‖∞={fmax:.4f}",
         e=out["energy"].item(),
         fs=tuple(out["forces"].shape),
         fmax=out["forces"].abs().max().item(),

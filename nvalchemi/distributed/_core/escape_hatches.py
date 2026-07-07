@@ -101,7 +101,11 @@ def _handle_sharded(
             # rank's force-gradient back to the owning ranks. A plain _unwrap
             # would detach _local_tensor and sever conservative forces.
             raw = args[idx]
-            t = _unwrap_grad_aware(raw) if isinstance(raw, ShardTensor) else new_args[idx]
+            t = (
+                _unwrap_grad_aware(raw)
+                if isinstance(raw, ShardTensor)
+                else new_args[idx]
+            )
             if not isinstance(t, torch.Tensor):
                 continue
             # Convention: caller passes ``(n_owned + 1, *F)`` — last row

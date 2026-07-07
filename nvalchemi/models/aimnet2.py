@@ -116,6 +116,7 @@ def _aimnet2_halo_spec() -> Any:
         MethodAdapter,
         PythonAdapter,
     )
+
     helpers = (
         PythonAdapter(
             module_path="aimnet.nbops",

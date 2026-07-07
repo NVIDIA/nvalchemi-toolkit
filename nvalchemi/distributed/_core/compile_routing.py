@@ -96,7 +96,12 @@ def set_gp_compile_routing(
     is read back inside the compiled Edgewise via :func:`get_gp_compile_routing`.
     """
     _GP_COMPILE_ROUTING[0] = (
-        global_indices, owner_rank, local_index, cap, world_size, mesh,
+        global_indices,
+        owner_rank,
+        local_index,
+        cap,
+        world_size,
+        mesh,
     )
 
 

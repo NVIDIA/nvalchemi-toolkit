@@ -139,7 +139,9 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
             Batch.from_data_list([_data(device)], device=device) if rank == 0 else None
         )
         sharded = ShardedBatch.from_batch(
-            full_batch, mesh=mesh, config=domain_config,
+            full_batch,
+            mesh=mesh,
+            config=domain_config,
             partition_mode=cfg.system.partition_mode or default_part_mode,
         )
         dist_model(sharded)  # warm lazy global-NL metadata
@@ -193,9 +195,7 @@ def main() -> None:
     # whole-forward compile: under torchrun the model stays eager (DD owns the
     # compile) so we only inner-compile in --single-only mode to avoid nesting.
     compile_intent = bool(cfg.loader.get("compile", False))
-    load_wrapper = build_loader(
-        cfg, compile_model=compile_intent and args.single_only
-    )
+    load_wrapper = build_loader(cfg, compile_model=compile_intent and args.single_only)
     build_harness = make_forward_harness(cfg, dd_compile=compile_intent)
     run_main(cfg.model, load_wrapper, build_harness, args, dtype=dtype)
 

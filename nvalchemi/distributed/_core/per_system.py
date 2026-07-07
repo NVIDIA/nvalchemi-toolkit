@@ -176,7 +176,9 @@ def per_system_reduce_op(
     in_dt = local_vals.dtype
     acc_dt = torch.float64 if in_dt == torch.float32 else in_dt
     acc = torch.zeros(
-        (n_systems,) + tuple(local_vals.shape[1:]), dtype=acc_dt, device=local_vals.device
+        (n_systems,) + tuple(local_vals.shape[1:]),
+        dtype=acc_dt,
+        device=local_vals.device,
     )
     expanded_idx = _expand_system_index_like(system_index.long(), local_vals)
     acc.scatter_add_(0, expanded_idx, local_vals.to(acc_dt))

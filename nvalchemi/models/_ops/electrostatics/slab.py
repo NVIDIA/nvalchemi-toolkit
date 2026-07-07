@@ -160,9 +160,7 @@ def slab_normals_and_axis(
     height_sq = c_dot_n * c_dot_n
 
     vol = torch.abs(torch.linalg.det(cell64))  # (B,)
-    inv_vol = torch.where(
-        is_slab, 1.0 / vol.clamp_min(1e-300), torch.zeros_like(vol)
-    )
+    inv_vol = torch.where(is_slab, 1.0 / vol.clamp_min(1e-300), torch.zeros_like(vol))
 
     slab_f = is_slab.to(torch.float64).reshape(-1, 1)
     normal = normal * slab_f

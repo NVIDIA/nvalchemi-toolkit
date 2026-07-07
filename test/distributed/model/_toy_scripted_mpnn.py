@@ -190,8 +190,7 @@ class ToyScriptedMPNNWrapper(nn.Module, BaseModelMixin):
         )
         forces = -grad_e if grad_e is not None else torch.zeros_like(positions)
         energy = (
-            torch.zeros(n_graphs, 1, dtype=x.dtype, device=x.device)
-            + e_scalar.detach()
+            torch.zeros(n_graphs, 1, dtype=x.dtype, device=x.device) + e_scalar.detach()
         )
         out: OrderedDict = OrderedDict()
         out["energy"] = energy

@@ -225,9 +225,7 @@ class ParallelizationStrategy(ABC):
         """React to a moving cell (barostat). Halo re-tracks; GP no-ops."""
 
     @abstractmethod
-    def plan_migration(
-        self, state: ShardState, batch: Batch
-    ) -> MigrationPlan:
+    def plan_migration(self, state: ShardState, batch: Batch) -> MigrationPlan:
         """Decide (async) whether any atoms crossed a boundary this step."""
 
     @abstractmethod
@@ -360,9 +358,9 @@ class HaloStrategy(ParallelizationStrategy):
         self.on_cell_change(state, getattr(batch, "cell", None))
         keep = part.keeps_owner(batch.positions, self._rank, h)
         natural = part.assign_atoms_to_ranks(batch.positions)
-        new_rank = torch.where(
-            keep, torch.full_like(natural, self._rank), natural
-        ).to(torch.int64)
+        new_rank = torch.where(keep, torch.full_like(natural, self._rank), natural).to(
+            torch.int64
+        )
         mesh = self._config.mesh
 
         # Reshard EVERY per-atom field independently (preserves dtypes). The
@@ -524,6 +522,7 @@ def _graph_partition_run_forward(
     wired_fields: "dict[str, Any] | None" = None,
 ) -> dict[str, Any]:
     from nvalchemi.distributed._core.context import activate_dd_context
+
     """Graph-parallel forward.
 
     Each rank owns a balanced index slice of atoms plus the edges into them.
@@ -666,6 +665,7 @@ def _halo_run_forward(
     )
     from nvalchemi.distributed.output_consolidation import consolidate_padded_outputs
     from nvalchemi.neighbors import compute_neighbors
+
     """Halo-storage forward.
 
     Preconditions (typically set up by :class:`DomainParallel` via
@@ -721,9 +721,7 @@ def _halo_run_forward(
     # requested; eager instances skip padding entirely.
     _cp = dist_model._spec.compile
     _dd_compile = bool(
-        _cp is not None
-        and _cp.forces_via_autograd
-        and dist_model._dd_compile_requested
+        _cp is not None and _cp.forces_via_autograd and dist_model._dd_compile_requested
     )
     if wired_fields and _dd_compile:
         raise NotImplementedError(
@@ -741,8 +739,12 @@ def _halo_run_forward(
         # graph-shape cap (the graph padder owns those), so it lives here.
         _ms_req = max((max(r) for r in meta.send_sizes), default=0)
         resolve_cap(
-            dist_model._cap_state, "max_send", _ms_req,
-            initial_factor=1.20, grow_factor=1.30, stride=16,
+            dist_model._cap_state,
+            "max_send",
+            _ms_req,
+            initial_factor=1.20,
+            grow_factor=1.30,
+            stride=16,
         )
         # The padded view is transient — only the compiled forward needs
         # fixed shapes. Stash the real-sized storage groups to restore after
@@ -786,8 +788,12 @@ def _halo_run_forward(
         # to ShardTensors so custom ops see a ShardTensor input and the
         # per-layer halo correction fires.
         _promote_positions_to_shardtensor(
-            padded_batch, dist_model._spec, meta, dist_model._halo_config,
-            sharded.num_graphs, None,
+            padded_batch,
+            dist_model._spec,
+            meta,
+            dist_model._halo_config,
+            sharded.num_graphs,
+            None,
         )
         # A model that builds + compiles its own graph declares a
         # ``graph_padder`` without ``forces_via_autograd``: the framework
@@ -852,7 +858,6 @@ def _halo_run_forward(
         if _orig_edges is not None:
             _groups["edges"] = _orig_edges
     return result
-
 
 
 # ----------------------------------------------------------------------

@@ -75,7 +75,6 @@ def test_shim_reconstructs_shardtensor_from_plain_tangent(_session_gloo_pg) -> N
     local value equals the plain tensor (lossless for ``Replicate``). Without the
     shim this path raises ``...guessed its metadata incorrectly``."""
     import pytest
-
     from torch._functorch._aot_autograd.runtime_wrappers import AOTDispatchAutograd
     from torch._subclasses.fake_tensor import FakeTensorMode
 

@@ -98,9 +98,7 @@ def _op_signature(op_spec: OpAdapter) -> tuple:
 # Each rule: (description, fn). fn returns the candidate next spec or None.
 
 
-def _rule_halo_to_local(
-    spec: MLIPSpec, last: Attempt
-) -> MLIPSpec | None:
+def _rule_halo_to_local(spec: MLIPSpec, last: Attempt) -> MLIPSpec | None:
     """If the model used ``scatter='halo_correction'`` and the multi-rank
     output diverges, try ``scatter='local'`` — the UMA case (eSCN
     backbone is halo-unaware, edge_index covers the full graph, so
@@ -196,9 +194,7 @@ def _rule_add_per_graph_autograd_to_all_reduce(
     )
 
 
-def _rule_drop_extra_all_reduce(
-    spec: MLIPSpec, last: Attempt
-) -> MLIPSpec | None:
+def _rule_drop_extra_all_reduce(spec: MLIPSpec, last: Attempt) -> MLIPSpec | None:
     """If multi_E ≈ ref_E × world_size on a key declared in
     ``all_reduce_outputs``, that key is being reduced an extra time
     (the wrapper's internals already replicate it). Drop the key.
@@ -222,9 +218,7 @@ def _rule_drop_extra_all_reduce(
     )
 
 
-_RULES: list[
-    tuple[str, Callable[[MLIPSpec, Attempt], MLIPSpec | None]]
-] = [
+_RULES: list[tuple[str, Callable[[MLIPSpec, Attempt], MLIPSpec | None]]] = [
     (
         "halo_correction → local (suspected halo-unaware backbone double-count)",
         _rule_halo_to_local,

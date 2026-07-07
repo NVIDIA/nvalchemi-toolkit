@@ -121,7 +121,15 @@ class DistributedPipelineModel:
 
     # Fields always present on a Batch, so never a cross-step wired dependency.
     _BATCH_FIELDS = frozenset(
-        {"positions", "atomic_numbers", "atomic_masses", "cell", "pbc", "energy", "forces"}
+        {
+            "positions",
+            "atomic_numbers",
+            "atomic_masses",
+            "cell",
+            "pbc",
+            "energy",
+            "forces",
+        }
     )
 
     def _model_cfg(self, step: Any) -> "DomainConfig":

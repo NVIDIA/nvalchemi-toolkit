@@ -178,7 +178,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         )
         return dataclasses.replace(
             SPEC_LJ_HALO,
-            distribution=dataclasses.replace(SPEC_LJ_HALO.distribution, custom_ops=custom_ops),
+            distribution=dataclasses.replace(
+                SPEC_LJ_HALO.distribution, custom_ops=custom_ops
+            ),
         )
 
     # ------------------------------------------------------------------

@@ -245,9 +245,9 @@ def _detect_scripted_op_shardtensor_ima(
         "context, not the real site). Fix by MARSHALLING the scripted op across "
         "the boundary (Route C): unwrap ShardTensor→local, run the still-scripted "
         "op, re-wrap. Scripted *submodules* are auto-marshalled by the default "
-        "``DomainConfig.scripted_marshal=\"auto\"``; a module-level scripted "
+        '``DomainConfig.scripted_marshal="auto"``; a module-level scripted '
         "*function* (the usual culprit, e.g. ``e3nn.o3._spherical_harmonics``) "
-        "must be DECLARED — add ``JitAdapter(module_path, attr, mode=\"marshal\")`` "
+        'must be DECLARED — add ``JitAdapter(module_path, attr, mode="marshal")`` '
         "to the spec's ``distribution.third_party_helpers``. Run the pre-flight "
         "``detect_scripted_ops(model, spec)`` to list undeclared scripted "
         "functions and get a paste-able delta."

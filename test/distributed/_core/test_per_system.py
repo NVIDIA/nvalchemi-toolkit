@@ -43,6 +43,8 @@ def _mock_config() -> Any:
     cfg = MagicMock()
     cfg.mesh.get_group.return_value = None
     return cfg
+
+
 def test_single_process_sum_matches_scatter() -> None:
     torch.manual_seed(0)
     local_vals = torch.randn(10, 3, dtype=torch.float64)
@@ -54,6 +56,8 @@ def test_single_process_sum_matches_scatter() -> None:
 
     got = per_system_reduce(local_vals, system_index, n_systems, _mock_config())
     torch.testing.assert_close(got, expected)
+
+
 def test_single_process_autograd() -> None:
     torch.manual_seed(1)
     local_vals = torch.randn(6, 2, dtype=torch.float64, requires_grad=True)
@@ -68,25 +72,35 @@ def test_single_process_autograd() -> None:
         :, None
     ].expand(-1, 2)
     torch.testing.assert_close(grad, expected)
+
+
 def _init_gloo(rank: int, world_size: int, port: str = "29511") -> None:
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = port
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+
 def _worker(rank: int, world_size: int, fn: Any, *args: Any) -> None:
     _init_gloo(rank, world_size)
     try:
         fn(rank, world_size, *args)
     finally:
         dist.destroy_process_group()
+
+
 class _MeshStub:
     def get_group(self) -> Any:
         return None
+
+
 def _cfg() -> Any:
     cfg = MagicMock()
     cfg.mesh = _MeshStub()
     return cfg
+
+
 def _test_forward_value(rank: int, world_size: int) -> None:
     """Each rank has some atoms for each of N systems; after per_system_reduce,
     every rank should see the same per-system sum equal to the global sum."""
@@ -116,10 +130,16 @@ def _test_forward_value(rank: int, world_size: int) -> None:
         ref.scatter_add_(0, s.unsqueeze(-1).expand(-1, 2), v)
 
     torch.testing.assert_close(result, ref, rtol=1e-12, atol=1e-14)
+
+
 def test_forward_value_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_forward_value), nprocs=2)
+
+
 def test_forward_value_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_forward_value), nprocs=4)
+
+
 def _test_adjoint(rank: int, world_size: int) -> None:
     """<y, f(x)>_global == <f.backward(y), x>_global.
 
@@ -152,12 +172,19 @@ def _test_adjoint(rank: int, world_size: int) -> None:
     # Forward replicates across ranks — local_lhs varies per rank because y
     # differs. The ADJOINT identity is on the GLOBAL inner products.
     torch.testing.assert_close(global_lhs, global_rhs, rtol=1e-10, atol=1e-10)
+
+
 def test_adjoint_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_adjoint), nprocs=2)
+
+
 def test_adjoint_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_adjoint), nprocs=4)
 
+
 _SPEC_HALO_WITH_SYSTEMS = SPEC_MPNN_HALO
+
+
 def _fake_cfg_and_meta(
     n_padded: int, n_owned: int | None = None
 ) -> tuple[MagicMock, MagicMock]:
@@ -169,6 +196,8 @@ def _fake_cfg_and_meta(
     # (no halo). Handler only slices when src shape > n_owned.
     meta.n_owned = n_owned if n_owned is not None else n_padded
     return cfg, meta
+
+
 def _test_mol_sum_idiom_routes_through_primitive(rank: int, world_size: int) -> None:
     """Simulates an AIMNet2 / MEGNet idiom:
 
@@ -215,10 +244,16 @@ def _test_mol_sum_idiom_routes_through_primitive(rank: int, world_size: int) -> 
         ref.scatter_add_(0, s.unsqueeze(-1).expand(-1, feat_dim), v)
 
     torch.testing.assert_close(result.unwrap(), ref, rtol=1e-12, atol=1e-14)
+
+
 def test_mol_sum_idiom_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_mol_sum_idiom_routes_through_primitive), nprocs=2)
+
+
 def test_mol_sum_idiom_4ranks() -> None:
     mp.spawn(_worker, args=(4, _test_mol_sum_idiom_routes_through_primitive), nprocs=4)
+
+
 def _test_autograd_through_dispatch(rank: int, world_size: int) -> None:
     torch.manual_seed(400 + rank)
     n_systems = 2
@@ -257,8 +292,12 @@ def _test_autograd_through_dispatch(rank: int, world_size: int) -> None:
     dist.all_reduce(g_rhs, op=dist.ReduceOp.SUM)
 
     torch.testing.assert_close(g_lhs, g_rhs, rtol=1e-10, atol=1e-10)
+
+
 def test_autograd_through_dispatch_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_autograd_through_dispatch), nprocs=2)
+
+
 def _test_nonzero_accumulator_raises(rank: int, world_size: int) -> None:
     cfg, meta = _fake_cfg_and_meta(n_padded=4)
     # Accumulator pre-seeded with a non-zero value
@@ -275,5 +314,7 @@ def _test_nonzero_accumulator_raises(rank: int, world_size: int) -> None:
             torch.zeros(1, 3, dtype=torch.long),
             torch.ones(1, 3, dtype=torch.float64),
         )
+
+
 def test_nonzero_accumulator_raises_2ranks() -> None:
     mp.spawn(_worker, args=(2, _test_nonzero_accumulator_raises), nprocs=2)

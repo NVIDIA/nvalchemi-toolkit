@@ -82,6 +82,8 @@ def _spec(
         owned_only_outputs=frozenset(owned_only_outputs),
         all_reduce_outputs=frozenset(all_reduce_outputs),
     )
+
+
 def _attempt(
     spec: MLIPSpec,
     *,
@@ -99,6 +101,8 @@ def _attempt(
         max_rel_diff=rel_diff or {},
         handler_counts=handler_counts or {},
     )
+
+
 class TestSpecSerialization:
     def test_preset_roundtrip(self):
         d = SPEC_MPNN_HALO.to_dict()
@@ -149,6 +153,8 @@ class TestSpecSerialization:
             assert o1.scatter_outputs == o2.scatter_outputs
             assert o1.owned_slice_inputs == o2.owned_slice_inputs
             assert o1.all_reduce_outputs == o2.all_reduce_outputs
+
+
 class TestRuleHaloToLocal:
     """``halo_correction`` → ``local`` is the UMA fix's signature: a
     halo-unaware backbone whose edge_index covers the full graph
@@ -209,6 +215,8 @@ class TestRuleHaloToLocal:
             handler_counts={"halo_scatter_correction": 4},
         )
         assert _rule_halo_to_local(spec, last) is None
+
+
 class TestRuleDropExtraAllReduce:
     """If a key declared in ``all_reduce_outputs`` is being reduced
     twice (wrapper internals already replicate it), the rule drops
@@ -245,6 +253,8 @@ class TestRuleDropExtraAllReduce:
         )
         last = _attempt(spec, abs_diff={"energy": 1e-3}, rel_diff={"energy": 1e-6})
         assert _rule_drop_extra_all_reduce(spec, last) is None
+
+
 class TestNextFixCandidate:
     """Top-level dispatcher: tries rules in order, dedups against
     already-attempted specs."""
@@ -295,6 +305,8 @@ class TestNextFixCandidate:
         # Asking for next from `original` would propose `local` again —
         # but that signature is in attempts, so dedup returns None.
         assert _next_fix_candidate(original, attempts) is None
+
+
 class TestSpecSignature:
     def test_same_spec_same_signature(self):
         a = _spec(storage="halo", scatter="local", gather="halo_read")
@@ -315,6 +327,8 @@ class TestSpecSignature:
         )
         b = _spec(storage="halo", scatter="halo_correction", gather="halo_read")
         assert _spec_signature(a) != _spec_signature(b)
+
+
 class TestDistributedModelSpecArg:
     """Verify the new ``spec=`` kwarg works alongside the wrapper-property
     fallback."""
@@ -336,7 +350,10 @@ class TestDistributedModelSpecArg:
         assert dm._spec is custom_spec
         assert dm._spec.distribution.policy.scatter_mode == "local"
         # Wrapper's own property is unchanged.
-        assert wrapper.distribution_spec().distribution.policy.scatter_mode == "halo_correction"
+        assert (
+            wrapper.distribution_spec().distribution.policy.scatter_mode
+            == "halo_correction"
+        )
 
     def test_falls_back_to_wrapper_property_when_no_spec(self):
         from nvalchemi.distributed.config import DomainConfig
@@ -350,6 +367,8 @@ class TestDistributedModelSpecArg:
         assert dm._spec is not None
         assert isinstance(dm._spec.distribution.policy, HaloStoragePolicy)
         assert dm._spec.distribution.policy.scatter_mode == "halo_correction"
+
+
 class TestImportSurface:
     def test_can_import_trace_and_validate_without_cuda(self):
         """The validator's import must not actually need CUDA — the
@@ -374,6 +393,7 @@ class TestImportSurface:
         with pytest.raises(RuntimeError, match="CUDA"):
             trace_and_validate(lambda: None, None)
 
+
 # ======================================================================
 # merged from test_validate_diagnostics.py
 # ======================================================================
@@ -397,6 +417,8 @@ class TestHaloCompletenessGating:
 
     def test_empty_ref_returns_none(self):
         assert _check_halo_completeness({}, {0: {"total_owned_valid": 5}}) is None
+
+
 class TestPartitionHealth:
     def _ref(self, n_global):
         return {"per_atom_count": torch.ones(n_global)}
@@ -427,6 +449,8 @@ class TestPartitionHealth:
     def test_none_when_no_summaries_or_ref(self):
         assert _partition_health(self._ref(10), {}) is None
         assert _partition_health({}, {0: {"n_owned": 5, "n_padded": 7}}) is None
+
+
 class TestLayerHookScriptModuleRobustness:
     def test_scripted_submodule_is_skipped_not_fatal(self):
         """A model with a TorchScript submodule (MACE's blocks are
@@ -461,6 +485,8 @@ class TestLayerHookScriptModuleRobustness:
         assert any("plain" in n for n in hooked_names)
         for h in handles:
             h.remove()
+
+
 class TestWorkerErrorTranslators:
     def test_severed_autograd_graph_diagnosis(self):
         from nvalchemi.distributed.validate import _translate_worker_error

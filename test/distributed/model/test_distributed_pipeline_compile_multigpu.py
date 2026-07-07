@@ -82,15 +82,21 @@ def _build_lattice(dtype: torch.dtype = torch.float64, seed: int = 0):
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
     n = positions.shape[0]
     g = torch.Generator().manual_seed(seed)
-    positions = positions + 0.15 * torch.randn(positions.shape, dtype=dtype, generator=g)
+    positions = positions + 0.15 * torch.randn(
+        positions.shape, dtype=dtype, generator=g
+    )
     positions = positions % box
     sign = torch.ones(n, dtype=dtype)
     sign[1::2] = -1.0
     atomic_numbers = torch.where(
-        sign > 0, torch.full((n,), 11, dtype=torch.long), torch.full((n,), 17, dtype=torch.long)
+        sign > 0,
+        torch.full((n,), 11, dtype=torch.long),
+        torch.full((n,), 17, dtype=torch.long),
     )
     masses = torch.where(
-        sign > 0, torch.full((n,), 22.99, dtype=dtype), torch.full((n,), 35.45, dtype=dtype)
+        sign > 0,
+        torch.full((n,), 22.99, dtype=dtype),
+        torch.full((n,), 35.45, dtype=dtype),
     )
     cell = torch.eye(3, dtype=dtype) * box
     pbc = torch.ones(3, dtype=torch.bool)
@@ -118,7 +124,9 @@ def _build_pipeline(mace_cut_holder: list[float], device, dtype):
     from nvalchemi.models.dftd3 import DFTD3ModelWrapper
     from nvalchemi.models.pipeline import PipelineGroup, PipelineModelWrapper
 
-    mace = MACEWrapper.from_checkpoint("small", device=device, dtype=dtype, enable_cueq=False)
+    mace = MACEWrapper.from_checkpoint(
+        "small", device=device, dtype=dtype, enable_cueq=False
+    )
     mace_cut_holder[0] = float(mace.cutoff)
     dftd3 = DFTD3ModelWrapper(a1=_A1, a2=_A2, s8=_S8, cutoff=_DFTD3_CUT)
     return PipelineModelWrapper(
@@ -172,7 +180,9 @@ def _compile_worker(rank: int, world_size: int) -> None:
 
     def _sharded(pos):
         full = (
-            Batch.from_data_list([_make_data(an, pos, masses, cell, pbc, device, dtype)])
+            Batch.from_data_list(
+                [_make_data(an, pos, masses, cell, pbc, device, dtype)]
+            )
             if rank == 0
             else None
         )
@@ -195,7 +205,9 @@ def _compile_worker(rank: int, world_size: int) -> None:
                 f_owned = out["forces"].detach()
                 e_local = out["energy"].sum().detach()
                 local_mask = (
-                    partitioner.assign_atoms_to_ranks(positions0.to(device=device, dtype=dtype))
+                    partitioner.assign_atoms_to_ranks(
+                        positions0.to(device=device, dtype=dtype)
+                    )
                     == rank
                 )
                 f_ref_owned = f_ref[local_mask]
@@ -207,11 +219,17 @@ def _compile_worker(rank: int, world_size: int) -> None:
                     flush=True,
                 )
                 torch.testing.assert_close(
-                    e_local.view(1).to(e_ref.dtype), e_ref, rtol=1e-5, atol=1e-2,
+                    e_local.view(1).to(e_ref.dtype),
+                    e_ref,
+                    rtol=1e-5,
+                    atol=1e-2,
                     msg=f"rank {rank}: compiled composite energy mismatch ΔE={de:.3e}",
                 )
                 torch.testing.assert_close(
-                    f_owned, f_ref_owned, rtol=1e-3, atol=2e-4,
+                    f_owned,
+                    f_ref_owned,
+                    rtol=1e-3,
+                    atol=2e-4,
                     msg=f"rank {rank}: compiled composite forces mismatch |ΔF|max={df:.3e}",
                 )
             if step == WARMUP_STEPS - 1:

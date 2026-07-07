@@ -193,12 +193,21 @@ class COOPadder:
         if data is None:
             return data
         n_cap = resolve_cap(
-            cap_state, "atoms", data.num_nodes,
-            initial_factor=1.15, grow_factor=1.30, stride=16, strict_gt=False,
+            cap_state,
+            "atoms",
+            data.num_nodes,
+            initial_factor=1.15,
+            grow_factor=1.30,
+            stride=16,
+            strict_gt=False,
         )
         e_cap = resolve_cap(
-            cap_state, "edges", data.num_edges,
-            initial_factor=1.35, grow_factor=1.30, stride=16,
+            cap_state,
+            "edges",
+            data.num_edges,
+            initial_factor=1.35,
+            grow_factor=1.30,
+            stride=16,
         )
         return _pad_coo_to_caps(data, n_cap, e_cap)
 
@@ -226,9 +235,7 @@ def _pad_coo_to_caps(data: "Batch", n_cap: int, e_cap: int) -> "Batch":
     n_real = pb.num_nodes
     e_real = pb.num_edges
     if n_real >= n_cap:
-        raise RuntimeError(
-            f"atom pad cap overflow: n_padded={n_real} >= n_cap={n_cap}"
-        )
+        raise RuntimeError(f"atom pad cap overflow: n_padded={n_real} >= n_cap={n_cap}")
     if e_real > e_cap:
         raise RuntimeError(f"edge pad cap overflow: E={e_real} > e_cap={e_cap}")
     dead = n_cap - 1
@@ -358,9 +365,13 @@ class DensePadder:
 
         n_cur = int(data[self.count_key].shape[0])
         n_cap = resolve_cap(
-            cap_state, self.cap_key, n_cur,
-            initial_factor=self.initial_factor, grow_factor=self.grow_factor,
-            stride=self.stride, strict_gt=False,
+            cap_state,
+            self.cap_key,
+            n_cur,
+            initial_factor=self.initial_factor,
+            grow_factor=self.grow_factor,
+            stride=self.stride,
+            strict_gt=False,
         )
         dead = n_cap - 1
         sent_old = n_cur - 1
@@ -373,9 +384,7 @@ class DensePadder:
             p = n_cap - int(t.shape[0])
             if p <= 0:
                 return t
-            return torch.cat(
-                [t, t.new_full((p,) + tuple(t.shape[1:]), fill)], dim=0
-            )
+            return torch.cat([t, t.new_full((p,) + tuple(t.shape[1:]), fill)], dim=0)
 
         out = dict(data)
         for key, fill in self.row_pads.items():
@@ -472,9 +481,13 @@ class DenseBatchPadder:
         if data is None:
             return data
         n_cap = resolve_cap(
-            cap_state, "atoms", data.num_nodes,
-            initial_factor=self.initial_factor, grow_factor=self.grow_factor,
-            stride=self.stride, strict_gt=False,
+            cap_state,
+            "atoms",
+            data.num_nodes,
+            initial_factor=self.initial_factor,
+            grow_factor=self.grow_factor,
+            stride=self.stride,
+            strict_gt=False,
         )
         return _pad_dense_batch_to_cap(data, n_cap, self.nbmat_key)
 
@@ -502,9 +515,7 @@ def _pad_dense_batch_to_cap(data: "Batch", n_cap: int, nbmat_key: str) -> "Batch
     pb = data
     n_real = pb.num_nodes
     if n_real >= n_cap:
-        raise RuntimeError(
-            f"atom pad cap overflow: n_padded={n_real} >= n_cap={n_cap}"
-        )
+        raise RuntimeError(f"atom pad cap overflow: n_padded={n_real} >= n_cap={n_cap}")
     pad_n = n_cap - n_real
     sentinel = n_cap  # the pad atom adapt_input appends sits at index n_cap
 
@@ -521,9 +532,7 @@ def _pad_dense_batch_to_cap(data: "Batch", n_cap: int, nbmat_key: str) -> "Batch
             fill = t.new_full((pad_n,) + trailing, sentinel)
             new_atom_data[k] = torch.cat([repointed, fill], dim=0)
         else:
-            new_atom_data[k] = torch.cat(
-                [t, t.new_zeros((pad_n,) + trailing)], dim=0
-            )
+            new_atom_data[k] = torch.cat([t, t.new_zeros((pad_n,) + trailing)], dim=0)
     n_graphs = len(atoms)
     sl = atoms.segment_lengths[:n_graphs].clone()
     sl[-1] = sl[-1] + pad_n

@@ -40,6 +40,8 @@ def _expected_rank() -> int:
     state so the assertion is robust to a leaked session-scoped PG from an
     earlier test (the auto-tag contract is what's under test, not the value)."""
     return dist.get_rank() if dist.is_initialized() else -1
+
+
 class TestTracingScope:
     def test_no_trace_outside_context(self):
         assert not is_tracing()
@@ -61,6 +63,8 @@ class TestTracingScope:
         except RuntimeError:
             pass
         assert not is_tracing()
+
+
 class TestRecordDispatch:
     def test_no_record_outside_context(self):
         # Should be a no-op — does not raise, does not allocate.
@@ -103,6 +107,8 @@ class TestRecordDispatch:
         assert len(r1) == 1 and len(r2) == 1
         assert r1[0]["handler"] == "h1"
         assert r2[0]["handler"] == "h2"
+
+
 class TestRecordingShape:
     """The ``record_dispatch`` records carry rich-enough fields that a
     test can assert against branch / shapes / meta — not just the
@@ -131,6 +137,7 @@ class TestRecordingShape:
         with dispatch_trace() as records:
             record_dispatch("h", meta={"n_owned": 80, "n_padded": 128})
         assert records[0]["meta"] == {"n_owned": 80, "n_padded": 128}
+
 
 def _per_system_reduce_worker(
     rank: int,
@@ -198,6 +205,8 @@ def _per_system_reduce_worker(
             float(accumulator.item()),
         )
     )
+
+
 def test_per_system_reduce_two_rank_gloo():
     """``index_add_`` on a (1,)-accumulator with a ShardTensor src
     fires ``_per_system_reduce_handler``; both ranks see the global
@@ -223,6 +232,8 @@ def test_per_system_reduce_two_rank_gloo():
         assert len(per_sys) == 1, f"rank {rank}: per_system fires={len(per_sys)}"
         assert per_sys[0]["branch"] == "owned_slice+all_reduce"
         assert per_sys[0]["meta"]["n_systems"] == 1
+
+
 def _no_trace_outside_scope_worker(
     rank: int,
     world_size: int,
@@ -260,6 +271,8 @@ def _no_trace_outside_scope_worker(
     accumulator.index_add_(0, index, src_st)
 
     queue.put((rank, is_tracing(), float(accumulator.item())))
+
+
 def test_dispatch_runs_without_trace_active():
     """Negative test: dispatch handlers still produce correct numerics
     when no trace scope is active. Confirms the trace plumbing is

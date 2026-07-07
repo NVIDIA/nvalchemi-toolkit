@@ -165,8 +165,8 @@ def _pad_capped_graph(
     envelope is zero.
     """
     import torch as _t  # noqa: PLC0415
-
     from fairchem.core.graph.compute import generate_graph  # noqa: PLC0415
+
     from nvalchemi.distributed.graph_padder import resolve_cap  # noqa: PLC0415
 
     device = fc_data.pos.device
@@ -208,14 +208,23 @@ def _pad_capped_graph(
     # (fixed atom set — see the docstring) and anchors the dead edge on real atoms.
     if cap_atoms:
         n_cap = resolve_cap(
-            cap_state, "n_cap", n_real, initial_factor=_CAP_GROWTH,
-            grow_factor=_CAP_GROWTH, stride=_CAP_STRIDE["n_cap"], extra=2,
+            cap_state,
+            "n_cap",
+            n_real,
+            initial_factor=_CAP_GROWTH,
+            grow_factor=_CAP_GROWTH,
+            stride=_CAP_STRIDE["n_cap"],
+            extra=2,
         )
     else:
         n_cap = n_real
     e_cap = resolve_cap(
-        cap_state, "e_cap", e_real, initial_factor=_CAP_GROWTH,
-        grow_factor=_CAP_GROWTH, stride=_CAP_STRIDE["e_cap"],
+        cap_state,
+        "e_cap",
+        e_real,
+        initial_factor=_CAP_GROWTH,
+        grow_factor=_CAP_GROWTH,
+        stride=_CAP_STRIDE["e_cap"],
     )
     n_dead = n_cap - n_real
     e_dead = e_cap - e_real
@@ -229,13 +238,14 @@ def _pad_capped_graph(
             dead_pos[1, 0] = _DEAD_COORD + 2.0 * float(backbone.cutoff)
         fc_data.pos = _t.cat([fc_data.pos, dead_pos], dim=0)
         fc_data.atomic_numbers = _t.cat(
-            [fc_data.atomic_numbers,
-             _t.zeros(n_dead, dtype=fc_data.atomic_numbers.dtype, device=device)],
+            [
+                fc_data.atomic_numbers,
+                _t.zeros(n_dead, dtype=fc_data.atomic_numbers.dtype, device=device),
+            ],
             dim=0,
         )
         fc_data.batch = _t.cat(
-            [fc_data.batch,
-             _t.zeros(n_dead, dtype=fc_data.batch.dtype, device=device)],
+            [fc_data.batch, _t.zeros(n_dead, dtype=fc_data.batch.dtype, device=device)],
             dim=0,
         )
         # Keep natoms summing to n_cap by charging the dead atoms to system 0.
@@ -274,9 +284,7 @@ def _pad_capped_graph(
 
     fc_data.edge_index = edge_index
     fc_data.cell_offsets = cell_offsets
-    fc_data.nedges = _t.tensor(
-        [edge_index.shape[1]], dtype=_t.long, device=device
-    )
+    fc_data.nedges = _t.tensor([edge_index.shape[1]], dtype=_t.long, device=device)
     return fc_data
 
 
@@ -489,7 +497,12 @@ def _node_partition_bounds(ctx: Any) -> tuple[int, int]:
 @torch._dynamo.disable  # type: ignore[misc]
 @distributed_method
 def _distributed_partition_graph(
-    ctx: Any, original: Any, backbone_self: Any, data_dict: Any, *args: Any, **kwargs: Any
+    ctx: Any,
+    original: Any,
+    backbone_self: Any,
+    data_dict: Any,
+    *args: Any,
+    **kwargs: Any,
 ) -> Any:
     """Restrict the backbone's node-wise work to this rank's owned atom block.
 
@@ -617,9 +630,7 @@ def _distributed_reduce_node_to_system(
         sysv = _t.zeros(out_shape, device=node_values.device, dtype=node_values.dtype)
         flat = node_values.reshape(node_values.shape[0], -1)
         sysv = (
-            sysv.reshape(num_systems, -1)
-            .index_add(0, batch, flat)
-            .reshape(out_shape)
+            sysv.reshape(num_systems, -1).index_add(0, batch, flat).reshape(out_shape)
         )
         return sysv, sysv
 
@@ -628,9 +639,7 @@ def _distributed_reduce_node_to_system(
     out_shape = (num_systems,) + tuple(node_values.shape[1:])
     system_values = _t.zeros(out_shape, device=node_values.device, dtype=_t.float64)
     if node_values.dim() == 1:
-        system_values = system_values.index_add(
-            0, batch, node_values.to(_t.float64)
-        )
+        system_values = system_values.index_add(0, batch, node_values.to(_t.float64))
     else:
         flat_node = node_values.reshape(node_values.shape[0], -1)
         system_values = (
@@ -757,7 +766,11 @@ def _distributed_merged_mole_consistency_info(
     first_an = data.atomic_numbers[:n][first].to(torch.int)
     composition = data.atomic_numbers.new_zeros(
         backbone_self.max_num_elements, dtype=torch.int
-    ).index_add(0, first_an, torch.ones(first_an.shape[0], dtype=torch.int, device=first_an.device))
+    ).index_add(
+        0,
+        first_an,
+        torch.ones(first_an.shape[0], dtype=torch.int, device=first_an.device),
+    )
     charge = getattr(data, "charge", None)
     spin = getattr(data, "spin", None)
     dataset = getattr(data, "dataset", [None])
@@ -825,14 +838,10 @@ def _distributed_set_mole_coefficients(
         or not getattr(backbone_self, "use_composition_embedding", False)
         or not atomic_numbers_full.is_cuda
     ):
-        return original(
-            backbone_self, atomic_numbers_full, batch_full, csd_mixed_emb
-        )
+        return original(backbone_self, atomic_numbers_full, batch_full, csd_mixed_emb)
 
     nsys = int(csd_mixed_emb.shape[0])
-    with torch.autocast(
-        device_type=atomic_numbers_full.device.type, enabled=False
-    ):
+    with torch.autocast(device_type=atomic_numbers_full.device.type, enabled=False):
         # ``system_sum`` slices this rank's owned rows (offset-aware), dropping
         # ghost and dead rows, so the full rows are passed here.
         comp_by_atom = backbone_self.composition_embedding(atomic_numbers_full)
@@ -842,7 +851,9 @@ def _distributed_set_mole_coefficients(
         count = system_sum(ones, batch_full, nsys, scope=Scope.OWNED)
         # fairchem's index_reduce(mean, include_self) seeds an extra zero row on
         # model_version 1.0; match it so the denominator is identical.
-        include_self = 1.0 if _np.isclose(backbone_self.model_version, 1.0).item() else 0.0
+        include_self = (
+            1.0 if _np.isclose(backbone_self.model_version, 1.0).item() else 0.0
+        )
         composition = comp_sum / (count + include_self).clamp_min(1.0)
 
         embeddings = [composition.unsqueeze(0), csd_mixed_emb[None]]
@@ -1098,9 +1109,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         # (owned node slice, per-layer node-feature all-gather; its own minimal
         # adapter set). Cached separately from halo.
         partition = strategy == StrategyKind.GRAPH_PARTITION
-        cache_attr = (
-            "_dist_spec_gp_part_cache" if partition else "_dist_spec_cache"
-        )
+        cache_attr = "_dist_spec_gp_part_cache" if partition else "_dist_spec_cache"
         cached = getattr(self, cache_attr, None)
         if cached is not None:
             return cached
@@ -1123,6 +1132,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         from fairchem.core.modules.normalization.element_references import (  # noqa: PLC0415
             ElementReferences,
         )
+
         from nvalchemi.distributed.spec import (  # noqa: PLC0415
             SPEC_UMA_HALO,
             MethodAdapter,
@@ -1261,9 +1271,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                     attr_name="reduce_node_to_system",
                     replacement=_distributed_reduce_node_to_system,
                 ),
-                MethodAdapter(
-                    ElementReferences, "undo_refs", _distributed_undo_refs
-                ),
+                MethodAdapter(ElementReferences, "undo_refs", _distributed_undo_refs),
             )
             spec = dataclasses.replace(
                 spec,
@@ -1532,8 +1540,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         settings = getattr(self.predict_unit, "inference_settings", None)
         first_call = not getattr(self.predict_unit, "lazy_model_intialized", True)
         compiling = settings is not None and getattr(settings, "compile", False)
-        if first_call and settings is not None and (
-            getattr(settings, "merge_mole", False) or compiling
+        if (
+            first_call
+            and settings is not None
+            and (getattr(settings, "merge_mole", False) or compiling)
         ):
             fc_data = fc_data.to(torch.device("cpu"))
         static_cm = (

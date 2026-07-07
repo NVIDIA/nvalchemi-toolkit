@@ -37,7 +37,9 @@ import pytest
 # Walk up to the repo root (the dir holding pyproject.toml) rather than a
 # fixed parent count, so this survives moving the test between subfolders.
 REPO_ROOT = next(
-    p for p in pathlib.Path(__file__).resolve().parents if (p / "pyproject.toml").exists()
+    p
+    for p in pathlib.Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists()
 )
 TOOLS_DIR = REPO_ROOT / "tools"
 

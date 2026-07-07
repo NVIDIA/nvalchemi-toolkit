@@ -298,7 +298,7 @@ def _mace_cueq_equivalence_worker(rank: int, world_size: int) -> None:
     ]
     for i in topk.tolist():
         fo, fr = f_owned[i], f_ref_owned[i]
-        ratio = (fo / fr.where(fr.abs() > 1e-6, torch.ones_like(fr)))
+        ratio = fo / fr.where(fr.abs() > 1e-6, torch.ones_like(fr))
         lines.append(
             f"  atom{i:>3} |Δf|={per_atom[i].item():.3e}  frac={frac[i].tolist()}  "
             f"f_dist={fo.tolist()}  f_ref={fr.tolist()}  ratio={ratio.tolist()}"

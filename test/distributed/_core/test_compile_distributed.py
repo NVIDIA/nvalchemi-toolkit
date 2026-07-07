@@ -17,6 +17,7 @@
 torch.compile via nvalchemi::distributed_scatter_add / ::distributed_index_select
 custom ops. Compiled (dispatch) == eager (TF) for forward AND backward, ==
 central reference. 2-rank gloo."""
+
 import os
 import sys
 import traceback
@@ -125,9 +126,7 @@ def _worker_distributed(rank, world_size):
         dist.all_gather(all_src, src0)
         ref_full = torch.zeros(n_global, F, dtype=torch.float64)
         for r in range(world_size):
-            ref_full.scatter_add_(
-                0, all_idx[r].unsqueeze(-1).expand(-1, F), all_src[r]
-            )
+            ref_full.scatter_add_(0, all_idx[r].unsqueeze(-1).expand(-1, F), all_src[r])
         expected = ref_full[rank * per_rank : (rank + 1) * per_rank]
         torch.testing.assert_close(out_e_local, expected, rtol=1e-9, atol=1e-9)
         print(

@@ -43,14 +43,20 @@ class _ToyMPNN(nn.Module):
         super().__init__()
         self.embed = nn.Embedding(n_types, hidden)
         self.layers = nn.ModuleList(
-            nn.Sequential(nn.Linear(hidden + 1, hidden), nn.SiLU(),
-                          nn.Linear(hidden, hidden))
+            nn.Sequential(
+                nn.Linear(hidden + 1, hidden), nn.SiLU(), nn.Linear(hidden, hidden)
+            )
             for _ in range(n_layers)
         )
         self.readout = nn.Linear(hidden, 1)
 
-    def message(self, layer: nn.Module, h_src: torch.Tensor, pos_src: torch.Tensor,
-                pos_dst: torch.Tensor) -> torch.Tensor:
+    def message(
+        self,
+        layer: nn.Module,
+        h_src: torch.Tensor,
+        pos_src: torch.Tensor,
+        pos_dst: torch.Tensor,
+    ) -> torch.Tensor:
         edge_len = (pos_src - pos_dst).norm(dim=1, keepdim=True)
         return layer(torch.cat([h_src, edge_len], dim=1))
 
@@ -139,8 +145,9 @@ def _worker(rank: int, world: int) -> None:
     )
 
     torch.testing.assert_close(e_gp, e_ref, rtol=1e-9, atol=1e-9)
-    torch.testing.assert_close(f_owned, f_ref[offset : offset + n_owned],
-                               rtol=1e-8, atol=1e-8)
+    torch.testing.assert_close(
+        f_owned, f_ref[offset : offset + n_owned], rtol=1e-8, atol=1e-8
+    )
     if rank == 0:
         print(f"[gp w={world}] energy + owned forces match single-process")
     dist.barrier()

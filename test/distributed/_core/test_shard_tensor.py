@@ -50,8 +50,12 @@ from nvalchemi.distributed._core.shard_tensor import (
 from nvalchemi.distributed.spec import SPEC_MPNN_HALO
 
 pytestmark = pytest.mark.usefixtures("_session_gloo_pg")
+
+
 def _assert_halo(x: object) -> None:
     assert isinstance(x, ShardTensor), f"expected ShardTensor, got {type(x).__name__}"
+
+
 def test_unwrap_grad_aware_preserves_graph_through_handler() -> None:
     """Regression for the MACE distributed-autograd graph break.
 
@@ -79,6 +83,8 @@ def test_unwrap_grad_aware_preserves_graph_through_handler() -> None:
     r_ref = (leaf_ref * 2.0).sum(dim=0, keepdim=True).expand(5, 3).contiguous() * 3.0
     (g_ref,) = torch.autograd.grad(r_ref.sum(), leaf_ref)
     torch.testing.assert_close(g, g_ref)
+
+
 def test_arithmetic_propagates() -> None:
     a = ShardTensor.wrap(torch.randn(5, 3))
     _assert_halo(a + 1.0)
@@ -89,12 +95,16 @@ def test_arithmetic_propagates() -> None:
     _assert_halo(a + a)
     # ShardTensor + plain Tensor should still yield ShardTensor
     _assert_halo(a + torch.zeros(5, 3))
+
+
 def test_indexing_propagates() -> None:
     a = ShardTensor.wrap(torch.arange(20, dtype=torch.float64).reshape(5, 4))
     _assert_halo(a[torch.tensor([0, 2, 4])])
     _assert_halo(a[:3])
     _assert_halo(a[1:4, :2])
     _assert_halo(a[..., 0])
+
+
 def test_creation_methods_propagate() -> None:
     a = ShardTensor.wrap(torch.randn(4, 3))
     _assert_halo(torch.zeros_like(a))
@@ -102,6 +112,8 @@ def test_creation_methods_propagate() -> None:
     _assert_halo(a.new_zeros((7, 3)))
     _assert_halo(a.new_empty((2, 3)))
     _assert_halo(a.new_full((3, 3), 2.5))
+
+
 def test_linear_propagates() -> None:
     a = ShardTensor.wrap(torch.randn(4, 8, dtype=torch.float64))
     w = torch.randn(16, 8, dtype=torch.float64)
@@ -109,6 +121,8 @@ def test_linear_propagates() -> None:
     out = F.linear(a, w, b)
     _assert_halo(out)
     assert out.shape == (4, 16)
+
+
 def test_embedding_propagates() -> None:
     # nn.Embedding calls F.embedding(input, weight); input here is indices.
     # With ShardTensor indices, DTensor-style "mixed tensor" rejection would
@@ -118,6 +132,8 @@ def test_embedding_propagates() -> None:
     out = F.embedding(indices, weight)
     _assert_halo(out)
     assert out.shape == (4, 8)
+
+
 def test_reshape_propagates() -> None:
     a = ShardTensor.wrap(torch.arange(24, dtype=torch.float64))
     _assert_halo(a.reshape(6, 4))
@@ -126,26 +142,36 @@ def test_reshape_propagates() -> None:
     b = a.reshape(4, 6, 1)
     _assert_halo(b.squeeze(-1))
     _assert_halo(a.unflatten(0, (4, 6)))
+
+
 def test_reductions_propagate() -> None:
     a = ShardTensor.wrap(torch.randn(4, 3, dtype=torch.float64))
     _assert_halo(a.sum())
     _assert_halo(a.sum(dim=0))
     _assert_halo(a.mean(dim=-1))
     _assert_halo(a.max(dim=1).values)
+
+
 def test_activation_propagates() -> None:
     a = ShardTensor.wrap(torch.randn(4, 3, dtype=torch.float64))
     _assert_halo(F.silu(a))
     _assert_halo(F.relu(a))
     _assert_halo(a.sigmoid())
+
+
 def test_matmul_propagates() -> None:
     a = ShardTensor.wrap(torch.randn(4, 8, dtype=torch.float64))
     w = torch.randn(8, 5, dtype=torch.float64)
     _assert_halo(a @ w)
     _assert_halo(torch.matmul(a, w))
+
+
 def test_cat_propagates() -> None:
     a = ShardTensor.wrap(torch.randn(4, 3, dtype=torch.float64))
     b = torch.randn(2, 3, dtype=torch.float64)
     _assert_halo(torch.cat([a, b], dim=0))
+
+
 def test_shape_reports_local_size() -> None:
     # ``.shape`` returns the local size (standard Tensor semantics).
     a = ShardTensor.wrap(torch.zeros(7, 3, dtype=torch.float64))
@@ -154,6 +180,8 @@ def test_shape_reports_local_size() -> None:
     assert a.size(0) == 7
     assert a.numel() == 21
     assert a.ndim == 2
+
+
 def test_scatter_add_without_halo_context_matches_plain() -> None:
     torch.manual_seed(0)
     src = torch.randn(10, 4, dtype=torch.float64)
@@ -169,6 +197,8 @@ def test_scatter_add_without_halo_context_matches_plain() -> None:
 
     _assert_halo(got)
     torch.testing.assert_close(got.unwrap(), expected, rtol=1e-12, atol=1e-14)
+
+
 def test_scatter_add_return_type_is_halotensor() -> None:
     # chained usage: torch.zeros_like(x).scatter_add_(...) — the common pattern
     # in both ToyGNN and MACE.
@@ -178,6 +208,8 @@ def test_scatter_add_return_type_is_halotensor() -> None:
     out = torch.zeros_like(x).scatter_add_(0, index, src)
     _assert_halo(out)
     assert out.shape == (6, 3)
+
+
 def test_autograd_through_halo_tensor() -> None:
     leaf = torch.randn(3, 4, dtype=torch.float64, requires_grad=True)
     h = ShardTensor.wrap(leaf)
@@ -185,6 +217,8 @@ def test_autograd_through_halo_tensor() -> None:
     (grad,) = torch.autograd.grad(loss, leaf)
     expected = torch.full_like(leaf, 2.0)
     torch.testing.assert_close(grad, expected)
+
+
 def test_autograd_through_scatter_add_without_context() -> None:
     # With no halo_context, our handler just does the functional scatter —
     # autograd must still work end-to-end for leaf → scatter output → loss.
@@ -197,6 +231,8 @@ def test_autograd_through_scatter_add_without_context() -> None:
     (grad,) = torch.autograd.grad(loss, leaf)
     # Each entry of leaf contributes to the scatter once, so grad = ones.
     torch.testing.assert_close(grad, torch.ones_like(leaf))
+
+
 def test_toygnn_forward_halo_tensor_matches_plain() -> None:
     torch.manual_seed(7)
     dtype = torch.float64
@@ -224,6 +260,8 @@ def test_toygnn_forward_halo_tensor_matches_plain() -> None:
 
     _assert_halo(out_halo)
     torch.testing.assert_close(out_halo.unwrap(), out_plain, rtol=1e-12, atol=1e-14)
+
+
 def test_toygnn_backward_halo_tensor_matches_plain() -> None:
     torch.manual_seed(11)
     dtype = torch.float64
@@ -250,12 +288,15 @@ def test_toygnn_backward_halo_tensor_matches_plain() -> None:
     f_halo = forces(positions, wrap_z=True)
     torch.testing.assert_close(f_halo, f_plain, rtol=1e-12, atol=1e-14)
 
+
 def test_list_handlers_includes_default_intercepts() -> None:
     handlers = list_handlers()
     op_names = [op for op, _ in handlers]
     assert any("scatter_add_" in n for n in op_names)
     assert any("index_add_" in n for n in op_names)
     assert any("index_copy_" in n for n in op_names)
+
+
 def test_user_registered_handler_fires() -> None:
     fired = []
 
@@ -273,6 +314,8 @@ def test_user_registered_handler_fires() -> None:
         torch.testing.assert_close(result, torch.full((3,), 42.0))
     finally:
         clear_handlers(torch.sigmoid)
+
+
 def test_handler_branches_internally() -> None:
     """A handler registered for an op is the sole handler for that op; if its
     behavior is conditional it branches internally (the registry is
@@ -294,6 +337,8 @@ def test_handler_branches_internally() -> None:
         assert calls == ["small", "large"]
     finally:
         clear_handlers(torch.tanh)
+
+
 def test_index_add_without_halo_meta_matches_plain() -> None:
     torch.manual_seed(0)
     src = torch.randn(10, 4, dtype=torch.float64)
@@ -308,6 +353,8 @@ def test_index_add_without_halo_meta_matches_plain() -> None:
 
     assert isinstance(got, ShardTensor)
     torch.testing.assert_close(got.unwrap(), expected, rtol=1e-12, atol=1e-14)
+
+
 def test_index_copy_without_halo_meta_matches_plain() -> None:
     torch.manual_seed(0)
     src = torch.randn(3, 4, dtype=torch.float64)
@@ -320,6 +367,8 @@ def test_index_copy_without_halo_meta_matches_plain() -> None:
 
     assert isinstance(got, ShardTensor)
     torch.testing.assert_close(got.unwrap(), expected, rtol=1e-12, atol=1e-14)
+
+
 def test_metadata_propagates_through_elementwise_ops() -> None:
     """After wrap + elementwise op, the output ShardTensor should
     carry the same metadata as the input (spec-driven dispatch relies on

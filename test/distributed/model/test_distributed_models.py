@@ -198,7 +198,10 @@ def test_lj_wrapper_declares_halo_spec() -> None:
         assert op.gather_inputs == ()
 
     # Cached / stable across accesses (built once per call is fine; content equal).
-    assert wrapper.distribution_spec().distribution.custom_ops[0].op is spec.distribution.custom_ops[0].op
+    assert (
+        wrapper.distribution_spec().distribution.custom_ops[0].op
+        is spec.distribution.custom_ops[0].op
+    )
 
 
 def test_mace_wrapper_declares_mpnn_halo_spec() -> None:
@@ -1000,9 +1003,7 @@ def _port_for(key: str) -> str:
 _MODEL_DEVICE = "cuda"
 # fp32 is the production cuda path (warp/cueq require it). NVALCHEMI_TIER_FP64=1
 # forces fp64 for precision-vs-logic debugging (where the kernel supports it).
-_MODEL_DTYPE = (
-    torch.float64 if os.environ.get("NVALCHEMI_TIER_FP64") else torch.float32
-)
+_MODEL_DTYPE = torch.float64 if os.environ.get("NVALCHEMI_TIER_FP64") else torch.float32
 cuda_model_tier = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="model-equivalence runs on the gloo+cuda tier (needs a GPU)",
@@ -1315,12 +1316,22 @@ def _scripted_marshal_no_leak_worker(
 
     # Larger hidden/layers so one iteration's autograd graph is well above
     # allocator noise — a per-iteration leak then dwarfs the threshold.
-    wrapper = ToyScriptedMPNNWrapper(hidden=128, n_layers=4).to(device=device, dtype=dtype)
+    wrapper = ToyScriptedMPNNWrapper(hidden=128, n_layers=4).to(
+        device=device, dtype=dtype
+    )
     wrapper.eval()
     mesh = _MockMesh(rank, world_size)
     sharded, _local_mask, domain_config = _sharded_batch_for_system(
-        positions, atomic_numbers, masses, cell, pbc, rank, world_size, mesh,
-        cutoff=float(wrapper.model_config.neighbor_config.cutoff), storage="halo",
+        positions,
+        atomic_numbers,
+        masses,
+        cell,
+        pbc,
+        rank,
+        world_size,
+        mesh,
+        cutoff=float(wrapper.model_config.neighbor_config.cutoff),
+        storage="halo",
     )
 
     with DistributedModel(wrapper, domain_config) as dist_model:
