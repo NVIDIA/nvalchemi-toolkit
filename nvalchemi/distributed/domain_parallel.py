@@ -45,7 +45,6 @@ from nvalchemi.hooks._context import HookContext
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
-    from nvalchemi.distributed.distributed_model import DistributedModel
     from nvalchemi.distributed.sharded_batch import ShardedBatch
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,11 @@ class DomainParallel(BaseDynamics):
         # Lazy-initialized in partition().
         self._strategy: ParallelizationStrategy | None = None
         self._sharded_batch: ShardedBatch | None = None
-        self._dist_model: DistributedModel | None = None
+        # DistributedModel for an atomic model, or DistributedPipelineModel for a
+        # composite (PipelineModelWrapper); both share the ShardedBatch->output +
+        # close() contract the per-step machinery relies on.
+        self._dist_model: Any = None
+        self._composite: bool = False
 
         # Runtime state.
         self._n_owned: int = 0
@@ -191,23 +194,41 @@ class DomainParallel(BaseDynamics):
 
         mesh = self._config.mesh
 
-        # Adapter around the inner dynamics' model. Owns halo exchange,
-        # NL rebuild, and output consolidation. Built first so the strategy can
-        # be selected from its resolved storage policy.
-        self._dist_model = DistributedModel(
-            self._dynamics.model,
-            self._config,
-            compile=self._config.compile,
-        )
+        # Adapter around the inner dynamics' model. Owns halo exchange, NL rebuild,
+        # and output consolidation. An atomic model rides ``DistributedModel``; a
+        # composite (``PipelineModelWrapper``, e.g. MACE+DFTD3 / AIMNet2+PME) can't
+        # (``DistributedModel`` wraps atomic models only), so it rides
+        # ``DistributedPipelineModel`` — the same ``ShardedBatch``->output contract,
+        # doing per-sub-model halo/NL/consolidation internally. Both are halo-based,
+        # so the strategy is selected from a halo policy either way.
+        from nvalchemi.models.pipeline import PipelineModelWrapper  # noqa: PLC0415
+
+        if isinstance(self._dynamics.model, PipelineModelWrapper):
+            from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
+                HaloStoragePolicy,
+            )
+            from nvalchemi.distributed.distributed_pipeline import (  # noqa: PLC0415
+                DistributedPipelineModel,
+            )
+
+            self._composite = True
+            self._dist_model = DistributedPipelineModel(
+                self._dynamics.model, self._config, compile=self._config.compile
+            )
+            policy: Any = HaloStoragePolicy()
+        else:
+            self._composite = False
+            self._dist_model = DistributedModel(
+                self._dynamics.model,
+                self._config,
+                compile=self._config.compile,
+            )
+            policy = self._dist_model._spec.distribution.policy
 
         # The parallelization strategy owns data layout, cell tracking,
-        # migration, and reductions for this run — selected from the model's
+        # migration, and reductions for this run — selected from the (halo)
         # storage policy so a new strategy plugs in without a driver type-switch.
-        self._strategy = strategy_for_policy(
-            self._dist_model._spec.distribution.policy,
-            self._config,
-            self._domain_rank,
-        )
+        self._strategy = strategy_for_policy(policy, self._config, self._domain_rank)
 
         # Coordinator globalizes NHC/NPT/NPH thermodynamic state via the
         # strategy's reductions (integrator declares intent; inert otherwise).
@@ -371,32 +392,42 @@ class DomainParallel(BaseDynamics):
         # 1. Sync owned state back into the persistent ShardedBatch.
         self._sharded_batch.update_from_batch(batch)
 
-        # 2. Populate sharded.padded_batch. ``halo_exchange`` needs the halo
-        # config which ``DistributedModel`` builds lazily on first call, so
-        # prime it here before the external exchange.
-        from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
-
-        if isinstance(self._dist_model._spec.distribution.policy, HaloStoragePolicy):
-            from nvalchemi.distributed.particle_halo import halo_exchange
-
-            self._dist_model._ensure_initialized(self._sharded_batch)
-            halo_exchange(
-                self._sharded_batch,
-                self._dist_model._halo_config,
-                compute_forces=self._dist_model._needs_forces(),
-            )
-            compute_batch = self._sharded_batch.padded_batch
+        if self._composite:
+            # Composite adapter (DistributedPipelineModel) owns per-sub-model halo
+            # exchange, neighbor rebuild, and owned-shape consolidation internally,
+            # so it runs directly on the ShardedBatch — no external halo_exchange /
+            # NL hook. Fire the compute hooks on the owned batch (parity with the
+            # single-process path; the composite builds its own padded views).
+            dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            outputs = self._dist_model(self._sharded_batch)
+            dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
         else:
-            compute_batch = batch
+            # 2. Populate sharded.padded_batch. ``halo_exchange`` needs the halo
+            # config which ``DistributedModel`` builds lazily on first call, so
+            # prime it here before the external exchange.
+            from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
 
-        # 3. BEFORE_COMPUTE hooks — fire on the view the model will see.
-        dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, compute_batch)
+            if isinstance(self._dist_model._spec.distribution.policy, HaloStoragePolicy):
+                from nvalchemi.distributed.particle_halo import halo_exchange
 
-        # 4. Model forward via the adapter.
-        outputs = self._dist_model(self._sharded_batch)
+                self._dist_model._ensure_initialized(self._sharded_batch)
+                halo_exchange(
+                    self._sharded_batch,
+                    self._dist_model._halo_config,
+                    compute_forces=self._dist_model._needs_forces(),
+                )
+                compute_batch = self._sharded_batch.padded_batch
+            else:
+                compute_batch = batch
 
-        # 5. AFTER_COMPUTE hooks.
-        dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, compute_batch)
+            # 3. BEFORE_COMPUTE hooks — fire on the view the model will see.
+            dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, compute_batch)
+
+            # 4. Model forward via the adapter.
+            outputs = self._dist_model(self._sharded_batch)
+
+            # 5. AFTER_COMPUTE hooks.
+            dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, compute_batch)
 
         # 6. Detach all output tensors before writing to the batch and stashing
         # on ``dyn._last_outputs`` (mirrors ``BaseDynamics.compute``). Outputs
