@@ -13,7 +13,7 @@ and supported features in `nvalchemi`.
 The quickest way to install ALCHEMI Toolkit:
 
 ```bash
-$ pip install --extra-index-url https://pypi.nvidia.com nvalchemi-toolkit
+$ pip install nvalchemi-toolkit
 ```
 
 Make sure it is importable:
