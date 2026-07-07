@@ -54,7 +54,15 @@
   `check_fp_dtype_consistency`'s cast to the positions dtype. A subclass can set
   it to keep a high-precision label — e.g. `frozenset({"energy"})` so an extensive
   total energy (~1e4–1e5 eV) is not silently downcast to float32. The exemption
-  also holds across `add_system_property` / `add_node_property`.
+  also holds across `add_system_property` / `add_node_property`, and survives
+  batching: `Batch.from_data_list` collates with `torch.cat` and the storage
+  layer respects an existing tensor's dtype, so the preserved precision carries
+  through the batch and device moves unchanged.
+- **`check_fp_dtype_consistency` cast warning is now deduplicated** — the warning
+  fires only the first time each distinct `(field, source_dtype, target_dtype)`
+  cast is seen in a process, instead of on every `AtomicData` construction (which
+  flooded logs in training loops). Casting behaviour is unchanged; only the
+  warning frequency is reduced.
 
 ### Models
 

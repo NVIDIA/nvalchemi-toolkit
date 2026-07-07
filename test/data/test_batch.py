@@ -16,12 +16,20 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
+
+
+class _KeepEnergyData(AtomicData):
+    """AtomicData subclass that opts ``energy`` out of the fp-dtype downcast."""
+
+    _precision_preserving_keys: ClassVar[frozenset[str]] = frozenset({"energy"})
 
 
 def _minimal_atomic_data(
@@ -1317,3 +1325,63 @@ class TestBatchFromRawDicts:
         # field_levels is provided but doesn't mention unknown_scalar
         batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
         assert "unknown_scalar" in batch.keys["system"]
+
+
+# -----------------------------------------------------------------------------
+# Precision-preserving fields survive batching
+# -----------------------------------------------------------------------------
+class TestPrecisionPreservingBatch:
+    """A field opted out of the fp-dtype downcast at the AtomicData level keeps
+    its precision through ``Batch.from_data_list`` and device moves.
+
+    ``Batch`` carries whatever dtype the source ``AtomicData`` produced (collation
+    is ``torch.cat``, and the storage layer respects an existing tensor's dtype),
+    so the ``_precision_preserving_keys`` exemption is honoured end-to-end.
+    """
+
+    def test_fp64_energy_survives_from_data_list(self):
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        data_list = [
+            _KeepEnergyData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                energy=e64.clone(),
+            )
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        assert batch.energy.dtype == torch.float64
+        # bit-exact: no fp32 round-trip anywhere in the collation path
+        assert batch.energy[0].item() == e64.item()
+
+    def test_fp64_energy_survives_device_move(self):
+        e64 = torch.tensor([[-41512.590527111]], dtype=torch.float64)
+        batch = Batch.from_data_list(
+            [
+                _KeepEnergyData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    energy=e64.clone(),
+                )
+                for _ in range(2)
+            ]
+        )
+        moved = batch.to("cpu")
+        assert moved.energy.dtype == torch.float64
+        assert moved.energy[0].item() == e64.item()
+
+    def test_default_energy_batches_at_positions_dtype(self):
+        """Without the exemption, energy is downcast at the AtomicData level and
+        the batch faithfully carries that float32 (no schema-driven upcast)."""
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        with pytest.warns(UserWarning, match="energy"):
+            data_list = [
+                AtomicData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    energy=e64.clone(),
+                )
+                for _ in range(2)
+            ]
+        batch = Batch.from_data_list(data_list)
+        assert batch.energy.dtype == torch.float32
