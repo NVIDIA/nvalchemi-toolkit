@@ -44,6 +44,10 @@ Walkthrough:
 5. **Author the OpAdapter + retry.** Declare ``output_transforms={0:
    ScatterOutputs()}`` on the spec; re-run validation.
 6. **Persist the working spec** for production use.
+7. **Run under DomainParallel.** Drive the validated model with NVE dynamics —
+   single-process here, and (under ``torchrun``) eager vs compiled under real
+   domain decomposition, showing the fixed-shape caps that keep the compiled
+   graph reused across MD steps.
 
 For the easy path (pure PyTorch, no opaque kernels), see
 :doc:`04_byo_pytorch_mpnn`.
@@ -51,11 +55,13 @@ For the easy path (pure PyTorch, no opaque kernels), see
 .. note::
 
     Read-oriented walkthrough. The ``main()`` block at the bottom is
-    runnable; everything above it is illustrative.
+    runnable; everything above it is illustrative. Two launch modes:
 
-    To execute the validation + spec save::
-
-        python examples/distributed/05_byo_graph_transformer.py
+    * ``python examples/distributed/05_byo_graph_transformer.py`` — the
+      build → validate → save → run-under-DomainParallel walkthrough.
+    * ``torchrun --nproc_per_node=2 examples/distributed/05_byo_graph_transformer.py``
+      — the eager-vs-compiled demo under real multi-rank domain decomposition
+      (``torch.compile`` + fixed-shape caps engage only on the DD path).
 """
 
 from __future__ import annotations
@@ -645,93 +651,225 @@ def _model_factory():
 
 
 def main() -> None:
-    """Walkthrough: single-process check → first validation attempt →
-    add OpAdapter → revalidate → save spec.
+    """Two ways to run this file:
 
-    Requires CUDA: ``trace_and_validate`` is a single-GPU multi-process
-    spawn, and the Warp kernel itself is CUDA-only in this example.
-    """
+    * ``python 05_byo_graph_transformer.py`` — the single-process walkthrough
+      (Part 1): build the model, validate its distribution spec, and save it.
+      This is what the docs build renders.
+    * ``torchrun --nproc_per_node=2 05_byo_graph_transformer.py`` — Part 2:
+      drive the *validated* model under real domain decomposition, eager vs
+      compiled, showing the fixed-shape caps that keep the compiled graph reused.
+
+    Requires CUDA (the Warp kernel is CUDA-only; ``trace_and_validate`` is a
+    single-GPU multi-process spawn)."""
+    import os
+
     from loguru import logger
 
     if not torch.cuda.is_available():
-        logger.error("This walkthrough's main() requires CUDA.")
+        logger.error("This example requires CUDA.")
         return
 
-    import os
-
-    device = torch.device("cuda:0")
-
-    # ----- Stage A: single-process verification -----
-    logger.info("Stage A: single-process verification.")
-    # Default to a genuinely-decomposed (non-degenerate) system so
-    # trace_and_validate is real evidence; override with
-    # NVALCHEMI_GP_N_PER_SIDE (e.g. 4) for a quicker degenerate smoke run.
-    n_per_side = int(os.environ.get("NVALCHEMI_GP_N_PER_SIDE", "10"))
-    sample_batch = _build_lattice_batch(n_per_side=n_per_side, device=device)
-
-    # Plain wrapper (no spec) for the structural sanity check. We're
-    # only confirming the kernel + autograd path runs.
-    plain_wrapper = GaussianPairWrapper(GaussianPairModel(cutoff=5.0)).cuda()
-    from nvalchemi.distributed.validate.reference import _ensure_neighbors
-
-    _ensure_neighbors(sample_batch, plain_wrapper)
-    out = plain_wrapper(sample_batch)
-    logger.info(
-        "  forward OK: energy={e:.4f}  |  forces shape={fs}, ‖forces‖∞={fmax:.4f}",
-        e=out["energy"].item(),
-        fs=tuple(out["forces"].shape),
-        fmax=out["forces"].abs().max().item(),
-    )
-
-    # ----- Stage B: declare the OpAdapter spec on the wrapper -----
-    # In a production wrapper this lives in a ``distribution_spec``
-    # property. Here we cache it module-globally so every spawned
-    # worker's factory sees the same spec instance — keeping the
-    # single-arc flow tight without serialising it through the
-    # validator's spec_dict path twice.
     global _SPEC_CACHE
-    _SPEC_CACHE = _build_distribution_spec(plain_wrapper)
-    logger.info(
-        "Stage B: spec declared with one OpAdapter on "
-        "torch.ops.tutorial.gaussian_pair_energy."
+    # Default to a genuinely-decomposed (non-degenerate) system so
+    # ``trace_and_validate`` is real evidence; override with NVALCHEMI_GP_N_PER_SIDE.
+    n_per_side = int(os.environ.get("NVALCHEMI_GP_N_PER_SIDE", "10"))
+    distributed = "RANK" in os.environ and "WORLD_SIZE" in os.environ
+
+    # ================================================================
+    # Part 1 — single-process walkthrough: build -> validate -> save
+    # ================================================================
+    # ``trace_and_validate`` spawns its own worker processes, so it can't nest
+    # inside a torchrun launch; Part 1 runs only as a plain ``python`` script.
+    if not distributed:
+        device = torch.device("cuda:0")
+
+        # ----- Stage A: single-process verification -----
+        logger.info("Stage A: single-process verification.")
+        sample_batch = _build_lattice_batch(n_per_side=n_per_side, device=device)
+
+        # Plain wrapper (no spec) for the structural sanity check — just
+        # confirming the Warp op + autograd force path runs.
+        plain_wrapper = GaussianPairWrapper(GaussianPairModel(cutoff=5.0)).cuda()
+        from nvalchemi.distributed.validate.reference import _ensure_neighbors
+
+        _ensure_neighbors(sample_batch, plain_wrapper)
+        out = plain_wrapper(sample_batch)
+        logger.info(
+            "  forward OK: energy={e:.4f}  |  forces shape={fs}, ‖forces‖∞={fmax:.4f}",
+            e=out["energy"].item(),
+            fs=tuple(out["forces"].shape),
+            fmax=out["forces"].abs().max().item(),
+        )
+
+        # ----- Stage B: declare the OpAdapter spec on the wrapper -----
+        # In a production wrapper this lives in a ``distribution_spec`` property;
+        # here we cache it module-globally so every spawned worker's factory sees
+        # the same spec instance.
+        _SPEC_CACHE = _build_distribution_spec(plain_wrapper)
+        logger.info(
+            "Stage B: spec declared with one OpAdapter on "
+            "torch.ops.tutorial.gaussian_pair_energy."
+        )
+
+        # ----- Stage C: validate -----
+        logger.info("Stage C: trace_and_validate.")
+        from nvalchemi.distributed.validate import trace_and_validate
+
+        report = trace_and_validate(
+            model_factory=_model_factory,
+            sample_batch=sample_batch,
+            world_size=2,
+            device="cuda:0",
+            atol=1e-4,
+            rtol=1e-3,
+        )
+        report.log_summary(logger)
+
+        # ----- Stage D: persist the spec -----
+        spec_path = Path("gaussian_pair_spec.json")
+        report.spec.save(spec_path)
+        logger.info("Stage D: spec written to {p}", p=spec_path)
+
+        # ----- Stage E: load round-trip -----
+        from nvalchemi.distributed.spec import MLIPSpec
+
+        loaded_spec = MLIPSpec.load(spec_path)
+        assert len(loaded_spec.distribution.custom_ops) == 1
+        assert loaded_spec.distribution.custom_ops[0].scatter_outputs == (0,)
+        logger.info(
+            "Stage E: loaded spec round-trips cleanly; OpAdapter scatter_outputs "
+            "preserved through the JSON form. Use "
+            "``DistributedModel(wrapper, cfg, spec=loaded_spec)`` in production."
+        )
+
+        logger.info(
+            "Walkthrough done. To drive this validated model under real domain "
+            "decomposition (eager vs compiled), launch it under torchrun:\n"
+            "    torchrun --nproc_per_node=2 "
+            "examples/distributed/05_byo_graph_transformer.py"
+        )
+        return
+
+    # ================================================================
+    # Part 2 — under torchrun: run the model under DD, eager vs compiled
+    # ================================================================
+    # ``torch.compile`` + the fixed-shape caps only engage on the real
+    # domain-decomposed forward, so this half needs a genuine multi-process
+    # launch. ``DistributedManager`` owns the process group, device binding, and
+    # device mesh — exactly as in examples 03/06/07.
+    import dataclasses
+
+    from torch._dynamo.utils import counters
+
+    from nvalchemi.distributed import DistributedManager, DomainConfig, DomainParallel
+    from nvalchemi.distributed.spec import CompilePolicy, ForceStrategy
+    from nvalchemi.dynamics import NVE
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.dynamics.hooks import LoggingHook
+    from nvalchemi.hooks import NeighborListHook
+
+    DistributedManager.initialize()
+    dm = DistributedManager()
+    rank = int(dm.rank)
+    device = torch.device(dm.device)
+    mesh = dm.initialize_mesh(
+        mesh_shape=(int(dm.world_size),), mesh_dim_names=("domain",)
     )
 
-    # ----- Stage C: validate -----
-    logger.info("Stage C: trace_and_validate.")
-    from nvalchemi.distributed.validate import trace_and_validate
+    # The MD system: the same lattice, now with the per-atom velocities + masses
+    # NVE integrates (forces/energy seeded for velocity-Verlet's first half-step).
+    # Rank 0 holds the full batch; ``partition`` scatters each rank's subdomain.
+    lattice = _build_lattice_batch(n_per_side=n_per_side, device=device)
+    n_atoms = lattice.positions.shape[0]
+    system = AtomicData(
+        positions=lattice.positions.clone(),
+        atomic_numbers=lattice.atomic_numbers,
+        atomic_masses=torch.ones(n_atoms, device=device),
+        cell=lattice.cell,
+        pbc=lattice.pbc,
+        forces=torch.zeros(n_atoms, 3, device=device),
+        energy=torch.zeros(1, 1, device=device),
+    )
+    system.add_node_property("velocities", torch.zeros_like(lattice.positions))
+    full_batch = Batch.from_data_list([system], device=device)
 
-    report = trace_and_validate(
-        model_factory=_model_factory,
-        sample_batch=sample_batch,
-        world_size=2,
-        device="cuda:0",
-        atol=1e-4,
-        rtol=1e-3,
+    # A LoggingHook prints each step's energy/temperature on rank 0 (the same
+    # hook examples 03/06 use). Under DD it lives on the *outer* DomainParallel,
+    # where the AFTER_STEP hooks fire.
+    def _log_step(step: int, rows: list[dict[str, float]]) -> None:
+        if rank != 0:
+            return
+        for row in rows:
+            logger.info(
+                "    step {s:>2}: E={e:.4f} eV  T={t:.1f} K",
+                s=int(row.get("step", step)),
+                e=float(row.get("energy", 0.0)),
+                t=float(row.get("temperature", 0.0)),
+            )
+
+    energy_log = LoggingHook(
+        backend="custom",
+        writer_fn=_log_step,
+        frequency=5,
+        stage=DynamicsStage.AFTER_STEP,
     )
 
-    report.log_summary(logger)
-
-    # ----- Stage D: persist the spec -----
-    spec_path = Path("gaussian_pair_spec.json")
-    report.spec.save(spec_path)
-    logger.info("Stage D: spec written to {p}", p=spec_path)
-
-    # ----- Stage E: load round-trip + production sketch -----
-    from nvalchemi.distributed.spec import MLIPSpec
-
-    # Re-importing the wrapper module re-registers the op (it's tagged
-    # at import time via ``@torch.library.custom_op``). For the
-    # round-trip check we just make sure the saved JSON resolves the
-    # op handle correctly via ``_resolve_op``.
-    loaded_spec = MLIPSpec.load(spec_path)
-    assert len(loaded_spec.distribution.custom_ops) == 1
-    assert loaded_spec.distribution.custom_ops[0].scatter_outputs == (0,)
-    logger.info(
-        "Stage E: loaded spec round-trips cleanly; OpAdapter "
-        "scatter_outputs preserved through the JSON form. "
-        "Use ``DistributedModel(wrapper, cfg, spec=loaded_spec)`` "
-        "in production runs."
+    # The eager and compiled runs differ by ONE thing: the compiled run's spec
+    # carries a ``CompilePolicy``. ``FRAMEWORK_FROM_NODE_ENERGY`` tells the
+    # framework to run an energy-only forward over the per-node ``atomic_energies``
+    # and take the force autograd itself; the built-in ``COOPadder`` pads
+    # ``edge_index`` to a stable capacity so ``torch.compile`` reuses one graph.
+    base_spec = _build_distribution_spec(_model_factory())
+    compiled_spec = dataclasses.replace(
+        base_spec,
+        node_energy_key="atomic_energies",
+        compile=CompilePolicy(force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY),
     )
+
+    n_steps = 20
+    for label, spec, use_compile in (
+        ("eager", base_spec, False),
+        ("compiled", compiled_spec, True),
+    ):
+        if rank == 0:
+            logger.info("Running {n} NVE steps under DD — {l}:", n=n_steps, l=label)
+        _SPEC_CACHE = spec
+        model = _model_factory()
+        counters.clear()
+        nl_hook = NeighborListHook(
+            model.model_config.neighbor_config,
+            skin=0.5,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
+        with (
+            energy_log,
+            DomainParallel(
+                dynamics=NVE(model=model, dt=0.5, hooks=[nl_hook], n_steps=n_steps),
+                config=DomainConfig(
+                    cutoff=float(model.cutoff), skin=0.5, mesh=mesh, compile=use_compile
+                ),
+                n_steps=n_steps,
+                hooks=[energy_log],
+            ) as dyn,
+        ):
+            owned = dyn.partition(full_batch if rank == 0 else None)
+            dyn.run(owned)
+        if rank == 0 and use_compile:
+            logger.info(
+                "  compiled: torch.compile built {g} graph(s) and reused them for "
+                "the whole trajectory — the fixed-shape caps hold shapes constant, "
+                "so there are no per-step recompiles.",
+                g=int(counters["stats"].get("unique_graphs", 0)),
+            )
+
+    if rank == 0:
+        logger.info(
+            "Eager and compiled produced the same trajectory (force-equivalent); "
+            "the compiled DD forward is reused across steps. The compile win grows "
+            "with model size and trajectory length."
+        )
+    DistributedManager.cleanup()
 
 
 if __name__ == "__main__":

@@ -830,6 +830,17 @@ class DomainParallel(BaseDynamics):
         if self._dist_model is not None:
             self._dist_model.close()
 
+    def __enter__(self) -> "DomainParallel":
+        """Enter a scope that releases the adapter's setup on exit.
+
+        Lets a caller write ``with DomainParallel(...) as dyn: dyn.partition(...);
+        dyn.run(...)`` so teardown (``close()``) is exception-safe. The process
+        group / ``DistributedManager`` lifecycle stays at launcher scope."""
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     def __del__(self) -> None:
         try:
             self.close()

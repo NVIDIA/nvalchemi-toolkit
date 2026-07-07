@@ -66,7 +66,6 @@ import warnings
 from pathlib import Path
 
 import torch
-import torch.distributed as dist
 from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
@@ -194,11 +193,13 @@ def main() -> None:
         help="xyz file path (rank 0 only).",
     )
     parser.add_argument(
-        "--backend",
-        default="nccl",
-        help="Process-group backend. Use 'gloo' on CPU-only envs.",
+        "--dtype",
+        default="float32",
+        choices=["float32", "float64"],
+        help="Model / simulation dtype.",
     )
     args = parser.parse_args()
+    dtype = torch.float64 if args.dtype == "float64" else torch.float32
 
     # Docs build / no torchrun: there is no process group to join, so skip the
     # launch instead of failing in init_process_group (guard matches examples
@@ -211,36 +212,16 @@ def main() -> None:
         )
         return
 
-    # ----- Process group setup -----
-    # ``torchrun`` populates RANK / WORLD_SIZE / LOCAL_RANK; we just
-    # bind to the assigned device and init the process group.
-    dist.init_process_group(backend=args.backend)
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
+    # ----- Distributed bootstrap via PhysicsNeMo's DistributedManager -----
+    # ``initialize()`` reads the ``torchrun`` env (RANK / WORLD_SIZE / LOCAL_RANK),
+    # inits the process group, and binds this rank's device; ``initialize_mesh``
+    # builds the 1-D ``("domain",)`` DeviceMesh DomainParallel decomposes over.
+    from nvalchemi.distributed import DistributedManager
 
-    # Gloo lacks ``all_to_all`` / ``all_to_all_v``; the halo path
-    # routes through physicsnemo's ``indexed_all_to_all_v_wrapper``.
-    # Reuse the validator's isend/irecv shim (with cuda↔cpu staging)
-    # so single-GPU multi-rank correctness testing works end-to-end on
-    # Gloo. NCCL on a real multi-GPU cluster goes through the unmodified
-    # collective.
-    if args.backend == "gloo":
-        from nvalchemi.distributed.validate.worker import (
-            _patch_physicsnemo_all_to_all_for_gloo,
-        )
-
-        _patch_physicsnemo_all_to_all_for_gloo()
-    local_rank = int(os.environ.get("LOCAL_RANK", rank))
-    if torch.cuda.is_available():
-        # Clamp to available device count so single-GPU loopback runs
-        # (e.g. ``torchrun --nproc_per_node=2`` on a 1-GPU box for
-        # gloo+CUDA correctness testing) bind every rank to ``cuda:0``
-        # instead of crashing on ``cuda:1``.
-        device_index = local_rank % torch.cuda.device_count()
-        torch.cuda.set_device(device_index)
-        device = torch.device(f"cuda:{device_index}")
-    else:
-        device = torch.device("cpu")
+    DistributedManager.initialize()
+    dm = DistributedManager()
+    rank, world_size, device = dm.rank, dm.world_size, torch.device(dm.device)
+    mesh = dm.initialize_mesh(mesh_shape=(world_size,), mesh_dim_names=("domain",))
 
     if rank == 0:
         logger.info(
@@ -255,35 +236,12 @@ def main() -> None:
             dt=args.dt_fs,
         )
 
-    # ----- DeviceMesh for DomainParallel -----
-    # 1-D mesh over ``world_size`` ranks — every rank owns one
-    # spatial subdomain.
-    #
-    # Backend override: when the default PG is gloo (e.g. ``--backend
-    # gloo`` for single-GPU multi-rank correctness testing) and CUDA is
-    # available, PyTorch's DeviceMesh *silently* creates a fresh
-    # ``cpu:gloo,cuda:nccl`` hybrid PG for the dim — which then asks
-    # NCCL to attach two ranks to one device and fails with
-    # ``Duplicate GPU detected``. Pinning the dim backend to plain
-    # ``gloo`` keeps every collective on Gloo and lets multi-rank
-    # logic run on a single GPU.
-    from torch.distributed.device_mesh import DeviceMesh
-
-    backend_override = (("gloo", None),) if args.backend == "gloo" else None
-    mesh = DeviceMesh(
-        device.type,
-        list(range(world_size)),
-        mesh_dim_names=("domain",),
-        backend_override=backend_override,
-    )
-
     # ----- Load MACE wrapper -----
     # Suppress mace-torch's chatty deprecation warnings at import.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         from nvalchemi.models.mace import MACEWrapper
 
-    dtype = torch.float32
     wrapper = MACEWrapper.from_checkpoint(
         args.checkpoint, dtype=dtype, device=device
     ).eval()
@@ -344,49 +302,46 @@ def main() -> None:
     # ``DomainParallel`` — its ``step()`` only fires AFTER_STEP on the
     # outer hook chain, after atom migration has resolved. Inner
     # AFTER_STEP would never fire.
-    dynamics = DomainParallel(
+    # ``with dynamics:`` releases the adapter's setup on exit (delegates to
+    # ``close()``), so teardown is exception-safe; the process-group lifecycle
+    # stays at launcher scope (``DistributedManager.cleanup()`` below).
+    with DomainParallel(
         dynamics=integrator,
         config=domain_cfg,
         n_steps=args.n_steps,
         hooks=[snapshot_hook],
-    )
-
-    # ----- Build the initial batch on rank 0 -----
-    # DomainParallel.partition() requires the full batch on rank 0 and
-    # ``None`` elsewhere; it scatters each rank's owned subdomain.
-    initial_batch = (
-        build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
-        if rank == 0
-        else None
-    )
-    owned_batch = dynamics.partition(initial_batch)
-    if rank == 0:
-        logger.info(
-            "Partitioned: n_owned (rank 0) = {n} of {tot} global atoms",
-            n=int(owned_batch.positions.shape[0]),
-            tot=int(initial_batch.positions.shape[0]),
+    ) as dynamics:
+        # ----- Build the initial batch on rank 0 -----
+        # DomainParallel.partition() requires the full batch on rank 0 and
+        # ``None`` elsewhere; it scatters each rank's owned subdomain.
+        initial_batch = (
+            build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
+            if rank == 0
+            else None
         )
+        owned_batch = dynamics.partition(initial_batch)
+        if rank == 0:
+            logger.info(
+                "Partitioned: n_owned (rank 0) = {n} of {tot} global atoms",
+                n=int(owned_batch.positions.shape[0]),
+                tot=int(initial_batch.positions.shape[0]),
+            )
 
-    # ----- Run the trajectory -----
-    # ``run`` is the canonical entry point. It opens hooks, runs
-    # ``n_steps`` of velocity-Verlet + Langevin under domain
-    # decomposition (halo exchange → forward → consolidate →
-    # integrator update → atom migration), then closes hooks. The
-    # SnapshotHook writes every ``snapshot_every`` steps, building up
-    # the trajectory in the sink.
-    dynamics.run(owned_batch)
+        # ----- Run the trajectory -----
+        # ``run`` is the canonical entry point: halo exchange → forward →
+        # consolidate → integrator update → atom migration, then closes hooks.
+        # SnapshotHook writes every ``snapshot_every`` steps into the sink.
+        dynamics.run(owned_batch)
 
-    # ----- Persist trajectory + cleanup -----
-    if rank == 0:
-        n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
-        logger.info(
-            "Done. Wrote {f} xyz frames to {p}.",
-            f=n_frames,
-            p=args.output_xyz,
-        )
+        # ----- Persist trajectory (rank 0 holds the gathered frames) -----
+        if rank == 0:
+            n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
+            logger.info(
+                "Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz
+            )
 
-    dynamics.close()
-    dist.destroy_process_group()
+    # Process-group teardown stays at launcher scope.
+    DistributedManager.cleanup()
 
 
 if __name__ == "__main__":

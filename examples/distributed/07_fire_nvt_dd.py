@@ -89,7 +89,6 @@ import warnings
 from pathlib import Path
 
 import torch
-import torch.distributed as dist
 from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
@@ -211,7 +210,6 @@ def main() -> None:
     parser.add_argument(
         "--output-xyz", type=Path, default=Path("fire_nvt_dd_trajectory.xyz")
     )
-    parser.add_argument("--backend", default="nccl", help="Use 'gloo' on CPU envs.")
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -233,35 +231,24 @@ def main() -> None:
         )
         return
 
-    # ----- Process group + device -----
-    dist.init_process_group(backend=args.backend)
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    if args.backend == "gloo":
-        from nvalchemi.distributed.validate.worker import (
-            _patch_physicsnemo_all_to_all_for_gloo,
-        )
+    # ----- Distributed bootstrap: 2-D (pipeline, domain) mesh -----
+    # 2 pipeline stages × (world/2) domain ranks. DistributedManager owns init +
+    # device binding; ``initialize_mesh`` builds the 2-D (pipeline, domain) mesh.
+    from nvalchemi.distributed import DistributedManager
 
-        _patch_physicsnemo_all_to_all_for_gloo()
-    local_rank = int(os.environ.get("LOCAL_RANK", rank))
-    if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank % torch.cuda.device_count())
-        device = torch.device(f"cuda:{local_rank % torch.cuda.device_count()}")
-    else:
-        device = torch.device("cpu")
-
-    # ----- 2-D (pipeline, domain) mesh: 2 stages × (world/2) domain ranks -----
-    from torch.distributed.device_mesh import init_device_mesh
-
+    DistributedManager.initialize()
+    dm = DistributedManager()
+    rank, world_size, device = dm.rank, dm.world_size, torch.device(dm.device)
     n_pipeline = 2
-    domain_size = world_size // n_pipeline
-    if world_size != n_pipeline * domain_size:
+    if world_size < 4 or world_size % n_pipeline != 0:
         raise RuntimeError(
-            f"world_size {world_size} must be 2 × domain_size; launch with an even "
-            "--nproc_per_node (e.g. 4 = 2 stages × 2 domain)."
+            f"world_size {world_size} must be an even number >= 4 (2 pipeline "
+            "stages × >=2 domain ranks); launch with e.g. --nproc_per_node=4."
         )
-    mesh = init_device_mesh(
-        device.type, (n_pipeline, domain_size), mesh_dim_names=("pipeline", "domain")
+    domain_size = world_size // n_pipeline
+    mesh = dm.initialize_mesh(
+        mesh_shape=(n_pipeline, domain_size),
+        mesh_dim_names=("pipeline", "domain"),
     )
     pipeline_index = int(mesh["pipeline"].get_local_rank())
     is_domain_lead = int(mesh["domain"].get_local_rank()) == 0
@@ -384,7 +371,8 @@ def main() -> None:
         logger.info("Done. Wrote {n} NVT frames to {p}.", n=n, p=args.output_xyz)
 
     stage.close()
-    dist.destroy_process_group()
+    # Process-group teardown stays at launcher scope.
+    DistributedManager.cleanup()
 
 
 if __name__ == "__main__":

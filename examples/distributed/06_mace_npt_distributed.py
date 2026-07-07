@@ -73,7 +73,6 @@ import warnings
 from pathlib import Path
 
 import torch
-import torch.distributed as dist
 from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
@@ -221,11 +220,13 @@ def main() -> None:
         help="xyz file path (rank 0 only).",
     )
     parser.add_argument(
-        "--backend",
-        default="nccl",
-        help="Process-group backend. Use 'gloo' on CPU-only envs.",
+        "--dtype",
+        default="float32",
+        choices=["float32", "float64"],
+        help="Model / simulation dtype.",
     )
     args = parser.parse_args()
+    dtype = torch.float64 if args.dtype == "float64" else torch.float32
 
     # Docs build / no torchrun: no process group to join, so skip the launch.
     if _DOCS_BUILD or not _DISTRIBUTED_ENV:
@@ -236,24 +237,13 @@ def main() -> None:
         )
         return
 
-    # ----- Process group setup (identical to example 03) -----
-    dist.init_process_group(backend=args.backend)
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
+    # ----- Distributed bootstrap via DistributedManager (see example 03) -----
+    from nvalchemi.distributed import DistributedManager
 
-    if args.backend == "gloo":
-        from nvalchemi.distributed.validate.worker import (
-            _patch_physicsnemo_all_to_all_for_gloo,
-        )
-
-        _patch_physicsnemo_all_to_all_for_gloo()
-    local_rank = int(os.environ.get("LOCAL_RANK", rank))
-    if torch.cuda.is_available():
-        device_index = local_rank % torch.cuda.device_count()
-        torch.cuda.set_device(device_index)
-        device = torch.device(f"cuda:{device_index}")
-    else:
-        device = torch.device("cpu")
+    DistributedManager.initialize()
+    dm = DistributedManager()
+    rank, world_size, device = dm.rank, dm.world_size, torch.device(dm.device)
+    mesh = dm.initialize_mesh(mesh_shape=(world_size,), mesh_dim_names=("domain",))
 
     if rank == 0:
         logger.info(
@@ -270,23 +260,11 @@ def main() -> None:
             dt=args.dt_fs,
         )
 
-    # ----- DeviceMesh for DomainParallel (identical to example 03) -----
-    from torch.distributed.device_mesh import DeviceMesh
-
-    backend_override = (("gloo", None),) if args.backend == "gloo" else None
-    mesh = DeviceMesh(
-        device.type,
-        list(range(world_size)),
-        mesh_dim_names=("domain",),
-        backend_override=backend_override,
-    )
-
     # ----- Load MACE wrapper -----
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         from nvalchemi.models.mace import MACEWrapper
 
-    dtype = torch.float32
     wrapper = MACEWrapper.from_checkpoint(
         args.checkpoint, dtype=dtype, device=device
     ).eval()
@@ -335,49 +313,52 @@ def main() -> None:
     )
 
     # ----- DomainParallel wrapping (SnapshotHook on the outer, as in 03) -----
-    dynamics = DomainParallel(
+    # ``with dynamics:`` makes teardown exception-safe; the process-group
+    # lifecycle stays at launcher scope (``DistributedManager.cleanup()`` below).
+    with DomainParallel(
         dynamics=integrator,
         config=domain_cfg,
         n_steps=args.n_steps,
         hooks=[snapshot_hook],
-    )
-
-    # ----- Build the initial batch on rank 0 and partition -----
-    initial_batch = (
-        build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
-        if rank == 0
-        else None
-    )
-    v0 = cell_volume(initial_batch) if rank == 0 else None
-    owned_batch = dynamics.partition(initial_batch)
-    if rank == 0:
-        logger.info(
-            "Partitioned: n_owned (rank 0) = {n} of {tot} atoms; V0 = {v:.2f} Å³",
-            n=int(owned_batch.positions.shape[0]),
-            tot=int(initial_batch.positions.shape[0]),
-            v=v0,
+    ) as dynamics:
+        # ----- Build the initial batch on rank 0 and partition -----
+        initial_batch = (
+            build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
+            if rank == 0
+            else None
         )
+        v0 = cell_volume(initial_batch) if rank == 0 else None
+        owned_batch = dynamics.partition(initial_batch)
+        if rank == 0:
+            logger.info(
+                "Partitioned: n_owned (rank 0) = {n} of {tot} atoms; V0 = {v:.2f} Å³",
+                n=int(owned_batch.positions.shape[0]),
+                tot=int(initial_batch.positions.shape[0]),
+                v=v0,
+            )
 
-    # ----- Run the trajectory -----
-    final_batch = dynamics.run(owned_batch)
+        # ----- Run the trajectory -----
+        final_batch = dynamics.run(owned_batch)
 
-    # ----- Report volume relaxation + persist trajectory + cleanup -----
-    # The cell is replicated (broadcast from rank 0 each step), so any rank's
-    # final cell is the global cell; report it from rank 0.
-    if rank == 0:
-        v1 = cell_volume(final_batch)
-        logger.info(
-            "Volume: {v0:.2f} → {v1:.2f} Å³ ({pct:+.2f}%) over {n} steps",
-            v0=v0,
-            v1=v1,
-            pct=100.0 * (v1 - v0) / v0,
-            n=args.n_steps,
-        )
-        n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
-        logger.info("Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz)
+        # ----- Report volume relaxation + persist trajectory -----
+        # The cell is replicated (broadcast from rank 0 each step), so any rank's
+        # final cell is the global cell; report it from rank 0.
+        if rank == 0:
+            v1 = cell_volume(final_batch)
+            logger.info(
+                "Volume: {v0:.2f} → {v1:.2f} Å³ ({pct:+.2f}%) over {n} steps",
+                v0=v0,
+                v1=v1,
+                pct=100.0 * (v1 - v0) / v0,
+                n=args.n_steps,
+            )
+            n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
+            logger.info(
+                "Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz
+            )
 
-    dynamics.close()
-    dist.destroy_process_group()
+    # Process-group teardown stays at launcher scope.
+    DistributedManager.cleanup()
 
 
 if __name__ == "__main__":

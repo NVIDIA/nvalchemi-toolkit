@@ -2172,7 +2172,11 @@ def _install_aot_plain_tangent_coercion() -> None:
     if getattr(_orig, "_mlip_plain_tangent_shim", False):
         return
 
-    def _process_runtime_tangent(x: Any, meta: Any) -> Any:
+    def _process_runtime_tangent(x: Any, meta: Any, *args: Any, **kwargs: Any) -> Any:
+        # ``*args`` / ``**kwargs`` forward any extra params the stock method
+        # takes across torch versions (e.g. ``tangent_idx`` added in torch 2.12)
+        # so the shim stays signature-compatible; the coercion only touches
+        # ``(x, meta)``.
         if (
             isinstance(x, torch.Tensor)
             and not is_traceable_wrapper_subclass(x)
