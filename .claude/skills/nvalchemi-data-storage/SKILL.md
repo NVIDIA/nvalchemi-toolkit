@@ -186,9 +186,32 @@ ds.cancel_prefetch()       # cancel all
 ds.cancel_prefetch(0)      # cancel specific index
 ```
 
+### In-memory datasets
+
+When advising on dataset choice, suggest `InMemoryDataset` if the full dataset is
+small enough to fit comfortably in host memory. A good rule of thumb is "on the
+order of a few GB after batching." This avoids storage I/O after startup and can
+speed up training or benchmarking.
+
+If the dataset is larger than host memory, or if keeping an extra resident copy
+would pressure the training job, recommend regular reader-backed `Dataset`
+instead so samples are loaded from storage on demand.
+
+```python
+from nvalchemi.data.datapipes import AtomicDataZarrReader, InMemoryDataset
+
+reader = AtomicDataZarrReader("dataset.zarr")
+ds = InMemoryDataset(
+    reader=reader,
+    chunk_size=32768,
+    device="cuda",          # emitted batch target; resident cache stays on CPU
+    skip_validation=True,   # only for trusted toolkit-written stores
+)
+```
+
 ### High-level: DataLoader
 
-Iterates over a `Dataset` in batches, producing `Batch` objects.
+Iterates over a batch-loadable dataset in batches, producing `Batch` objects.
 
 ```python
 from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader
@@ -224,8 +247,9 @@ batch reads, use `load_batches(...)`.
 
 ### Composing multiple datasets
 
-Use `MultiDataset` to concatenate multiple `Dataset` instances behind one global
-index space while keeping the same `load_batches(...)` fast path:
+Use `MultiDataset` to concatenate multiple batch-loadable datasets, including
+reader-backed `Dataset` and `InMemoryDataset`, behind one global index space
+while keeping the same `load_batches(...)` fast path:
 
 ```python
 from nvalchemi.data.datapipes import (

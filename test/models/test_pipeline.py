@@ -848,6 +848,27 @@ class TestPipelineNeighborHooks:
         hooks = pipe.make_neighbor_hooks()
         assert len(hooks) == 1
 
+    def test_forwards_neighbor_list_method(self):
+        class _NLModel(MockEnergyForceModel):
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "forces"}),
+                    needs_pbc=False,
+                    neighbor_config=NeighborConfig(cutoff=5.0),
+                    active_outputs={"energy", "forces"},
+                )
+
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[_NLModel()]),
+            ]
+        )
+        hooks = pipe.make_neighbor_hooks(neighbor_list_method="cell_list")
+
+        assert len(hooks) == 1
+        assert hooks[0].method == "cell_list"
+
 
 # ===========================================================================
 # Neighbor adaptation tests

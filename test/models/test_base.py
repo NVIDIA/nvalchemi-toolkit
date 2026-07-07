@@ -559,6 +559,22 @@ class TestBaseModelMixinMakeNeighborHooks:
         hooks = model.make_neighbor_hooks()
         assert len(hooks) == 1
 
+    def test_hooks_forward_neighbor_list_method(self):
+        class _NLModel(DemoModelWrapper):
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy"}),
+                    neighbor_config=NeighborConfig(cutoff=5.0),
+                    needs_pbc=False,
+                )
+
+        model = _NLModel()
+        hooks = model.make_neighbor_hooks(neighbor_list_method="batch_naive_tile")
+
+        assert len(hooks) == 1
+        assert hooks[0].method == "batch_naive_tile"
+
 
 class TestBaseModelMixinExportModel:
     def test_add_output_head_raises(self, demo_model):

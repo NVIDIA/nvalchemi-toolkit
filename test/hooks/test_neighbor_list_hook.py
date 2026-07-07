@@ -270,6 +270,23 @@ class TestNeighborListHookProtocol:
             NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE), Hook
         )
 
+    def test_explicit_method_override(self):
+        hook = NeighborListHook(
+            _cfg(), method="batch_naive_tile", stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        batch = _line_batch("cpu", pbc=False)
+
+        method = hook._select_neighbor_list_method(
+            batch.num_nodes,
+            batch.num_graphs,
+            batch.batch_ptr,
+            None,
+            None,
+            batch.positions.dtype,
+        )
+
+        assert method == "batch_naive_tile"
+
 
 # ===========================================================================
 # TestStagingBufferAllocation

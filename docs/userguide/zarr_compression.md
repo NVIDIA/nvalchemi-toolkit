@@ -761,11 +761,19 @@ own writer --- you can bypass this:
 dataset = Dataset(reader=reader, device="cuda:0", skip_validation=True)
 ```
 
-With `skip_validation=True` the Dataset constructs
+`InMemoryDataset` accepts the same flag when materializing a reader-backed
+resident batch:
+
+```python
+dataset = InMemoryDataset(reader=reader, device="cuda:0", skip_validation=True)
+```
+
+With `skip_validation=True` the Dataset or InMemoryDataset constructs
 {py:class}`~nvalchemi.data.Batch` objects directly from raw tensor
 dictionaries via
 {py:meth}`~nvalchemi.data.Batch.from_raw_dicts`, avoiding per-sample
-Pydantic overhead entirely.
+Pydantic overhead. For InMemoryDataset this speeds up initial materialization;
+subsequent DataLoader iteration selects graphs from the resident batch.
 
 ```{warning}
 ``skip_validation`` trusts the store contents.  Use it only with stores
