@@ -340,6 +340,63 @@ class TestUniformLevelStorage:
         src.defrag(copied_mask=copied_mask)
         assert len(src) == 0
 
+    def test_put_raises_before_copy_if_uniform_dtypes_mismatch(self):
+        """put fails before mutating dest when a later shared dtype mismatches."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor([[1.0], [2.0]], device=device, dtype=torch.float32),
+                "b": torch.tensor([6, 8], device=device, dtype=torch.int64),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={
+                "a": torch.zeros(2, 1, device=device, dtype=torch.float32),
+                "b": torch.zeros(2, device=device, dtype=torch.int32),
+            },
+            device=device,
+            validate=False,
+        )
+
+        with pytest.raises(TypeError, match="b"):
+            dest.put(src, torch.tensor([True, True], device=device))
+
+        torch.testing.assert_close(
+            dest["a"],
+            torch.zeros(2, 1, device=device, dtype=torch.float32),
+        )
+        torch.testing.assert_close(
+            dest["b"],
+            torch.zeros(2, device=device, dtype=torch.int32),
+        )
+
+    def test_defrag_raises_if_uniform_storage_has_unsupported_dtype(self):
+        """defrag raises before compacting any uniform attribute with unsupported dtypes."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0]], device=device, dtype=torch.float32
+                ),
+                "bad": torch.tensor(
+                    [9.0, 8.0, 7.0], device=device, dtype=torch.float16
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        expected_a = src["a"].clone()
+        expected_bad = src["bad"].clone()
+
+        with pytest.raises(TypeError, match="bad"):
+            src.defrag(copied_mask=torch.tensor([True, False, True], device=device))
+
+        torch.testing.assert_close(src["a"], expected_a)
+        torch.testing.assert_close(src["bad"], expected_bad)
+        assert not hasattr(src, "_num_kept")
+
     def test_put_defrag_fixed_tensor_shapes(self):
         """Data tensors are not expanded or trimmed by put or defrag (fixed storage)."""
         device = "cpu"
@@ -903,6 +960,38 @@ class TestSegmentedLevelStorage:
         )
         assert dest.batch_ptr[0].item() == 0
         assert len(dest) == 1
+
+    def test_defrag_raises_if_segmented_storage_has_unsupported_dtype(self):
+        """defrag raises before compacting segmented attributes with unsupported dtypes."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "positions": torch.tensor(
+                    [[1.0], [2.0], [3.0]], device=device, dtype=torch.float32
+                ),
+                "bad": torch.tensor(
+                    [9.0, 8.0, 7.0], device=device, dtype=torch.float16
+                ),
+            },
+            segment_lengths=[1, 2],
+            batch_ptr=torch.tensor([0, 1, 3], device=device, dtype=torch.int32),
+            device=device,
+            validate=False,
+        )
+        expected_positions = src["positions"].clone()
+        expected_bad = src["bad"].clone()
+        expected_batch_ptr = src.batch_ptr.clone()
+        expected_segment_lengths = src.segment_lengths.clone()
+
+        with pytest.raises(TypeError, match="bad"):
+            src.defrag(copied_mask=torch.tensor([True, False], device=device))
+
+        torch.testing.assert_close(src["positions"], expected_positions)
+        torch.testing.assert_close(src["bad"], expected_bad)
+        torch.testing.assert_close(src.batch_ptr, expected_batch_ptr)
+        torch.testing.assert_close(src.segment_lengths, expected_segment_lengths)
+        assert not hasattr(src, "_num_segments")
+        assert not hasattr(src, "_num_elements_kept")
 
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""

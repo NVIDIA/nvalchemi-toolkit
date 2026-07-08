@@ -1227,7 +1227,8 @@ class UniformLevelStorage(BaseLevelStorage):
         rows move to the front in place. Attributes with buffer-kernel-
         supported dtypes (``bool``, ``int32``, ``int64``, ``float32``,
         ``float64``) are compacted in place. Buffer shape is unchanged
-        (fixed-size batches).
+        (fixed-size batches). Unsupported dtypes raise ``TypeError`` before
+        any attribute is compacted.
 
         Parameters
         ----------
@@ -1944,7 +1945,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         filled so batch_ptr[-1] == total_kept_elems); segment_lengths derived
         from it; no trim. Attributes with buffer-kernel-supported dtypes
         (``bool``, ``int32``, ``int64``, ``float32``, ``float64``) are
-        compacted in place.
+        compacted in place. Unsupported dtypes raise ``TypeError`` before
+        any attribute is compacted.
 
         Parameters
         ----------
