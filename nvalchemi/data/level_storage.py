@@ -603,6 +603,38 @@ def _validate_trailing_shapes(tensors: list[Tensor]) -> bool:
     return all(t.shape[1:] == trailing for t in tensors)
 
 
+_SUPPORTED_BUFFER_DTYPES = ", ".join(
+    str(dtype) for dtype in sorted(TORCH_TO_WP, key=str)
+)
+
+
+def _validate_buffer_tensor_dtype(key: str, tensor: Tensor) -> None:
+    """Raise a clear error when a buffer kernel cannot handle *tensor*'s dtype."""
+    if tensor.dtype not in TORCH_TO_WP:
+        raise TypeError(
+            f"Attribute '{key}' has unsupported dtype {tensor.dtype}; "
+            f"supported dtypes: {_SUPPORTED_BUFFER_DTYPES}"
+        )
+
+
+def _validated_buffer_copy_tensors(
+    dest_data: TensorDict, src_data: TensorDict, common: list[str]
+) -> list[tuple[str, Tensor, Tensor]]:
+    """Validate shared buffer attributes before any copy kernels mutate state."""
+    tensors: list[tuple[str, Tensor, Tensor]] = []
+    for key in common:
+        src_t = src_data[key]
+        dest_t = dest_data[key]
+        if src_t.dtype != dest_t.dtype:
+            raise TypeError(
+                f"Attribute '{key}' dtype mismatch: source {src_t.dtype}, "
+                f"destination {dest_t.dtype}"
+            )
+        _validate_buffer_tensor_dtype(key, src_t)
+        tensors.append((key, src_t, dest_t))
+    return tensors
+
+
 # ---------------------------------------------------------------------------
 # BaseLevelStorage (ABC)
 # ---------------------------------------------------------------------------
@@ -710,7 +742,8 @@ class BaseLevelStorage(ABC):
     # -- Abstract -----------------------------------------------------------
 
     @abstractmethod
-    def __len__(self) -> int: ...
+    def __len__(self) -> int:
+        ...
 
     @abstractmethod
     def select(self, idx: IndexType) -> BaseLevelStorage:
@@ -733,7 +766,8 @@ class BaseLevelStorage(ABC):
         """Return ``True`` if this container uses segmented storage."""
 
     @abstractmethod
-    def _validate_setitem(self, key: str, value: Tensor) -> None: ...
+    def _validate_setitem(self, key: str, value: Tensor) -> None:
+        ...
 
     # -- Dict-like interface ------------------------------------------------
 
@@ -1119,7 +1153,9 @@ class UniformLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
-        Copies only float32 attributes; only as many rows as fit in this
+        Copies attributes with buffer-kernel-supported dtypes (``bool``,
+        ``int32``, ``int64``, ``float32``, ``float64``); source and
+        destination dtypes must match. Only as many rows as fit in this
         storage's empty slots (dest_mask[i] False = empty). Uses Warp buffer
         kernels (no host sync). If copied_mask is provided, it is updated in
         place with True for each row that was copied.
@@ -1141,9 +1177,10 @@ class UniformLevelStorage(BaseLevelStorage):
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
+        common = [key for key in self._data.keys() if key in src._data]
         if not common:
             raise ValueError("put requires at least one common attribute")
+        tensors = _validated_buffer_copy_tensors(self._data, src._data, common)
         n_src = len(src)
         dest_capacity = self._data.shape[0]
         if mask.shape[0] != n_src:
@@ -1164,9 +1201,7 @@ class UniformLevelStorage(BaseLevelStorage):
                 raise ValueError(
                     f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
                 )
-        for key in common:
-            src_t = src._data[key]
-            dest_t = self._data[key]
+        for key, src_t, dest_t in tensors:
             if dest_t.shape[0] < dest_capacity:
                 raise ValueError(
                     f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
@@ -1189,10 +1224,10 @@ class UniformLevelStorage(BaseLevelStorage):
         """Defrag in-place: remove rows where copied_mask[i] is True.
 
         Rows with copied_mask[i] True (previously put) are dropped; remaining
-        rows move to the front in place. Only float32 attributes are
-        compacted. Buffer shape is unchanged (fixed-size batches). Other
-        attributes are indexed with the same indices (so must be kept in sync
-        if present).
+        rows move to the front in place. Attributes with buffer-kernel-
+        supported dtypes (``bool``, ``int32``, ``int64``, ``float32``,
+        ``float64``) are compacted in place. Buffer shape is unchanged
+        (fixed-size batches).
 
         Parameters
         ----------
@@ -1216,10 +1251,10 @@ class UniformLevelStorage(BaseLevelStorage):
             copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
         if copied_mask.shape[0] != n_src:
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
-        for key in list(self._data.keys()):
-            t = self._data[key]
-            if t.dtype not in TORCH_TO_WP:
-                continue
+        tensors = [(key, self._data[key]) for key in self._data.keys()]
+        for key, t in tensors:
+            _validate_buffer_tensor_dtype(key, t)
+        for _, t in tensors:
             # Pass a clone so the kernel's in-place mask update doesn't affect other keys
             defrag_per_system(t, copied_mask.clone())
         object.__setattr__(self, "_num_kept", int((~copied_mask).sum().item()))
@@ -1836,8 +1871,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put segments where mask[i] is True from src into this storage (buffer).
 
-        New segment boundaries are appended to this storage's batch_ptr. Only
-        float32 attributes are copied. Uses Warp buffer kernels; one host sync
+        New segment boundaries are appended to this storage's batch_ptr.
+        Copies attributes with buffer-kernel-supported dtypes (``bool``,
+        ``int32``, ``int64``, ``float32``, ``float64``); source and
+        destination dtypes must match. Uses Warp buffer kernels; one host sync
         after all attributes to update this storage's segment count. If
         copied_mask is provided, it is updated in place with True for each
         segment that was copied.
@@ -1855,9 +1892,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
+        common = [key for key in self._data.keys() if key in src._data]
         if not common:
             raise ValueError("put requires at least one common attribute")
+        tensors = _validated_buffer_copy_tensors(self._data, src._data, common)
         n_seg = len(src)
         if mask.shape[0] != n_seg:
             raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
@@ -1877,13 +1915,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if dest_batch_ptr.shape[0] < min_batch_ptr_size:
             return
         new_num_dest = None
-        for key in common:
-            src_t = src._data[key]
-            if src_t.dtype != torch.float32:
-                continue
-            dest_t = self._data[key]
-            if dest_t.dtype != torch.float32:
-                continue
+        for _, src_t, dest_t in tensors:
             new_num_dest = put_masked_segmented(
                 src_t,
                 src._batch_ptr,
@@ -1910,7 +1942,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
         Kept segments move to the front; batch_ptr is updated in place (tail
         filled so batch_ptr[-1] == total_kept_elems); segment_lengths derived
-        from it; no trim. All attributes must be float32 (uses Warp kernels).
+        from it; no trim. Attributes with buffer-kernel-supported dtypes
+        (``bool``, ``int32``, ``int64``, ``float32``, ``float64``) are
+        compacted in place.
 
         Parameters
         ----------
@@ -1936,6 +1970,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
         self._lazy_init_batch_ptr()
         keys = list(self._data.keys())
+        for key in keys:
+            _validate_buffer_tensor_dtype(key, self._data[key])
         original_bp = self._batch_ptr.clone()
         num_kept_t = defrag_segmented(self._data[keys[0]], self._batch_ptr, copied_mask)
         for key in keys[1:]:

@@ -505,9 +505,9 @@ class TestBatchMutation:
         )
         ei_before = b2["neighbor_list"].clone()
         b1.append(b2)
-        assert torch.equal(b2["neighbor_list"], ei_before), (
-            "append() mutated other batch's neighbor_list"
-        )
+        assert torch.equal(
+            b2["neighbor_list"], ei_before
+        ), "append() mutated other batch's neighbor_list"
         # Verify result is structurally correct.
         assert b1.num_graphs == 2
         assert b1.num_nodes_list == [2, 3]
@@ -853,6 +853,35 @@ class TestBatchPutDefrag:
         assert copied_mask.sum().item() == 0
         assert buffer.num_graphs == 2
 
+    def test_put_copies_mixed_supported_dtypes_for_atoms_and_edges(self):
+        """put preserves integer atom and edge fields alongside floating payloads."""
+        sample = AtomicData(
+            positions=torch.tensor(
+                [[0.1, 0.2, 0.3], [1.0, 1.1, 1.2], [2.0, 2.1, 2.2]],
+                dtype=torch.float32,
+            ),
+            atomic_numbers=torch.tensor([6, 8, 1], dtype=torch.int64),
+            neighbor_list=torch.tensor([[0, 1], [1, 2]], dtype=torch.int64),
+            pbc=torch.tensor([[True, False, True]], dtype=torch.bool),
+        )
+        src_batch = Batch.from_data_list([sample])
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=6,
+            num_edges=4,
+            template=sample,
+        )
+
+        buffer.put(src_batch, torch.tensor([True]))
+
+        assert buffer.num_graphs == 1
+        assert buffer.num_nodes_list == [3]
+        assert buffer.num_edges_list == [2]
+        torch.testing.assert_close(buffer.positions[:3], src_batch.positions)
+        torch.testing.assert_close(buffer.atomic_numbers[:3], src_batch.atomic_numbers)
+        torch.testing.assert_close(buffer.neighbor_list[:2], src_batch.neighbor_list)
+        torch.testing.assert_close(buffer.pbc[:1], src_batch.pbc)
+
     def test_defrag_with_copied_mask(self):
         """defrag(copied_mask) compacts batch by removing graphs where copied_mask is True."""
         batch = Batch.from_data_list(
@@ -1164,9 +1193,9 @@ class TestBatchIsendIrecvTagAlignment:
                 handle.wait()
 
         send_tags_after_meta = send_tags[1:]
-        assert send_tags_after_meta == recv_tags, (
-            f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
-        )
+        assert (
+            send_tags_after_meta == recv_tags
+        ), f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
 
 
 class TestBatchFromRawDicts:

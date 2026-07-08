@@ -946,7 +946,8 @@ class Batch(DataMixin):
 
         Drops graphs where copied_mask[i] is True (e.g. from a prior
         :meth:`put`). Uses Warp buffer kernels; one host sync per group to
-        trim. Only float32 attributes are compacted.
+        trim. Attributes with buffer-kernel-supported dtypes (``bool``,
+        ``int32``, ``int64``, ``float32``, ``float64``) are compacted.
 
         Parameters
         ----------

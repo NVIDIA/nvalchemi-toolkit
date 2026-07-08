@@ -810,6 +810,100 @@ class TestSegmentedLevelStorage:
             src["x"][:2], torch.tensor([[2.0], [3.0]], device=device)
         )
 
+    def test_put_and_defrag_preserve_mixed_supported_dtypes(self):
+        """put and defrag keep int64 atom data in sync with float32 payloads."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "positions": torch.tensor(
+                    [[1.0, 1.5, 2.0], [3.0, 3.5, 4.0], [5.0, 5.5, 6.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+                "atomic_numbers": torch.tensor(
+                    [6, 8, 1], device=device, dtype=torch.int64
+                ),
+            },
+            segment_lengths=[1, 2],
+            device=device,
+            validate=False,
+        )
+        expected_remaining_positions = src["positions"][1:].clone()
+        expected_remaining_numbers = src["atomic_numbers"][1:].clone()
+        dest = SegmentedLevelStorage(
+            data={
+                "positions": torch.zeros(4, 3, device=device, dtype=torch.float32),
+                "atomic_numbers": torch.zeros(4, device=device, dtype=torch.int64),
+            },
+            segment_lengths=[0],
+            device=device,
+            batch_ptr_capacity=5,
+            validate=False,
+        )
+        copied_mask = torch.zeros(2, dtype=torch.bool, device=device)
+        dest.put(
+            src,
+            torch.tensor([True, False], device=device),
+            copied_mask=copied_mask,
+        )
+
+        assert copied_mask.tolist() == [True, False]
+        assert len(dest) == 2
+        torch.testing.assert_close(
+            dest["positions"][:1],
+            torch.tensor([[1.0, 1.5, 2.0]], device=device, dtype=torch.float32),
+        )
+        torch.testing.assert_close(
+            dest["atomic_numbers"][:1],
+            torch.tensor([6], device=device, dtype=torch.int64),
+        )
+
+        src.defrag(copied_mask=copied_mask)
+
+        assert len(src) == 1
+        assert src.num_elements() == 2
+        torch.testing.assert_close(src["positions"][:2], expected_remaining_positions)
+        torch.testing.assert_close(
+            src["atomic_numbers"][:2], expected_remaining_numbers
+        )
+
+    def test_put_raises_before_copy_if_segmented_dtypes_mismatch(self):
+        """put fails before mutating dest when a shared attribute dtype mismatches."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "positions": torch.tensor([[1.0, 2.0, 3.0]], device=device),
+                "atomic_numbers": torch.tensor([6], device=device, dtype=torch.int64),
+            },
+            segment_lengths=[1],
+            device=device,
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={
+                "positions": torch.zeros(3, 3, device=device, dtype=torch.float32),
+                "atomic_numbers": torch.zeros(3, device=device, dtype=torch.int32),
+            },
+            segment_lengths=[0],
+            device=device,
+            batch_ptr_capacity=4,
+            validate=False,
+        )
+
+        with pytest.raises(TypeError, match="atomic_numbers"):
+            dest.put(src, torch.tensor([True], device=device))
+
+        torch.testing.assert_close(
+            dest["positions"],
+            torch.zeros(3, 3, device=device, dtype=torch.float32),
+        )
+        torch.testing.assert_close(
+            dest["atomic_numbers"],
+            torch.zeros(3, device=device, dtype=torch.int32),
+        )
+        assert dest.batch_ptr[0].item() == 0
+        assert len(dest) == 1
+
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
         device = "cpu"
