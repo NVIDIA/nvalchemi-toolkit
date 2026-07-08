@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 import pytest
 import torch
+import torch._dynamo
 from torch import nn
 
 from nvalchemi._typing import ModelOutputs
@@ -1150,7 +1151,10 @@ class TestPipelineNeighborAdaptation:
         """Deep-copied pipelines still filter neighbors per sub-model cutoff."""
         wide = _MatrixModel10()
         tight = _MatrixModel4()
-        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[wide, tight])])
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
+        )
         tight_step_id = id(pipe.groups[0].steps[1])
         assert pipe._step_neighbor_plans[tight_step_id].needs_cutoff_adaptation is True
 
@@ -1795,8 +1799,6 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["forces"] is not None
 
-        import torch._dynamo
-
         torch._dynamo.config.suppress_errors = True
         compiled_pipe = torch.compile(pipe, fullgraph=False)
         out_compiled = compiled_pipe(batch)
@@ -1829,8 +1831,6 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["energy"] is not None
         assert out_eager["forces"] is not None
-
-        import torch._dynamo
 
         torch._dynamo.config.suppress_errors = True
         compiled_pipe = torch.compile(pipe, fullgraph=False)
