@@ -74,6 +74,74 @@ class ReaderProtocol(Protocol):
         ...
 
 
+@runtime_checkable
+class BatchDatasetProtocol(Protocol):
+    """Protocol for nvalchemi datasets that load :class:`Batch` objects.
+
+    Implementations provide the batch-loading and prefetch contract used by
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset`.
+    """
+
+    def __len__(self) -> int:
+        """Return the number of samples available for batching."""
+        ...
+
+    def __getitem__(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
+        """Return one sample and its metadata by index."""
+        ...
+
+    def load_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> list[Batch]:
+        """Load several batches immediately."""
+        ...
+
+    def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
+        """Submit one sample for prefetching."""
+        ...
+
+    def prefetch_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> None:
+        """Submit multiple batches for fused prefetch."""
+        ...
+
+    def get_fused_batches(self) -> Iterator[Batch]:
+        """Consume the next pending fused prefetch result."""
+        ...
+
+    def has_pending_fused_batches(self) -> bool:
+        """Return whether fused prefetch results are waiting."""
+        ...
+
+    def cancel_prefetch(self, index: int | None = None) -> None:
+        """Cancel pending prefetch work."""
+        ...
+
+    @property
+    def prefetch_count(self) -> int:
+        """Return the number of queued prefetch requests."""
+        ...
+
+    @property
+    def field_names(self) -> list[str]:
+        """Return field names available in dataset samples."""
+        ...
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return lightweight metadata for a sample."""
+        ...
+
+    def close(self) -> None:
+        """Release resources held by the dataset."""
+        ...
+
+
 @dataclass
 class _PrefetchResult:
     """Container for async prefetch results.
@@ -147,6 +215,8 @@ class Dataset:
     Wraps a :class:`~nvalchemi.data.datapipes.backends.base.Reader` and returns
     :class:`~nvalchemi.data.atomic_data.AtomicData` objects directly,
     with CUDA-stream prefetching support.
+    ``Dataset`` implements :class:`BatchDatasetProtocol`, the batch-loading
+    protocol consumed by :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
 
     Parameters
     ----------

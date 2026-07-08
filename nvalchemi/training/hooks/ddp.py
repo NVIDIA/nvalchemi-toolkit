@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from torch.utils.data import BatchSampler, DistributedSampler, RandomSampler
 
 from nvalchemi.data.datapipes.dataloader import DataLoader as ALCHEMIDataLoader
-from nvalchemi.data.datapipes.dataset import Dataset as ALCHEMIDataset
+from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
 from nvalchemi.data.datapipes.multidataset import MultiDataset as ALCHEMIMultiDataset
 from nvalchemi.data.datapipes.samplers import (
     DistributedSamplerProtocol,
@@ -414,7 +414,7 @@ class DDPHook(BaseModel):
                 batch_size=dataloader.batch_size,
                 **kwargs,
             )
-        elif isinstance(dataset, ALCHEMIDataset):
+        elif isinstance(dataset, BatchDatasetProtocol):
             sampler = DistributedSampler(dataset, **kwargs)
             dataloader.batch_sampler = BatchSampler(
                 sampler,
@@ -424,8 +424,9 @@ class DDPHook(BaseModel):
         else:
             raise TypeError(
                 "DDPHook expected nvalchemi.data.datapipes.DataLoader.dataset to be "
-                "Dataset or MultiDataset when installing the default distributed "
-                f"batch sampler; got {type(dataset).__name__}."
+                "a batch-loadable dataset or MultiDataset when installing the "
+                "default distributed batch sampler; got "
+                f"{type(dataset).__name__}."
             )
 
         dataloader.sampler = None

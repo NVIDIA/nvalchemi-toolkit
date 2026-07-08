@@ -1,182 +1,205 @@
-# AGENTS.md — NVIDIA ALCHEMI toolkit
+# AGENTS.md - NVIDIA ALCHEMI Toolkit
 
-> Guidelines for AI coding agents operating in this repository.
+Guidelines for AI coding agents operating in this repository.
 
 ## Project Overview
 
-`nvalchemi` is an NVIDIA deep-learning framework for atomic simulations. Python 3.12+,
-built with PyTorch, Pydantic, and jaxtyping. Package manager is `uv`, build backend is
-`hatchling`.
+`nvalchemi-toolkit` provides the `nvalchemi` Python package: a GPU-first
+framework for AI atomic simulation workflows. It covers graph-structured atomic
+data, model wrappers for machine-learned interatomic potentials, batched
+dynamics, hooks/reporting, and training/finetuning workflows.
 
-## Build & Run Commands
+- Python support: `>=3.11,<3.14`; CI and setup examples use Python 3.12.
+- Package manager: `uv`; build backend: `hatchling`.
+- Core dependencies: PyTorch, Pydantic v2, jaxtyping, TensorDict, Zarr, Rich,
+  PhysicsNeMo, and `nvalchemi-toolkit-ops`.
+- The project is in public beta. Public PRs may not be accepted immediately, but
+  bug reports, feature requests, and scoped implementation discussions are welcome.
+
+## Repository Practices
+
+- Read `CONTRIBUTING.md` and the docs under `docs/userguide/about/` before broad
+  changes; keep work tightly scoped.
+- Use DCO sign-off for commits: `git commit -s -m "fix: describe change"`.
+- Prefer Conventional Commits-style messages unless maintainers request otherwise.
+- Install and run pre-commit hooks for development. PRs that skip pre-commit are
+  not expected to be reviewed.
+- The PR template expects a short description, testing notes, changelog updates,
+  docstring/docs updates where applicable, and the relevant type-of-change box.
+
+## CUDA And Environment Setup
+
+First check CUDA availability:
 
 ```bash
-# Install all dependencies
-make install                    # or: uv sync --all-extras
-
-# Lint (ruff, pyupgrade, whitespace, debug statements)
-make lint
-
-# Docstring coverage check
-make interrogate
-
-# License header check
-make license
+nvidia-smi
 ```
 
-### Testing
+- If `nvidia-smi` is missing or reports no usable device, use default `uv`
+  commands without CUDA extras where possible.
+- If it reports CUDA 12.x, pass `--extra cu12` to `uv` commands and
+  `CUDA_EXTRA=cu12` to `make` targets.
+- If it reports CUDA 13.x, `cu13` is the default Makefile extra; explicit
+  commands can still use `--extra cu13` or `CUDA_EXTRA=cu13`.
+- Do not use `uv sync --all-extras`: the CUDA variants and some model extras are
+  mutually exclusive.
 
-This project uses [pytest-testmon](https://testmon.org) to skip tests unaffected by
-recent code changes. A `.testmondata` database tracks which tests depend on which source
-files; only tests whose dependencies changed are re-run.
+Common setup commands:
 
 ```bash
-# --- Local development ---
+# Default development environment; Makefile currently defaults CUDA_EXTRA=cu13.
+make install
 
-make test                      # Run only affected tests (fast, requires .testmondata)
-make test-all                  # Run ALL tests and rebuild .testmondata
-make pytest                    # Run ALL tests with coverage (no testmon)
+# CUDA 12 development environment.
+make install CUDA_EXTRA=cu12
 
-# --- CI targets (not intended for local use) ---
+# Add CUDA-aligned optional extras, for example MACE.
+make install CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace
 
-make testmon-coverage          # Run with testmon + coverage; used by CI workflows
+# Direct uv equivalents.
+uv sync --extra cu13
+uv sync --extra cu12 --extra mace
 
-# --- Targeting specific tests ---
-
-# Run a SINGLE test file
-uv run pytest test/data/test_data_mixin.py
-
-# Run a SINGLE test case
-uv run pytest test/data/test_data_mixin.py::TestMoveObjToDevice::test_move_tensor_to_device
-
-# Run a single test by keyword match
-uv run pytest -k "test_move_tensor" test/
-
-# Run a specific test module (via Makefile target)
-make pytest-target TARGET=test/data/test_data_mixin.py
-
-# Specialized test suites
-make pytest-data               # data, md, training, models, neighborlist
-make pytest-models             # models only
-make pytest-dynamics           # dynamics, md, autobatch, optim
-make pytest-al                 # active learning
-make pytest-utils              # utils, common, help
+# Include documentation dependencies when needed.
+uv sync --extra cu13 --group docs
 ```
 
-**Typical local workflow:** run `make test-all` once to build the testmon database,
-then use `make test` for fast iteration. The database persists across runs in
-`.testmondata` (git-ignored).
+Optional extras include `aimnet`, `ase`, `cu12`, `cu13`, `mace`, `pymatgen`,
+`tensorboard`, and `uma`. `uma` conflicts with the CUDA/MACE stack and should be
+resolved in its own environment, as CI does with:
 
-**Coverage:** the coverage threshold (75%) is configured in `pyproject.toml`
-(`[tool.coverage.report] fail_under`). Branch coverage is disabled for testmon
-compatibility.
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+```
 
-## Code Style
+## Build, Lint, Test
 
-### Formatting & Linting
+Use Makefile targets when possible because they keep `uv run` aligned with the
+selected CUDA extra.
 
-- **Formatters**: `ruff-format` (via pre-commit hooks).
-- **Linter**: `ruff` with rules: `E` (pycodestyle), `F` (pyflakes), `S` (bandit),
-  `I` (isort), `PERF` (performance). Only `I` rules are auto-fixable.
-- **Ignored globally**: `E501` (line length), `S311` (random generators),
-  `F722` and `F821` (break jaxtyping annotations).
-- **Per-file overrides**: `F401` ignored in `__init__.py` and `docs/*.py`;
-  `S101` (assert) ignored in `test/*.py`; `E402` ignored in `examples/*.py`.
-- **pyupgrade**: targets `--py310-plus`.
-- **Docstrings**: `interrogate` enforces 95% coverage (excludes tests, init, magic,
-  private, semiprivate, property decorators, nested functions/classes).
-- **Markdown**: `markdownlint` runs in pre-commit (MD024 disabled).
+```bash
+make lint                         # whitespace, debug, ruff check/format
+make lint-fix                     # ruff check/format auto-fix path
+make format                       # ruff format plus ruff check --fix
+make interrogate                  # docstring coverage
+make license                      # SPDX/license header validation
+make docs                         # build Sphinx docs
+make build                        # build package artifacts
+```
 
-### License Header
+Testing uses `pytest-testmon` for affected-test selection. A `.testmondata`
+database is populated by full runs and reused by fast selective runs.
 
-Every `.py` file MUST start with this exact SPDX header (see `test/_license/header.txt`).
+```bash
+make test                         # affected tests with testmon --testmon-nocollect
+make test-all                     # all tests and rebuild testmon database
+make pytest                       # all tests with coverage, no testmon
+make testmon-coverage             # CI-style testmon plus coverage
 
-The pre-commit hook (`test/_license/header_check.py`) validates this on every commit.
+# Narrow tests with Makefile pass-through.
+make test PYTEST_ARGS="test/data/test_atomic_data.py"
+make pytest PYTEST_ARGS="-k test_move_tensor test/"
 
-### Imports
+# Direct uv commands must include the active CUDA extra.
+uv run --extra cu13 pytest test/models/test_lj_model.py
+uv run --extra cu12 pytest \
+  test/data/test_data_mixin.py::TestMoveObjToDevice::test_move_tensor_to_device
+```
 
-- Always use `from __future__ import annotations` at the top of source files.
-- Import order is enforced by ruff/isort: stdlib, third-party, local (`nvalchemi`).
-- Use `TYPE_CHECKING` blocks for imports only needed at type-check time.
-- Unused imports are allowed only in `__init__.py` files (F401 suppressed).
+Coverage is configured in `pyproject.toml` with `fail_under = 75`, branch
+coverage disabled, and `nvalchemi.coverage.xml` as the XML output. Interrogate
+docstring coverage requires 95%.
 
-### Type Annotations
+## Tooling And Style
 
-- All functions and methods MUST have type annotations.
-- Use `jaxtyping` for tensor shape annotations (e.g., `Float[torch.Tensor, "V 3"]`).
-- Shape dimension aliases are defined in `nvalchemi/_typing.py`:
-  `B` (batch), `V` (nodes), `E` (edges), `H` (hidden), `C` (centroids), `M` (ensemble).
-- Use semantic type aliases from `_typing.py` (e.g., `NodePositions`, `Forces`, `Energy`).
-- Use `Annotated[type, Field(...)]` for Pydantic model fields with descriptions.
-- Use `typing.Protocol` for structural typing / interfaces.
-- Use `TypeAlias` for type alias declarations.
+- Ruff lint rules: `E`, `F`, `S`, `I`, and `PERF`; only import sorting (`I`) is
+  marked auto-fixable in `pyproject.toml`.
+- Ruff ignores: `E501`, `S311`, `F722`, and `F821`.
+- Per-file ignores: `F401` in `__init__.py` and `docs/*.py`; `E402` and `S101`
+  in `examples/*.py`; `S101` in `test/*.py`.
+- Pre-commit also runs large-file checks, trailing-whitespace, end-of-file fixer,
+  YAML checks, debug-statements, Ruff, interrogate, markdownlint with `MD024`
+  disabled, and the local license hook.
+- Every `.py` file must start with the exact SPDX header in
+  `test/_license/header.txt`.
+- New source files should use `from __future__ import annotations`.
+- Keep imports ordered by Ruff/isort: standard library, third-party, local
+  `nvalchemi`.
+- Use `TYPE_CHECKING` for type-only imports and optional-heavy imports.
+- Examples in the `examples` folder should follow `sphinx-gallery` style;
+this implies no interactivity, and for distributed examples they should
+be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
 
-### Naming Conventions
+## Coding Conventions
 
-- **Classes**: `PascalCase` — `AtomicData`, `ModelConfig`, `BaseModelMixin`.
-- **Functions/methods**: `snake_case` — `compute_embeddings`, `adapt_input`.
-- **Private**: prefix with `_` — `_adapt_input`, `_verify_request`, `_typing.py`.
-- **Type aliases**: `PascalCase` — `NodePositions`, `GraphEmbeddings`, `ModelOutputs`.
-- **Constants/module-level**: `UPPER_SNAKE_CASE` or `PascalCase` for type vars.
-- **TypeVars**: single uppercase letter or short name — `T`, `F`, `C`.
-- **Test classes**: `Test` prefix — `TestMoveObjToDevice`, `TestDataMixin`.
-- **Test methods**: `test_` prefix with descriptive snake_case — `test_move_tensor_to_device`.
+- All public functions and methods should be type annotated and documented with
+  NumPy-style docstrings.
+- Use jaxtyping and semantic aliases from `nvalchemi/_typing.py` for tensor shape
+  and domain types.
+- Use Pydantic v2 patterns: `Annotated[..., Field(description=...)]`,
+  `@model_validator(mode="after")`, `ConfigDict`, and serializers where
+  appropriate.
+- Prefer `typing.Protocol` for structural interfaces and `TypeAlias` for named
+  aliases.
+- Keep errors precise: `ValueError`, `KeyError`, or `TypeError` for validation;
+  `NotImplementedError` for abstract/unimplemented behavior; `RuntimeError` for
+  internal consistency failures; `warnings.warn(..., UserWarning)` for capability
+  mismatches.
+- Guard optional integrations with `nvalchemi._optional.OptionalDependency` and
+  raise `OptionalDependencyError` through that mechanism.
+- Do not add private helper functions that only wrap a single obvious call unless
+  the wrapper removes real complexity or matches an existing local pattern.
+- Add short comments where they explain intent or non-obvious constraints; avoid
+  comments that restate the code.
 
-### Docstrings
+## Tests
 
-- NumPy-style docstrings are required (enforced at 95% coverage).
-- Must include `Parameters`, `Returns`, `Raises` sections as applicable.
-- Class docstrings should include `Attributes` section.
-- Use `Examples` section with doctestable code where appropriate.
+- Test files mirror package areas under `test/`: `data`, `dynamics`, `hooks`,
+  `models`, and `training`.
+- Test classes use `Test*`; test methods use descriptive `test_*` names.
+- Use `setup_method` for per-test class fixtures when local tests already follow
+  that pattern.
+- Use `unittest.mock.Mock`, `patch`, and `patch.object` for mocking.
+- Mark slow tests with `@pytest.mark.slow`; deselect with `-m 'not slow'`.
+- CLI tests use `@pytest.mark.cli`.
+- `asyncio_mode = "auto"` is enabled.
+- Prefer existing demo/test utilities such as `DemoModelWrapper`, `DemoDynamics`,
+  and local `conftest.py` fixtures over bespoke scaffolding.
+- Add or update regression tests for behavior changes, especially model adapters,
+  dynamics hooks, data serialization, training specs, and optional-dependency
+  paths.
 
-### Error Handling
+## Architecture Notes
 
-- Use `ValueError`, `KeyError`, `TypeError` for validation with descriptive messages.
-- Use `NotImplementedError` for abstract/unimplemented methods.
-- Use `warnings.warn(..., UserWarning)` for capability mismatches (not hard errors).
-- Use `raise RuntimeError(...)` for internal consistency violations.
-- Custom errors: `OptionalDependencyError(ImportError)` for missing optional deps.
+- `nvalchemi/_typing.py`: central shape aliases and domain type aliases.
+- `nvalchemi/_optional.py`: optional dependency registry and clean error path.
+- `nvalchemi/_serialization.py`: tensor/model serialization helpers.
+- `nvalchemi/data/`: `AtomicData`, `Batch`, data mixins, Zarr/level storage,
+  datapipes, samplers, and transforms.
+- `nvalchemi/models/`: `BaseModelMixin`, demo/LJ/DFTD3/Ewald/PME models,
+  optional AIMNet2/MACE/UMA wrappers, neighbor filters, and composable pipelines.
+- `nvalchemi/dynamics/`: base dynamics, demo dynamics, integrators, optimizers,
+  sampler, sinks, hooks, and low-level ops.
+- `nvalchemi/hooks/`: shared hook protocol/registry/context plus reporting,
+  periodic, neighbor-list, profiling, and timing hooks.
+- `nvalchemi/training/`: CLI, strategy/spec validation, runtime, distributed
+  helpers, finetuning, checkpoints, losses, optimizers, and training hooks.
+- `nvalchemi/distributed.py`: distributed utilities used by training and
+  multi-stage workflows.
 
-### Pydantic Patterns
+Import from concrete modules when optional exports might pull unavailable extras.
+For example, prefer `from nvalchemi.models.base import BaseModelMixin` in code
+that should not import optional model backends.
 
-- Data structures inherit from `pydantic.BaseModel` (often mixed with custom mixins).
-- Use `@model_validator(mode="after")` for cross-field consistency checks.
-- Use `PlainSerializer` for custom tensor serialization.
-- Use `ConfigDict(extra="allow")` when models need extensibility.
-- Use `model_config = {"arbitrary_types_allowed": True}` for torch.Tensor fields.
-- Document fields with `Annotated[..., Field(description=...)]`.
+## Documentation And Agent Skills
 
-### Testing Patterns
-
-- Framework: `pytest` with `pytest-timeout`, `pytest-asyncio`, `hypothesis`.
-- Test files mirror source structure under `test/`.
-- Group related tests in classes with `Test` prefix.
-- Use `setup_method` for per-test fixtures within test classes.
-- Use `unittest.mock.Mock`, `patch`, `patch.object` for mocking.
-- Markers: `@pytest.mark.slow`, `@pytest.mark.cli`.
-- Deselect slow tests with `-m 'not slow'`.
-- `asyncio_mode = "auto"` — async tests run automatically.
-- Test verbosity: `-vv -r xfXs` (show extra info on xfailed/xpassed/skipped).
-- When possible, use `Demo*` classes (e.g., `DemoModelWrapper`, `DemoDynamics`)
-  to compose example and unit test workflows instead of bespoke classes.
-
-### Architecture Notes
-
-- `nvalchemi/_typing.py`: Central type definitions — always import types from here.
-- `nvalchemi/data/atomic_data.py`: Core `AtomicData` structure (Pydantic + DataMixin).
-- `nvalchemi/data/batch.py`: `Batch` — batched disjoint graph (like torch_geometric).
-- `nvalchemi/models/base.py`: `BaseModelMixin` — abstract interface for ML potentials.
-  **Note:** `nvalchemi/models/__init__.py` has broken imports (aimnet2, mace); import
-  `BaseModelMixin` directly from `nvalchemi.models.base` or under `TYPE_CHECKING`.
-- `nvalchemi/_imports.py`: Optional dependency management with decorator pattern.
-- `nvalchemi/_utils.py`: Context managers for device/dtype/env management.
-- `nvalchemi/dynamics/`: Dynamics simulation framework. Inheritance:
-  `_CommunicationMixin` → `BaseDynamics` → `FusedStage` / `DemoDynamics`.
-  Hook system via `DynamicsStage` + `Hook` protocol. Data sinks: `GPUBuffer`,
-  `HostMemory`, `ZarrData`. Orchestration: `DistributedPipeline`.
-
-### Key Dependencies
-
-`torch` (>=2.5.1), `pydantic` (>=2.11.7), `jaxtyping` (>=0.3.2), `loguru`,
-`plum-dispatch`, `dm-tree`, `nvtx`, `numpy`, `periodictable`, `tensordict` (>=0.11),
-`zarr` (>=3). Optional: `nvidia-physicsnemo` (training extra), `ase` (>=3.27).
+- User docs live in `docs/userguide/`; API docs live in `docs/modules/`; examples
+  live in `examples/`.
+- Project conventions, including virial/stress/pressure signs, are documented in
+  `docs/userguide/about/conventions.md`.
+- Agent-facing API skills live in `.claude/skills/`. Check the relevant
+  `SKILL.md` before nontrivial work in data structures/storage, dynamics,
+  hooks, model wrapping, training, finetuning, reporting, losses, or Zarr
+  performance.
+- When docs, examples, or public APIs change, update related docs and consider
+  `CHANGELOG.md` because the PR template asks for it.
