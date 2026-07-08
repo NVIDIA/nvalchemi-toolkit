@@ -16,20 +16,12 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 import pytest
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
-
-
-class _KeepEnergyData(AtomicData):
-    """AtomicData subclass that opts ``energy`` out of the fp-dtype downcast."""
-
-    _precision_preserving_keys: ClassVar[frozenset[str]] = frozenset({"energy"})
 
 
 def _minimal_atomic_data(
@@ -1336,13 +1328,16 @@ class TestPrecisionPreservingBatch:
 
     ``Batch`` carries whatever dtype the source ``AtomicData`` produced (collation
     is ``torch.cat``, and the storage layer respects an existing tensor's dtype),
-    so the ``_precision_preserving_keys`` exemption is honoured end-to-end.
+    so the ``precision_preserving_keys`` exemption is honoured end-to-end.
     """
 
-    def test_fp64_energy_survives_from_data_list(self):
+    def test_fp64_energy_survives_from_data_list(self, monkeypatch):
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
         e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
         data_list = [
-            _KeepEnergyData(
+            AtomicData(
                 positions=torch.randn(2, 3, dtype=torch.float32),
                 atomic_numbers=torch.ones(2, dtype=torch.long),
                 energy=e64.clone(),
@@ -1354,11 +1349,14 @@ class TestPrecisionPreservingBatch:
         # bit-exact: no fp32 round-trip anywhere in the collation path
         assert batch.energy[0].item() == e64.item()
 
-    def test_fp64_energy_survives_device_move(self):
+    def test_fp64_energy_survives_device_move(self, monkeypatch):
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
         e64 = torch.tensor([[-41512.590527111]], dtype=torch.float64)
         batch = Batch.from_data_list(
             [
-                _KeepEnergyData(
+                AtomicData(
                     positions=torch.randn(2, 3, dtype=torch.float32),
                     atomic_numbers=torch.ones(2, dtype=torch.long),
                     energy=e64.clone(),

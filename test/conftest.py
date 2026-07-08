@@ -17,18 +17,18 @@ from __future__ import annotations
 import pytest
 import torch
 
-from nvalchemi.data.atomic_data import AtomicData
+from nvalchemi.data import atomic_data
 
 
 @pytest.fixture(autouse=True)
 def _reset_fp_cast_warned() -> None:
     """Clear the process-global fp-cast warning cache before each test.
 
-    ``AtomicData.check_fp_dtype_consistency`` dedups its cast warning per
-    ``(field, dtype)`` across all constructions, so without this reset warning
-    assertions would depend on test order (an earlier test could consume the
-    only warning for a given field/dtype)."""
-    AtomicData._fp_cast_warned.clear()
+    ``check_fp_dtype_consistency`` dedups its cast warning per ``(field, dtype)``
+    across all constructions, so without this reset warning assertions would
+    depend on test order (an earlier test could consume the only warning for a
+    given field/dtype)."""
+    atomic_data._FP_CAST_WARNED.clear()
 
 
 @pytest.fixture(params=["cpu", "cuda"])

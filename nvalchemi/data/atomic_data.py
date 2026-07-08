@@ -64,6 +64,12 @@ def _warn_first(seen: set, key: object, message: str, *, stacklevel: int = 2) ->
         warnings.warn(message, UserWarning, stacklevel=stacklevel + 1)
 
 
+# Process-global record of (field, src_dtype, tgt_dtype) casts already warned
+# about, so check_fp_dtype_consistency warns once per cast rather than per
+# construction. Module-level so it stays out of the AtomicData schema.
+_FP_CAST_WARNED: set[tuple[str, str, str]] = set()
+
+
 class AtomicNumberTable:
     """
     Atomic number table
@@ -377,15 +383,11 @@ class AtomicData(BaseModel, DataMixin):
         }
     )
 
-    # FP fields exempt from the positions-dtype cast below. Empty by default (all
-    # fp tensors match positions); a subclass may set it to keep a high-precision
-    # label, e.g. {"energy"} so a fp64 total energy (~1e4-1e5 eV, which fp32 would
-    # quantize to ~1e-2 eV) is not silently downcast to the compute precision.
-    _precision_preserving_keys: ClassVar[frozenset[str]] = frozenset()
-
-    # Process-global (field, src_dtype, tgt_dtype) casts already warned about, so
-    # check_fp_dtype_consistency warns once per cast rather than per construction.
-    _fp_cast_warned: ClassVar[set[tuple[str, str, str]]] = set()
+    # FP fields exempt from the positions-dtype cast below. Empty by default. Set
+    # it globally (``AtomicData.precision_preserving_keys = frozenset({"energy"})``)
+    # or on a subclass to keep a high-precision label, e.g. a fp64 total energy
+    # (~1e4-1e5 eV, which fp32 would quantize to ~1e-2 eV).
+    precision_preserving_keys: ClassVar[frozenset[str]] = frozenset()
 
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
@@ -484,12 +486,12 @@ class AtomicData(BaseModel, DataMixin):
     def check_fp_dtype_consistency(self) -> AtomicData:
         """
         Cast floating point tensors to the positions dtype. Fields in
-        ``_precision_preserving_keys`` are exempt. Casting is unconditional, but
+        ``precision_preserving_keys`` are exempt. Casting is unconditional, but
         each distinct ``(field, src, tgt)`` cast warns only once per process.
         """
         dtype = self.positions.dtype
         for key in self.model_dump().keys():
-            if key in self._precision_preserving_keys:
+            if key in self.precision_preserving_keys:
                 continue
             value = getattr(self, key)
             if not (isinstance(value, torch.Tensor) and value.dtype.is_floating_point):
@@ -497,7 +499,7 @@ class AtomicData(BaseModel, DataMixin):
             if value.dtype != dtype:
                 # stacklevel=3 keeps the warning on the user's AtomicData(...) call
                 _warn_first(
-                    self._fp_cast_warned,
+                    _FP_CAST_WARNED,
                     (key, str(value.dtype), str(dtype)),
                     f"AtomicData field '{key}' was cast from {value.dtype} to "
                     f"{dtype} to match positions; pass a matching dtype to silence "
