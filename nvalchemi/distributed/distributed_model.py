@@ -64,16 +64,20 @@ def isolate_compile_cache_per_rank() -> None:
     under multi-rank DD a rank can deserialize another rank's guarded entry and
     raise a ``KeyError`` mid-forward → a skipped collective → NCCL deadlock.
     Pointing each rank at its own dir removes the collision while keeping the
-    caches ON (disabling them instead re-lowers the AOT graph every step, ~26 s/step
-    on torch 2.10).
+    caches ON (disabling them instead re-lowers the AOT graph every step).
 
     Idempotent and launcher-friendly: only sets a var that is currently unset (so a
     launcher/user setting wins), keys off ``LOCAL_RANK`` (torchrun) / ``RANK``, and
-    is a no-op single-process. **Must run before the first ``torch.compile``** to
-    take effect — the reliable path is a launcher exporting these from
-    ``LOCAL_RANK`` at process start (a model loader may compile before any framework
-    code runs); the call in :func:`_configure_dd_dynamo` is the in-process best
-    effort.
+    is a no-op single-process. These vars are read when inductor/triton actually
+    lower a graph — i.e. at the *first forward*, not when ``torch.compile`` merely
+    wraps the model — so calling this at ``DistributedModel`` construction (via
+    :func:`_configure_dd_dynamo`) reliably lands before the first DD forward. That
+    covers the common ``from_checkpoint(compile_model=True)`` -> ``DistributedModel``
+    order: the loader only wraps the model (lazily) and runs no forward, so nothing
+    is lowered until the DD forward, by which point the dirs are set. The one gap is
+    a forward triggered *before* construction (e.g. a manual sanity-check call); for
+    that, a launcher exporting these from ``LOCAL_RANK`` at process start is the
+    bulletproof path.
     """
     import os  # noqa: PLC0415
 
@@ -111,11 +115,14 @@ def _configure_dd_dynamo() -> None:
        guarded entry and hit a ``KeyError`` (e.g. a cueq segment ``lengths`` dim) →
        skip a collective → NCCL deadlock. The fix is to point each rank at its OWN
        cache dir (keeping the caches ON — disabling them re-lowers the AOT graph
-       every step, ~26 s/step on torch 2.10). This calls :func:`isolate_compile_cache_per_rank`,
-       which is a no-op if the dirs are already set — the reliable time to set them
-       is before *any* ``torch.compile`` runs (a loader may compile before this
-       ``__init__``), so a launcher should set them from ``LOCAL_RANK`` at process
-       start; this call is the in-process best effort.
+       every step). This calls :func:`isolate_compile_cache_per_rank`, a no-op if the
+       dirs are already set. Since those dirs are read at first-forward lowering (not
+       when ``torch.compile`` wraps the model) and this runs at ``DistributedModel``
+       construction, it lands before the first DD forward — including the common
+       ``from_checkpoint(compile_model=True)`` -> ``DistributedModel`` order, where
+       the loader only wraps (lazily) and runs no forward. A launcher exporting the
+       dirs from ``LOCAL_RANK`` at process start still covers the edge case of a
+       forward triggered before construction.
     """
     import torch._dynamo as _td  # noqa: PLC0415
 

@@ -241,124 +241,125 @@ def main() -> None:
     from nvalchemi.distributed import DistributedManager
 
     DistributedManager.initialize()
-    dm = DistributedManager()
-    rank, world_size, device = dm.rank, dm.world_size, torch.device(dm.device)
-    mesh = dm.initialize_mesh(mesh_shape=(world_size,), mesh_dim_names=("domain",))
+    try:
+        dm = DistributedManager()
+        rank, world_size, device = dm.rank, dm.world_size, torch.device(dm.device)
+        mesh = dm.initialize_mesh(mesh_shape=(world_size,), mesh_dim_names=("domain",))
 
-    if rank == 0:
-        logger.info(
-            "MACE NPT distributed: world_size={ws} device={dev} "
-            "checkpoint={ckpt} repeats={r} n_steps={n} T={T}K "
-            "P={P} eV/Å³ dt={dt}fs",
-            ws=world_size,
-            dev=device,
-            ckpt=args.checkpoint,
-            r=tuple(args.repeats),
-            n=args.n_steps,
-            T=args.temperature_k,
-            P=args.pressure,
-            dt=args.dt_fs,
-        )
-
-    # ----- Load MACE wrapper -----
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        from nvalchemi.models.mace import MACEWrapper
-
-    wrapper = MACEWrapper.from_checkpoint(
-        args.checkpoint, dtype=dtype, device=device
-    ).eval()
-    # The barostat needs the virial → ask MACE for stress (example 03 only
-    # needed energy + forces). Everything else is unchanged.
-    wrapper.set_config("active_outputs", {"energy", "forces", "stress"})
-    if rank == 0:
-        logger.info("MACE wrapper ready: cutoff={c} Å", c=wrapper.cutoff)
-
-    # ----- Domain config -----
-    domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh)
-
-    # ----- Hooks -----
-    nl_hook = NeighborListHook(
-        wrapper.model_config.neighbor_config,
-        skin=0.5,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-    )
-    n_frames_expected = (args.n_steps // args.snapshot_every) + 1
-    trajectory_sink = HostMemory(capacity=n_frames_expected)
-    snapshot_hook = SnapshotHook(
-        sink=trajectory_sink,
-        frequency=args.snapshot_every,
-    )
-    # RANK_ZERO scope: gather the full system (with the current cell) onto
-    # rank 0 so each frame is the whole box, not one rank's shard.
-    snapshot_hook.scope = HookScope.RANK_ZERO
-
-    # ----- Inner integrator: NPT -----
-    # NPT couples a Nosé–Hoover thermostat chain to the particle velocities
-    # and a barostat to the cell. Under DomainParallel the dynamics
-    # coordinator globalises the kinetic energy / DOF / pressure tensor and
-    # broadcasts the replicated barostat state + cell each step (see the
-    # module docstring), so this stays ensemble-correct across ranks.
-    integrator = NPT(
-        model=wrapper,
-        dt=args.dt_fs,
-        temperature=args.temperature_k,
-        pressure=args.pressure,
-        barostat_time=args.barostat_time_fs,
-        thermostat_time=args.thermostat_time_fs,
-        pressure_coupling="isotropic",
-        chain_length=3,
-        hooks=[nl_hook],
-        n_steps=args.n_steps,
-    )
-
-    # ----- DomainParallel wrapping (SnapshotHook on the outer, as in 03) -----
-    # ``with dynamics:`` makes teardown exception-safe; the process-group
-    # lifecycle stays at launcher scope (``DistributedManager.cleanup()`` below).
-    with DomainParallel(
-        dynamics=integrator,
-        config=domain_cfg,
-        n_steps=args.n_steps,
-        hooks=[snapshot_hook],
-    ) as dynamics:
-        # ----- Build the initial batch on rank 0 and partition -----
-        initial_batch = (
-            build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
-            if rank == 0
-            else None
-        )
-        v0 = cell_volume(initial_batch) if rank == 0 else None
-        owned_batch = dynamics.partition(initial_batch)
         if rank == 0:
             logger.info(
-                "Partitioned: n_owned (rank 0) = {n} of {tot} atoms; V0 = {v:.2f} Å³",
-                n=int(owned_batch.positions.shape[0]),
-                tot=int(initial_batch.positions.shape[0]),
-                v=v0,
-            )
-
-        # ----- Run the trajectory -----
-        final_batch = dynamics.run(owned_batch)
-
-        # ----- Report volume relaxation + persist trajectory -----
-        # The cell is replicated (broadcast from rank 0 each step), so any rank's
-        # final cell is the global cell; report it from rank 0.
-        if rank == 0:
-            v1 = cell_volume(final_batch)
-            logger.info(
-                "Volume: {v0:.2f} → {v1:.2f} Å³ ({pct:+.2f}%) over {n} steps",
-                v0=v0,
-                v1=v1,
-                pct=100.0 * (v1 - v0) / v0,
+                "MACE NPT distributed: world_size={ws} device={dev} "
+                "checkpoint={ckpt} repeats={r} n_steps={n} T={T}K "
+                "P={P} eV/Å³ dt={dt}fs",
+                ws=world_size,
+                dev=device,
+                ckpt=args.checkpoint,
+                r=tuple(args.repeats),
                 n=args.n_steps,
-            )
-            n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
-            logger.info(
-                "Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz
+                T=args.temperature_k,
+                P=args.pressure,
+                dt=args.dt_fs,
             )
 
-    # Process-group teardown stays at launcher scope.
-    DistributedManager.cleanup()
+        # ----- Load MACE wrapper -----
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from nvalchemi.models.mace import MACEWrapper
+
+        wrapper = MACEWrapper.from_checkpoint(
+            args.checkpoint, dtype=dtype, device=device
+        ).eval()
+        # The barostat needs the virial → ask MACE for stress (example 03 only
+        # needed energy + forces). Everything else is unchanged.
+        wrapper.set_config("active_outputs", {"energy", "forces", "stress"})
+        if rank == 0:
+            logger.info("MACE wrapper ready: cutoff={c} Å", c=wrapper.cutoff)
+
+        # ----- Domain config -----
+        domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh)
+
+        # ----- Hooks -----
+        nl_hook = NeighborListHook(
+            wrapper.model_config.neighbor_config,
+            skin=0.5,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
+        n_frames_expected = (args.n_steps // args.snapshot_every) + 1
+        trajectory_sink = HostMemory(capacity=n_frames_expected)
+        snapshot_hook = SnapshotHook(
+            sink=trajectory_sink,
+            frequency=args.snapshot_every,
+        )
+        # RANK_ZERO scope: gather the full system (with the current cell) onto
+        # rank 0 so each frame is the whole box, not one rank's shard.
+        snapshot_hook.scope = HookScope.RANK_ZERO
+
+        # ----- Inner integrator: NPT -----
+        # NPT couples a Nosé–Hoover thermostat chain to the particle velocities
+        # and a barostat to the cell. Under DomainParallel the dynamics
+        # coordinator globalises the kinetic energy / DOF / pressure tensor and
+        # broadcasts the replicated barostat state + cell each step (see the
+        # module docstring), so this stays ensemble-correct across ranks.
+        integrator = NPT(
+            model=wrapper,
+            dt=args.dt_fs,
+            temperature=args.temperature_k,
+            pressure=args.pressure,
+            barostat_time=args.barostat_time_fs,
+            thermostat_time=args.thermostat_time_fs,
+            pressure_coupling="isotropic",
+            chain_length=3,
+            hooks=[nl_hook],
+            n_steps=args.n_steps,
+        )
+
+        # ----- DomainParallel wrapping (SnapshotHook on the outer, as in 03) -----
+        # ``with dynamics:`` makes teardown exception-safe; the process-group
+        # lifecycle stays at launcher scope (``DistributedManager.cleanup()`` below).
+        with DomainParallel(
+            dynamics=integrator,
+            config=domain_cfg,
+            n_steps=args.n_steps,
+            hooks=[snapshot_hook],
+        ) as dynamics:
+            # ----- Build the initial batch on rank 0 and partition -----
+            initial_batch = (
+                build_initial_batch(tuple(args.repeats), dtype=dtype, device=device)
+                if rank == 0
+                else None
+            )
+            v0 = cell_volume(initial_batch) if rank == 0 else None
+            owned_batch = dynamics.partition(initial_batch)
+            if rank == 0:
+                logger.info(
+                    "Partitioned: n_owned (rank 0) = {n} of {tot} atoms; V0 = {v:.2f} Å³",
+                    n=int(owned_batch.positions.shape[0]),
+                    tot=int(initial_batch.positions.shape[0]),
+                    v=v0,
+                )
+
+            # ----- Run the trajectory -----
+            final_batch = dynamics.run(owned_batch)
+
+            # ----- Report volume relaxation + persist trajectory -----
+            # The cell is replicated (broadcast from rank 0 each step), so any rank's
+            # final cell is the global cell; report it from rank 0.
+            if rank == 0:
+                v1 = cell_volume(final_batch)
+                logger.info(
+                    "Volume: {v0:.2f} → {v1:.2f} Å³ ({pct:+.2f}%) over {n} steps",
+                    v0=v0,
+                    v1=v1,
+                    pct=100.0 * (v1 - v0) / v0,
+                    n=args.n_steps,
+                )
+                n_frames = write_trajectory_xyz(trajectory_sink, args.output_xyz)
+                logger.info(
+                    "Done. Wrote {f} xyz frames to {p}.", f=n_frames, p=args.output_xyz
+                )
+    finally:
+        # Process-group teardown stays at launcher scope.
+        DistributedManager.cleanup()
 
 
 if __name__ == "__main__":
