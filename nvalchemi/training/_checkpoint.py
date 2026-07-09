@@ -1768,7 +1768,6 @@ def load_checkpoint(
     # Remaining paths are component-level loads: either the checkpoint has no
     # strategy metadata, or ``model_names`` requested a partial load from a
     # strategy checkpoint. Partial loads do not reconstruct strategy hooks.
-    
     # Build the load set as the union of each selected model's associations.
     # When ``model_names is None`` this is equivalent to loading every
     # component listed in the manifest.
