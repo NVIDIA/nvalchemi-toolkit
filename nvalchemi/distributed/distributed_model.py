@@ -170,6 +170,33 @@ def _prepare_dd_compile(spec: "Any", compile_kwargs: "dict | None") -> dict:
     return ck
 
 
+def _wrapper_is_precompiled(wrapper: "Any") -> bool:
+    """True if the wrapper already holds a ``torch.compile``-d module.
+
+    ``torch.compile`` returns an ``OptimizedModule`` (carrying ``_orig_mod``); a
+    wrapper that compiled itself in its loader (e.g. MACE
+    ``from_checkpoint(compile_model=True)``) holds one in its module tree.
+    Walking the tree keeps the check model-agnostic. This matters because running
+    the *eager* distributed path against such a model is silently wrong: the halo
+    correction (eager per-op handlers, or the compile-refresh adapters) never sees
+    the message-passing ops sealed inside the loader's compiled graph, so every
+    rank returns an uncorrected owned-only forward.
+    """
+    modules = getattr(wrapper, "modules", None)
+    if not callable(modules):
+        return False
+    try:
+        from torch._dynamo.eval_frame import OptimizedModule  # noqa: PLC0415
+    except Exception:  # pragma: no cover - torch internal layout changed
+        OptimizedModule = None
+    for m in modules():
+        if OptimizedModule is not None and isinstance(m, OptimizedModule):
+            return True
+        if type(m).__name__ == "OptimizedModule":
+            return True
+    return False
+
+
 def _partition_health_verdict(
     n_owned: int, n_padded: int, group: Any, device: Any
 ) -> tuple[bool, bool, int]:
@@ -493,6 +520,34 @@ class DistributedModel:
         self._dd_compile_kwargs: dict | None = (
             _prepare_dd_compile(self._spec, compile_kwargs) if compile else None
         )
+        # A model may arrive already torch.compiled by its own loader (e.g.
+        # ``MACEWrapper.from_checkpoint(compile_model=True)``) in front of a
+        # *plain* DistributedModel. The eager DD path is silently WRONG for such
+        # a model — the halo correction never sees the message-passing ops sealed
+        # inside the compiled graph, so each rank returns an uncorrected owned-only
+        # forward. When the model uses a framework-owned energy-autograd force
+        # strategy, engage the compiled DD path (it consumes a pre-compiled inner
+        # model correctly); if the spec declares no compiled forward at all, raise
+        # rather than return garbage. Models that keep force autograd inside the
+        # model (``MODEL_INTERNAL``, e.g. UMA's fairchem-owned internal compile)
+        # run the eager path correctly and are left untouched.
+        if not self._dd_compile_requested and _wrapper_is_precompiled(wrapper):
+            _cp_pre = getattr(self._spec, "compile", None)
+            if _cp_pre is not None and _cp_pre.forces_via_autograd:
+                self._dd_compile_requested = True
+                self._dd_compile_kwargs = _prepare_dd_compile(
+                    self._spec, compile_kwargs
+                )
+            elif _cp_pre is None:
+                raise DistributionError(
+                    f"{type(wrapper).__name__}'s model is already torch.compiled "
+                    "(e.g. from_checkpoint(compile_model=True)), but its "
+                    "distribution_spec declares no CompilePolicy, so a correct "
+                    "compiled distributed forward cannot be built. Either build "
+                    "the wrapper WITHOUT compiling it and pass "
+                    "DistributedModel(..., compile=True), or add a CompilePolicy "
+                    "to its distribution_spec."
+                )
         # Tune Dynamo/inductor for DD unconditionally: the wrapped model may be
         # compiled by its own loader (e.g. MACE ``loader.compile``) rather than the
         # framework, in which case ``compile`` above is False yet the model still
@@ -1322,7 +1377,44 @@ class DistributedModel:
         # Fresh leaf so autograd.grad (outside compile) differentiates the
         # compiled output w.r.t. it.
         pos_plain = pos_plain.detach().requires_grad_(True)
-        atoms["positions"] = pos_plain
+
+        # Stress via the strain trick: perturb positions AND cell by a symmetric
+        # per-system strain leaf, then virial = d(energy)/d(strain). Because we
+        # differentiate the framework's already-consolidated GLOBAL energy, this is
+        # correct for every force strategy (real + reciprocal spaces alike), filling
+        # the compiled-DD stress the energy-autograd path otherwise omits. The
+        # per-rank virial is summed across ranks by consolidation (stress declared
+        # ALL_REDUCE), exactly like the autograd forces. Gated on stress being
+        # requested. Strain application is OUTSIDE the compiled region (like the
+        # positions leaf), so it adds no graph ops.
+        want_stress = "stress" in self._wrapper.model_config.active_outputs and bool(
+            getattr(self._spec.compile, "stress_via_strain", False)
+        )
+        strain = None
+        cell_orig = cell_local = None
+        if want_stress:
+            _bidx = padded_batch.batch_idx
+            _bidx = (_bidx.to_local() if hasattr(_bidx, "to_local") else _bidx).long()
+            strain = torch.zeros(
+                int(n_graphs), 3, 3, dtype=pos_plain.dtype, device=pos_plain.device
+            ).requires_grad_(True)
+            strain_sym = 0.5 * (strain + strain.transpose(-1, -2))
+            strain_atom = strain_sym.index_select(0, _bidx)  # [N, 3, 3]
+            pos_use = pos_plain + torch.einsum("nij,nj->ni", strain_atom, pos_plain)
+            cell_orig = getattr(padded_batch, "cell", None)
+            if cell_orig is not None:
+                cell_local = (
+                    cell_orig.to_local()
+                    if hasattr(cell_orig, "to_local")
+                    else cell_orig
+                )
+                cell_use = cell_local + torch.einsum(
+                    "bij,bjk->bik", cell_local, strain_sym
+                )
+                object.__setattr__(padded_batch, "cell", cell_use)
+            atoms["positions"] = pos_use
+        else:
+            atoms["positions"] = pos_plain
 
         # Fixed-shape halo routing as graph inputs, attached to the batch so
         # Dynamo lifts them (they drift per step). ``max_send`` is the persistent
@@ -1370,15 +1462,31 @@ class DistributedModel:
         else:
             # Model self-consolidated the global per-system energy already.
             energy = e
-        (grad,) = torch.autograd.grad(
+        grad_inputs = [pos_plain] if not want_stress else [pos_plain, strain]
+        grads = torch.autograd.grad(
             [energy],
-            [pos_plain],
+            grad_inputs,
             grad_outputs=[torch.ones_like(energy)],
             create_graph=False,
             retain_graph=False,
             allow_unused=True,
         )
+        grad = grads[0]
         forces = torch.zeros_like(pos_plain) if grad is None else -grad
-        return self._wrapper.adapt_output(
-            {"energy": energy, "forces": forces}, padded_batch
-        )
+        result: dict[str, Any] = {"energy": energy, "forces": forces}
+        if want_stress:
+            virial = grads[1]  # d(energy)/d(strain): this rank's partial virial
+            if virial is None or cell_local is None:
+                result["stress"] = torch.zeros(
+                    int(n_graphs), 3, 3, dtype=pos_plain.dtype, device=pos_plain.device
+                )
+            else:
+                # sigma = (1/V) dE/d(strain) with the strain applied as
+                # r->r(I+eps), cell->cell(I+eps) (matches the analytic wrappers'
+                # tensile-positive Cauchy stress). Consolidation sums the per-rank
+                # virial across ranks (stress declared ALL_REDUCE).
+                vol = torch.det(cell_local).abs().reshape(-1, 1, 1)
+                result["stress"] = virial / vol
+            if cell_orig is not None:
+                object.__setattr__(padded_batch, "cell", cell_orig)
+        return self._wrapper.adapt_output(result, padded_batch)

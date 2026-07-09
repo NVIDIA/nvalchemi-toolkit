@@ -291,6 +291,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 static_shapes=True,
                 force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
                 graph_padder=DenseBatchPadder(),
+                stress_via_strain=True,
             )
         )
         return MLIPSpec(
@@ -304,7 +305,16 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             outputs={
                 "energy": OutputSpec(OutputKind.PER_GRAPH),
                 "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
-                "stress": OutputSpec(OutputKind.PER_GRAPH),
+                # Eager (hybrid) stress comes from the analytic kernel virial and is
+                # already global, so no reduce. Under compile the framework derives
+                # stress by strain-autograd of the consolidated global energy; that
+                # per-rank virial is a partial and must be summed across ranks
+                # (``ALL_REDUCE``) to recover the global stress.
+                "stress": (
+                    OutputSpec(OutputKind.PER_GRAPH)
+                    if self.hybrid_forces
+                    else OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)
+                ),
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE),
             },
             # The wrapper emits per-atom ``atomic_energies``; the framework
@@ -531,7 +541,18 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         )
 
         self._cache_valid = True
-        self._cached_alpha = params.alpha
+        # ``alpha`` (the Ewald splitting parameter) is a numerical accuracy knob,
+        # not a physical degree of freedom: the full Ewald sum is alpha-invariant,
+        # so ``alpha`` must contribute zero to the virial/stress. Detach it so the
+        # framework's strain-autograd stress does not differentiate through it.
+        # Single-GPU this is a no-op (real-space and reciprocal alpha-derivatives
+        # cancel exactly), but under domain decomposition real-space (owned-only /
+        # halo) and the reciprocal (global all-reduced ``S(k)``) are consolidated
+        # differently, so the cancellation is incomplete and a spurious isotropic
+        # stress leaks in. ``k_vectors`` stays live — it carries the genuine
+        # reciprocal cell-virial (recovered via the strained positions and green's
+        # live volume), so detaching it would drop that (much larger) term.
+        self._cached_alpha = params.alpha.detach()
         self._cached_k_vectors = k_vectors
 
     # ------------------------------------------------------------------

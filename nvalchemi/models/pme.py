@@ -328,6 +328,12 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 static_shapes=True,
                 force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
                 graph_padder=DenseBatchPadder(),
+                # The framework strains positions + cell and takes the virial by
+                # autograd of the consolidated global energy. PME's reciprocal is
+                # fully differentiable in the cell (k-vectors + volume + FFT), so
+                # this is correct (requires the nvalchemiops convolve-backward
+                # grad_k_squared rank fix).
+                stress_via_strain=True,
             )
         )
         # Eager kernel forces are complete per owned atom, so slice off the halo
@@ -343,7 +349,15 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             outputs={
                 "energy": OutputSpec(OutputKind.PER_GRAPH),
                 "forces": forces_spec,
-                "stress": OutputSpec(OutputKind.PER_GRAPH),
+                # Compiled DD (hybrid_forces=False) derives stress via the framework
+                # strain-autograd of the consolidated GLOBAL energy: a per-rank
+                # virial that ALL_REDUCE sums across ranks (correct for real +
+                # reciprocal, since PME's reciprocal is differentiable in the cell).
+                # The eager analytic kernel virial (hybrid_forces=True) needs a
+                # reciprocal-aware split, so it stays unreduced.
+                "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)
+                if not self.hybrid_forces
+                else OutputSpec(OutputKind.PER_GRAPH),
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE),
             },
             node_energy_key="atomic_energies",

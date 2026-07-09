@@ -259,6 +259,14 @@ class CompilePolicy:
     static_shapes: bool = True
     graph_padder: "GraphPadder | None" = None
     force_strategy: ForceStrategy = ForceStrategy.MODEL_INTERNAL
+    # Opt in to framework-computed stress on the compiled energy-autograd path:
+    # the framework strains positions + cell and takes ``virial = dE/d(strain)``.
+    # Correct only when the model's FULL cell-dependence is differentiable (e.g.
+    # MACE). NOT safe for models with cached/non-differentiable cell terms — the
+    # electrostatics reciprocal space (Ewald cached k-vectors; PME FFT custom op
+    # with no cell-strain backward) needs dedicated work first, so they leave this
+    # False and emit no compiled-DD stress rather than a wrong one.
+    stress_via_strain: bool = False
 
     @property
     def forces_via_autograd(self) -> bool:
