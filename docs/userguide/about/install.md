@@ -8,9 +8,7 @@ There are a number of ways to download and setup a Python environment for `nvalc
 depending on whether you are a user, a developer, what optional dependencies you would like
 to include, what version of CUDA Toolkit is available, and what environment manager you use.
 
-## Installation Methods
-
-### From PyPI
+## From PyPI
 
 The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
 one accelerator stack, then add any compatible optional extras.
@@ -77,9 +75,11 @@ exclusive with `cu12`, `cu13`, and `mace`; keep UMA in a separate environment.
 We recommend using `uv` for virtual environment, package management, and
 dependency resolution. `uv` can be obtained through their installation
 page found [here](https://docs.astral.sh/uv/getting-started/installation/).
+Alternative environment managers like `pyenv` can also be used for `pip`
+exclusive commands.
 ```
 
-### From Github Source
+## From Github Source
 
 This approach is useful for obtain nightly builds by installing directly
 from the source repository:
@@ -88,7 +88,7 @@ from the source repository:
 $ pip install git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
 ```
 
-### Installation via `uv`
+## Installation via `uv`
 
 Maintainers generally use `uv`, and is the most reliable (and fastest) way
 to spin up a virtual environment to use ALCHEMI Toolkit. Assuming `uv`
