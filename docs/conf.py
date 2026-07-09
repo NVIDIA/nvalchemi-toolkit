@@ -21,59 +21,11 @@ import logging
 import os
 import pathlib
 import sys
-import types
 from importlib.metadata import version
 
 import dotenv
 from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 
-
-def _install_physicsnemo_docs_stub() -> None:
-    """Provide typed PhysicsNeMo placeholders for CPU-only docs previews."""
-    physicsnemo = types.ModuleType("physicsnemo")
-    distributed = types.ModuleType("physicsnemo.distributed")
-    utils = types.ModuleType("physicsnemo.utils")
-    profiling = types.ModuleType("physicsnemo.utils.profiling")
-
-    class DistributedManager:
-        world_size = 1
-        rank = 0
-        device = "cpu"
-
-        @classmethod
-        def is_initialized(cls) -> bool:
-            return False
-
-    class PhysicsNeMoUninitializedDistributedManagerWarning(Warning):
-        pass
-
-    class Profiler:
-        pass
-
-    class TorchProfilerConfig:
-        pass
-
-    class TorchProfileWrapper:
-        pass
-
-    distributed.DistributedManager = DistributedManager
-    distributed.PhysicsNeMoUninitializedDistributedManagerWarning = (
-        PhysicsNeMoUninitializedDistributedManagerWarning
-    )
-    profiling.Profiler = Profiler
-    profiling.TorchProfilerConfig = TorchProfilerConfig
-    profiling.TorchProfileWrapper = TorchProfileWrapper
-    physicsnemo.distributed = distributed
-    physicsnemo.utils = utils
-    utils.profiling = profiling
-
-    sys.modules.setdefault("physicsnemo", physicsnemo)
-    sys.modules.setdefault("physicsnemo.distributed", distributed)
-    sys.modules.setdefault("physicsnemo.utils", utils)
-    sys.modules.setdefault("physicsnemo.utils.profiling", profiling)
-
-
-_install_physicsnemo_docs_stub()
 
 # -- Load environment vars -----------------------------------------------------
 # Note: To override, use environment variables (e.g. PLOT_GALLERY=True make html)
