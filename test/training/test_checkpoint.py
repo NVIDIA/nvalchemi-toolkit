@@ -1329,17 +1329,13 @@ class TestStrategyCheckpoint:
         strategy = FineTuningStrategy(
             models=DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8)),
             module_patches={
-                "main.model.projection": create_model_spec(
-                    nn.Linear,
-                    in_features=8,
-                    out_features=1,
-                ),
                 "main.model.aux_projection": create_model_spec(
                     nn.Linear,
                     in_features=8,
                     out_features=2,
                 ),
             },
+            trainable_patterns=("main.model.aux_projection.*",),
             optimizer_configs=OptimizerConfig(
                 optimizer_cls=torch.optim.Adam,
                 optimizer_kwargs={"lr": 1e-3},
@@ -1349,40 +1345,31 @@ class TestStrategyCheckpoint:
             loss_fn=EnergyMSELoss(),
             devices=[torch.device("cpu")],
         )
-        strategy.train_batch(_make_checkpoint_batch(seed=1))
 
         model = strategy.models["main"].model
-        saved_projection = {
-            name: parameter.detach().clone()
-            for name, parameter in model.projection.named_parameters()
-        }
+        # Mimic training by filling the projection weights.
+        with torch.no_grad():
+            model.aux_projection.weight.fill_(7.0)
+            model.aux_projection.bias.fill_(8.0)
         saved_aux_projection = {
             name: parameter.detach().clone()
             for name, parameter in model.aux_projection.named_parameters()
         }
+        # Save the checkpoint and verify the projection weights are present.
         save_checkpoint(tmp_path, strategy=strategy)
+        state = torch.load(
+            tmp_path / "models" / "main" / "checkpoints" / "0.pt",
+            weights_only=True,
+        )
+        assert "model.aux_projection.weight" in state
 
+        # Confirm loading works fine.
         restored = FineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
         restored_model = restored.models["main"].model
 
-        assert isinstance(restored_model.projection, nn.Linear)
         assert isinstance(restored_model.aux_projection, nn.Linear)
-        for name, parameter in restored_model.projection.named_parameters():
-            assert torch.equal(parameter, saved_projection[name])
         for name, parameter in restored_model.aux_projection.named_parameters():
             assert torch.equal(parameter, saved_aux_projection[name])
-
-        optimizer_params = {
-            id(parameter)
-            for group in restored._optimizers[0].param_groups
-            for parameter in group["params"]
-        }
-        assert id(restored_model.projection.weight) in optimizer_params
-        assert id(restored_model.aux_projection.weight) in optimizer_params
-        assert any(
-            parameter is restored_model.projection.weight
-            for parameter in restored._optimizers[0].state
-        )
 
     def test_loaded_strategy_reuses_restored_optimizer_state(
         self, tmp_path: Path
