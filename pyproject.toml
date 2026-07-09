@@ -102,8 +102,9 @@ packages = ["nvalchemi"]
 # === UV configuration ====
 [tool.uv]
 default-groups = ["dev", "build"]
-# Several PhysicsNeMo CUDA dependencies have placeholder packages on PyPI and
-# installable wheels on NVIDIA's index.
+# torch/torchvision resolve from the explicit PyTorch CUDA indexes while their
+# dependencies come from PyPI; unsafe-best-match lets uv pick the best version
+# across indexes rather than stopping at the first that has the name.
 index-strategy = "unsafe-best-match"
 conflicts = [
   [
@@ -199,10 +200,6 @@ docs = [
 
 [tool.setuptools.packages.find]
 include = ["nvalchemi", "nvalchemi.*"]
-
-[[tool.uv.index]]
-name = "nvidia"
-url = "https://pypi.nvidia.com"
 
 [[tool.uv.index]]
 name = "pytorch-cu126"
