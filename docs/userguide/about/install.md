@@ -4,6 +4,10 @@
 
 # Installation Guide
 
+There are a number of ways to download and setup a Python environment for `nvalchemi-toolkit`,
+depending on whether you are a user, a developer, what optional dependencies you would like
+to include, what version of CUDA Toolkit is available, and what environment manager you use.
+
 ## Installation Methods
 
 ### From PyPI
