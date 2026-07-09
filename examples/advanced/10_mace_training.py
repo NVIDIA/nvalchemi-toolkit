@@ -706,6 +706,9 @@ def _build_validation_config(
 #        examples/advanced/10_mace_training.py \
 #        --config-name=10_vanilla_mace distributed.enabled=true
 #
+# The commands above use ``--extra cu12``; change ``uv run --extra cuXX`` to match
+# your NVIDIA driver / CUDA toolkit availability (for example, ``cu13`` on CUDA 13.x).
+#
 # Note that ``training.batch_size`` is the per-process batch size. The global batch size
 # is therefore ``training.batch_size * nproc_per_node``.
 
@@ -797,7 +800,8 @@ if __name__ == "__main__":
         print(
             "Skipping Hydra training during docs build. Run with:\n"
             "uv run --extra cu12 --extra mace python "
-            "examples/advanced/10_mace_training.py",
+            "examples/advanced/10_mace_training.py\n"
+            "(use --extra cu13 instead depending on your CUDA availability)",
             flush=True,
         )
     else:
