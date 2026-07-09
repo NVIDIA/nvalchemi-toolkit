@@ -98,6 +98,8 @@ checkpoints/
 _build
 docs/_build
 docs/modules/generated
+docs/modules/**/generated
+docs/modules/**/_generated
 docs/modules/backreferences
 docs/examples
 
