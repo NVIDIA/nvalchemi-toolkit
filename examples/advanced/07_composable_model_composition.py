@@ -57,8 +57,8 @@ This example:
 * Combines a Lennard-Jones short-range model with an Ewald long-range model
   using the ``+`` operator.
 * Demonstrates :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
-  which returns the single hook needed for the composite model (using the
-  maximum cutoff across all sub-models).
+  which returns the neighbor hook or hooks needed by the pipeline's
+  cutoff-adaptation plan.
 * Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.
 
 Key concepts demonstrated
@@ -69,8 +69,7 @@ Key concepts demonstrated
 * ``a + b + c`` chains — flattens into a single pipeline with one group
   per model.
 * :meth:`~nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks` —
-  returns a list with one correctly-configured
-  :class:`~nvalchemi.hooks.NeighborListHook`.
+  returns all neighbor-list hooks required by a model or composed pipeline.
 """
 
 from __future__ import annotations
@@ -199,12 +198,9 @@ print(
 # NVT simulation with the composite model
 # -----------------------------------------
 # :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
-# returns a list containing exactly one
-# :class:`~nvalchemi.hooks.NeighborListHook` configured for the
-# combined model's effective cutoff (max of all sub-model cutoffs).
-# Registering this single hook is all that is needed — the neighbor data
-# is shared between both sub-models via
-# :func:`~nvalchemi.models._ops.neighbor_filter.prepare_neighbors_for_model`.
+# returns every hook required by the pipeline's neighbor-list plan.  With the
+# default ``neighbor_adaptation="auto"``, similar cutoffs can share a source
+# list, while very different cutoffs get separate source lists.
 
 nvt = NVTLangevin(
     model=combined,
@@ -286,9 +282,18 @@ if rows:
 #         PipelineGroup(steps=[dftd3]),
 #     ])
 #
-# A single call to ``combined.make_neighbor_hooks()`` returns the one hook
-# needed for the combined system, automatically choosing the maximum cutoff
-# and the most general neighbor format (MATRIX if any sub-model requires it).
+# ``make_neighbor_hooks()`` is the right registration point for composed
+# models.  The pipeline decides whether to share one source list or build
+# multiple source lists from the configured adaptation policy:
+#
+#     pipe = PipelineModelWrapper(
+#         groups=[PipelineGroup(steps=[short_range_model, long_range_model])],
+#         neighbor_adaptation="auto",  # default
+#         max_cutoff_ratio=1.5,
+#     )
+#
+# Use ``neighbor_adaptation="always"`` to build one max-cutoff source list,
+# or ``"never"`` to build exact cutoff source groups without cutoff filtering.
 
 # %%
 # Optional plot — energy vs step
