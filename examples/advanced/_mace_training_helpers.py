@@ -274,7 +274,7 @@ class GradientClipHook(TrainingUpdateHook):
 class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
     """Customized learning rate scheduler that starts with a cosine annealing schedule
     and then switches to a constant learning rate. It uses the SequentialLR scheduler to 
-    chain the two schedules for convenience. It is possible to directly inherits from 
+    chain the two schedules for convenience. It is possible to directly inherit from 
     ``torch.optim.lr_scheduler.LRScheduler`` as well.
 
     Attributes

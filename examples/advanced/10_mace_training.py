@@ -622,7 +622,7 @@ def _hooks(
 def _build_validation_config(
     cfg: DictConfig,
     validation_loader: DataLoader | None,
-    loss_fn: Any,
+    loss_fn: ComposedLossFunction,
 ) -> ValidationConfig | None:
     """Build the ValidationConfig used by TrainingStrategy."""
     if not bool(cfg.training.validation.get("enabled", True)):
