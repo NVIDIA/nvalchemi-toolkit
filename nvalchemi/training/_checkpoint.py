@@ -1402,6 +1402,32 @@ def _with_strategy_device_override(
     return metadata
 
 
+def _build_model_from_checkpoint_spec(
+    root: Path,
+    name: str,
+    *,
+    load_location: torch.device | None,
+) -> tuple[nn.Module, BaseSpec]:
+    """Build a model without its saved weights from its checkpoint spec."""
+    spec = _load_spec(root / "models" / name / "spec.json")
+    build_kwargs = (
+        {"device": load_location}
+        if load_location is not None and spec.accepts_kwarg("device")
+        else {}
+    )
+    model = spec.build(**build_kwargs)
+    if not isinstance(model, nn.Module):
+        raise RuntimeError(
+            f"Model spec for {name!r} built {type(model)!r}, expected nn.Module."
+        )
+    # Move models whose factories do not accept device after construction.
+    # Factory-loaded models such as MACE + cuEq need the device during
+    # construction so conversion happens on the intended accelerator.
+    if load_location is not None and not build_kwargs:
+        model.to(load_location)
+    return model, spec
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -1692,6 +1718,44 @@ def load_checkpoint(
         _run_validators(loaded, validators)
         return loaded
 
+    if strategy_metadata is not None and model_names is None:
+        from nvalchemi.training.strategy import TrainingStrategy
+
+        unweighted_models = {
+            name: _build_model_from_checkpoint_spec(
+                root,
+                name,
+                load_location=load_location,
+            )[0]
+            for name in manifest.models
+        }
+        loaded_strategy_models: Any = unweighted_models
+        if strategy_metadata.get("single_model_input") is True and set(
+            unweighted_models
+        ) == {"main"}:
+            loaded_strategy_models = unweighted_models["main"]
+
+        runtime_strategy_metadata = _with_strategy_device_override(
+            strategy_metadata, map_location
+        )
+        restored_strategy = TrainingStrategy.from_checkpoint_dict(
+            runtime_strategy_metadata,
+            models=loaded_strategy_models,
+            hooks=hooks,
+            training_fn=training_fn,
+        )
+        loaded = _restore_checkpoint_into_strategy(
+            root,
+            manifest,
+            checkpoint_index=checkpoint_index,
+            strategy=restored_strategy,
+            strategy_metadata=runtime_strategy_metadata,
+            map_location=load_location,
+        )
+        loaded["strategy_metadata"] = runtime_strategy_metadata
+        _run_validators(loaded, validators)
+        return loaded
+
     # determine what models to load
     selected_models = set(manifest.models) if model_names is None else set(model_names)
     unknown = selected_models - set(manifest.models)
@@ -1701,6 +1765,10 @@ def load_checkpoint(
             f"Available: {sorted(manifest.models)!r}"
         )
 
+    # Remaining paths are component-level loads: either the checkpoint has no
+    # strategy metadata, or ``model_names`` requested a partial load from a
+    # strategy checkpoint. Partial loads do not reconstruct strategy hooks.
+    
     # Build the load set as the union of each selected model's associations.
     # When ``model_names is None`` this is equivalent to loading every
     # component listed in the manifest.
@@ -1721,22 +1789,11 @@ def load_checkpoint(
     # --- Models ---
     loaded_models: dict[str, tuple[nn.Module, BaseSpec]] = {}
     for name in models_to_load:
-        spec = _load_spec(root / "models" / name / "spec.json")
-        build_kwargs = (
-            {"device": load_location}
-            if load_location is not None and spec.accepts_kwarg("device")
-            else {}
+        model, spec = _build_model_from_checkpoint_spec(
+            root,
+            name,
+            load_location=load_location,
         )
-        model = spec.build(**build_kwargs)
-        if not isinstance(model, nn.Module):
-            raise RuntimeError(
-                f"Model spec for {name!r} built {type(model)!r}, expected nn.Module."
-            )
-        # Move models whose factories do not accept device after construction.
-        # Factory-loaded models such as MACE + cuEq need the device during
-        # construction so conversion happens on the intended accelerator.
-        if load_location is not None and not build_kwargs:
-            model.to(load_location)
         weights = torch.load(
             root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
@@ -1788,37 +1845,10 @@ def load_checkpoint(
             _run_validators(loaded, validators)
         return manifest
 
-    strategy = None
-    if strategy_metadata is not None and model_names is None:
-        from nvalchemi.training.strategy import TrainingStrategy
-
-        loaded_strategy_models: Any = _loaded_model_objects(manifest)
-        if strategy_metadata.get("single_model_input") is True and set(
-            loaded_strategy_models
-        ) == {"main"}:
-            loaded_strategy_models = loaded_strategy_models["main"]
-
-        runtime_strategy_metadata = _with_strategy_device_override(
-            strategy_metadata, map_location
-        )
-        strategy = TrainingStrategy.from_checkpoint_dict(
-            runtime_strategy_metadata,
-            models=loaded_strategy_models,
-            hooks=hooks,
-            training_fn=training_fn,
-        )
-        _install_strategy_optimizer_state(strategy, manifest)
-        _load_hook_states(
-            root,
-            strategy,
-            checkpoint_index,
-            map_location=load_location,
-        )
-
     loaded = _manifest_to_loaded_checkpoint(
         manifest,
         root=root,
-        strategy=strategy,
+        strategy=None,
     )
     if strategy_metadata is not None:
         loaded["strategy_metadata"] = _with_strategy_device_override(
