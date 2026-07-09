@@ -3000,6 +3000,11 @@ class FusedStage(BaseDynamics):
         self._call_hooks(DynamicsStage.AFTER_STEP, batch)
         self._call_fused_hooks(DynamicsStage.AFTER_STEP, batch)
 
+        # Snapshot before the counter migration so it is reported in exit_converged.
+        pre_converge_status = batch.status.clone()
+        if pre_converge_status.dim() == 2:
+            pre_converge_status = pre_converge_status.squeeze(-1)
+
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
             if dynamics.n_steps is None:
                 continue
@@ -3029,10 +3034,6 @@ class FusedStage(BaseDynamics):
             if migrate.any():
                 batch.status.view(-1)[migrate] = next_status
                 counter[migrate] = 0  # Reset for next system in this slot
-
-        pre_converge_status = batch.status.clone()
-        if pre_converge_status.dim() == 2:
-            pre_converge_status = pre_converge_status.squeeze(-1)
 
         for active_mask, (_, dynamics) in zip(
             stage_active_masks, self.sub_stages, strict=True

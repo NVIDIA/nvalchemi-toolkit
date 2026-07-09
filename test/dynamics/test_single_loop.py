@@ -826,6 +826,23 @@ class TestFusedStage:
         # Should stop after 1 step (convergence), NOT 10000
         assert fused.step_count == 1
 
+    def test_counter_graduation_reported_in_exit_converged(self) -> None:
+        """n_steps counter migration is reported via step()'s exit_converged."""
+        model = NonConservativeDemoModel()
+        dynamics = BaseDynamics(model=model, n_steps=2)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+
+        batch = create_batch_with_status(n_graphs=1)
+        batch.status = torch.tensor([0])
+
+        batch, exit_converged = fused.step(batch)
+        assert exit_converged is None
+
+        batch, exit_converged = fused.step(batch)
+        assert batch.status.view(-1).tolist() == [fused.exit_status]
+        assert exit_converged is not None
+        assert exit_converged.tolist() == [0]
+
 
 # -----------------------------------------------------------------------------
 # TestFusedStageDeviceValidation
