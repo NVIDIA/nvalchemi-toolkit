@@ -11,112 +11,58 @@
 The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
 one accelerator stack, then add any compatible optional extras.
 
-<div class="install-builder" id="install-builder">
-  <fieldset>
-    <legend>Accelerator stack</legend>
-    <label><input type="radio" name="cuda" value="none" checked> No CUDA</label>
-    <label><input type="radio" name="cuda" value="cu12"> CUDA 12</label>
-    <label><input type="radio" name="cuda" value="cu13"> CUDA 13</label>
-  </fieldset>
-  <fieldset>
-    <legend>Optional extras</legend>
-    <label><input type="checkbox" name="extra" value="mace"> mace</label>
-    <label><input type="checkbox" name="extra" value="uma"> uma</label>
-    <label><input type="checkbox" name="extra" value="aimnet"> aimnet</label>
-    <label><input type="checkbox" name="extra" value="ase"> ase</label>
-    <label><input type="checkbox" name="extra" value="pymatgen"> pymatgen</label>
-    <label><input type="checkbox" name="extra" value="tensorboard"> tensorboard</label>
-  </fieldset>
-  <p class="install-warning" id="install-warning" hidden></p>
-  <p><strong>pip</strong></p>
-  <pre><code id="pip-command"></code></pre>
-  <p><strong>uv</strong></p>
-  <pre><code id="uv-command"></code></pre>
+<div class="install-matrix" id="install-matrix">
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="package-manager-label">Package manager</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="package-manager-label">
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-pip" value="pip" checked>
+      <label for="package-manager-pip">Pip</label>
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-uv" value="uv">
+      <label for="package-manager-uv">uv</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="accelerator-label">Accelerator</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="accelerator-label">
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-none" value="none" checked>
+      <label for="accelerator-none">No CUDA</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu12" value="cu12">
+      <label for="accelerator-cu12">CUDA 12</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu13" value="cu13">
+      <label for="accelerator-cu13">CUDA 13</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="optional-extras-label">Optional extras</div>
+    <div class="install-matrix-options" role="group" aria-labelledby="optional-extras-label">
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-aimnet" value="aimnet">
+      <label for="extra-aimnet">AIMNet2</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-ase" value="ase">
+      <label for="extra-ase">ASE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-mace" value="mace">
+      <label for="extra-mace">MACE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-pymatgen" value="pymatgen">
+      <label for="extra-pymatgen">pymatgen</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-tensorboard" value="tensorboard">
+      <label for="extra-tensorboard">TensorBoard</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-uma" value="uma">
+      <label for="extra-uma">UMA</label>
+    </div>
+  </div>
+  <div class="install-matrix-output">
+    <div class="install-matrix-heading">Run this command</div>
+    <div class="install-command">
+      <pre><code id="install-command">pip install nvalchemi-toolkit</code></pre>
+      <button type="button" id="copy-install-command" aria-label="Copy install command">Copy</button>
+    </div>
+  </div>
+  <p class="install-matrix-note" id="install-matrix-note" aria-live="polite"></p>
 </div>
 
-<script>
-(() => {
-  const root = document.getElementById("install-builder");
-  if (!root) return;
-
-  const warning = document.getElementById("install-warning");
-  const pipCommand = document.getElementById("pip-command");
-  const uvCommand = document.getElementById("uv-command");
-  const extraInputs = [...root.querySelectorAll('input[name="extra"]')];
-
-  const labels = {
-    none: "nvalchemi-toolkit",
-    cu12: "nvalchemi-toolkit[cu12]",
-    cu13: "nvalchemi-toolkit[cu13]",
-  };
-
-  const torchIndexes = {
-    none: null,
-    cu12: "https://download.pytorch.org/whl/cu126",
-    cu13: "https://download.pytorch.org/whl/cu130",
-  };
-
-  const torchBackends = {
-    none: "cpu",
-    cu12: "cu126",
-    cu13: "cu130",
-  };
-
-  function selectedCuda() {
-    return root.querySelector('input[name="cuda"]:checked').value;
-  }
-
-  function selectedExtras() {
-    return extraInputs.filter((input) => input.checked).map((input) => input.value);
-  }
-
-  function packageSpec(cuda, extras) {
-    const allExtras = cuda === "none" ? [...extras] : [cuda, ...extras];
-    return allExtras.length ? `nvalchemi-toolkit[${allExtras.join(",")}]` : labels.none;
-  }
-
-  function update() {
-    const cuda = selectedCuda();
-    let extras = selectedExtras();
-    const messages = [];
-
-    if (extras.includes("uma") && extras.includes("mace")) {
-      extras = extras.filter((extra) => extra !== "mace");
-      root.querySelector('input[value="mace"]').checked = false;
-      messages.push("uma and mace are mutually exclusive; mace was removed.");
-    }
-
-    if (extras.includes("uma") && cuda !== "none") {
-      root.querySelector('input[name="cuda"][value="none"]').checked = true;
-      messages.push("uma is mutually exclusive with CUDA 12 and CUDA 13; No CUDA was selected.");
-    }
-
-    const finalCuda = selectedCuda();
-    const spec = packageSpec(finalCuda, extras);
-    const pipLines = ["pip install"];
-    if (torchIndexes[finalCuda]) {
-      pipLines.push(`  --extra-index-url ${torchIndexes[finalCuda]}`);
-    }
-    pipLines.push("  --extra-index-url https://pypi.nvidia.com");
-    pipLines.push(`  '${spec}'`);
-    pipCommand.textContent = pipLines.join(" \\\n");
-
-    uvCommand.textContent = [
-      "uv pip install",
-      `  --torch-backend ${torchBackends[finalCuda]}`,
-      "  --index https://pypi.nvidia.com",
-      "  --index-strategy unsafe-best-match",
-      `  '${spec}'`,
-    ].join(" \\\n");
-
-    warning.hidden = messages.length === 0;
-    warning.textContent = messages.join(" ");
-  }
-
-  root.addEventListener("change", update);
-  update();
-})();
-</script>
+<noscript>
+Choose one accelerator extra and append any compatible optional extras, for
+example: <code>pip install 'nvalchemi-toolkit[cu13,mace]'</code>.
+</noscript>
 
 ```{note}
 The CUDA extras are mutually exclusive. The `uma` extra is also mutually
@@ -155,7 +101,6 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 $ uv venv --seed --python 3.12
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13]'
 ```
@@ -166,16 +111,22 @@ For MACE and cuEquivariance support, select the matching variant:
 # CUDA 13 MACE stack
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13,mace]'
 
 # CUDA 12 MACE stack
 $ uv pip install \
     --torch-backend cu126 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu12,mace]'
+```
+
+```{tip}
+The `--torch-backend` option routes `uv` to install the correct
+set of extra libraries more explicitly. For machines without accelerators,
+such as on MacOS development, this option can be omitted. Conversely, on
+machines with a GPU and for whatever reason want to force the installation
+to be CPU only, you can specify `cpu` as a backend.
 ```
 
 </details>
@@ -272,7 +223,6 @@ for production settings!
 $ uv venv --seed --python 3.13
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'
 ```
@@ -305,7 +255,6 @@ mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
 pip install \
     --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
 

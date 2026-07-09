@@ -11,38 +11,130 @@ html {
     --pst-font-size-h6: 1.1rem;
 }
 
-.install-builder {
+.install-matrix {
   border: 1px solid var(--pst-color-border);
   border-radius: 0.5rem;
   margin: 1.5rem 0;
+  overflow: hidden;
+}
+
+.install-matrix-row,
+.install-matrix-output {
+  align-items: center;
+  border-bottom: 1px solid var(--pst-color-border);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(9rem, 0.3fr) 1fr;
   padding: 1rem;
 }
 
-.install-builder fieldset {
-  border: 0;
-  margin: 0 0 1rem;
-  padding: 0;
-}
-
-.install-builder legend {
+.install-matrix-heading {
   font-weight: 700;
-  margin-bottom: 0.5rem;
 }
 
-.install-builder label {
-  display: block;
-  margin: 0.35rem 0;
+.install-matrix-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.install-builder .install-warning {
-  color: var(--pst-color-warning);
+.install-matrix-input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.install-matrix-options label {
+  background: var(--pst-color-surface);
+  border: 1px solid var(--pst-color-border);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+}
+
+.install-matrix-input:checked + label {
+  background: var(--nv-color-green);
+  border-color: var(--nv-color-green);
+  color: #111111;
   font-weight: 700;
-  margin-top: 0.75rem;
 }
 
-.install-builder pre {
-  margin-bottom: 0.75rem;
+.install-matrix-input:focus-visible + label {
+  outline: 3px solid var(--pst-color-link);
+  outline-offset: 2px;
+}
+
+.install-matrix-input:disabled + label {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.install-matrix-output {
+  background: var(--pst-color-surface);
+}
+
+.install-command {
+  align-items: stretch;
+  display: flex;
+  min-width: 0;
+}
+
+.install-command pre {
+  border-radius: 0.25rem 0 0 0.25rem;
+  flex: 1;
+  margin: 0;
+  min-width: 0;
   white-space: pre-wrap;
+}
+
+.install-command button {
+  background: var(--nv-color-green);
+  border: 0;
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: #111111;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 1rem;
+}
+
+.install-command button:hover {
+  background: var(--pst-color-primary);
+  color: var(--pst-color-on-primary);
+}
+
+.install-command button:focus-visible {
+  outline: 3px solid var(--pst-color-link);
+  outline-offset: 2px;
+}
+
+.install-matrix-note {
+  color: var(--pst-color-text-muted);
+  margin: 0;
+  min-height: 1.5rem;
+  padding: 0.75rem 1rem;
+}
+
+@media (max-width: 640px) {
+  .install-matrix-row,
+  .install-matrix-output {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .install-command {
+    flex-direction: column;
+  }
+
+  .install-command pre,
+  .install-command button {
+    border-radius: 0.25rem;
+  }
+
+  .install-command button {
+    margin-top: 0.5rem;
+    min-height: 2.5rem;
+  }
 }
 
 .reporting-flow {
