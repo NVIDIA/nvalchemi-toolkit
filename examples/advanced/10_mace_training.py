@@ -19,7 +19,7 @@ MACE Training with ALCHEMI Training Utilities
 This example walks through a complete model-training lifecycle on the ALCHEMI
 Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN
 dataset as the reference workflow. The training script run configuration is loaded
-with Hydra <https://hydra.cc/>__ from :download:`10_vanilla_mace.yaml <10_vanilla_mace.yaml>`.
+with `Hydra <https://hydra.cc/>`__ from :download:`10_vanilla_mace.yaml <10_vanilla_mace.yaml>`.
 
 At a high level, the ALCHEMI training workflow has the following structure:
 
@@ -656,11 +656,11 @@ def _build_validation_config(
 # Running TrainingStrategy
 # ------------------------
 # The final step is to assemble the objects created above and hand them to
-# :class:`~nvalchemi.training.TrainingStrategy`, which runs the training loop. 
+# :class:`~nvalchemi.training.TrainingStrategy`, which runs the training loop.
 # On each step, it calls the training function, steps the optimizer and scheduler,
 # invokes hooks at their registered stages, runs validation when configured, and
 # tracks checkpointable training state.
-
+#
 # :class:`~nvalchemi.distributed.DistributedManager` provides distributed
 # runtime information such as rank, local rank, world size, and device placement.
 # The same code path works for single-GPU and multi-GPU launches. In distributed
@@ -706,7 +706,7 @@ def _build_validation_config(
 #        examples/advanced/10_mace_training.py \
 #        --config-name=10_vanilla_mace distributed.enabled=true
 #
-# Note that ``training.batch_size`` is the per-process batch size. The global batch size 
+# Note that ``training.batch_size`` is the per-process batch size. The global batch size
 # is therefore ``training.batch_size * nproc_per_node``.
 
 # sphinx_gallery_start_ignore
@@ -796,7 +796,7 @@ if __name__ == "__main__":
     if _DOCS_BUILD:
         print(
             "Skipping Hydra training during docs build. Run with:\n"
-            "uv run torchrun --standalone --nproc_per_node=1 "
+            "uv run --extra cu12 --extra mace python "
             "examples/advanced/10_mace_training.py",
             flush=True,
         )
