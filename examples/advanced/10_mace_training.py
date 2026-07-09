@@ -18,45 +18,40 @@ MACE Training with ALCHEMI Training Utilities
 
 This example walks through a complete model-training lifecycle on the ALCHEMI
 Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN
-dataset as the reference workflow.
+dataset as the reference workflow. The training script run configuration is loaded
+with Hydra <https://hydra.cc/>__ from :download:`10_vanilla_mace.yaml <10_vanilla_mace.yaml>`.
 
-The ALCHEMI training workflow has the following structure:
+At a high level, the ALCHEMI training workflow has the following structure:
 
 .. code-block:: text
 
    [Graph Data] -> [Model Architecture] -> [Supervised Objective] -> [Runtime Hooks] -> [TrainingStrategy]
 
 **Data** — MatPES r2SCAN structures are read from ALCHEMI-compatible Zarr splits.
-Each sample provides graph inputs (positions, atom types, periodic boundary
+Each sample contains graph inputs (positions, atom types, periodic boundary
 metadata) and supervised labels (energy, forces, stress).
 
 **Model** — A 9.06M-parameter ScaleShiftMACE model from
 `ACEsuit <https://github.com/acesuit/mace>`__ is wrapped with
-:class:`~nvalchemi.models.mace.MACEWrapper` for use inside
+:class:`~nvalchemi.models.mace.MACEWrapper` so it can be used by
 :class:`~nvalchemi.training.TrainingStrategy`. NVIDIA cuEquivariance kernels are
 enabled by default in the Hydra config (`model.cueq.enabled: true`).
 
 **Loss** — Energies, forces, and stresses are fit with a weighted sum of Huber
-losses. :class:`~nvalchemi.training.PiecewiseWeight` schedules switch term
-weights at a configured optimizer step (stage two).
+losses. :class:`~nvalchemi.training.PiecewiseWeight` schedules are used to change
+the loss-term weights at a configured optimizer step for the second training stage.
 
 **Runtime** — Distributed wrapping, EMA, neighbor-list rebuild, gradient
-clipping, metrics logging, and checkpointing attach through hooks instead of
-the core training loop. Validation cadence is configured with
-:class:`~nvalchemi.training.ValidationConfig` on
-:class:`~nvalchemi.training.TrainingStrategy`; validation runs automatically
-during :meth:`~nvalchemi.training.TrainingStrategy.run` rather than through a
-registered hook.
+clipping, metrics logging, and checkpointing are attached through runtime hooks 
+rather than being implemented directly in the core trainin loop. Validation 
+is configured separately using :class:`~nvalchemi.training.ValidationConfig` on
+:class:`~nvalchemi.training.TrainingStrategy`. Validation runs automatically 
+during :meth:`~nvalchemi.training.TrainingStrategy.run`.
 
 Dataset-derived metadata (`E0s`, `avg_num_neighbors`, `atomic_inter_shift` /
-`atomic_inter_scale`) must be precomputed and set in ``cfg.model`` before
-training. The default YAML includes values from the MatPES r2SCAN training
+`atomic_inter_scale`), must be precomputed and set in ``cfg.model`` before
+training. The default YAML includes values computed from the MatPES r2SCAN training
 split.
-
-Default Hydra config: ``examples/advanced/10_vanilla_mace.yaml``.
-
-Note that ``training.batch_size`` is per process; the global batch size is
-``training.batch_size * nproc_per_node``.
 
 """
 
@@ -93,7 +88,8 @@ from nvalchemi.data.datapipes import (
     InMemoryDataset,
 )
 from nvalchemi.distributed import DistributedManager
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks import Hook, NeighborListHook
+from nvalchemi.models.mace import MACEWrapper
 from nvalchemi.training import (
     CheckpointHook,
     ComposedLossFunction,
@@ -109,10 +105,13 @@ from nvalchemi.training import (
     ValidationConfig,
     default_training_fn,
 )
-from nvalchemi.training.distributed import get_local_rank, get_rank
+from nvalchemi.training.hooks import TrainingUpdateHook
 
 _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
+# Samples per Zarr read during startup materialization; 32768 is used instead of
+# the default 4096 for fewer read calls.
 _DATASET_CHUNK_SIZE = 32768
+# CUDA prefetch settings for host-to-device transfer in dataloader.
 _DATALOADER_NUM_STREAMS = 2
 _DATALOADER_PREFETCH_FACTOR = 2
 _DATALOADER_USE_STREAMS = True
@@ -128,10 +127,10 @@ _DATALOADER_USE_STREAMS = True
 # device, and :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or
 # sequential training batches from that in-memory batch.
 #
-# The default config uses a per-process training batch size of 256 and a
-# validation batch size of 512. Given that the structure sizes in this dataset range from 1 atom
-# to 240 atoms, :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` can also be used as an alternative to cap
-# the atom count per batch when memory is tight.
+# The default configuration uses a per-process training batch size of 256 and a
+# validation batch size of 512. Given that the structure sizes in this dataset range from
+# 1 atom to 240 atoms, :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` can also be 
+# used as an alternative to cap the atom count per batch when memory is tight.
 #
 # .. code-block:: python
 #
@@ -223,14 +222,14 @@ def _loader(
 # %%
 # Building the MACE model
 # -----------------------
-# The default configuration trains ScaleShiftMACE with energy, force, and stress
-# outputs. Any object passed to :class:`~nvalchemi.training.TrainingStrategy`
+# The default configuration trains ScaleShiftMACE to predict energy, force, and 
+# stress. Any model object passed to :class:`~nvalchemi.training.TrainingStrategy`
 # must follow :class:`~nvalchemi.models.base.BaseModelMixin`.
 # :class:`~nvalchemi.models.mace.MACEWrapper` handles input adaptation,
-# neighbor-list metadata, and output routing for MACE variants.
+# neighbor-list metadata, and routes model outputs for MACE model variants.
 #
-# Before building the model, populate dataset-derived metadata in your Hydra
-# config: ``E0s`` (from structure-energy regression or isolated-atom DFT),
+# Before building the model, populate the Hydra config with dataset-derived
+# metadata: ``E0s`` (from structure-energy regression or isolated-atom DFT),
 # ``avg_num_neighbors``, and the ScaleShiftMACE pair ``atomic_inter_shift`` /
 # ``atomic_inter_scale``. The default YAML includes values precomputed from the
 # training split.
@@ -400,7 +399,7 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
 # %%
 # Configuring the optimizer and scheduler
 # ---------------------------------------
-# Schedulers attach through :class:`~nvalchemi.training.OptimizerConfig`. The
+# Schedulers are attached through :class:`~nvalchemi.training.OptimizerConfig`. The
 # runnable example uses
 # :class:`~examples.advanced._mace_training_helpers.TwoStageCosineConstantLR` —
 # cosine annealing for stage one, then a constant stage-two learning rate; any
@@ -418,7 +417,6 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
 #        optimizer_cls=torch.optim.AdamW,
 #        optimizer_kwargs={
 #            "lr": 5.0e-3,
-#            "weight_decay": 1.0e-3,
 #        },
 #        scheduler_cls=TwoStageCosineConstantLR,
 #        scheduler_kwargs={
@@ -464,8 +462,8 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 # --------------------
 # Hooks extend the core training loop without embedding that logic in the loop
 # itself. For example, :class:`~nvalchemi.training.DDPHook` wraps the model in
-# DDP at :class:`~nvalchemi.training.TrainingStage` ``SETUP`` when
-# ``training.distributed.enabled`` is true (the default),
+# DDP at the :class:`~nvalchemi.training.TrainingStage` ``SETUP`` stage when
+# ``training.distributed.enabled`` is true.
 # :class:`~nvalchemi.training.EMAHook` maintains shadow weights for validation at
 # ``AFTER_OPTIMIZER_STEP``, and :class:`~nvalchemi.hooks.NeighborListHook` rebuilds
 # the interaction graph at ``BEFORE_FORWARD`` before every forward pass.
@@ -503,8 +501,8 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 #        ),
 #    ]
 #
-# ``GradientClipHook`` and ``TrainingMetricsLogger`` live in this example's
-# helper module; the other hooks are public ALCHEMI training APIs. The runnable
+# ``GradientClipHook`` and ``TrainingMetricsLogger`` are implemented in this example's
+# helper module. The other hooks shown above are public ALCHEMI training APIs. The runnable
 # script assembles the full hook list from Hydra through ``_hooks(cfg, model)``.
 
 # sphinx_gallery_start_ignore
@@ -513,9 +511,9 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 def _hooks(
     cfg: DictConfig,
     model: torch.nn.Module,
-) -> list[Any]:
+) -> list[Hook | TrainingUpdateHook]:
     """Build runtime hooks for DDP, EMA, neighbor lists, logging, and checkpointing."""
-    hooks: list[Any] = []
+    hooks: list[Hook | TrainingUpdateHook] = []
 
     # Distributed wrapping — DDPHook applies DDP at TrainingStage.SETUP.
     distributed_cfg = cfg.training.get("distributed", {})
@@ -590,16 +588,19 @@ def _hooks(
 # sphinx_gallery_end_ignore
 
 # %%
-# Running TrainingStrategy
-# ------------------------
-# The Hydra entrypoint composes the pieces described above from
-# ``examples/advanced/10_vanilla_mace.yaml``. Held-out validation is
-# strategy-owned: pass a :class:`~nvalchemi.training.ValidationConfig` when
-# constructing :class:`~nvalchemi.training.TrainingStrategy` (not a registered
-# hook). :meth:`~nvalchemi.training.TrainingStrategy.run` evaluates validation
-# at the configured cadence and once more at end-of-training; the latest summary
-# is stored on ``strategy.last_validation``. In multi-GPU runs each rank
-# evaluates a disjoint shard via ``DistributedSampler``.
+# Configuring validation
+# ----------------------
+# Validation is configured with :class:`~nvalchemi.training.ValidationConfig`. The
+# configuration specifies the validation data, validation function, loss function,
+# evaluation cadence, and whether to use EMA weights. During 
+# :class:`~nvalchemi.training.TrainingStrategy.run`, the strategy evaluates validation 
+# at this cadence and once more at the end of training. The latest validation 
+# summary is stored on ``strategy.last_validation``.
+# 
+# In multi-GPU runs, each rank evaluates a disjoint validation shard through a
+# DistributedSampler. The runnable script builds this configuration with
+# ``_build_validation_config(...)`` after the validation loader and loss function
+# have been constructed.
 #
 # .. code-block:: python
 #
@@ -614,88 +615,6 @@ def _hooks(
 #        use_ema="auto",
 #        name="validation",
 #    )
-#
-# Launch the full lifecycle by wiring the Hydra helpers together and calling
-# :meth:`~nvalchemi.training.TrainingStrategy.run`:
-#
-# .. code-block:: python
-#
-#    from nvalchemi.distributed import DistributedManager
-#    from nvalchemi.training import TrainingStrategy, default_training_fn
-#
-#    DistributedManager.initialize()
-#    manager = DistributedManager()
-#    device = torch.device(manager.device)
-#
-#    train_loader = _loader(...)
-#    validation_loader = _loader(...)
-#
-#    model = _build_model(...)
-#    loss_fn = _build_mace_huber_loss(...)
-#    optimizer_config = _optimizer(...)
-#    hooks = _hooks(...)
-#    validation_config = _build_validation_config(...)
-#
-#    strategy = TrainingStrategy(
-#        models=model,
-#        optimizer_configs=optimizer_config,
-#        num_steps=68_000,
-#        training_fn=default_training_fn,
-#        loss_fn=loss_fn,
-#        devices=[device],
-#        distributed_manager=manager,
-#        hooks=hooks,
-#        validation_config=validation_config,
-#    )
-#
-#    strategy.run(train_loader)
-#
-# Run the Hydra entrypoint on one or more GPUs:
-#
-# Single GPU:
-#
-# .. code-block:: bash
-#
-#    uv run torchrun --standalone --nproc_per_node=1 \
-#        examples/advanced/10_mace_training.py
-#
-# Multi-GPU:
-#
-# .. code-block:: bash
-#
-#    uv run torchrun --standalone --nproc_per_node=8 \
-#        examples/advanced/10_mace_training.py \
-#        --config-name=10_vanilla_mace
-
-# %%
-# Validation curves and benchmark accuracy
-# ----------------------------------------
-# With the default config, :class:`~nvalchemi.training.ValidationConfig` drives
-# automatic validation passes during
-# :meth:`~nvalchemi.training.TrainingStrategy.run` every
-# ``training.validation.every_steps`` optimizer steps (1,000 by default), plus one
-# final pass at end-of-training. Each pass uses the EMA shadow weights
-# (``use_ema="auto"``), which yields smoother validation curves than the
-# corresponding training losses.
-# :class:`~examples.advanced._mace_training_helpers.TrainingMetricsLogger` records
-# ``validation/*`` scalars to ``outputs/metrics.jsonl`` when
-# ``training.logging.jsonl_path`` is set via the ``AFTER_VALIDATION`` hook stage.
-#
-# The figure below shows validation Huber losses from a full default-config run
-# on 1× H100 GPU (~80 minutes wall time).
-# The sharp transition near step 54,400 marks the stage-two loss-weight schedule
-# (``training.loss.stage_two.start_step``).
-#
-# .. image:: ../_static/vanilla_mace_validation_metrics_260702.png
-#    :align: center
-#    :width: 70%
-#
-# With this default config (68,000 optimizer steps, ~50 epochs on MatPES r2SCAN
-# train), the trained model reaches held-out test MAEs of energy 25.5 meV/atom,
-# forces 145 meV/Å, and stress 0.703 GPa. These values are comparable to the
-# MatPES r2SCAN benchmarks reported in
-# `the MatPES paper <https://arxiv.org/pdf/2503.04070>`__ and to training with the
-# `MACE CLI <https://github.com/acesuit/mace>`__.
 
 # sphinx_gallery_start_ignore
 
@@ -731,16 +650,77 @@ def _build_validation_config(
         name="validation",
     )
 
+# sphinx_gallery_end_ignore
+
+# %%
+# Running TrainingStrategy
+# ------------------------
+# The final step is to assemble the objects created above and hand them to
+# :class:`~nvalchemi.training.TrainingStrategy`, which runs the training loop. 
+# On each step, it calls the training function, steps the optimizer and scheduler,
+# invokes hooks at their registered stages, runs validation when configured, and
+# tracks checkpointable training state.
+
+# :class:`~nvalchemi.distributed.DistributedManager` provides distributed
+# runtime information such as rank, local rank, world size, and device placement.
+# The same code path works for single-GPU and multi-GPU launches. In distributed
+# runs, :class:`~nvalchemi.training.DDPHook` uses the distributed manager to wrap
+# the model and coordinate rank-specific behavior.
+#
+# .. code-block:: python
+#
+#    from nvalchemi.distributed import DistributedManager
+#    from nvalchemi.training import TrainingStrategy, default_training_fn
+#
+#    DistributedManager.initialize()
+#    manager = DistributedManager()
+#    device = torch.device(manager.device)
+#
+#    strategy = TrainingStrategy(
+#        models=model,
+#        optimizer_configs=optimizer_config,
+#        num_steps=68_000,
+#        training_fn=default_training_fn,
+#        loss_fn=loss_fn,
+#        devices=[device],
+#        distributed_manager=manager,
+#        hooks=hooks,
+#        validation_config=validation_config,
+#    )
+#
+#    strategy.run(train_loader)
+#
+# Run the Hydra entrypoint on one or more GPUs:
+#
+# Single GPU:
+#
+# .. code-block:: bash
+#
+#    uv run --extra cu12 --extra mace python examples/advanced/10_mace_training.py
+#
+# Multi-GPU:
+#
+# .. code-block:: bash
+#
+#    uv run --extra cu12 --extra mace torchrun --standalone --nproc_per_node=8 \
+#        examples/advanced/10_mace_training.py \
+#        --config-name=10_vanilla_mace distributed.enabled=true
+#
+# Note that ``training.batch_size`` is the per-process batch size. The global batch size 
+# is therefore ``training.batch_size * nproc_per_node``.
+
+# sphinx_gallery_start_ignore
+
 
 @hydra.main(version_base=None, config_path=".", config_name="10_vanilla_mace")
 def main(cfg: DictConfig) -> None:
     """Run MACE training."""
     DistributedManager.initialize()
     manager = DistributedManager()
-    if get_rank(manager) == 0:
+    if manager.rank == 0:
         print(OmegaConf.to_yaml(cfg, resolve=True), flush=True)
     device = (
-        torch.device("cuda", get_local_rank(manager))
+        torch.device("cuda", manager.local_rank)
         if torch.cuda.is_available()
         else torch.device(manager.device)
     )
@@ -768,18 +748,18 @@ def main(cfg: DictConfig) -> None:
             validation_loader.sampler = validation_sampler
 
     # Building the MACE model
-    model = _build_model(cfg, device)
-    if get_rank(manager) == 0:
+    model: MACEWrapper = _build_model(cfg, device)
+    if manager.rank == 0:
         print(f"Model parameters: {count_model_parameters(model):,}")
 
     # Building the loss function
-    loss_fn = _build_mace_huber_loss(cfg.training.loss)
+    loss_fn: ComposedLossFunction = _build_mace_huber_loss(cfg.training.loss)
 
     # Building the runtime hooks
-    hooks = _hooks(cfg, model)
+    hooks: list[Hook | TrainingUpdateHook] = _hooks(cfg, model)
 
     # Building the training strategy
-    validation_config = _build_validation_config(
+    validation_config: ValidationConfig | None = _build_validation_config(
         cfg,
         validation_loader,
         loss_fn,
@@ -824,3 +804,23 @@ if __name__ == "__main__":
         main()
 
 # sphinx_gallery_end_ignore
+
+# %%
+# Validation curves and reference results
+# ---------------------------------------
+# The figure below shows validation Huber losses from a full default-config run
+# on 1× H100 GPU, which took about 80 minutes of wall time. Actual wall time may 
+# differ depending on system configuration, hardware, and software stack.
+# The sharp transition near step 54,400 marks the stage-two loss-weight schedule
+# configured by ``training.loss.stage_two.start_step``.
+#
+# .. image:: ../_static/vanilla_mace_validation_metrics_260701.png
+#    :align: center
+#    :width: 70%
+#
+# With this default config (68,000 optimizer steps, about 50 epochs on the MatPES r2SCAN
+# train set), the trained model reaches held-out test MAEs of energy 25.5 meV/atom,
+# forces 145 meV/Å, and stress 0.703 GPa. These values are comparable to the
+# MatPES r2SCAN benchmarks reported in
+# `the MatPES paper <https://arxiv.org/pdf/2503.04070>`__ and to training with the
+# `MACE CLI <https://github.com/acesuit/mace>`__.

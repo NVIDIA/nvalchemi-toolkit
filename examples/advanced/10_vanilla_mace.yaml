@@ -37,7 +37,7 @@ training:
     enabled: false  # resume from checkpoint before training
     dir: outputs/checkpoints  # checkpoint directory to restore from
   distributed:
-    enabled: true  # wrap model with DDP
+    enabled: false  # wrap model with DDP
     backend: nccl  # PyTorch distributed backend for GPU
   loss:
     energy_weight: 1.0  # stage-1 per-atom energy Huber weight

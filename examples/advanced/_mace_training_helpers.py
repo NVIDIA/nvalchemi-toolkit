@@ -36,7 +36,7 @@ from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes import DataLoader, Dataset, InMemoryDataset
 from nvalchemi.distributed import DistributedManager
 from nvalchemi.training import TrainingStage, TrainingStrategy
-from nvalchemi.training.distributed import all_reduce, get_rank, get_world_size
+from nvalchemi.training.distributed import all_reduce, get_world_size
 from nvalchemi.training.hooks import TrainingUpdateHook
 
 GPA_TO_EV_PER_ANGSTROM_CUBED = giga * angstrom**3 / electron_volt
@@ -170,12 +170,12 @@ def make_validation_sampler(
     manager: DistributedManager,
 ) -> DistributedSampler | None:
     """Return the distributed validation sampler for multi-rank validation."""
-    if get_world_size(manager) <= 1:
+    if manager.world_size <= 1:
         return None
     return DistributedSampler(
         dataset,
-        num_replicas=get_world_size(manager),
-        rank=get_rank(manager),
+        num_replicas=manager.world_size,
+        rank=manager.rank,
         shuffle=False,
         drop_last=True,
     )
@@ -201,7 +201,7 @@ def save_final_checkpoint(
     checkpoint_cfg = cfg.training.checkpoint
     if not bool(checkpoint_cfg.get("save_final", False)):
         return
-    if get_rank(manager) != 0:
+    if manager.rank != 0:
         return
     step_interval = checkpoint_cfg.get("step_interval", None)
     if (
@@ -272,7 +272,10 @@ class GradientClipHook(TrainingUpdateHook):
 
 
 class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
-    """Cosine-anneal the first stage, then hold a constant second-stage LR.
+    """Customized learning rate scheduler that starts with a cosine annealing schedule
+    and then switches to a constant learning rate. It uses the SequentialLR scheduler to 
+    chain the two schedules for convenience. It is possible to directly inherits from 
+    ``torch.optim.lr_scheduler.LRScheduler`` as well.
 
     Attributes
     ----------
@@ -309,12 +312,16 @@ class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
         if any(float(group["lr"]) != base_lr for group in optimizer.param_groups):
             raise ValueError("all optimizer parameter groups must share one LR.")
         second_stage_factor = self.second_stage_lr / base_lr
+        
+        # SequentialLR chains the two schedulers.
+        # Stage 1: cosine decay from the optimizer's initial LR down to eta_min.
         schedulers = [
             torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer,
                 T_max=self.first_stage_steps,
                 eta_min=self.eta_min,
             ),
+            # Stage 2: constant LR via a fixed multiplicative factor on base_lr.
             torch.optim.lr_scheduler.LambdaLR(
                 optimizer,
                 lr_lambda=lambda _: second_stage_factor,
@@ -323,6 +330,7 @@ class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
         super().__init__(
             optimizer,
             schedulers=schedulers,
+            # Hand off to the second stage scheduler after first_stage_steps.
             milestones=[self.first_stage_steps],
             last_epoch=last_epoch,
         )
@@ -344,7 +352,7 @@ class JsonLinesLogger:
         self._file = self.path.open("a", encoding="utf-8")
 
     def log_metrics(self, metrics: Mapping[str, Any], step: int | None = None) -> None:
-        """Append one metrics event."""
+        """Append one set of metrics to the JSON Lines file."""
         payload: dict[str, Any] = {
             "metrics": {
                 key: float(value)
@@ -365,7 +373,27 @@ class JsonLinesLogger:
 
 
 class TrainingMetricsLogger:
-    """Print training and validation metrics from hook context."""
+    """Log training and validation metrics from hook context.
+
+    Training metrics are logged at ``AFTER_BACKWARD`` every ``every`` optimizer
+    steps; validation metrics are logged at every ``AFTER_VALIDATION``. Training
+    metrics are all-reduced across ranks. When configured, the optional external logger
+    receives metrics such as ``train/loss`` and ``validation/loss``.
+
+    Parameters
+    ----------
+    every : int
+        Optimizer-step interval for training metric logs. Validation
+        metrics are still emitted after every validation pass.
+    logger : Any | None, optional
+        Optional external logger (e.g., MLflow, W&B, or the provided
+        :class:`JsonLinesLogger`). Supported APIs are ``log_metrics``,
+        ``log``, or ``log_metric``, each accepting a ``step=`` keyword.
+    logger_axis : {"step", "epoch"}, optional
+        X-axis value forwarded to ``logger`` as ``step``. Default
+        ``"step"`` uses ``ctx.step_count``; ``"epoch"`` uses
+        ``ctx.epoch``.
+    """
 
     stage = None
 
@@ -376,21 +404,7 @@ class TrainingMetricsLogger:
         logger: Any | None = None,
         logger_axis: Literal["step", "epoch"] = "step",
     ) -> None:
-        """Configure logging cadence.
-
-        Parameters
-        ----------
-        every : int
-            Optimizer-step interval for training metric logs. Validation
-            metrics are still emitted after every validation pass.
-        logger : Any | None, optional
-            Optional external logger (e.g., MLFlow, W&B, or the provided JsonLinesLogger). Supported APIs are ``log_metrics``,
-            ``log``, or ``log_metric``, each accepting a ``step=`` keyword.
-        logger_axis : {"step", "epoch"}, optional
-            X-axis value forwarded to ``logger`` as ``step``. Default
-            ``"step"`` uses ``ctx.step_count``; ``"epoch"`` uses
-            ``ctx.epoch``.
-        """
+        """Configure logging cadence and optional external logger."""
         if logger_axis not in {"step", "epoch"}:
             raise ValueError("logger_axis must be 'step' or 'epoch'.")
         self.frequency = 1
@@ -399,7 +413,7 @@ class TrainingMetricsLogger:
         self.logger_axis = logger_axis
 
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
-        """Return whether this logger handles ``stage``."""
+        """Return whether this logger handles the specified ``stage``."""
         return stage in {TrainingStage.AFTER_BACKWARD, TrainingStage.AFTER_VALIDATION}
 
     def close(self) -> None:
@@ -409,7 +423,11 @@ class TrainingMetricsLogger:
             close()
 
     def __call__(self, ctx: Any, stage: TrainingStage) -> None:
-        """Print one globally reduced metrics snapshot on rank zero."""
+        """Log training metrics at ``AFTER_BACKWARD`` on the configured cadence.
+
+        Metrics are all-reduced across ranks, then printed on rank zero and
+        forwarded to the optional external logger.
+        """
         if stage is TrainingStage.AFTER_VALIDATION:
             self._log_validation(ctx)
             return
@@ -460,7 +478,11 @@ class TrainingMetricsLogger:
         )
 
     def _log_validation(self, ctx: Any) -> None:
-        """Print the latest validation summary on rank zero."""
+        """Log validation metrics at ``AFTER_VALIDATION`` on rank zero.
+
+        Prints the latest validation summary and forwards the metrics
+        to the optional external logger.
+        """
         if ctx.global_rank != 0 or ctx.validation is None:
             return
         summary = ctx.validation
@@ -470,6 +492,8 @@ class TrainingMetricsLogger:
             | {self._metric_name(name): float(value) for name, value in components.items()},
             ctx,
         )
+
+        # Prepare the message to be printed to the console.
         message = (
             f"validation step={ctx.step_count} epoch={ctx.epoch} "
             f"loss={float(summary['total_loss']):.6g} "
@@ -489,6 +513,8 @@ class TrainingMetricsLogger:
                 for name, value in sorted(components.items())
             )
             message = f"{message} {suffix}"
+
+        # Prepare the metrics to be logged to the external logger.
         external_metrics = {"validation/loss": float(summary["total_loss"])}
         external_metrics.update(
             {
@@ -513,6 +539,7 @@ class TrainingMetricsLogger:
 
     @staticmethod
     def _require_finite(metrics: Mapping[str, float], ctx: Any) -> None:
+        """Raise ``RuntimeError`` if any metric value is non-finite."""
         bad = {name: value for name, value in metrics.items() if not math.isfinite(value)}
         if bad:
             raise RuntimeError(
@@ -520,7 +547,11 @@ class TrainingMetricsLogger:
             )
 
     def _log_external_metrics(self, ctx: Any, metrics: dict[str, float]) -> None:
-        """Log metrics to an optional external experiment logger."""
+        """Log metrics to an optional external experiment logger.
+
+        Tries ``log_metrics``, then ``log``, then ``log_metric`` to accommodate
+        different external logger APIs.
+        """
         if self.logger is None or not metrics:
             return
         step = self._logger_step(ctx)
@@ -559,8 +590,8 @@ class TrainingMetricsLogger:
         ]
 
     def _metric_name(self, name: str) -> str:
-        """Return the display name used for component loss metrics."""
-        return name.removeprefix("train/").removesuffix("_unweighted")
+        """Return the concise display name used for component loss metrics."""
+        return name.removesuffix("_unweighted")
 
     @staticmethod
     def _reduced_metrics(
