@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Compose multiple AtomicData-native datasets behind one index space."""
+"""Compose multiple batch-loadable AtomicData-native datasets behind one index space."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +85,14 @@ PendingFusedBatch = Future[_FusedBatchResult] | _DelegatedFusedBatch
 
 
 class MultiDataset:
-    """Compose multiple :class:`Dataset` instances behind one index space.
+    """Compose multiple batch-loadable datasets behind one index space.
 
     The class provides concatenated indexing and nvalchemi-specific batch APIs
     used by :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
 
     Parameters
     ----------
-    *datasets : Dataset
+    *datasets : BatchDatasetProtocol
         One or more nvalchemi datasets. Order defines the global index mapping.
     output_strict : bool, default=True
         If True, require all datasets to expose identical field names.
@@ -102,7 +102,7 @@ class MultiDataset:
 
     def __init__(
         self,
-        *datasets: Dataset,
+        *datasets: BatchDatasetProtocol,
         output_strict: bool = True,
         num_workers: int = 2,
     ) -> None:
@@ -110,7 +110,7 @@ class MultiDataset:
 
         Parameters
         ----------
-        *datasets : Dataset
+        *datasets : BatchDatasetProtocol
             Datasets to concatenate.
         output_strict : bool, default=True
             Require matching field names across datasets.
@@ -120,7 +120,7 @@ class MultiDataset:
         Raises
         ------
         TypeError
-            If any child is not a nvalchemi Dataset.
+            If any dataset provided is not compatible with :class:`BatchDatasetProtocol`.
         ValueError
             If no datasets are provided or strict field names differ.
         """
@@ -129,9 +129,10 @@ class MultiDataset:
                 f"MultiDataset requires at least one dataset, got {len(datasets)}"
             )
         for i, dataset in enumerate(datasets):
-            if not isinstance(dataset, Dataset):
+            if not isinstance(dataset, BatchDatasetProtocol):
                 raise TypeError(
-                    f"datasets[{i}] must be a Dataset instance, got {type(dataset).__name__}"
+                    f"datasets[{i}] must implement BatchDatasetProtocol, got "
+                    f"{type(dataset).__name__}"
                 )
 
         self._datasets = list(datasets)
@@ -196,7 +197,7 @@ class MultiDataset:
                 continue
 
             reference_set = set(reference)
-            field_names = set(dataset.field_names)
+            field_names = set(current)
             if field_names != reference_set:
                 raise ValueError(
                     "output_strict=True requires identical field names across "
@@ -309,7 +310,7 @@ class MultiDataset:
         return self._cumul[-1]
 
     @property
-    def datasets(self) -> tuple[Dataset, ...]:
+    def datasets(self) -> tuple[BatchDatasetProtocol, ...]:
         """Child datasets in global index order."""
         return tuple(self._datasets)
 

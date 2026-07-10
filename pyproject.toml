@@ -137,7 +137,7 @@ dependency-metadata = [
     "torch>=2.8.0 ; extra == 'torch'",
     "torch>=2.8.0 ; extra == 'torch-cu12'",
     "torch>=2.8.0 ; extra == 'torch-cu13'",
-  ], provides-extra = ["torch", "torch-cu12", "torch-cu13"] },
+  ], provides-extras = ["torch", "torch-cu12", "torch-cu13"] },
 ]
 
 [tool.uv.sources]

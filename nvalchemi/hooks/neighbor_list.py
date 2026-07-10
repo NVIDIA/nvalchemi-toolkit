@@ -305,9 +305,10 @@ class NeighborListHook:
     stage : Enum | None, optional
         The workflow stage at which this hook runs.  Defaults to
         ``DynamicsStage.BEFORE_COMPUTE``.
-    use_cuda_graph : bool, optional
-        Opt into per-shape CUDA-graph capture of the neighbor-list
-        dispatch chain (cell-list path only).  Default ``False``.
+    method : str | None, optional
+        Explicit ``nvalchemiops`` neighbor-list method to use.  When ``None``
+        (default), the hook selects an appropriate method from the batch shape
+        and periodic-cell metadata.
     """
 
     def __init__(
@@ -316,11 +317,12 @@ class NeighborListHook:
         skin: float = 0.0,
         max_neighbors: int | None = None,
         stage: Enum | None = None,
-        use_cuda_graph: bool = False,
+        method: str | None = None,
     ) -> None:
         self.config = config
         self.skin = skin
         self.stage = stage
+        self.method = method
         self._max_neighbors_override = max_neighbors
         self.frequency = 1
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
@@ -1048,6 +1050,8 @@ class NeighborListHook:
         dtype: torch.dtype,
     ) -> str:
         """Choose the explicit method to use inside the compiled hot path."""
+        if self.method is not None:
+            return self.method
         fallback = "cell_list" if N // max(B, 1) >= 2000 else "naive"
         if cell is None or pbc is None:
             return fallback
