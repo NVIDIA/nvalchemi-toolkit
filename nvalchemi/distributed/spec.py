@@ -354,6 +354,17 @@ class MLIPSpec:
     # compiled path does the same via
     # ``CompilePolicy.force_strategy=FRAMEWORK_FROM_NODE_ENERGY``.
     node_energy_key: str | None = None
+    # Name of a per-node virial output (``(n_nodes, 3, 3)``, energy units) the
+    # framework reduces, owned-aware, into the per-system ``"stress"`` on the
+    # eager halo path. For analytic-kernel-virial wrappers (LJ, DFTD3) whose
+    # kernel returns a per-system virial summed over all local (owned + ghost)
+    # atoms — wrong under decomposition and not owned-maskable once collapsed:
+    # they instead emit a per-atom virial under this key, and the framework
+    # sums it owned-only + all-reduces (each pair counted once by its owner),
+    # then converts to tensile-positive Cauchy stress ``-W/V`` using the cell
+    # volume, overriding the wrapper's all-local ``"stress"``. ``None`` (default)
+    # means the wrapper owns its own per-system stress.
+    node_virial_key: str | None = None
     # Graph-parallel only: the model's neighbour kernel indexes the position array
     # (dense ``neighbor_matrix`` receivers = rows of ``positions``, e.g. PME's
     # fused real-space+reciprocal kernel), so it needs the FULL replicated node set
@@ -437,6 +448,7 @@ class MLIPSpec:
             all_reduce_outputs=self.all_reduce_outputs | other.all_reduce_outputs,
             system_reductions=self.system_reductions or other.system_reductions,
             node_energy_key=self.node_energy_key or other.node_energy_key,
+            node_virial_key=self.node_virial_key or other.node_virial_key,
             compile=_merge_compile_policies(self.compile, other.compile),
         )
 
@@ -466,6 +478,7 @@ class MLIPSpec:
             output_kinds=dict(self.output_kinds),
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
+            node_virial_key=self.node_virial_key,
             compile=self.compile,
         )
 
@@ -479,6 +492,7 @@ class MLIPSpec:
             output_kinds=dict(self.output_kinds),
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
+            node_virial_key=self.node_virial_key,
             compile=policy,
         )
 
@@ -508,6 +522,7 @@ class MLIPSpec:
             "core": self.distribution.to_dict(),
             "system_reductions": self.system_reductions,
             "node_energy_key": self.node_energy_key,
+            "node_virial_key": self.node_virial_key,
             "gp_replicate_geometry": self.gp_replicate_geometry,
             "owned_only_outputs": sorted(self.owned_only_outputs),
             "all_reduce_outputs": sorted(self.all_reduce_outputs),
@@ -532,6 +547,7 @@ class MLIPSpec:
                 distribution=DistributionSpec.from_dict(d["core"]),
                 system_reductions=d.get("system_reductions", True),
                 node_energy_key=d.get("node_energy_key"),
+                node_virial_key=d.get("node_virial_key"),
                 gp_replicate_geometry=d.get("gp_replicate_geometry", False),
                 owned_only_outputs=frozenset(d.get("owned_only_outputs", [])),
                 all_reduce_outputs=frozenset(d.get("all_reduce_outputs", [])),

@@ -73,6 +73,7 @@ class Reduce(Enum):
     MIN = "min"
 
     def to_op(self) -> Any:
+        """Map to the ``torch.distributed.ReduceOp`` for this reduction."""
         return {
             Reduce.SUM: dist.ReduceOp.SUM,
             Reduce.MAX: dist.ReduceOp.MAX,
@@ -103,9 +104,14 @@ class ShardState(Protocol):
     cell: Any
     pbc: Any
 
-    def update_from_batch(self, batch: Batch) -> None: ...
-    def full_batch(self, dst: int = 0) -> Batch | None: ...
-    def to_global_batch(self) -> Batch: ...
+    def update_from_batch(self, batch: Batch) -> None:
+        """Rebuild the per-rank layout in place from a resharded owned ``batch``."""
+
+    def full_batch(self, dst: int = 0) -> Batch | None:
+        """Gather the global batch onto rank ``dst`` (``None`` on other ranks)."""
+
+    def to_global_batch(self) -> Batch:
+        """Reconstruct and return the full global batch on every rank."""
 
 
 @dataclass
@@ -123,6 +129,7 @@ class MigrationPlan:
 
     @classmethod
     def none(cls) -> MigrationPlan:
+        """A plan that never migrates (no in-flight consensus)."""
         return cls(work=None, flag=None)
 
     @property
@@ -294,14 +301,15 @@ class HaloStrategy(ParallelizationStrategy):
     def run_forward(
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
+        """Run the model forward on this rank's halo-padded (owned + ghost) shard."""
         dist_model._dist_ctx.cap_atoms = self.caps_atoms
         dist_model._dist_ctx.strategy = self
         return _halo_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
-        # Track a barostat-deformed cell so rank membership is judged against the
-        # current box, not the partition-time one. Single entry point for the
-        # cell — the partitioner is the source of truth.
+        """Retrack a barostat-deformed ``cell`` so rank membership is judged
+        against the current box, not the partition-time one. Single entry point
+        for the cell — the partitioner is the source of truth."""
         part = state.partitioner
         if part is not None and cell is not None:
             part.update_cell(cell)
@@ -409,13 +417,14 @@ class HaloStrategy(ParallelizationStrategy):
         return new_batch
 
     def reduce_system(self, per_system: torch.Tensor, op: Reduce) -> torch.Tensor:
-        # Each rank holds a per-system partial over its OWNED atoms; sum (or
-        # max/min) across the mesh to the global value.
+        """All-reduce a per-system owned partial across the mesh to the global
+        value (each rank contributes its owned atoms' share)."""
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(per_system, op=op.to_op(), group=self._group())
         return per_system
 
     def global_atom_count(self, n_owned: int, device: torch.device) -> torch.Tensor:
+        """Sum this rank's owned atom count across the mesh to the global total."""
         count = torch.tensor([n_owned], dtype=torch.int64, device=device)
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(count, op=dist.ReduceOp.SUM, group=self._group())
@@ -452,27 +461,35 @@ class GraphPartitionStrategy(ParallelizationStrategy):
     def run_forward(
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
+        """Run the model forward on this rank's owned node slice (features
+        all-gathered per layer)."""
         dist_model._dist_ctx.cap_atoms = self.caps_atoms
         dist_model._dist_ctx.strategy = self
         return _graph_partition_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
+        """No-op: the node partition is geometry-free (the cell is a plain input)."""
         return None
 
     def plan_migration(self, state: ShardState, batch: Batch) -> MigrationPlan:
+        """No migration: the node partition is fixed for the run's duration."""
         return MigrationPlan.none()
 
     def apply_migration(
         self, state: ShardState, batch: Batch, plan: MigrationPlan
     ) -> Batch:
+        """No migration: return the batch unchanged."""
         return batch
 
     def reduce_system(self, per_system: torch.Tensor, op: Reduce) -> torch.Tensor:
+        """All-reduce a per-system owned partial across the mesh to the global
+        value (each rank contributes its owned node slice's share)."""
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(per_system, op=op.to_op(), group=self._group())
         return per_system
 
     def global_atom_count(self, n_owned: int, device: torch.device) -> torch.Tensor:
+        """Sum this rank's owned node count across the mesh to the global total."""
         count = torch.tensor([n_owned], dtype=torch.int64, device=device)
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(count, op=dist.ReduceOp.SUM, group=self._group())
@@ -810,16 +827,27 @@ def _halo_run_forward(
             else None
         )
         dist_model._dist_ctx.graph_padder = _eager_padder
-        # A wrapper that delegates its per-system energy reduction to the
-        # framework (``spec.node_energy_key``) emits raw per-node energies
-        # under that key; widen active outputs so the forward produces them,
-        # then reduce owned-aware below. Restored in ``finally``.
+        # A wrapper that delegates its per-system energy / stress reduction to
+        # the framework (``spec.node_energy_key`` / ``node_virial_key``) emits
+        # raw per-node energies / virials under those keys; widen active outputs
+        # so the forward produces them, then reduce owned-aware below. The virial
+        # key is only requested when stress is active. Restored in ``finally``.
         _nek = dist_model._spec.node_energy_key
+        _nvk = dist_model._spec.node_virial_key
         _mc = dist_model._wrapper.model_config
         _saved_active = None
+        _extra = set()
         if _nek is not None and _nek not in _mc.active_outputs:
+            _extra.add(_nek)
+        if (
+            _nvk is not None
+            and "stress" in _mc.active_outputs
+            and _nvk not in _mc.active_outputs
+        ):
+            _extra.add(_nvk)
+        if _extra:
             _saved_active = _mc.active_outputs
-            _mc.active_outputs = set(_saved_active) | {_nek}
+            _mc.active_outputs = set(_saved_active) | _extra
         with activate_dd_context(dist_model._dist_ctx):
             try:
                 output = dist_model._wrapper(padded_batch)
@@ -828,6 +856,10 @@ def _halo_run_forward(
                 if _nek is not None and _nek in output:
                     output = dist_model._reduce_node_energy(
                         output, _nek, padded_batch, sharded.num_graphs
+                    )
+                if _nvk is not None and _nvk in output:
+                    output = dist_model._reduce_node_virial(
+                        output, _nvk, padded_batch, sharded.num_graphs
                     )
             finally:
                 if _eager_padder is not None:

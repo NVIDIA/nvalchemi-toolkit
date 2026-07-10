@@ -1299,6 +1299,44 @@ class DistributedModel:
         output["energy"] = reduced
         return output
 
+    def _reduce_node_virial(
+        self,
+        output: dict[str, Any],
+        node_virial_key: str,
+        padded_batch: "Batch",
+        num_graphs: int,
+    ) -> dict[str, Any]:
+        """Reduce a wrapper's per-node virial into the per-system ``"stress"``.
+
+        Analytic-kernel-virial wrappers (LJ, DFTD3) return a per-system virial
+        summed over each rank's all-local (owned + ghost) atoms, which is wrong
+        under decomposition and can't be owned-masked once collapsed. They
+        instead emit the per-atom virial ``(n_nodes, 3, 3)`` (energy units) under
+        ``node_virial_key``; this owned-slices + all-reduces it (each pair counted
+        once by its owning atom, mirroring ``atomic_energies``), converts to the
+        tensile-positive Cauchy stress ``-W/V`` using the cell volume, and
+        overrides the wrapper's all-local ``"stress"``. Must run inside an active
+        DD context.
+        """
+        from nvalchemi.distributed._core.enums import Scope  # noqa: PLC0415
+        from nvalchemi.distributed.helpers import system_sum, to_local  # noqa: PLC0415
+
+        node_v = to_local(output.pop(node_virial_key))
+        virial = system_sum(
+            node_v,
+            to_local(padded_batch.batch_idx).to(torch.long),
+            int(num_graphs),
+            scope=Scope.OWNED,
+        )  # (n_systems, 3, 3), replicated
+        cell = to_local(padded_batch.cell)
+        volume = torch.det(cell).abs().view(-1, 1, 1)
+        stress = -virial / volume
+        ref = output.get("stress")
+        if ref is not None:
+            stress = stress.to(ref.dtype).reshape(ref.shape)
+        output["stress"] = stress
+        return output
+
     # ------------------------------------------------------------------
     # Compiled energy-autograd path (framework-owned)
     # ------------------------------------------------------------------

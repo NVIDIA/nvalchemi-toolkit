@@ -548,10 +548,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
 
         DFTD3 has no global coupling (coordination numbers, C6 interpolation,
         and the dispersion sum are all within-cutoff), so it needs no cross-rank
-        op. The only seam is the per-system energy total: the wrapper emits raw
-        per-atom dispersion energies under ``atomic_energies`` and the framework
-        reduces them owned-aware, so :meth:`forward` carries no distributed
-        logic. Forces are direct per-atom, owned-only.
+        op. The per-system seams are reductions the framework owns: energy from
+        the raw per-atom dispersion energies (``atomic_energies``) and stress
+        from the raw per-atom virial (``atomic_virial``), both reduced
+        owned-aware, so :meth:`forward` carries no distributed logic. Forces are
+        direct per-atom, owned-only.
 
         Returns
         -------
@@ -568,6 +569,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 SPEC_DFTD3_HALO.distribution, shard_fields=()
             ),
             node_energy_key="atomic_energies",
+            node_virial_key="atomic_virial",
         )
 
     @property
@@ -652,6 +654,13 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             and "atomic_energies" in model_output
         ):
             output["atomic_energies"] = model_output["atomic_energies"]
+        # Per-atom virial: passed through for the framework's owned-aware
+        # per-system stress reduction under decomposition (``node_virial_key``).
+        if (
+            "atomic_virial" in self.model_config.active_outputs
+            and "atomic_virial" in model_output
+        ):
+            output["atomic_virial"] = model_output["atomic_virial"]
         if "stress" in self.model_config.active_outputs:
             if "virial" in model_output:
                 if not hasattr(data, "cell") or data.cell is None:
@@ -798,6 +807,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
 
         # Convert units: Hartree -> eV, Hartree/Bohr -> eV/Å.
         atomic_energies_ev: torch.Tensor | None = None
+        atomic_virial_ev: torch.Tensor | None = None
         virial_ha: torch.Tensor | None = None
         if want_atomic:
             # ``energy_ha`` is per-atom here -> per-system totals in fp64 so the
@@ -810,7 +820,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 .unsqueeze(-1)
             )  # (B, 1)
             if raw_virial_ha is not None:
-                # Per-atom virial -> per-system by the real batch index.
+                # Per-atom virial (eV): kept for the framework's owned-aware
+                # per-system stress reduction under decomposition
+                # (``node_virial_key``), and collapsed by the real batch index
+                # for the single-process per-system stress.
+                atomic_virial_ev = raw_virial_ha.to(positions.dtype) * HARTREE_TO_EV
                 virial_ha = torch.zeros(
                     B, 3, 3, dtype=raw_virial_ha.dtype, device=positions.device
                 ).index_add_(0, batch_idx.to(torch.long), raw_virial_ha)
@@ -836,6 +850,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         if virial_ha is not None:
             # Virial: Hartree -> eV (purely energy units, no length scaling).
             model_output["virial"] = virial_ha.to(positions.dtype) * HARTREE_TO_EV
+        if (
+            atomic_virial_ev is not None
+            and "atomic_virial" in self.model_config.active_outputs
+        ):
+            model_output["atomic_virial"] = atomic_virial_ev
 
         return self.adapt_output(model_output, data)
 

@@ -412,17 +412,27 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
 
         compute_stresses = "stress" in self.model_config.active_outputs
 
-        # Warp ops return per-atom energy / force (and per-system virial)
-        # directly. Under domain decomposition the spec's OpAdapter routes the
-        # sharded args; single-process they pass through unchanged.
+        # Warp ops return per-atom energy / force (and a per-atom virial when
+        # given a per-atom ``batch_idx`` + per-atom cells). Under domain
+        # decomposition the spec's OpAdapter routes the sharded args;
+        # single-process they pass through unchanged.
         if compute_stresses:
+            # Give each atom its own "system" so the kernel writes one virial
+            # row per atom; the dim-0 ``index_add_`` collapse below is then a
+            # per-atom scatter into a per-system accumulator, which the framework
+            # reduces owned-aware (owned-slice + all-reduce) — exactly like the
+            # per-atom energy scatter. This keeps the per-system virial correct
+            # under decomposition instead of summing each rank's owned + ghost
+            # atoms; single-process it equals the kernel's per-system virial.
+            atom_idx = torch.arange(N, device=positions.device, dtype=batch_idx.dtype)
+            atom_cells = cells.index_select(0, batch_idx.to(torch.long))
             atomic_energies, forces, virial = lj_energy_forces_virial_batch(
                 positions=positions,
-                cells=cells,
+                cells=atom_cells,
                 neighbor_matrix=neighbor_matrix.contiguous(),
                 neighbor_matrix_shifts=neighbor_matrix_shifts,
                 num_neighbors=num_neighbors.contiguous(),
-                batch_idx=batch_idx.contiguous(),
+                batch_idx=atom_idx.contiguous(),
                 fill_value=fill_value,
                 epsilon=self.epsilon,
                 sigma=self.sigma,
@@ -430,7 +440,10 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
-            virials = virial.view(B, 3, 3)
+            atomic_virial = virial.view(N, 3, 3)
+            virials = torch.zeros(
+                B, 3, 3, dtype=atomic_virial.dtype, device=positions.device
+            ).index_add_(0, batch_idx.to(torch.long), atomic_virial)
         else:
             atomic_energies, forces = lj_energy_forces_batch(
                 positions=positions,
