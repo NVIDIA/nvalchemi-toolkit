@@ -80,7 +80,7 @@ def __init__(self, model: nn.Module) -> None:
         optional_inputs=frozenset(),                # used if present, skipped if absent
         supports_pbc=False,
         needs_pbc=False,
-        neighbor_config=None,                       # or NeighborConfig(...) if a neighbor list is needed
+        neighbor_config=None,                       # NeighborConfig(...) if needed
     )
 ```
 
@@ -311,7 +311,9 @@ class MyPotentialWrapper(nn.Module, BaseModelMixin):
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
         return {"node_embeddings": (self.model.hidden_dim,)}
 
-    def compute_embeddings(self, data: AtomicData | Batch, **kwargs: Any) -> AtomicData | Batch:
+    def compute_embeddings(
+        self, data: AtomicData | Batch, **kwargs: Any
+    ) -> AtomicData | Batch:
         model_inputs = self.adapt_input(data, **kwargs)
         data.node_embeddings = self.model.encoder(model_inputs["positions"])
         return data
