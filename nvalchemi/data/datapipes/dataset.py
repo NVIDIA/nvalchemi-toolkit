@@ -248,7 +248,10 @@ class Dataset:
 
     ``Dataset`` implements :class:`BatchDatasetProtocol`, the batch-loading
     contract that :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and
-    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consume.
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consume. For a
+    fully-resident alternative that materializes the whole dataset once and
+    trades memory for read speed, see
+    :class:`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`.
 
     Parameters
     ----------
