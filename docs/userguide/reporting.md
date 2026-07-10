@@ -63,39 +63,28 @@ is to act with the requested cadence on each provided reporter:
 3. Calls each reporter with `(ctx, stage, state)`.
 4. Applies the configured error policy if a reporter raises.
 
-<div class="reporting-flow" role="img" aria-label="Reporting orchestrator flow">
-  <div class="reporting-flow-row with-arrows">
-    <div class="reporting-flow-card">
-      <strong>Workflow</strong>
-      Training, dynamics, or custom execution
-    </div>
-    <div class="reporting-flow-arrow">engine hook call</div>
-    <div class="reporting-flow-card">
-      <strong>HookContext</strong>
-      Context object and stage enum
-    </div>
-    <div class="reporting-flow-arrow">stage match</div>
-    <div class="reporting-flow-card">
-      <strong>ReportingOrchestrator</strong>
-      Cadence and reporter fan-out
-    </div>
-    <div class="reporting-flow-arrow">mark event</div>
-    <div class="reporting-flow-card">
-      <strong>ReportingState</strong>
-      Event metadata and recent messages
-    </div>
-    <div class="reporting-flow-arrow">report</div>
-    <div class="reporting-flow-card">
-      <strong>Reporter</strong>
-      TensorBoard, Rich, or custom backend
-    </div>
-    <div class="reporting-flow-arrow">write</div>
-    <div class="reporting-flow-card">
-      <strong>Output</strong>
-      File, run log, or dashboard
-    </div>
-  </div>
-</div>
+```{eval-rst}
+.. graphviz::
+   :caption: Reporting orchestrator flow, from workflow to output.
+   :alt: Reporting orchestrator flow
+
+   digraph reporting_flow {
+       rankdir=TB
+
+       workflow     [label="Workflow\n(training / dynamics / custom)"]
+       context      [label="HookContext\n(context + stage enum)"]
+       orchestrator [label="ReportingOrchestrator\n(cadence + reporter fan-out)"]
+       state        [label="ReportingState\n(event metadata + recent messages)"]
+       reporter     [label="Reporter\n(TensorBoard / Rich / custom)"]
+       output       [label="Output\n(file / run log / dashboard)"]
+
+       workflow -> context     [label="engine hook call"]
+       context -> orchestrator [label="stage match"]
+       orchestrator -> state   [label="mark event"]
+       state -> reporter       [label="report"]
+       reporter -> output      [label="write"]
+   }
+```
 
 Each reporter calls {py:func}`~nvalchemi.hooks.collect_scalars` to build a
 {py:class}`~nvalchemi.hooks.ScalarSnapshot` — a frozen payload containing the
@@ -129,33 +118,30 @@ mean loss, total throughput across all GPUs. Set `rank_zero_only` when
 independence is acceptable and parallel writes to the same destination must be
 avoided.
 
-<div class="reporting-flow" role="img" aria-label="Distributed reporting reduction flow">
-  <div class="reporting-flow-row">
-    <div class="reporting-flow-card">
-      <strong>rank 0</strong>
-      collect_scalars
-    </div>
-    <div class="reporting-flow-card">
-      <strong>rank 1</strong>
-      collect_scalars
-    </div>
-    <div class="reporting-flow-card">
-      <strong>rank n</strong>
-      collect_scalars
-    </div>
-  </div>
-  <div class="reporting-flow-arrow">reduce_scalar_snapshot: mean, sum, min, or max</div>
-  <div class="reporting-flow-row">
-    <div class="reporting-flow-card">
-      <strong>rank 0</strong>
-      writes or renders
-    </div>
-    <div class="reporting-flow-card">
-      <strong>nonzero ranks</strong>
-      return after reduction
-    </div>
-  </div>
-</div>
+```{eval-rst}
+.. graphviz::
+   :caption: Distributed reporting: per-rank collection, reduction, and rank-zero write.
+   :alt: Distributed reporting reduction flow
+
+   digraph distributed_reporting {
+       rankdir=TB
+
+       r0 [label="rank 0\ncollect_scalars"]
+       r1 [label="rank 1\ncollect_scalars"]
+       rn [label="rank n\ncollect_scalars"]
+
+       reduce [label="reduce_scalar_snapshot\n(mean / sum / min / max)" fillcolor="#4a3315"]
+
+       w0 [label="rank 0\nwrites or renders"]
+       wn [label="nonzero ranks\nreturn after reduction" style="rounded,filled,dashed"]
+
+       r0 -> reduce
+       r1 -> reduce
+       rn -> reduce
+       reduce -> w0
+       reduce -> wn
+   }
+```
 
 ## Getting started
 
@@ -279,6 +265,8 @@ For an animated live-data demo using synthetic metrics:
 ```bash
 uv run python examples/intermediate/07_rich_training_reporting.py --steps 80 --delay 0.05
 ```
+
+(designing-rich-layouts)=
 
 ## Designing Rich layouts
 
