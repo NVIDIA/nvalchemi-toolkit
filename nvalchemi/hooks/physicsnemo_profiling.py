@@ -58,47 +58,84 @@ def _parse_activity(activity: ProfilerActivity | str) -> ProfilerActivity:
 class TorchProfilerHook(BaseModel):
     """Capture PyTorch profiler traces through PhysicsNeMo's profiler wrapper.
 
-    The hook supports both training and dynamics workflows. It starts the
-    PhysicsNeMo profiler when entering its context, or lazily at the first
-    supported stage if called without a context manager. It advances the PyTorch
-    profiler schedule at each batch or dynamics step and finalizes traces at the
-    end of training or when the hook context closes.
+    ``TorchProfilerHook`` drives PhysicsNeMo's :class:`~physicsnemo.utils.
+    profiling.Profiler` (backed by :class:`~physicsnemo.utils.profiling.
+    TorchProfileWrapper`) so that ``torch.profiler`` traces are collected for an
+    nvalchemi workflow without hand-rolling profiler setup, stepping, and
+    finalization. The same hook attaches to both training and dynamics workflows:
+    it recognizes :attr:`TrainingStage.BEFORE_TRAINING`,
+    :attr:`~TrainingStage.BEFORE_BATCH`, :attr:`~TrainingStage.AFTER_BATCH`, and
+    :attr:`~TrainingStage.AFTER_TRAINING`, plus
+    :attr:`DynamicsStage.BEFORE_STEP` and :attr:`~DynamicsStage.AFTER_STEP`.
 
-    Parameters
-    ----------
-    output_dir : str | Path
-        Root directory for profiler outputs.
-    activities : tuple[ProfilerActivity | str, ...] | None, optional
-        PyTorch profiler activities. ``None`` lets PhysicsNeMo choose CPU and
-        CUDA when CUDA is available. Strings may be ``"cpu"`` or ``"cuda"``.
-    schedule : Callable | None, optional
-        PyTorch profiler schedule created by :func:`torch.profiler.schedule`.
-    record_shapes : bool, optional
-        Whether to record tensor shapes.
-    profile_memory : bool, optional
-        Whether to profile memory allocations.
-    with_flops : bool, optional
-        Whether to estimate FLOPs for supported operations.
-    with_stack : bool, optional
-        Whether to record Python stack traces.
-    on_trace_ready_path : str | Path | None, optional
-        Directory passed to PyTorch's tensorboard trace handler. When provided,
-        it is rank-suffixed because those traces bypass PhysicsNeMo's final
-        ``trace.json`` export.
-    frequency : int, optional
-        Hook dispatch frequency. Keep the default ``1`` unless you explicitly
-        want the profiler schedule to advance less often.
-    rank_subdirs : bool, optional
-        Whether to place nvalchemi-managed outputs under ``rank_<global_rank>``.
-        Enabled by default for a consistent single- and multi-process layout.
+    The profiler starts when the hook enters its context (``__enter__``) or,
+    if it is dispatched by a workflow without being used as a context manager,
+    lazily on the first supported start stage. It advances the ``torch.profiler``
+    schedule once per batch or dynamics step (at ``AFTER_BATCH`` /
+    ``AFTER_STEP``) and finalizes traces at ``AFTER_TRAINING`` or when the hook
+    context closes. Register it like any other hook by adding it to a strategy's
+    or dynamics object's ``hooks=[...]`` list; for dynamics runs it is also valid
+    to wrap the run in a ``with`` block so start/finalize bracket exactly the
+    profiled region.
 
-    Attributes
-    ----------
-    stage : Enum | None
-        ``None`` because this hook dispatches across training and dynamics
-        stages through :meth:`_runs_on_stage`.
-    frequency : int
-        Hook dispatch cadence.
+    Outputs are written under ``output_dir`` (named by ``name``). In distributed
+    runs, or whenever ``rank_subdirs`` is set, per-process outputs land in
+    ``output_dir / rank_<global_rank>``, and the optional
+    ``on_trace_ready_path`` TensorBoard handler directory is rank-suffixed the
+    same way. Activity selection accepts either :class:`~torch.profiler.
+    ProfilerActivity` values or the string aliases ``"cpu"`` / ``"cuda"``;
+    ``None`` lets PhysicsNeMo pick CPU and CUDA when available.
+
+    Examples
+    --------
+    Profile a training run by registering the hook alongside the strategy's
+    other hooks:
+
+    >>> import torch  # doctest: +SKIP
+    >>> from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook  # doctest: +SKIP
+    >>> from nvalchemi.training import (  # doctest: +SKIP
+    ...     EnergyMSELoss, OptimizerConfig, TrainingStrategy, default_training_fn,
+    ... )
+    >>> profiler = TorchProfilerHook(  # doctest: +SKIP
+    ...     output_dir="prof/train",
+    ...     activities=("cpu", "cuda"),
+    ...     record_shapes=True,
+    ...     profile_memory=True,
+    ...     with_flops=True,
+    ... )
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models=model,
+    ...     optimizer_configs=OptimizerConfig(
+    ...         optimizer_cls=torch.optim.Adam, optimizer_kwargs={"lr": 1e-3},
+    ...     ),
+    ...     training_fn=default_training_fn,
+    ...     loss_fn=EnergyMSELoss(),
+    ...     num_epochs=1,
+    ...     devices=[torch.device("cuda")],
+    ...     hooks=[profiler],
+    ... )
+    >>> strategy.run(train_loader)  # doctest: +SKIP
+
+    For dynamics, use the hook as a context manager so the profiler brackets the
+    exact steps you care about:
+
+    >>> hook = TorchProfilerHook(output_dir="prof/md", activities=("cuda",))  # doctest: +SKIP
+    >>> with hook:  # doctest: +SKIP
+    ...     dynamics.run(batch, num_steps=100)
+
+    Notes
+    -----
+    Only one PhysicsNeMo profiler may be active at a time: ``_start`` raises a
+    :class:`RuntimeError` if the global :class:`~physicsnemo.utils.profiling.
+    Profiler` is already initialized or enabled, so construct and register this
+    hook before any other PhysicsNeMo profiler configuration. The hook is
+    single-use — once finalized it cannot be restarted, and calling it (or
+    re-entering it) after ``close`` raises. Finalization happens at
+    ``AFTER_TRAINING`` or on context exit; dynamics workflows that never emit an
+    ``AFTER_TRAINING`` stage should be run under the ``with`` block (or have
+    ``close`` called) to flush traces. ``frequency`` is a :class:`ClassVar`-style
+    workflow field, and ``stage`` is ``None`` because the hook handles multiple
+    stages itself rather than binding to a single one.
     """
 
     output_dir: Annotated[
