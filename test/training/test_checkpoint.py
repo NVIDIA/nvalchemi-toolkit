@@ -1319,12 +1319,17 @@ class TestStrategyCheckpoint:
         assert restored.step_count == 4
         assert restored.global_step_count == 4
 
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_finetuning_checkpoint_loads_after_registration_patches(
-        self, tmp_path: Path
+        self, tmp_path: Path, device: str
     ) -> None:
         """Strategy restore applies topology patches before loading state dicts."""
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("No CUDA device available.")
+
         from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
+        torch_device = torch.device(device)
         torch.manual_seed(0)
         strategy = FineTuningStrategy(
             models=DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8)),
@@ -1343,7 +1348,7 @@ class TestStrategyCheckpoint:
             num_steps=1,
             training_fn=checkpoint_training_fn,
             loss_fn=EnergyMSELoss(),
-            devices=[torch.device("cpu")],
+            devices=[torch_device],
         )
 
         model = strategy.models["main"].model
@@ -1360,16 +1365,22 @@ class TestStrategyCheckpoint:
         state = torch.load(
             tmp_path / "models" / "main" / "checkpoints" / "0.pt",
             weights_only=True,
+            map_location=torch_device,
         )
         assert "model.aux_projection.weight" in state
+        if device == "cuda":
+            assert state["model.aux_projection.weight"].is_cuda
 
         # Confirm loading works fine.
-        restored = FineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
+        restored = FineTuningStrategy.load_checkpoint(
+            tmp_path, map_location=torch_device
+        )
         restored_model = restored.models["main"].model
 
         assert isinstance(restored_model.aux_projection, nn.Linear)
         for name, parameter in restored_model.aux_projection.named_parameters():
-            assert torch.equal(parameter, saved_aux_projection[name])
+            assert parameter.device.type == torch_device.type
+            assert torch.equal(parameter.cpu(), saved_aux_projection[name].cpu())
 
     def test_loaded_strategy_reuses_restored_optimizer_state(
         self, tmp_path: Path

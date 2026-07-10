@@ -1160,6 +1160,7 @@ def _restore_checkpoint_into_strategy(
 ) -> dict[str, Any]:
     """Load checkpoint state into an already-constructed strategy."""
     from nvalchemi.training.strategy import TrainingStrategy
+    from nvalchemi.training.runtime import move_to_devices
 
     if not isinstance(strategy, TrainingStrategy):
         raise TypeError(
@@ -1187,6 +1188,7 @@ def _restore_checkpoint_into_strategy(
         spec = _load_spec(spec_path) if spec_path.exists() else None
         loaded_models[name] = (model, spec)
 
+    strategy.models = move_to_devices(strategy.models, strategy.devices)
     live_optimizers, live_schedulers = _optimizer_scheduler_maps_from_strategy(strategy)
 
     loaded_optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec | None]] = {}
@@ -1407,15 +1409,22 @@ def _build_model_from_checkpoint_spec(
     name: str,
     *,
     load_location: torch.device | None,
+    **kwargs: Any,
 ) -> tuple[nn.Module, BaseSpec]:
-    """Build a model without its saved weights from its checkpoint spec."""
+    """Build a model without its saved weights from its checkpoint spec.
+
+    Extra ``**kwargs`` are forwarded to :meth:`BaseSpec.build` as
+    runtime construction overrides for the model factory.
+    """
     spec = _load_spec(root / "models" / name / "spec.json")
-    build_kwargs = (
-        {"device": load_location}
-        if load_location is not None and spec.accepts_kwarg("device")
-        else {}
-    )
+    build_on_device = load_location is not None and spec.accepts_kwarg("device")
+    build_kwargs = {
+        **kwargs,
+        **({"device": load_location} if build_on_device else {}),
+    }
     model = spec.build(**build_kwargs)
+    # Native checkpoints load weights and optimizer through :class:`nn.Module`
+    # state_dict APIs; non-modules are not supported here.
     if not isinstance(model, nn.Module):
         raise RuntimeError(
             f"Model spec for {name!r} built {type(model)!r}, expected nn.Module."
@@ -1423,7 +1432,7 @@ def _build_model_from_checkpoint_spec(
     # Move models whose factories do not accept device after construction.
     # Factory-loaded models such as MACE + cuEq need the device during
     # construction so conversion happens on the intended accelerator.
-    if load_location is not None and not build_kwargs:
+    if load_location is not None and not build_on_device:
         model.to(load_location)
     return model, spec
 
@@ -1697,6 +1706,9 @@ def load_checkpoint(
     )
     load_location = _strategy_target_device(strategy_metadata, map_location)
 
+    # Path 1: hydrate a user-supplied live strategy.
+    # The model structure must already match the checkpoint.
+    # This includes registration-time module patches or adapters.
     if strategy is not None:
         if model_names is not None:
             raise ValueError(
@@ -1718,9 +1730,12 @@ def load_checkpoint(
         _run_validators(loaded, validators)
         return loaded
 
+    # Path 2: rebuild the strategy from strategy metadata.
+    # Registration-time hooks run before weights are loaded.
     if strategy_metadata is not None and model_names is None:
         from nvalchemi.training.strategy import TrainingStrategy
 
+        # Build models from specs without loading weights.
         unweighted_models = {
             name: _build_model_from_checkpoint_spec(
                 root,
@@ -1735,15 +1750,18 @@ def load_checkpoint(
         ) == {"main"}:
             loaded_strategy_models = unweighted_models["main"]
 
+        # Reconstruct the strategy and run registration-time hooks.
         runtime_strategy_metadata = _with_strategy_device_override(
             strategy_metadata, map_location
         )
         restored_strategy = TrainingStrategy.from_checkpoint_dict(
             runtime_strategy_metadata,
             models=loaded_strategy_models,
-            hooks=hooks,
+            hooks=hooks, # extra user-supplied runtime hooks
             training_fn=training_fn,
         )
+
+        # Load model weights and optimizer/scheduler/runtime state.
         loaded = _restore_checkpoint_into_strategy(
             root,
             manifest,
@@ -1756,7 +1774,10 @@ def load_checkpoint(
         _run_validators(loaded, validators)
         return loaded
 
-    # determine what models to load
+    # Path 3: component-level loads: either the checkpoint has no strategy 
+    # metadata, or ``model_names`` requested a partial load from a strategy
+    # checkpoint. Partial loads do not reconstruct strategy hooks.
+    # Determine what models to load.
     selected_models = set(manifest.models) if model_names is None else set(model_names)
     unknown = selected_models - set(manifest.models)
     if unknown:
@@ -1765,9 +1786,6 @@ def load_checkpoint(
             f"Available: {sorted(manifest.models)!r}"
         )
 
-    # Remaining paths are component-level loads: either the checkpoint has no
-    # strategy metadata, or ``model_names`` requested a partial load from a
-    # strategy checkpoint. Partial loads do not reconstruct strategy hooks.
     # Build the load set as the union of each selected model's associations.
     # When ``model_names is None`` this is equivalent to loading every
     # component listed in the manifest.
