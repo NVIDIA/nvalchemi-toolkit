@@ -1706,7 +1706,7 @@ def load_checkpoint(
     )
     load_location = _strategy_target_device(strategy_metadata, map_location)
 
-    # Path 1: construct a user-supplied live strategy.
+    # Path 1: restore a user-supplied live strategy.
     # The model structure must already match the checkpoint.
     # This includes registration-time module patches or adapters.
     if strategy is not None:
