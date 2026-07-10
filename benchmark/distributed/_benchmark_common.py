@@ -557,6 +557,37 @@ def build_bcc_fe(
     return positions, atomic_numbers, masses, cell, velocities
 
 
+def build_bcc_fe_elongated(
+    nz_cells: int, dtype: torch.dtype, seed: int = 0
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Elongated bcc-Fe supercell: fixed 6x6 cross-section x ``nz_cells`` along z
+    (72 atoms per z-cell), ``a=2.866``. The long z axis keeps a 1-D domain split
+    along z non-degenerate as the atom count grows (used for the LAMMPS<->DD
+    scaling comparison)."""
+    from ase.build import bulk
+
+    nxy = 6
+    atoms = bulk("Fe", "bcc", a=2.866, cubic=True) * (nxy, nxy, nz_cells)
+    positions = torch.tensor(atoms.get_positions(), dtype=dtype)
+    atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.long)
+    masses = torch.tensor(atoms.get_masses(), dtype=dtype)
+    cell = torch.tensor(atoms.get_cell().array, dtype=dtype)
+
+    torch.manual_seed(seed + 12345)
+    positions = positions + 0.05 * torch.randn_like(positions)
+    torch.manual_seed(seed)
+    kT = KB_EV * 300.0
+    v_std = torch.sqrt(kT / masses).unsqueeze(-1)
+    velocities = v_std * torch.randn(len(atoms), 3, dtype=dtype)
+    velocities = velocities - velocities.mean(dim=0, keepdim=True)
+    return positions, atomic_numbers, masses, cell, velocities
+
+
+def bcc_fe_elong_cells_for_size(n_atoms: int) -> int:
+    """z-cell count for a 6x6xNz elongated bcc-Fe cell (72 atoms per z-cell)."""
+    return max(2, round(n_atoms / 72.0))
+
+
 def n_per_side_for_size(n_atoms: int) -> int:
     """Calculate the number of atoms per side for a given number of atoms."""
     return max(2, round(n_atoms ** (1.0 / 3.0)))
