@@ -12,13 +12,45 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Concrete loss terms for energy, forces, and stress.
+r"""Concrete loss terms for energy, forces, and stress.
 
 All three accept prediction and target tensors directly. The configurable
 ``target_key`` / ``prediction_key`` names are used by
 :class:`~nvalchemi.training.losses.composition.ComposedLossFunction`
 when routing keyed prediction/target mappings into these tensor-first
 loss terms.
+
+Notation
+--------
+Every loss in this module uses one shared set of symbols:
+
+* :math:`B` is the number of graphs (structures) in the minibatch, and
+  :math:`i \in \{1, \dots, B\}` indexes a graph / sample.
+* :math:`N_i` is the number of atoms in graph :math:`i`, with
+  :math:`a \in \{1, \dots, N_i\}` indexing an atom; :math:`V = \sum_i N_i`
+  is the total atom count in the batch.
+* :math:`\alpha \in \{1, 2, 3\}` indexes a Cartesian force component, and
+  :math:`p, q \in \{1, 2, 3\}` index the row/column of the :math:`3 \times 3`
+  stress tensor.
+* A hat marks a prediction and a bare symbol the target, so a residual is
+  :math:`r = \hat{y} - y`. The per-graph energy is :math:`\hat{E}_i, E_i`; the
+  force on atom :math:`a` of graph :math:`i` is
+  :math:`\hat{F}_{ia\alpha}, F_{ia\alpha}`; the stress is
+  :math:`\hat{\sigma}_{ipq}, \sigma_{ipq}`.
+* Sums run only over *valid* entries. With ``ignore_nonfinite`` a non-finite
+  target is dropped, and padded (non-atom) entries are always dropped, so the
+  normalizing counts (:math:`B`, :math:`N_i`, :math:`3 N_i`, :math:`V`, ...)
+  count valid entries only.
+* :math:`H_\delta` is the Huber function, quadratic near zero and linear in the
+  tails:
+
+  .. math::
+
+     H_\delta(r) =
+     \begin{cases}
+       \tfrac{1}{2}\, r^2 & |r| < \delta, \\
+       \delta \left(|r| - \tfrac{1}{2}\delta\right) & |r| \ge \delta.
+     \end{cases}
 """
 
 from __future__ import annotations
@@ -144,24 +176,29 @@ class EnergyMSELoss(BaseLossFunction):
     r"""Mean-squared-error loss on per-graph total energy.
 
     Energies enter this loss as one total-energy value per graph, with
-    canonical shape ``(B, 1)``. With ``per_atom=False`` the scalar is the
+    canonical shape ``(B, 1)``. With ``per_atom=False`` the loss is the
     graph-balanced MSE of total-energy residuals, so every graph has equal
-    weight regardless of size.
-
-    With ``per_atom=True``, prediction and target are first divided by
-    each graph's atom count. The squared residual is therefore measured in
-    energy-per-atom units, then reduced with atom-count weights:
+    weight regardless of size:
 
     .. math::
 
-        L = \frac{\sum_i N_i
-        \left(\frac{E_i^\mathrm{pred} - E_i^\mathrm{target}}{N_i}\right)^2}
-        {\sum_i N_i}.
+        L = \frac{1}{B} \sum_{i=1}^{B} \left(\hat{E}_i - E_i\right)^2.
 
-    This makes contributions proportional to graph size while
-    keeping the error quantity in per-atom energy units. Counts may be
-    supplied directly as ``(B,)`` or recovered from a padded node mask of
-    shape ``(B, V_max)``.
+    With ``per_atom=True`` the prediction and target are first divided by each
+    graph's atom count :math:`N_i`, so the residual is measured in
+    energy-per-atom units, and the reduction is weighted by :math:`N_i` so that
+    larger graphs contribute in proportion to their size:
+
+    .. math::
+
+        L = \frac{\sum_{i=1}^{B} N_i
+        \left(\dfrac{\hat{E}_i - E_i}{N_i}\right)^2}{\sum_{i=1}^{B} N_i}
+        = \frac{\sum_{i=1}^{B} (\hat{E}_i - E_i)^2 / N_i}{\sum_{i=1}^{B} N_i}.
+
+    A hat denotes the prediction and :math:`N_i` the atom count of graph
+    :math:`i` (see the module docstring for the shared notation). Counts
+    :math:`N_i` may be supplied directly as ``(B,)`` or recovered from a padded
+    node mask of shape ``(B, V_max)``.
 
     Tensor Contract
     ---------------
@@ -273,15 +310,20 @@ class EnergyMAELoss(BaseLossFunction):
     This loss operates on per-graph total energies with identical
     prediction and target shapes, commonly ``(B, 1)`` or ``(B,)``. With
     ``per_atom=True`` (default), prediction and target energies are first
-    divided by each graph's atom count, then absolute residuals are
+    divided by each graph's atom count :math:`N_i`, then absolute residuals are
     reduced with atom-count weights so that larger graphs contribute
     in proportion to their size:
 
     .. math::
 
-        L = \frac{\sum_i N_i
-        \left|\frac{E_i^\mathrm{pred} - E_i^\mathrm{target}}{N_i}\right|}
-        {\sum_i N_i}.
+        L = \frac{\sum_{i=1}^{B} N_i
+        \left|\dfrac{\hat{E}_i - E_i}{N_i}\right|}{\sum_{i=1}^{B} N_i}
+        = \frac{\sum_{i=1}^{B} |\hat{E}_i - E_i|}{\sum_{i=1}^{B} N_i}.
+
+    With ``per_atom=False`` the loss is the graph-balanced mean absolute error
+    of total-energy residuals, :math:`L = \tfrac{1}{B} \sum_{i=1}^{B}
+    |\hat{E}_i - E_i|`. A hat denotes the prediction and :math:`N_i` the atom
+    count of graph :math:`i` (see the module docstring for the shared notation).
 
     Parameters
     ----------
@@ -371,12 +413,22 @@ class EnergyMAELoss(BaseLossFunction):
 
 
 class EnergyHuberLoss(BaseLossFunction):
-    """Huber loss on total energy or energy per atom.
+    r"""Huber loss on total energy or energy per atom.
 
-    With ``per_atom=True``, energies are divided by each graph's atom
-    count before the Huber loss is applied. The final reduction averages
-    labeled structures rather than atom-count weighting the per-graph
-    values.
+    The elementwise Huber function :math:`H_\delta` (quadratic within
+    :math:`\delta` of zero, linear beyond it; see the module docstring) is
+    applied to each per-graph energy residual, then averaged over the :math:`B`
+    labeled graphs:
+
+    .. math::
+
+        L = \frac{1}{B} \sum_{i=1}^{B} H_\delta\!\left(\hat{E}_i - E_i\right).
+
+    With ``per_atom=True`` (default) the prediction and target are first divided
+    by each graph's atom count :math:`N_i`, so the Huber function acts on
+    energy-per-atom residuals :math:`(\hat{E}_i - E_i) / N_i`. Unlike the
+    per-atom MSE/MAE terms, the final reduction is an unweighted mean over
+    labeled structures rather than an atom-count-weighted mean.
 
     Parameters
     ----------
@@ -473,26 +525,36 @@ class EnergyHuberLoss(BaseLossFunction):
 
 
 class ForceMSELoss(BaseLossFunction):
-    """Mean-squared-error loss on per-atom forces.
+    r"""Mean-squared-error loss on per-atom forces.
 
     Forces enter this loss as per-atom vector quantities, unlike energy
-    totals. The ``normalize_by_atom_count`` flag therefore does not
-    convert total quantities into per-atom units; it controls how
-    per-atom force residuals are reduced across a mixed-size batch.
+    totals. Writing :math:`r_{ia\alpha} = \hat{F}_{ia\alpha} - F_{ia\alpha}`
+    for the residual of Cartesian component :math:`\alpha` of atom :math:`a` in
+    graph :math:`i`, the ``normalize_by_atom_count`` flag selects how the
+    squared component residuals are reduced across a mixed-size batch:
+
+    - ``normalize_by_atom_count=True`` (default): each graph's mean squared
+      component error is averaged over graphs, so every graph has equal weight
+      (a graph-balanced reduction):
+
+      .. math::
+
+          L = \frac{1}{B} \sum_{i=1}^{B}
+          \frac{1}{3 N_i} \sum_{a=1}^{N_i} \sum_{\alpha=1}^{3} r_{ia\alpha}^2.
+
+    - ``normalize_by_atom_count=False``: one global mean over every valid force
+      component, so a graph's weight is proportional to its atom count:
+
+      .. math::
+
+          L = \frac{1}{3V} \sum_{i=1}^{B} \sum_{a=1}^{N_i} \sum_{\alpha=1}^{3}
+          r_{ia\alpha}^2, \qquad 3V = \sum_{i=1}^{B} 3 N_i.
 
     Dense force tensors use shape ``(V, 3)``. Padded force tensors use
     shape ``(B, V_max, 3)`` and ignore padding entries according to
     ``num_nodes_per_graph`` supplied either as ``(B,)`` counts or
-    a ``(B, V_max)`` node mask.
-
-    - ``normalize_by_atom_count=True`` (default): per-graph mean of
-      squared-component error, then mean over graphs. This is a
-      graph-balanced reduction: small and large graph contributions
-      are somewhat normalized.
-    - ``normalize_by_atom_count=False``: elementwise mean over all valid
-      force components. This is an atom/component-weighted reduction:
-      graph contributions are proportional to their number of valid
-      force components.
+    a ``(B, V_max)`` node mask. A hat denotes the prediction; see the module
+    docstring for the shared notation.
 
     Tensor Contract
     ---------------
@@ -695,9 +757,22 @@ class ForceMSELoss(BaseLossFunction):
 
 
 class ForceHuberLoss(ForceMSELoss):
-    """Huber loss on per-component force residuals.
+    r"""Huber loss on per-component force residuals.
 
-    Inherits force masking and reduction from :class:`ForceMSELoss`.
+    Applies the Huber function :math:`H_\delta` to each force-component
+    residual :math:`r_{ia\alpha} = \hat{F}_{ia\alpha} - F_{ia\alpha}`, reusing
+    the masking and batch reduction of :class:`ForceMSELoss`. With
+    ``normalize_by_atom_count=False`` (default) this is a global mean over every
+    valid component:
+
+    .. math::
+
+        L = \frac{1}{3V} \sum_{i=1}^{B} \sum_{a=1}^{N_i} \sum_{\alpha=1}^{3}
+        H_\delta\!\left(r_{ia\alpha}\right).
+
+    With ``normalize_by_atom_count=True`` the per-graph mean is averaged over
+    graphs instead, :math:`L = \tfrac{1}{B} \sum_{i} \tfrac{1}{3 N_i}
+    \sum_{a, \alpha} H_\delta(r_{ia\alpha})`.
 
     Parameters
     ----------
@@ -759,14 +834,35 @@ class ForceHuberLoss(ForceMSELoss):
 
 
 class ForceL2NormLoss(BaseLossFunction):
-    """Mean per-atom force-vector L2 loss.
+    r"""Mean per-atom force-vector L2 loss.
 
-    The per-atom residual is the vector norm
-    ``torch.linalg.vector_norm(pred - target, ord=2, dim=-1)``. Dense
-    ``(V, 3)`` inputs can be graph-balanced with ``batch_idx`` and
+    Unlike the component-wise force terms, the per-atom residual here is the
+    Euclidean norm of the force-vector error,
+
+    .. math::
+
+        \rho_{ia} = \bigl\|\hat{\mathbf{F}}_{ia} - \mathbf{F}_{ia}\bigr\|_2
+        = \sqrt{\sum_{\alpha=1}^{3}
+        \left(\hat{F}_{ia\alpha} - F_{ia\alpha}\right)^2},
+
+    reduced over atoms according to ``normalize_by_atom_count``:
+
+    - ``normalize_by_atom_count=True`` (default): the mean atom norm per graph
+      is averaged over graphs (graph-balanced):
+
+      .. math::
+
+          L = \frac{1}{B} \sum_{i=1}^{B}
+          \frac{1}{N_i} \sum_{a=1}^{N_i} \rho_{ia}.
+
+    - ``normalize_by_atom_count=False``: one global mean over all valid atoms,
+      :math:`L = \tfrac{1}{V} \sum_{i=1}^{B} \sum_{a=1}^{N_i} \rho_{ia}`.
+
+    Dense ``(V, 3)`` inputs can be graph-balanced with ``batch_idx`` and
     ``num_graphs``. Padded ``(B, V_max, 3)`` inputs require
     ``num_nodes_per_graph`` counts or a node mask so padding can be
-    excluded from the atom-level reduction.
+    excluded from the atom-level reduction. The reduction is over atoms (one
+    norm per atom), not over individual components.
 
     Parameters
     ----------
@@ -913,11 +1009,26 @@ class ForceL2NormLoss(BaseLossFunction):
 
 
 class StressMSELoss(BaseLossFunction):
-    """Mean-squared-error loss on the per-graph stress tensor.
+    r"""Mean-squared-error loss on the per-graph stress tensor.
 
-    Both pred and target are shape ``(B, 3, 3)``. The loss is the mean
-    of the per-graph squared-Frobenius residual, computed via
-    :func:`~nvalchemi.training.losses.reductions.frobenius_mse`.
+    Both prediction and target are :math:`3 \times 3` tensors of shape
+    ``(B, 3, 3)``. Each graph contributes the mean of its nine squared
+    component residuals -- equivalently its squared Frobenius norm divided by
+    the number of valid components -- and these are averaged over graphs:
+
+    .. math::
+
+        L = \frac{1}{B} \sum_{i=1}^{B} \frac{1}{9}
+        \sum_{p=1}^{3} \sum_{q=1}^{3}
+        \left(\hat{\sigma}_{ipq} - \sigma_{ipq}\right)^2
+        = \frac{1}{B} \sum_{i=1}^{B}
+        \frac{\bigl\|\hat{\sigma}_i - \sigma_i\bigr\|_F^2}{9},
+
+    computed via
+    :func:`~nvalchemi.training.losses.reductions.frobenius_mse`. When
+    ``ignore_nonfinite`` drops components the per-graph denominator is the
+    number of valid components rather than 9. A hat denotes the prediction; see
+    the module docstring for the shared notation.
 
     Tensor Contract
     ---------------
@@ -1008,9 +1119,16 @@ class StressMSELoss(BaseLossFunction):
 
 
 class StressHuberLoss(StressMSELoss):
-    """Huber loss on per-graph stress tensors.
+    r"""Huber loss on per-graph stress tensors.
 
-    Inherits stress masking and reduction from :class:`StressMSELoss`.
+    Applies the Huber function :math:`H_\delta` to each stress-component
+    residual, then reuses the per-graph averaging of :class:`StressMSELoss`:
+
+    .. math::
+
+        L = \frac{1}{B} \sum_{i=1}^{B} \frac{1}{9}
+        \sum_{p=1}^{3} \sum_{q=1}^{3}
+        H_\delta\!\left(\hat{\sigma}_{ipq} - \sigma_{ipq}\right).
 
     Parameters
     ----------
