@@ -42,10 +42,10 @@ losses. :class:`~nvalchemi.training.PiecewiseWeight` schedules are used to chang
 the loss-term weights at a configured optimizer step for the second training stage.
 
 **Runtime** — Distributed wrapping, EMA, neighbor-list rebuild, gradient
-clipping, metrics logging, and checkpointing are attached through runtime hooks 
-rather than being implemented directly in the core trainin loop. Validation 
+clipping, metrics logging, and checkpointing are attached through runtime hooks
+rather than being implemented directly in the core trainin loop. Validation
 is configured separately using :class:`~nvalchemi.training.ValidationConfig` on
-:class:`~nvalchemi.training.TrainingStrategy`. Validation runs automatically 
+:class:`~nvalchemi.training.TrainingStrategy`. Validation runs automatically
 during :meth:`~nvalchemi.training.TrainingStrategy.run`.
 
 Dataset-derived metadata (`E0s`, `avg_num_neighbors`, `atomic_inter_shift` /
@@ -129,7 +129,7 @@ _DATALOADER_USE_STREAMS = True
 #
 # The default configuration uses a per-process training batch size of 256 and a
 # validation batch size of 512. Given that the structure sizes in this dataset range from
-# 1 atom to 240 atoms, :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` can also be 
+# 1 atom to 240 atoms, :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` can also be
 # used as an alternative to cap the atom count per batch when memory is tight.
 #
 # .. code-block:: python
@@ -222,7 +222,7 @@ def _loader(
 # %%
 # Building the MACE model
 # -----------------------
-# The default configuration trains ScaleShiftMACE to predict energy, force, and 
+# The default configuration trains ScaleShiftMACE to predict energy, force, and
 # stress. Any model object passed to :class:`~nvalchemi.training.TrainingStrategy`
 # must follow :class:`~nvalchemi.models.base.BaseModelMixin`.
 # :class:`~nvalchemi.models.mace.MACEWrapper` handles input adaptation,
@@ -353,23 +353,26 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
     force_weight = float(get_cfg(loss_cfg, "force_weight"))
     stress_weight = float(get_cfg(loss_cfg, "stress_weight", 0.0))
 
-    loss_fn: ComposedLossFunction = (
-        PiecewiseWeight(
-            boundaries=boundaries,
-            values=(energy_weight, float(get_cfg(stage_two, "energy_weight", energy_weight))),
-            per_epoch=False,
-        )
-        * EnergyHuberLoss(
-            per_atom=True,
-            delta=delta,
-            ignore_nonfinite=True,
-        )
+    loss_fn: ComposedLossFunction = PiecewiseWeight(
+        boundaries=boundaries,
+        values=(
+            energy_weight,
+            float(get_cfg(stage_two, "energy_weight", energy_weight)),
+        ),
+        per_epoch=False,
+    ) * EnergyHuberLoss(
+        per_atom=True,
+        delta=delta,
+        ignore_nonfinite=True,
     )
     if force_weight != 0.0:
         loss_fn = loss_fn + (
             PiecewiseWeight(
                 boundaries=boundaries,
-                values=(force_weight, float(get_cfg(stage_two, "force_weight", force_weight))),
+                values=(
+                    force_weight,
+                    float(get_cfg(stage_two, "force_weight", force_weight)),
+                ),
                 per_epoch=False,
             )
             * ForceHuberLoss(
@@ -382,7 +385,10 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
         loss_fn = loss_fn + (
             PiecewiseWeight(
                 boundaries=boundaries,
-                values=(stress_weight, float(get_cfg(stage_two, "stress_weight", stress_weight))),
+                values=(
+                    stress_weight,
+                    float(get_cfg(stage_two, "stress_weight", stress_weight)),
+                ),
                 per_epoch=False,
             )
             * StressHuberLoss(
@@ -592,11 +598,11 @@ def _hooks(
 # ----------------------
 # Validation is configured with :class:`~nvalchemi.training.ValidationConfig`. The
 # configuration specifies the validation data, validation function, loss function,
-# evaluation cadence, and whether to use EMA weights. During 
-# :class:`~nvalchemi.training.TrainingStrategy.run`, the strategy evaluates validation 
-# at this cadence and once more at the end of training. The latest validation 
+# evaluation cadence, and whether to use EMA weights. During
+# :class:`~nvalchemi.training.TrainingStrategy.run`, the strategy evaluates validation
+# at this cadence and once more at the end of training. The latest validation
 # summary is stored on ``strategy.last_validation``.
-# 
+#
 # In multi-GPU runs, each rank evaluates a disjoint validation shard through a
 # DistributedSampler. The runnable script builds this configuration with
 # ``_build_validation_config(...)`` after the validation loader and loss function
@@ -649,6 +655,7 @@ def _build_validation_config(
         use_ema="auto",
         name="validation",
     )
+
 
 # sphinx_gallery_end_ignore
 
@@ -813,7 +820,7 @@ if __name__ == "__main__":
 # Validation curves and reference results
 # ---------------------------------------
 # The figure below shows validation Huber losses from a full default-config run
-# on 1× H100 GPU, which took about 80 minutes of wall time. Actual wall time may 
+# on 1× H100 GPU, which took about 80 minutes of wall time. Actual wall time may
 # differ depending on system configuration, hardware, and software stack.
 # The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 # configured by ``training.loss.stage_two.start_step``.

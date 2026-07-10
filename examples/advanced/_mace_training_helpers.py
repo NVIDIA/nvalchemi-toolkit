@@ -144,8 +144,7 @@ def stress_target_scale(data_cfg: Any) -> float:
     if units in {"ev/a^3", "ev/angstrom^3", "ev_per_a3"}:
         return sign
     raise ValueError(
-        f"Unsupported stress_unit={units!r}; "
-        "use 'GPa', 'kBar', or 'eV/A^3'."
+        f"Unsupported stress_unit={units!r}; use 'GPa', 'kBar', or 'eV/A^3'."
     )
 
 
@@ -188,7 +187,7 @@ def close_zarr_loaders(*loaders: DataLoader | None) -> None:
             continue
         try:
             loader.dataset.close()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
@@ -273,8 +272,8 @@ class GradientClipHook(TrainingUpdateHook):
 
 class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
     """Customized learning rate scheduler that starts with a cosine annealing schedule
-    and then switches to a constant learning rate. It uses the SequentialLR scheduler to 
-    chain the two schedules for convenience. It is possible to directly inherit from 
+    and then switches to a constant learning rate. It uses the SequentialLR scheduler to
+    chain the two schedules for convenience. It is possible to directly inherit from
     ``torch.optim.lr_scheduler.LRScheduler`` as well.
 
     Attributes
@@ -312,7 +311,7 @@ class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
         if any(float(group["lr"]) != base_lr for group in optimizer.param_groups):
             raise ValueError("all optimizer parameter groups must share one LR.")
         second_stage_factor = self.second_stage_lr / base_lr
-        
+
         # SequentialLR chains the two schedulers.
         # Stage 1: cosine decay from the optimizer's initial LR down to eta_min.
         schedulers = [
@@ -454,19 +453,14 @@ class TrainingMetricsLogger:
         if ctx.global_rank != 0:
             return
         suffix = " ".join(
-            f"{name}={value:.6g}"
-            for name, value in reduced.items()
-            if name != "loss"
+            f"{name}={value:.6g}" for name, value in reduced.items() if name != "loss"
         )
         message = f"step={ctx.step_count} epoch={ctx.epoch} loss={reduced['loss']:.6g}"
         if suffix:
             message = f"{message} {suffix}"
         self._log_external_metrics(
             ctx,
-            {
-                f"train/{name}": value
-                for name, value in reduced.items()
-            }
+            {f"train/{name}": value for name, value in reduced.items()}
             | {
                 "train/step": float(ctx.step_count),
                 "train/epoch": float(ctx.epoch),
@@ -489,7 +483,10 @@ class TrainingMetricsLogger:
         components = summary.get("per_component_unweighted", {})
         self._require_finite(
             {"loss": float(summary["total_loss"])}
-            | {self._metric_name(name): float(value) for name, value in components.items()},
+            | {
+                self._metric_name(name): float(value)
+                for name, value in components.items()
+            },
             ctx,
         )
 
@@ -540,7 +537,9 @@ class TrainingMetricsLogger:
     @staticmethod
     def _require_finite(metrics: Mapping[str, float], ctx: Any) -> None:
         """Raise ``RuntimeError`` if any metric value is non-finite."""
-        bad = {name: value for name, value in metrics.items() if not math.isfinite(value)}
+        bad = {
+            name: value for name, value in metrics.items() if not math.isfinite(value)
+        }
         if bad:
             raise RuntimeError(
                 f"Non-finite metrics at step={ctx.step_count} epoch={ctx.epoch}: {bad}"
@@ -607,6 +606,5 @@ class TrainingMetricsLogger:
         if world_size > 1:
             values /= float(world_size)
         return {
-            name: float(value)
-            for name, value in zip(names, values.cpu(), strict=True)
+            name: float(value) for name, value in zip(names, values.cpu(), strict=True)
         }

@@ -173,7 +173,9 @@ def build_vanilla_mace_model(
         num_polynomial_cutoff=model_config.num_polynomial_cutoff,
         max_ell=model_config.max_ell,
         interaction_cls=_get_interaction_block(
-            str(model_config.get("interaction", "RealAgnosticResidualInteractionBlock")),
+            str(
+                model_config.get("interaction", "RealAgnosticResidualInteractionBlock")
+            ),
         ),
         interaction_cls_first=_get_interaction_block(
             str(
