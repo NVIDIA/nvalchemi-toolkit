@@ -14,7 +14,7 @@
 # limitations under the License.
 """Install the agent skills bundled with the ``nvalchemi`` package.
 
-The task-focused agent skills that live in ``.claude/skills/`` of the
+The task-focused agent skills that live in ``skills/`` of the
 ``nvalchemi-toolkit`` repository ship inside the ``nvalchemi`` wheel. This
 module provides the ``nvalchemi-skills`` console command to list them and to
 copy them into the skill directories used by coding agents (Claude Code,
@@ -31,7 +31,9 @@ Run with::
 
 from __future__ import annotations
 
+import json
 import shutil
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import click
@@ -43,10 +45,72 @@ TARGET_DIRS: dict[str, tuple[str, str | None]] = {
     "cursor": (".cursor/skills", "~/.cursor/skills"),
     "codex": (".codex/skills", "~/.codex/skills"),
     "copilot": (".github/skills", None),
-    "opencode": (".opencode/skill", "~/.config/opencode/skill"),
+    "opencode": (".opencode/skills", "~/.config/opencode/skills"),
     "gemini": (".gemini/skills", "~/.gemini/skills"),
     "agents": (".agents/skills", "~/.agents/skills"),
 }
+
+#: Distribution whose version the bundled skills are matched to.
+_DISTRIBUTION = "nvalchemi-toolkit"
+#: Manifest written into an install destination recording that version.
+_VERSION_MANIFEST = ".nvalchemi-skills.json"
+
+
+def _package_version() -> str:
+    """Return the installed ``nvalchemi-toolkit`` version.
+
+    Returns
+    -------
+    str
+        The distribution version, or ``"unknown"`` when the package metadata
+        cannot be located (for example a bare source tree with no install).
+    """
+    try:
+        return version(_DISTRIBUTION)
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def _source_provenance(source_root: Path) -> dict[str, str]:
+    """Describe where the installed skills came from.
+
+    A wheel install is pinned to the released version reported by
+    :func:`_package_version`. A repository checkout (editable install) is a
+    working tree, so that version string does not identify a commit; the git
+    description (short SHA plus a ``-dirty`` suffix) is captured best-effort so
+    the install is traceable.
+
+    Parameters
+    ----------
+    source_root : Path
+        Directory returned by :func:`_bundled_skills_root`.
+
+    Returns
+    -------
+    dict of str
+        ``{"source": "wheel"}`` for a bundled install, or
+        ``{"source": "repository", "git_describe": ...}`` for a checkout
+        (``git_describe`` omitted when git or the checkout is unavailable).
+    """
+    pkg_dir = Path(__file__).resolve().parent
+    if source_root.resolve() == (pkg_dir / "_skills").resolve():
+        return {"source": "wheel"}
+    prov = {"source": "repository"}
+    try:
+        import subprocess  # noqa: S404
+
+        described = subprocess.run(  # noqa: S603
+            ["git", "-C", str(source_root.parent), "describe", "--always", "--dirty"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()
+        if described:
+            prov["git_describe"] = described
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return prov
 
 
 def _bundled_skills_root() -> Path:
@@ -61,13 +125,13 @@ def _bundled_skills_root() -> Path:
     ------
     click.ClickException
         If neither the wheel-bundled ``nvalchemi/_skills`` directory nor the
-        repository ``.claude/skills`` fallback (editable installs) exists.
+        repository ``skills`` fallback (editable installs) exists.
     """
     pkg_dir = Path(__file__).resolve().parent
     bundled = pkg_dir / "_skills"
     if bundled.is_dir():
         return bundled
-    repo_skills = pkg_dir.parent / ".claude" / "skills"
+    repo_skills = pkg_dir.parent / "skills"
     if repo_skills.is_dir():
         return repo_skills
     raise click.ClickException(
@@ -222,10 +286,18 @@ def _install_into(source_root: Path, dest: Path, force: bool) -> tuple[int, int]
         shutil.copytree(skill_dir, target_dir)
         copied += 1
         click.echo(f"  + {skill_dir.name} -> {target_dir}")
+    if copied:
+        manifest = {
+            "nvalchemi_version": _package_version(),
+            **_source_provenance(source_root),
+        }
+        (dest / _VERSION_MANIFEST).write_text(
+            json.dumps(manifest) + "\n", encoding="utf-8"
+        )
     return copied, skipped
 
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def main() -> None:
     """Manage the agent skills bundled with the nvalchemi package."""
 
@@ -235,7 +307,10 @@ def list_skills() -> None:
     """List the bundled skills and their one-line summaries."""
     root = _bundled_skills_root()
     skills = _skill_dirs(root)
-    click.echo(f"{len(skills)} skills bundled ({root}):")
+    click.echo(
+        f"{len(skills)} skills bundled for {_DISTRIBUTION} "
+        f"{_package_version()} ({root}):"
+    )
     for skill_dir in skills:
         click.echo(f"  {skill_dir.name}: {_frontmatter_summary(skill_dir)}")
 
@@ -298,7 +373,10 @@ def install(target: str, scope: str, dest: Path | None, force: bool) -> None:
         copied, skipped = _install_into(root, destination, force)
         total_copied += copied
         total_skipped += skipped
-    click.echo(f"Done: {total_copied} copied, {total_skipped} skipped.")
+    click.echo(
+        f"Done: {total_copied} copied, {total_skipped} skipped "
+        f"({_DISTRIBUTION} {_package_version()})."
+    )
 
 
 if __name__ == "__main__":

@@ -8,15 +8,19 @@ The ALCHEMI Toolkit ships a set of **agent skills** --- concise instruction
 files that AI coding assistants (Claude, Copilot, Cursor, etc.) can load to
 get up to speed with the `nvalchemi` API without lengthy context-gathering.
 
-Skills live in the repository under `.claude/skills/`.
+Skills live in the repository under `skills/` at the repo root (the canonical
+location). `.claude/skills` and `.agents/skills` are symlinks to it so agents
+that read those paths discover them automatically.
 
 ## Installing skills
 
 There are three ways to get the skills, depending on how you use `nvalchemi`:
 
-**Inside a repository clone** --- nothing to install. Claude Code discovers
-`.claude/skills/` automatically; other agents are routed to the right
-`SKILL.md` by the table in the repository's `AGENTS.md`.
+**Inside a repository clone** --- nothing to install. Agents that read
+`.claude/skills` or `.agents/skills` (Claude Code, Cursor, OpenCode, Gemini
+CLI) discover them automatically through the committed symlinks; other agents
+are routed to the right `SKILL.md` by the table in the repository's
+`AGENTS.md`, or can be populated with `nvalchemi-skills install`.
 
 **From the installed package (recommended for library users)** --- the
 skills ship inside the `nvalchemi` wheel. After `pip install`/`uv add`, run:

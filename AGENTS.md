@@ -207,12 +207,14 @@ that should not import optional model backends.
 
 ## Agent Skills
 
-Task-focused API guides live in `.claude/skills/<name>/SKILL.md`. They are
-plain Markdown, readable by any agent: before nontrivial work in an area
-below, read the matching `SKILL.md`. Authoring conventions and dependency
-chains are documented in `.claude/skills/README.md`. The skills also ship in
-the `nvalchemi` wheel; `nvalchemi-skills install` copies them into agent
-directories outside this clone.
+Task-focused API guides live in `skills/<name>/SKILL.md` at the repo root
+(the canonical location; `.claude/skills` and `.agents/skills` are symlinks to
+it for in-repo discovery). They are plain Markdown, readable by any agent:
+before nontrivial work in an area below, read the matching `SKILL.md`.
+Authoring conventions and dependency chains are documented in
+`skills/README.md`. The skills also ship in the `nvalchemi` wheel;
+`nvalchemi-skills install` copies them into agent directories outside this
+clone.
 
 | Skill | Use when |
 |-------|----------|

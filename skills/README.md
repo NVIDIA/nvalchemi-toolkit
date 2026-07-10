@@ -2,10 +2,11 @@
 
 This folder contains task-focused guides ("skills") for working with the
 `nvalchemi` API. Each skill is a plain Markdown file with YAML frontmatter,
-readable by any coding agent or human. Claude Code discovers them
-automatically inside a clone; other agents reach them through the routing
-table in the repository's `AGENTS.md`, and installed-package users can copy
-them locally (see "Installing the skills" below).
+readable by any coding agent or human. Agents that read `.claude/skills` or
+`.agents/skills` discover them automatically inside a clone (both are
+symlinks to `skills/`); other agents reach them through the routing table in
+the repository's `AGENTS.md`, and installed-package users can copy them
+locally (see "Installing the skills" below).
 
 ## Which skill do I need?
 
@@ -24,7 +25,10 @@ them locally (see "Installing the skills" below).
 | Implement a new integrator, optimizer, or sampler class | `nvalchemi-dynamics-implementation` |
 | Add progress dashboards, TensorBoard, or CSV observability | `nvalchemi-reporting` |
 
-Each skill lives at `.claude/skills/<name>/SKILL.md`.
+Each skill lives at `skills/<name>/SKILL.md` (the canonical location). For
+in-repo discovery, `.claude/skills` and `.agents/skills` are symlinks to
+`skills/`, so agents that read those paths (Claude Code, Cursor, OpenCode,
+Gemini CLI, and any agentskills.io tool) find them with no setup.
 
 ## How the skills relate
 
@@ -41,13 +45,17 @@ reporting (orthogonal: attaches to training and dynamics)
 
 ## Installing the skills
 
-- **Inside a clone**: nothing to do. Claude Code loads the skills
-  automatically; other agents should follow the routing table in
-  `AGENTS.md`.
+- **Inside a clone**: nothing to do for agents that read `.claude/skills` or
+  `.agents/skills` (Claude Code, Cursor, OpenCode, Gemini CLI) — the committed
+  symlinks point them at `skills/`. For an agent that only reads its own
+  directory (for example Codex `.codex/skills` or Copilot `.github/skills`),
+  run `nvalchemi-skills install --target <agent>`.
 - **From an installed package**: the skills ship inside the `nvalchemi`
   wheel. Run `nvalchemi-skills install` to copy them into your project's or
-  home agent directories (`--help` lists targets). Installed skills match
-  the API version of the package you installed.
+  home agent directories (`-h`/`--help` lists targets). Installed skills match
+  the API version of the package you installed, and a `.nvalchemi-skills.json`
+  manifest is written alongside them recording that version and its provenance
+  (a released `wheel`, or a `repository` checkout with its `git describe`).
 - **Straight from GitHub** (any agent, no Python needed):
   `npx skills add NVIDIA/nvalchemi-toolkit`.
 

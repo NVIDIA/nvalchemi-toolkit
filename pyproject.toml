@@ -50,12 +50,14 @@ dynamic = ["version"]
 path = "nvalchemi/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["nvalchemi/**/*.py", ".claude/skills/**"]
+include = ["nvalchemi/**/*.py", "skills/**"]
 
 # Bundle the agent skills into the wheel so `nvalchemi-skills install` can
 # copy them out of an installed package (kept in sync with the API version).
+# Source of truth is the repo-root skills/ dir; .claude/skills and .agents/skills
+# are symlinks to it for in-repo agent discovery.
 [tool.hatch.build.targets.wheel.force-include]
-".claude/skills" = "nvalchemi/_skills"
+"skills" = "nvalchemi/_skills"
 
 [project.scripts]
 nvalchemi-io-test = "nvalchemi.data.io_test:main"

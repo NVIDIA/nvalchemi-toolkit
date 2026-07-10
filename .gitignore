@@ -111,4 +111,7 @@ slurm-*.out
 
 # testmon files
 .testmondata*
-.agents/
+
+# Agent scratch dir, but keep the tool-agnostic skills symlink (agentskills.io layout)
+.agents/*
+!.agents/skills

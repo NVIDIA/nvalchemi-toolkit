@@ -11,6 +11,15 @@ First and foremost, familiarize yourself with the existing documentation, both
 in the `sphinx` docs, as well in kernel docstrings. In particular, see the kernel
 style guide to ensure consistent variable names and conventions across the codebase.
 
+### Agent skills
+
+Agent skills are authored under `skills/` at the repo root (the canonical
+location; see `skills/README.md`). `.claude/skills` and `.agents/skills` are
+committed symlinks to it so coding agents discover them in-repo. On Windows,
+git only checks these out as real symlinks when `core.symlinks=true` (enable
+Developer Mode or run git as admin); otherwise they appear as small text files
+and the canonical `skills/` directory is still the source of truth.
+
 ## Signing Your Work
 
 - We require that all contributors "sign-off" on their commits. This certifies that the

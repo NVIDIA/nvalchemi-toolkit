@@ -41,7 +41,7 @@ NVIDIA GPUs.
 
 The repository ships agent-facing guidance at two levels:
 
-- **Skills** — task-specific API guides under `.claude/skills/`. Claude Code
+- **Skills** — task-specific API guides under `skills/`. Claude Code
   discovers them automatically when working inside a clone; other platforms
   are routed to the right `SKILL.md` by the table in `AGENTS.md`. Outside a
   clone, install the skills from the packaged wheel

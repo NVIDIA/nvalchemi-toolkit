@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import filecmp
+import json
 from pathlib import Path
 
 import pytest
@@ -24,7 +25,7 @@ from click.testing import CliRunner
 
 from nvalchemi import skills as skills_mod
 
-REPO_SKILLS = Path(__file__).resolve().parents[2] / ".claude" / "skills"
+REPO_SKILLS = Path(__file__).resolve().parents[2] / "skills"
 SKILL_NAMES = sorted(p.name for p in REPO_SKILLS.iterdir() if p.is_dir())
 
 
@@ -32,7 +33,7 @@ class TestSkillSourceResolution:
     """Resolution of the bundled-skills directory."""
 
     def test_dev_checkout_fallback(self):
-        """In an editable checkout the repo .claude/skills is used."""
+        """In an editable checkout the repo skills/ dir is used."""
         root = skills_mod._bundled_skills_root()
         assert root == REPO_SKILLS
 
@@ -140,11 +141,48 @@ class TestInstallCommand:
         assert (tmp_path / ".cursor" / "skills" / SKILL_NAMES[0]).is_dir()
 
     def test_self_install_does_not_clobber_source(self, monkeypatch):
-        """Installing into the repo's own .claude/skills is a no-op."""
-        monkeypatch.chdir(REPO_SKILLS.parents[1])
+        """Installing into the repo's own skills/ is a no-op."""
+        monkeypatch.chdir(REPO_SKILLS.parents[0])
         result = CliRunner().invoke(
             skills_mod.main,
             ["install", "--target", "claude", "--scope", "project", "--force"],
         )
         assert result.exit_code == 0, result.output
         assert "source and destination match" in result.output
+
+
+class TestVersionStamping:
+    """Version reporting and the install manifest."""
+
+    def test_list_reports_version(self):
+        """``list`` names the package version the skills match."""
+        result = CliRunner().invoke(skills_mod.main, ["list"])
+        assert result.exit_code == 0
+        assert skills_mod._package_version() in result.output
+
+    def test_install_writes_version_manifest(self, tmp_path):
+        """``install`` stamps the destination with version and provenance."""
+        result = CliRunner().invoke(
+            skills_mod.main, ["install", "--dest", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
+        manifest = tmp_path / skills_mod._VERSION_MANIFEST
+        assert manifest.is_file()
+        data = json.loads(manifest.read_text())
+        assert data["nvalchemi_version"] == skills_mod._package_version()
+        assert data["source"] in {"wheel", "repository"}
+
+    def test_provenance_classifies_wheel_and_repository(self):
+        """A wheel bundle and a repository checkout are distinguished."""
+        pkg_dir = Path(skills_mod.__file__).resolve().parent
+        assert skills_mod._source_provenance(pkg_dir / "_skills") == {"source": "wheel"}
+        assert skills_mod._source_provenance(REPO_SKILLS)["source"] == "repository"
+
+    def test_self_install_leaves_no_manifest_in_source(self, monkeypatch):
+        """The repo's own skills/ is never stamped (nothing is copied)."""
+        monkeypatch.chdir(REPO_SKILLS.parents[0])
+        CliRunner().invoke(
+            skills_mod.main,
+            ["install", "--target", "claude", "--scope", "project", "--force"],
+        )
+        assert not (REPO_SKILLS / skills_mod._VERSION_MANIFEST).exists()
