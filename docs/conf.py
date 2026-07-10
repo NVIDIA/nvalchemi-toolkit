@@ -80,6 +80,7 @@ extensions = [
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
     "sphinxext",
+    "sphinxcontrib.autodoc_pydantic",
 ]
 if not skip_gallery:
     extensions.append("sphinx_gallery.gen_gallery")
@@ -116,6 +117,29 @@ exclude_patterns = [
 suppress_warnings = ["config.cache"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
+
+# -- autodoc-pydantic: render models as user-facing schemas ------------------
+# Focus each model on its validated fields. Descriptions come from
+# ``Field(description=...)`` (single source of truth), so the redundant
+# constructor signature and validator/config noise are hidden.
+autodoc_pydantic_model_show_json = False
+autodoc_pydantic_model_show_config_summary = False
+autodoc_pydantic_model_show_validator_summary = False
+autodoc_pydantic_model_show_validator_members = False
+autodoc_pydantic_model_show_field_summary = False
+autodoc_pydantic_model_hide_paramlist = True
+autodoc_pydantic_model_member_order = "bysource"
+autodoc_pydantic_field_doc_policy = "description"
+autodoc_pydantic_field_show_constraints = True
+autodoc_pydantic_field_show_default = True
+autodoc_pydantic_field_list_validators = False
+autodoc_pydantic_field_swap_name_and_alias = False
+
+# Let the autosummary class template route pydantic models to autopydantic_model
+# (autodoc-pydantic does not auto-claim the plain autoclass autosummary emits).
+import sphinxext as _sphinxext  # noqa: E402
+
+autosummary_context = {"is_pydantic_model": _sphinxext.is_pydantic_model}
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
