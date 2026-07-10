@@ -90,8 +90,17 @@ through the dynamics step, and out to downstream ranks or sinks.
 Pre-allocated communication buffers
 -----------------------------------
 
+.. currentmodule:: nvalchemi.dynamics.base
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   BufferConfig
+
 Communication buffers are configured via
-:class:`~nvalchemi.dynamics.BufferConfig`:
+:class:`~nvalchemi.dynamics.base.BufferConfig`:
 
 .. code-block:: python
 

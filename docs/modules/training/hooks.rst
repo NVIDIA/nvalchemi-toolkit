@@ -509,8 +509,12 @@ API reference
 
    DDPHook
    MixedPrecisionHook
-   TorchProfilerHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
    EMAHook
    CheckpointHook
+
+The general-purpose profiling hooks
+:class:`~nvalchemi.hooks.StageTimingHook` and
+:class:`~nvalchemi.hooks.TorchProfilerHook` also work with training and are
+documented in :ref:`hooks-api`.

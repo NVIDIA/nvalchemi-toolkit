@@ -417,5 +417,8 @@ API reference
    NaNDetectorHook
    MaxForceClampHook
    FreezeAtomsHook
-   StageTimingHook
-   TorchProfilerHook
+
+The general-purpose profiling hooks
+:class:`~nvalchemi.hooks.StageTimingHook` and
+:class:`~nvalchemi.hooks.TorchProfilerHook` also work with dynamics and are
+documented in :ref:`hooks-api`.

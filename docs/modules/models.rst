@@ -15,6 +15,7 @@ Core classes
    :nosignatures:
 
    ModelConfig
+   NeighborConfig
    BaseModelMixin
 
 Demo utilities
