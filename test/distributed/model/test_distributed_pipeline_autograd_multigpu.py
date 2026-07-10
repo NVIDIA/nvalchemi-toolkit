@@ -79,7 +79,6 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 
 def _build_lattice(dtype: torch.dtype = torch.float64, seed: int = 0):
-    # Default box (30 Å) keeps the DFTD3 cutoff (12 Å) under the minimum-image
     # Non-degenerate: DFTD3's deep CN halo (cutoff 12 Å + skin 4 Å -> ghost 16 Å)
     # means the remote band (box/2 - 2*ghost) must exceed the lattice spacing, i.e.
     # box > 4*ghost + 2*spacing ~ 74 Å (not just 64). 88 Å / 16 = 5.5 Å spacing

@@ -67,11 +67,14 @@ subdomain independently. Cross-rank communication happens once per
 step (the halo exchange) plus a handful of collectives for
 per-system reductions.
 
-## Two storage strategies
+## Two parallelization strategies
 
 The choice of how per-atom fields are laid out across ranks is the
 single biggest architectural decision in any distributed MD framework.
-`nvalchemi.distributed` supports two:
+`nvalchemi.distributed` ships two, selected with `DomainConfig.strategy`
+({class}`~nvalchemi.distributed.config.StrategyKind`): **halo** (the
+default, spatial domain decomposition) and **graph-parallel** (a
+node partition for models that build their own neighbour list).
 
 ### Halo storage
 
@@ -108,32 +111,44 @@ the model produces a per-graph quantity like total energy).
 This is the default for the `MACE` / `LJ` / `UMA` / `Ewald` / `PME`
 wrappers shipped with the toolkit.
 
-### Sharded storage
+### Graph-parallel storage (node partition)
 
-Each rank holds *only* its `n_owned` rows. Cross-rank operations
-(`index_select`, `scatter_add`) route through global IDs at dispatch
-time — the rank that needs row `j` gathers it on demand, computes,
-and either returns the result to the original rank or scatters
-locally.
+Instead of a spatial halo, atoms are split by *index* into balanced
+contiguous blocks. Each rank owns `n_owned` atoms but holds the full
+geometry **replicated**, so a model that builds its own neighbour list
+inside `forward` — UMA / eSCN-family models emit their own `edge_index`
+via an internal `radius_pbc` kernel — still sees every position.
 
 ```text
-rank 0:   [ owned_0 ]  # shape (n_owned_0, F)
-rank 1:   [ owned_1 ]  # shape (n_owned_1, F)
+rank 0:   positions = ALL n_global rows (replicated);  owns nodes [0 .. n0)
+rank 1:   positions = ALL n_global rows (replicated);  owns nodes [n0 .. n0+n1)
 …
 ```
 
-**Pick sharded storage when:**
+Each rank runs the model on its owned block; a per-message-passing-layer
+feature `all_gather` reconstructs the full node set the convolution
+needs, and a reduce-scatter adjoint routes each owned atom's cross-rank
+gradient back on the backward pass. Per-system quantities (energy,
+stress) sum the owned slices with an `all_reduce`; forces come from the
+model's own autograd. Because the partition is by index rather than
+geometry, the cell is an ordinary model input, atoms never migrate
+between ranks, and only the edge count drifts under MD (compiled runs
+cap edges, not atoms).
 
-- The model is a charge-equilibration network (AIMNet2). Equilibrium
-  charges depend on a global mol_sum across all atoms in a system —
-  no spatial cutoff bounds the dependence, so halo storage would need
-  the entire box as halo on every rank.
-- Per-atom out-of-place updates dominate the forward (each
-  message-passing layer rewrites `x` rather than scatter-adding into
-  it). Halo-storage's halo-correction would need a refresh after
-  every update; gather avoids that bookkeeping.
+**Pick graph-parallel storage when:**
 
-The sharded path is only enabled by AIMNet2 in the current toolkit.
+- The model rebuilds its own neighbour list inside `forward` and can't
+  be handed a pre-padded halo view (UMA / eSCN-family). There is no
+  pre-forward seam to attach a halo to, but the full replicated
+  geometry gives the internal builder everything it needs.
+- You want to scale a *single* system past one GPU's memory: per-rank
+  message-passing activations span only `n_owned` rows even though the
+  positions are replicated, so peak memory falls with rank count.
+
+Select it with `DomainConfig(strategy=StrategyKind.GRAPH_PARTITION)`; the
+default is halo. The `SPEC_MPNN_GP` preset declares this layout for
+generic MPNNs, and UMA's wrapper returns a node-partition spec when the
+config selects it.
 
 ### Choosing
 
@@ -144,14 +159,18 @@ The strategy is declared on the model's
 |---|---|---|
 | `SPEC_MPNN_HALO` | halo, halo-correction scatter, halo-read gather | MACE, NequIP, generic MPNN |
 | `SPEC_LJ_HALO` | halo, halo-correction scatter | Lennard-Jones, pair potentials |
-| `SPEC_UMA_GATHER` | halo, local scatter (eSCN backbone is halo-unaware) | UMA |
+| `SPEC_UMA_HALO` | halo, local scatter (eSCN backbone is halo-unaware) | UMA |
 | `SPEC_EWALD_HALO` | halo, with custom-op adapters for reciprocal-space | Ewald |
 | `SPEC_PME_HALO` | halo, with custom-op adapters for charge spreading | PME |
-| `SPEC_AIMNET2_GATHER` | sharded, distributed scatter+gather | AIMNet2 |
+| `SPEC_DFTD3_HALO` | halo, standard energy/force outputs | DFTD3 dispersion |
+| `SPEC_MPNN_GP` | graph-partition (node partition + per-layer feature all-gather) | MACE / generic MPNN, graph-parallel |
 
 If your model fits one of these patterns, the preset is a one-line
 declaration on your wrapper's `distribution_spec` property. If it
 doesn't, see {doc}`distributed_byo` for the authoring workflow.
+
+AIMNet2 is supported as well, but its wrapper builds its (halo) spec
+inline rather than exposing a shipped `SPEC_*` preset.
 
 ## Runtime architecture
 
@@ -281,12 +300,160 @@ parameters every rank needs:
   {py:class}`~torch.distributed.device_mesh.DeviceMesh`. Construct
   manually or derive from `dist.get_world_size()`.
 
-Phase 7 of the distributed refactor split `DomainConfig` into focused
-sub-configs ({py:class}`~nvalchemi.distributed.config.HaloConfig`,
-{py:class}`~nvalchemi.distributed.config.MeshConfig`,
-{py:class}`~nvalchemi.distributed.config.PartitionConfig`); the legacy
-flat constructor still works for callsites that pass `cutoff=...`,
-`mesh=...`, etc.
+`DomainConfig` also carries optional fields for advanced runs — `compile`
+(enable a compiled distributed forward), `strategy` (select the
+parallelization strategy, e.g. halo vs. graph-partition), and finer
+partition/migration tuning (`ghost_width`, `grid_dims`,
+`require_nondegenerate`, `migration_hysteresis`). See the class for the
+full list; the three fields above are all a typical run needs.
+
+## Compiled distributed runs
+
+Set `compile=True` on the `DomainConfig` to run the per-rank forward under
+`torch.compile`:
+
+```python
+domain_cfg = DomainConfig(
+    cutoff=wrapper.cutoff, skin=0.5, mesh=mesh, compile=True
+)
+```
+
+The distributed forward is **fixed-shape**: the framework pads each rank's
+graph to per-rank capacity caps so tensor shapes stay static across MD
+steps. The caps grow a few times during warm-up and then settle, so a
+trajectory reaches a **recompile-free steady state** — the compiled graph
+is reused every step. That is what makes compiled DD practical for MD
+rather than one-shot inference. The shipped MACE (including
+cuEquivariance), AIMNet2, and UMA wrappers all support it; a BYO model
+opts in by declaring a
+{py:class}`~nvalchemi.distributed.CompilePolicy` on its spec (see
+{doc}`distributed_byo`).
+
+## Distributed dynamics
+
+Any {py:class}`~nvalchemi.dynamics.base.BaseDynamics` integrator or
+optimizer runs under `DomainParallel` — you wrap it exactly like the NVT
+example above and call `partition()` / `run()`. What changes under domain
+decomposition is *where global quantities come from*.
+
+### What the inner integrator sees
+
+Under `DomainParallel`, each rank's inner integrator sees **only its
+owned atoms** — never ghosts, never the whole system. The owned + ghost
+(halo) view exists only inside the model forward; your `pre_update` /
+`post_update` are handed the owned `Batch`. Two consequences:
+
+- **Per-atom operations are correct as-is.** Position integration,
+  velocity half-kicks, per-atom Langevin friction and noise, applying
+  forces — anything that only touches per-atom fields works under DD with
+  no changes. `NVE` and `NVTLangevin` are exact under DD for exactly this
+  reason.
+- **Global reductions are not.** Any quantity that reduces across *all*
+  atoms in a system — total kinetic energy, temperature, degrees of
+  freedom, a global force dot-product (FIRE), a convergence test, a
+  barostat's kinetic pressure — is wrong if computed as a local `.sum()`
+  / `.max()` over one rank's shard. Each rank would see only its slice.
+
+### Supported ensembles
+
+The shipped thermostats and barostats declare their global quantities as
+*intent*; `DomainParallel`'s dynamics coordinator supplies the cross-rank
+reduction, so the integrator body stays free of any distributed code. For
+these, there is nothing to do — wrap in `DomainParallel` and run:
+
+| Integrator | Under DD | Example |
+|---|---|---|
+| `NVE` | Exact; per-atom only, no reduction | — |
+| `NVTLangevin` | Exact; per-atom only, no reduction | `03_mace_nvt_distributed.py` |
+| Nosé–Hoover NVT | Global KE + DOF reduced by the coordinator | — |
+| `NPT` | Global KE + DOF + pressure; replicated barostat + cell | `06_mace_npt_distributed.py` |
+| `NPH` | Global KE + pressure; replicated cell | — |
+| `FIRE` / `FIRE2` | Global `v·f`, `v·v`, `f·f` dot-products | `07_fire_nvt_dd.py` |
+
+You can also run **two-dimensional parallelism** — a pipeline of stages,
+each stage itself domain-decomposed — by feeding `DomainParallel` stages
+to a `DistributedPipeline` over a `(pipeline, domain)` mesh;
+`07_fire_nvt_dd.py` shows a FIRE→NVT pipeline where each stage is its own
+DD sub-mesh.
+
+```{note}
+Global thermostat/barostat support (Nosé–Hoover, NPT, NPH) is recent.
+Validate long production barostat trajectories before relying on them.
+```
+
+### Bring your own integrator under DD
+
+A custom `BaseDynamics` subclass (see
+{doc}`dynamics_simulations` → *Writing your own dynamics*) runs under
+`DomainParallel` unchanged **as long as every operation is per-atom.** If
+your integrator needs a *global* scalar, make it DD-aware — in order of
+preference:
+
+1. **Reuse a shipped ensemble** when your scheme is Nosé–Hoover / NPT /
+   NPH / FIRE-shaped: the coordinator already globalizes its
+   thermodynamic quantities.
+
+2. **Compute the global scalar in a `HookScope.GLOBAL` hook.** This is the
+   sanctioned public seam. A hook whose `scope` is `HookScope.GLOBAL`
+   receives the *full gathered system on every rank*, so it can compute
+   any global quantity identically everywhere and hand it to the
+   integrator, which then reads a plain Python value (no shard math):
+
+   ```python
+   from nvalchemi.dynamics.base import DynamicsStage
+   from nvalchemi.distributed import HookScope
+
+   class GlobalKineticEnergyHook:
+       """Whole-system KE, computed identically on every rank.
+
+       ``scope = GLOBAL`` makes DomainParallel gather the full system onto
+       every rank before the hook runs, so every rank writes the same
+       value onto the integrator it wraps.
+       """
+       stage = DynamicsStage.BEFORE_STEP
+       scope = HookScope.GLOBAL
+       frequency = 1
+
+       def __init__(self, integrator):
+           self._integrator = integrator
+
+       def __call__(self, ctx, stage):
+           b = ctx.batch  # the FULL system, identical on every rank
+           ke = 0.5 * (b.atomic_masses * (b.velocities**2).sum(-1)).sum()
+           self._integrator.global_kinetic_energy = ke
+
+   # Register on the OUTER DomainParallel so the GLOBAL gather fires;
+   # the integrator reads ``self.global_kinetic_energy`` in post_update.
+   dynamics = DomainParallel(
+       dynamics=my_integrator,
+       config=domain_cfg,
+       n_steps=n_steps,
+       hooks=[GlobalKineticEnergyHook(my_integrator)],
+   )
+   ```
+
+   Because every rank computed the same value from the same gathered
+   system, the integrator stays in lockstep. A `GLOBAL` hook gathers the
+   whole system when it fires, so it suits step-boundary couplings — not a
+   per-step hot-loop scalar on very large systems.
+
+3. **Read `energy` directly** — the forward already reduces per-system
+   energy to its global value and replicates it to every rank, so
+   `batch.energy` is global. Never re-sum it.
+
+**Don'ts under DD:**
+
+- Don't call `torch.distributed.all_reduce` yourself over the world
+  group. Route global reductions through the framework (a shipped
+  ensemble, or a `GLOBAL` hook) so they stay correct under whichever
+  strategy is active — a hand-rolled reduction can double-count on a
+  replicated layout, where every rank already holds the full data.
+- Don't try to read owned + ghost atoms inside `pre_update` /
+  `post_update` — you only ever get owned atoms; the halo view lives
+  inside the forward.
+- Don't make a per-rank control-flow decision (like "converged") from a
+  local scalar. `DomainParallel` already reduces convergence mesh-wide; a
+  divergent local decision desyncs collectives.
 
 ## Next steps
 

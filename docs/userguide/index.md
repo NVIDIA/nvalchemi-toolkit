@@ -42,10 +42,10 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 ## Distributed Simulations
 
-- {doc}`Design Overview (presentation source) <distributed_design>`
 - {doc}`Overview: Domain Decomposition <distributed>`
 - {doc}`ShardTensor: Per-Atom Fields Across Ranks <distributed_shardtensor>`
 - {doc}`Bring Your Own Model: Authoring a Spec <distributed_byo>`
+- {doc}`Architecture & design (deep dive) <distributed_design>`
 
 ## Advanced Usage
 
@@ -87,10 +87,10 @@ dynamics
 :maxdepth: 1
 :hidden:
 
-distributed_design
 distributed
 distributed_shardtensor
 distributed_byo
+distributed_design
 ```
 
 ```{toctree}

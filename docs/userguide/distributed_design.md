@@ -1,4 +1,4 @@
-<!-- markdownlint-disable MD014 MD033 -->
+<!-- markdownlint-disable MD014 MD033 MD013 -->
 
 (distributed_design_overview)=
 
@@ -208,7 +208,7 @@ answer to the "where does each rank's per-atom tensor live, and what's
 the row layout?" question.
 
 ```{graphviz}
-:caption: Three ways to lay out a per-atom tensor across two ranks. Solid blocks are owned; dotted blocks are remote rows. **Halo storage** materialises a thin shell of remote owners' rows on each rank (read-only mirrors). **Sharded storage** stores only owned; cross-rank reads route over the wire. **Replicated storage** stores the full tensor on every rank and partitions logically — used when a model rebuilds its own NL inside ``forward`` and needs to see every position.
+:caption: Three ways to lay out a per-atom tensor across two ranks. Solid blocks are owned; dotted blocks are remote rows. **Halo storage** materialises a thin shell of remote owners' rows on each rank (read-only mirrors). **Sharded storage** stores only owned; cross-rank reads route over the wire. **Replicated storage** stores the full tensor on every rank and partitions logically — the layout used by the **graph-partition** strategy (§4b), for models that rebuild their own NL inside ``forward`` and need to see every position.
 :align: center
 
 digraph storage_modes {
@@ -304,7 +304,7 @@ Quick reference for picking a strategy:
 |---|---|---|---|
 | **Halo** | ``[owned │ halo]`` — owned rows are unique, halo rows mirror remote owners. | Local-receptive-field MPNN where the cutoff fits in one halo width. The model can be handed an opaque ``(n_owned + n_halo, *F)`` view and produce correct outputs without knowing the partition. | One halo exchange per step (refresh shell rows). |
 | **Sharded** | ``(n_owned, *F)`` — each rank stores only its owned rows. | Per-system reductions inside every layer (charge equilibration; ``mol_sum``). The cost of a per-layer halo refresh is dominated by the global reduction anyway, so saving on memory wins. | One ``all_to_all_v`` per cross-rank read or scatter (already needed for ``mol_sum``). |
-| **Replicated** | Full ``(n_global, *F)`` on every rank; partition is logical (a ``node_partition`` index slice). | Models that build their own neighbor list inside ``forward`` and can't be handed a pre-padded view (``UMA``'s ``_generate_graph``, ``eSCN``-family). Memory is O(n_global) per rank, so capped by single-GPU budget. | Per-MP-layer feature ``all_gather`` (autograd-aware) plus per-system ``all_reduce`` for energy / forces / stress. |
+| **Replicated** (graph-partition) | Full ``(n_global, *F)`` on every rank; partition is logical (a ``node_partition`` index slice). | Models that build their own neighbor list inside ``forward`` and can't be handed a pre-padded view (``UMA``'s ``_generate_graph``, ``eSCN``-family). Memory is O(n_global) per rank, so capped by single-GPU budget. | Per-MP-layer feature ``all_gather`` (autograd-aware) plus per-system ``all_reduce`` for energy / forces / stress. |
 
 The storage strategy is just the start. Within each strategy we still
 need to pick scatter rules, gather rules, and per-output reductions.
@@ -372,7 +372,7 @@ t = ShardTensor.wrap(
 )
 ```
 
-### 2.2 Dispatch via __torch_function__
+### 2.2 Dispatch via `__torch_function__`
 
 When a torch op is called with at least one ShardTensor argument,
 PyTorch invokes `ShardTensor.__torch_function__`. We walk a small
@@ -849,122 +849,86 @@ strain-trick stress (with the inner virial pass routed correctly).
 
 ---
 
-## 4b. UMA end-to-end: replicated for graph-rebuilding models
+## 4b. UMA end-to-end: node-partition graph parallel for graph-rebuilding models
 
 Some models can't be handed a halo-padded view because they build
 their own neighbor list inside ``forward``. UMA / eSCN-family models
 take ``positions`` and emit ``edge_index`` via their internal
 ``radius_pbc`` kernel — there's no pre-forward seam to attach a halo
-to. The replicated strategy answers that: every rank holds the full
-positions tensor, the model's NL builder runs on the global view,
-then a logical *node partition* (an index slice of
-``arange(n_global)``) restricts which receivers each rank computes
-messages for.
+to. The **graph-partition strategy**
+(:class:`~nvalchemi.distributed.strategy.GraphPartitionStrategy`,
+selected with ``DomainConfig(strategy=StrategyKind.GRAPH_PARTITION)``)
+answers that: every rank holds the full positions tensor, the model's
+NL builder runs on the global geometry, then a balanced *node
+partition* — a contiguous slice of ``arange(n_global)`` — assigns each
+rank a distinct block of owned atoms.
 
-UMA was designed by fairchem with this pattern already wired in. Its
-``escn_md._generate_graph`` already gates on
-``gp_utils.initialized()``: under that branch, fairchem partitions
-the receiver set, filters edges to ``target ∈ partition``, and slices
-node features to the partition rows. ``escn_md_block`` already calls
-``gather_from_model_parallel_region_sum_grad`` per MP layer to read
-sender features for cross-partition edges. ``compute_forces_and_stress``
-already calls ``reduce_from_model_parallel_region`` on the gradient
-of the per-rank energy partial.
+Each rank runs the backbone on its owned block. A per-MP-layer feature
+``all_gather`` reconstructs the full node set the convolution needs,
+and a reduce-scatter adjoint on the backward routes each owned atom's
+cross-rank gradient back to its owner. Per-system energy and stress sum
+the owned slices with an ``all_reduce``; forces come from fairchem's own
+autograd (the ``MODEL_INTERNAL`` force strategy). Unlike the spatial
+halo the partition is geometry-free: the cell is an ordinary model
+input, atoms never migrate, and only the edge count drifts under MD (so
+compiled runs cap edges, not atoms).
 
-We don't reimplement that partition path — we redirect it. The
-distributed spec installs a small set of ``PythonAdapter`` swaps on
-``fairchem.core.common.gp_utils``:
+We don't reimplement fairchem's message passing. UMA's
+``distribution_spec(StrategyKind.GRAPH_PARTITION)`` returns a spec whose
+``policy`` is :class:`~nvalchemi.distributed.spec.GraphParallelPolicy`
+and whose adapters are a handful of ``MethodAdapter`` swaps that make
+the backbone owned-block-aware — leaving
+``fairchem.core.common.gp_utils`` untouched (an earlier design redirected
+gp_utils via a thread-local metadata object; the node partition owns its
+own gather/reduce, so it no longer needs to):
 
 ```{code-block} python
-:caption: SPEC_UMA_REPLICATED's third_party_helpers (built lazily inside UMAWrapper.distribution_spec). Each adapter swaps a fairchem accessor with a chemistry-side replacement that reads our mesh state from a per-thread ReplicatedMetadata.
-helpers = (
-    PythonAdapter("fairchem.core.common.gp_utils", "initialized",
-                  patched_initialized),
-    PythonAdapter("fairchem.core.common.gp_utils", "get_gp_group",
-                  patched_get_gp_group),
-    PythonAdapter("fairchem.core.common.gp_utils", "get_gp_rank",
-                  patched_get_gp_rank),
-    PythonAdapter("fairchem.core.common.gp_utils", "get_gp_world_size",
-                  patched_get_gp_world_size),
-    PythonAdapter("fairchem.core.common.gp_utils",
-                  "reduce_from_model_parallel_region",
-                  patched_reduce_from_model_parallel_region),
-    PythonAdapter("fairchem.core.common.gp_utils",
-                  "gather_from_model_parallel_region",
-                  patched_gather_from_model_parallel_region),
-    PythonAdapter("fairchem.core.common.gp_utils",
-                  "gather_from_model_parallel_region_sum_grad",
-                  patched_gather_from_model_parallel_region_sum_grad),
-    # outputs.reduce_node_to_system patched at two binding sites
-    # (escn_md re-imports the symbol at module-load time).
-    PythonAdapter("fairchem.core.models.uma.outputs",
-                  "reduce_node_to_system",
-                  patched_reduce_node_to_system),
-    PythonAdapter("fairchem.core.models.uma.escn_md",
-                  "reduce_node_to_system",
-                  patched_reduce_node_to_system),
+:caption: The node-partition adapter set (built lazily inside UMAWrapper.distribution_spec). Each MethodAdapter swaps one eSCN method for a distribution-aware variant.
+partition_helpers = (
+    # replicate the full geometry, build the graph, keep this rank's owned nodes
+    MethodAdapter(eSCNMDBackbone, "_generate_graph", _distributed_partition_graph),
+    # all-gather owned node features to the full set for the edgewise conv
+    MethodAdapter(Edgewise, "forward", _distributed_edgewise_gather),
+    # undo element-reference offsets on the owned slice only
+    MethodAdapter(ElementReferences, "undo_refs", _distributed_undo_refs),
 )
 ```
 
-The patched accessors all read a thread-local ``ReplicatedMetadata``
-that ``DistributedModel._call_replicated_storage`` sets up at the
-start of each forward and clears at the end. Outside a scoped call
-the thread-local is ``None`` and the replacements behave as
-fairchem's no-GP path (``initialized() == False``), so single-rank
-inference is unaffected.
-
-The patched reductions promote fp32 → fp64 inside ``all_reduce``
-(matches the existing ``per_system_reduce`` pattern) so non-deterministic
-NCCL fp32 SUM commit order doesn't show up at the ε_fp32 level. Per-element
-error drops from ~1e-7 to ~1e-15 at modest cost.
-
-One extra subtlety lives in ``patched_reduce_node_to_system``.
-fairchem's original always all-reduces the per-system tensor when
-``gp_utils.initialized()``. That's correct when ``node_values`` is a
-per-rank partial (the ``compute_energy`` path), but wrong when it's
-already global+replicated (the ``compute_forces_and_stress``
-``pos_virial`` path, where ``node_values = grads[0] * pos`` and
-``grads[0]`` was all-reduced two lines earlier). The unconditional
-all_reduce there would multiply the global value by ``world_size``.
-The replacement gates the second all_reduce on
-``len(batch) == n_global``: if the input covers all atoms, it's
-already aggregated globally — skip the reduce. If it covers only the
-partition (``n_owned``), it's partial — run the reduce.
+The wrapper itself stays distribution-agnostic — its ``forward`` is the
+ordinary fairchem call. ``distribution_spec`` only picks the layout:
 
 ```{code-block} python
-:caption: UMAWrapper has zero distribution-aware code. distribution_spec returns the replicated preset; everything else flows through the patched gp_utils path on the model side.
+:caption: distribution_spec returns the spatial-halo preset by default, or a node-partition GP spec (GraphParallelPolicy + the adapters above, built and memoised lazily) when the config selects GRAPH_PARTITION.
 class UMAWrapper(nn.Module, BaseModelMixin):
 
-    @property
-    def distribution_spec(self):
-        # Triggers @triton_op registration + builds the third_party_helpers
-        # tuple that swaps fairchem's gp_utils accessors. Memoised by the
-        # framework's adapter registry across forwards within a scope.
-        return SPEC_UMA_REPLICATED   # populated lazily, see helpers above
+    def distribution_spec(self, strategy=None):
+        if strategy == StrategyKind.GRAPH_PARTITION:
+            # MLIPSpec(distribution=DistributionSpec(policy=GraphParallelPolicy()),
+            #          adapters=partition_helpers, outputs=...) — memoised here
+            ...
+        return SPEC_UMA_HALO                 # default: spatial halo
 
     def forward(self, data):
-        return self.predict_unit(data)   # fairchem does the rest
+        return self.predict_unit(data)       # fairchem does the rest
 ```
 
 What the framework adds on top:
 
-* ``ShardedBatch.from_batch(partition_mode="replicated")`` broadcasts
-  the full atom data to every rank and stamps each rank's
-  ``node_partition = arange(n_global).tensor_split(W)[rank]``.
-* ``DistributedModel._call_replicated_storage`` constructs the
-  per-thread ``ReplicatedMetadata``, installs it before the wrapper
-  call, and consolidates outputs (which mostly come back already
-  globally reduced inside the model — no extra all_reduce needed at
-  consolidation time).
+* :class:`~nvalchemi.distributed.strategy.GraphPartitionStrategy` records
+  the balanced node partition
+  (``arange(n_global).tensor_split(W)[rank]``), replicates positions to
+  every rank (no halo padding), runs the wrapper on the owned block, and
+  consolidates the outputs — ``all_reduce`` for per-system energy /
+  stress, reduce-scatter for owned force rows.
+* The partition is fixed for the run: no cell tracking, no migration.
+  Only the per-rank edge count moves, so a compiled forward caps edges.
 
-The replicated path also produces a clean memory-savings ratio under
-multi-rank: even though every rank holds the full positions tensor,
-per-rank MP-layer activations only span ``n_owned`` rows, so peak
-memory under 2 ranks is consistently 0.55–0.90× single-rank memory
-(better at larger N, where the activations dominate the peak over
-the replicated positions). The compute speedup is more modest
-(~1.20× forward, ~1.55× NVT at 2 ranks) because the per-MP-layer
-``all_gather`` is in the critical path.
+Even though every rank holds the full positions tensor, per-rank MP-layer
+activations only span ``n_owned`` rows, so peak memory under 2 ranks is
+consistently 0.55–0.90× single-rank memory (better at larger N, where
+the activations dominate the peak over the replicated positions). The
+compute speedup is more modest (~1.20× forward, ~1.55× NVT at 2 ranks)
+because the per-MP-layer ``all_gather`` is in the critical path.
 
 ---
 

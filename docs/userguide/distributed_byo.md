@@ -110,13 +110,19 @@ The shipped presets cover:
   ORB, generic message-passing models with autograd forces).
 - **`SPEC_LJ_HALO`**: pair potentials with kernel-direct forces
   (Lennard-Jones, Buckingham, Morse).
-- **`SPEC_UMA_GATHER`**: UMA-style eSCN backbones — halo storage but
+- **`SPEC_UMA_HALO`**: UMA-style eSCN backbones — halo storage but
   with `scatter="local"` because the backbone isn't halo-aware (it
   computes its own internal full-graph edge index).
-- **`SPEC_AIMNET2_GATHER`**: charge-equilibration networks with
-  global per-system reductions; sharded storage.
 - **`SPEC_EWALD_HALO`** / **`SPEC_PME_HALO`**: long-range
   electrostatics with reciprocal-space dispatch via `OpAdapter`s.
+- **`SPEC_DFTD3_HALO`**: DFTD3 dispersion — halo storage with the
+  standard energy/force outputs.
+- **`SPEC_MPNN_GP`**: MPNNs under graph-parallelism — node-partition
+  storage with a per-layer feature all-gather, instead of a spatial halo.
+
+Charge-equilibration networks such as AIMNet2 (global per-system
+reductions) are supported too, but their wrapper builds the spec inline
+rather than exposing a shipped preset.
 
 If your model is structurally identical to one of these — that's the
 pedagogical point of declaring presets — you're done with spec
@@ -196,9 +202,8 @@ Every spec should declare `output_kinds` for the keys in
 | `GLOBAL` | already globally-correct on every rank; passthrough |
 | `UNKNOWN` | fall back to the legacy `shape[0] == n_padded` heuristic + warn |
 
-Phase 4 of the distributed refactor introduced this enum to replace
-the shape heuristic. Always declare; the heuristic exists for back-compat
-only.
+Declaring the output kind replaces a shape-based heuristic. Always
+declare it explicitly; the heuristic exists for back-compat only.
 
 ## Step 3: Validate with `trace_and_validate`
 
@@ -392,11 +397,15 @@ into a private `_core` module.
 |---|---|---|
 | `MLIPSpec` | {py:mod}`nvalchemi.distributed.spec` | Top-level spec: distribution, output_kinds, owned_only / all_reduce sets |
 | `DistributionSpec` | {py:mod}`nvalchemi.distributed.spec` | policy + custom_ops + third_party_helpers, no chemistry vocabulary |
-| `HaloStoragePolicy` / `PlainShard` | {py:mod}`nvalchemi.distributed.ops` | Per-field storage layout |
+| `StoragePolicy` / `HaloStoragePolicy` | {py:mod}`nvalchemi.distributed.ops` | Per-field storage layout |
 | `OpAdapter` | {py:mod}`nvalchemi.distributed` | One custom-op handler declaration |
+| `MethodAdapter` | {py:mod}`nvalchemi.distributed` | Swap a method on a third-party module for a DD-aware variant |
 | `JitAdapter` / `PythonAdapter` | {py:mod}`nvalchemi.distributed` | Third-party-helper replacements |
+| `CompilePolicy` | {py:mod}`nvalchemi.distributed` | `torch.compile` settings for a compiled DD forward (graph padder, force strategy) |
 | transforms (`ScatterOutputs`, `GatherInputs`, …) | {py:mod}`nvalchemi.distributed.ops` | Per-arg / per-output kernel transforms |
 | `OutputKind` | {py:mod}`nvalchemi.distributed` | Per-output shape classification |
+| intent verbs (`to_local`, `system_sum`, `refresh_neighbors`, `scatter_to_owners`, `autograd_target`) | {py:mod}`nvalchemi.distributed` | Chemistry-vocabulary helpers a wrapper or adapter calls inside a DD scope |
+| `current_dd_context` | {py:mod}`nvalchemi.distributed` | Read the active DD context (owned / padded counts, policy) from inside a forward |
 | `trace_and_validate` | {py:mod}`nvalchemi.distributed.validate` | Validator entry point |
 
 For the architecture behind this workflow — storage policies, the
