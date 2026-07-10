@@ -69,6 +69,11 @@ batch = Batch.from_data_list([data1, data2])
 writer.write(batch)
 ```
 
+`write()` creates the store and refuses to run twice: a second call raises
+`FileExistsError: Zarr store already exists at <path>`. To add samples to an
+existing store use `append()`; to rebuild from scratch, write to a fresh
+path. Keep scripts re-runnable by doing one or the other explicitly.
+
 ### Appending to an existing store
 
 ```python
@@ -231,7 +236,7 @@ loader = DataLoader(
 )
 
 # For throughput tuning (skip_validation, prefetch_factor, chunk/shard
-# sizing), load the nvalchemi-zarr-perf agent skill.
+# sizing), see the nvalchemi-zarr-perf skill.
 
 for batch in loader:
     # batch is a Batch with concatenated tensors on target device
@@ -328,6 +333,24 @@ reader = MyReader("data/", pin_memory=True)
 ds = Dataset(reader, device="cuda")
 loader = DataLoader(ds, batch_size=16)
 ```
+
+---
+
+## Troubleshooting
+
+Error messages below are quoted from
+`nvalchemi/data/datapipes/backends/zarr.py` and `nvalchemi/_optional.py`.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `FileNotFoundError: Zarr store does not exist at <path>` | `append`, `delete`, `add_custom`, or a read hit a path never written | Call `writer.write(...)` once before appending; check the store path |
+| `FileExistsError: Zarr store already exists at <path>` | `write()` called on a path that already holds a store (e.g. re-running a script) | Use `append()` to add samples, or write to a fresh store path |
+| `ValueError: No data provided to write.` | `writer.write([])` with an empty list | Skip empty inputs at the call site |
+| `ValueError: shard_size (S) must be a multiple of chunk_size (C)` | Misaligned `ZarrArrayConfig` shard/chunk sizes | Pick `shard_size` as an integer multiple of `chunk_size` |
+| `ValueError: Data shape[0]=X does not match expected size=Y for level='...'` | `add_custom` array length does not match the store's atom/edge/system count | Size the custom array to the chosen level's total count |
+| `ValueError: Invalid level '<level>'. Must be 'atom', 'edge', or 'system'.` | Typo in the `level=` argument | Use one of the three literal level names |
+| `OptionalDependencyError` mentioning `nvalchemi-toolkit[ase]` | Converting ASE / extxyz structures without the `ase` extra | Install the extra, e.g. `uv sync --extra cu13 --extra ase` |
+| Shuffled reads are slow; GPU starves | Chunking/validation defaults not tuned for random access | See the `nvalchemi-zarr-perf` skill (`skip_validation`, `prefetch_factor`, chunk/shard sizing) |
 
 ---
 

@@ -15,7 +15,7 @@ description: >-
 ## Overview
 
 Use reporting for curated workflow summaries and dashboards. Use logging for
-direct event records such as per-system dynamics rows. Link agents to
+direct event records such as per-system dynamics rows. See
 `docs/userguide/reporting.md`, `docs/userguide/training.md`,
 `docs/userguide/dynamics.md`, and `docs/userguide/hooks.md` for full details.
 
@@ -174,7 +174,8 @@ Guidelines:
 
 Reporters can be rank-gated. Defaults are conservative for terminal and file
 outputs: rank zero writes or renders unless a reporter requires all ranks for a
-collective reduction.
+collective reduction. For setting up the distributed training run itself, see
+the `nvalchemi-distributed-training` skill.
 
 ```python
 reporting = ReportingOrchestrator(
@@ -266,7 +267,7 @@ console, lifecycle, refresh rate, history, and rank filtering.
 
 ---
 
-## Agent Checklist
+## Checklist
 
 - Add observability by default for long-running examples, CLI scaffolds,
   fine-tuning scripts, DDP jobs, and dynamics simulations.

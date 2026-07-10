@@ -15,7 +15,7 @@ description: >-
 
 Use `TrainingStrategy` as the owner of one training job: model(s), dataloaders,
 loss, optimizer/scheduler config, validation, hooks, runtime counters, and
-checkpoints. For full details, link agents to `docs/userguide/training.md`,
+checkpoints. For full details, see `docs/userguide/training.md`,
 `docs/userguide/losses.md`, and `docs/modules/training/checkpoints.rst`.
 
 ```python
@@ -69,8 +69,8 @@ strategy.run(train_loader)
 
 Accept any `torch.nn.Module` that works with the selected `training_fn`. Prefer
 wrapped `BaseModelMixin` models for standard `AtomicData`/`Batch` contracts;
-load `nvalchemi-model-wrapping` or `docs/userguide/models.md` when adapting
-arbitrary MLIPs.
+see the `nvalchemi-model-wrapping` skill or `docs/userguide/models.md` when
+adapting arbitrary MLIPs.
 
 Make model construction reproducible when possible. Use native checkpoint
 constructors that carry a spec, or store a `create_model_spec(...)` for custom
@@ -189,7 +189,7 @@ validation-summary key or callable when the default `"total_loss"` is not right.
 
 ## Checkpoints And Reproducibility
 
-Agent-created training workflows should be fully checkpointable and reproducible:
+Training workflows should be fully checkpointable and reproducible:
 
 - Use deterministic model/wrapper constructors or `create_model_spec(...)`.
 - Keep loss functions, schedules, optimizer configs, and restart-critical hooks
@@ -198,6 +198,8 @@ Agent-created training workflows should be fully checkpointable and reproducible
   jobs, including Slurm-style cluster runs.
 - Make data splits, sampler state, seeds, units, dtype/device choices, and config
   files explicit in the run directory.
+- For multi-GPU or multi-node runs (DDP, rank-safe checkpointing), see the
+  `nvalchemi-distributed-training` skill.
 
 Strategy checkpoints are restart packages: model weights, optimizer and scheduler
 state, strategy counters, checkpointable hook state, and reconstruction metadata.
@@ -221,3 +223,22 @@ checkpoint weights, use `FineTuningStrategy.from_pretrained_checkpoint(...)` fro
 `nvalchemi-fine-tuning`; opt into source loss or optimizer classes with
 `use_original_loss=True` or `use_original_opt_class=True` when those defaults are
 desired. See `docs/modules/training/checkpoints.rst`.
+
+---
+
+## Troubleshooting
+
+Error messages below are quoted from `nvalchemi/training/strategy.py` and
+`nvalchemi/training/_strategy_validation.py`; all are raised at
+`TrainingStrategy` construction time.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `ValueError: training_fn must be provided explicitly. To opt into the stock single-model behavior, use ...` | No `training_fn` given and the stock behavior was not opted into | `from nvalchemi.training import default_training_fn` and pass `training_fn=default_training_fn`, or supply your own |
+| `ValueError: models must contain at least one BaseModelMixin.` | Empty `models`, or a raw `torch.nn.Module` passed where a wrapped model is required | Wrap the model first — see the `nvalchemi-model-wrapping` skill |
+| `ValueError: Exactly one of num_epochs or num_steps must be set; got ...` | Both or neither duration argument supplied | Pass `num_epochs=` or `num_steps=`, never both |
+| `ValueError: optimizer_configs key '<k>' is not present in models; available model keys: [...]` | Named `optimizer_configs` mapping uses a key missing from `models` | Use identical keys in both mappings; models without an optimizer entry stay frozen |
+| `ValueError: devices must contain at least one torch.device.` / `devices must have length 1 or len(models)=N` | Empty or mis-sized `devices` list | Pass one shared device or exactly one device per model |
+| `ValueError: loss_fn weights[<idx>]: ...` | A custom weight schedule cannot be serialized for restartable checkpoints | Implement `to_spec()` on the schedule (see `nvalchemi-loss-api`) |
+| `ValueError: hooks must not contain duplicate hook instances; ...` | The same hook object appears twice in `hooks=[...]` | Create distinct hook instances |
+| Loss raises on dtype mismatch at first step | Built-in losses default to `dtype_policy="strict"` | See "Losses And Scheduling" above for `dtype_policy` choices |

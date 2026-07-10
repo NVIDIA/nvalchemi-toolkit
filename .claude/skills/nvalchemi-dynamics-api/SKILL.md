@@ -185,7 +185,9 @@ fused_3 = fused + extra_stage   # append to existing FusedStage
 
 `DistributedPipeline` chains dynamics stages across multiple ranks using
 `torch.distributed`. Each rank runs one stage; converged samples are sent
-to the next rank.
+to the next rank. This is pipeline parallelism for dynamics; for
+data-parallel multi-GPU *training* (DDP), see the
+`nvalchemi-distributed-training` skill.
 
 ### Composition with `|` operator
 
@@ -498,6 +500,23 @@ ConvergenceHook.from_fmax(
     frequency=1,
 )
 ```
+
+---
+
+## Troubleshooting
+
+Error messages below are quoted from `nvalchemi/dynamics/base.py`.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `ValueError: No step count provided. Either pass n_steps to run() or set it at construction time ...` | Neither the constructor nor `run()` received a step count | Pass `n_steps=` in one of the two places |
+| `ValueError: Invalid comm_mode=... Expected one of: 'sync', 'async_recv', 'fully_async'.` | Typo in `comm_mode` | Use one of the three literal mode names |
+| `ValueError: buffer_config is required when prior_rank or next_rank is set.` | A pipeline stage participates in inter-rank communication without pre-allocated buffers | Pass a `BufferConfig` to every communicating stage; adjacent stages need identical values |
+| `RuntimeError: Requested CUDA device type, but not available to PyTorch.` | `device_type="cuda"` on a CPU-only machine | Use `device_type="cpu"` or run on a GPU host |
+| `RuntimeError: All sinks are full. Cannot store N overflow samples.` | Converged samples have nowhere to go | Add or enlarge data sinks (see "Data sinks" above) |
+| `RuntimeError: <Stage> requires '<key>' (declared in __needs_keys__), but the model did not produce it.` | The wrapped model's outputs do not include a key the stage needs (e.g. `forces`) | Check the model's `ModelConfig` output selection — see the `nvalchemi-model-wrapping` skill |
+| `RuntimeError: refill_check requires a sampler to be configured.` | Inflight batching used without a sampler | Configure `SizeAwareSampler` (see "Inflight batching" above) |
+| Energies drift or atoms overlap during MD | Neighbor list never rebuilt while atoms moved | Register a neighbor-list hook — see the `nvalchemi-dynamics-hooks` skill |
 
 ---
 
