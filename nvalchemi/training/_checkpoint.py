@@ -1159,8 +1159,8 @@ def _restore_checkpoint_into_strategy(
     map_location: str | torch.device | None,
 ) -> dict[str, Any]:
     """Load checkpoint state into an already-constructed strategy."""
-    from nvalchemi.training.strategy import TrainingStrategy
     from nvalchemi.training.runtime import move_to_devices
+    from nvalchemi.training.strategy import TrainingStrategy
 
     if not isinstance(strategy, TrainingStrategy):
         raise TypeError(
@@ -1757,7 +1757,7 @@ def load_checkpoint(
         restored_strategy = TrainingStrategy.from_checkpoint_dict(
             runtime_strategy_metadata,
             models=loaded_strategy_models,
-            hooks=hooks, # extra user-supplied runtime hooks
+            hooks=hooks,  # extra user-supplied runtime hooks
             training_fn=training_fn,
         )
 
@@ -1774,7 +1774,7 @@ def load_checkpoint(
         _run_validators(loaded, validators)
         return loaded
 
-    # Path 3: component-level loads: either the checkpoint has no strategy 
+    # Path 3: component-level loads: either the checkpoint has no strategy
     # metadata, or ``model_names`` requested a partial load from a strategy
     # checkpoint. Partial loads do not reconstruct strategy hooks.
     # Determine what models to load.
