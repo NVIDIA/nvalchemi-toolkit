@@ -1543,6 +1543,21 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     ) -> int:
         """Save this strategy as a restartable checkpoint.
 
+        Rather than pickling the strategy, this writes a spec-based checkpoint:
+        model weights and architecture, optimizer and scheduler state, the
+        training counters (``step_count``, ``epoch_count``, ``batch_count``,
+        ``global_step_count``), and the state of any
+        :class:`~nvalchemi.hooks.CheckpointableHook` are each serialized through
+        their Pydantic specs, so a restart reconstructs the objects without
+        executing arbitrary pickled code. The non-serializable pieces --
+        ``training_fn`` and ``loss_target_assembler`` -- are intentionally
+        excluded and must be supplied again at load time.
+
+        Checkpoints are indexed within ``root_folder`` and tracked by a
+        manifest. ``checkpoint_index=-1`` (the default) auto-increments from the
+        latest manifest entry, so repeated calls accumulate ``0, 1, 2, ...``,
+        while an explicit index overwrites that slot in place.
+
         Parameters
         ----------
         root_folder : Path | str
@@ -1555,6 +1570,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         -------
         int
             The checkpoint index that was written.
+
+        See Also
+        --------
+        restore_checkpoint : Restore saved state into this strategy instance.
+
+        Notes
+        -----
+        See :ref:`checkpoint-semantics` in the training guide for the four
+        categories of state a checkpoint captures and the developer
+        requirements for custom models, schedules, and hooks.
         """
         from nvalchemi.training._checkpoint import save_checkpoint
 

@@ -560,6 +560,8 @@ from whichever stage it picks. For a complete guide to writing hooks, see
 {doc}`hooks`; for the built-in reporting stack, which uses exactly these stages to
 write Rich and TensorBoard output, see {doc}`reporting`.
 
+(checkpoint-semantics)=
+
 ## Checkpointing
 
 A long run will eventually be interrupted — preemption, a crash, or a deliberate
