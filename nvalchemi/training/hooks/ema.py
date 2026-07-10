@@ -104,20 +104,6 @@ class EMAHook(BaseModel, TrainingUpdateHook):
     monkey-patched modules whose deepcopy/load path materializes registered
     tensors on CPU or in a default dtype usable without model-specific hooks.
 
-    Parameters
-    ----------
-    model_key : str, optional
-        Key identifying the source model inside ``ctx.models``. Default ``"main"``.
-    decay : float, optional
-        EMA decay factor in ``[0.0, 1.0)``. Default ``0.999``.
-    update_every : int, optional
-        Positive step stride for averaging updates. Default ``1``.
-    start_step : int, optional
-        Non-negative minimum completed step before updates begin. Default ``0``.
-    use_buffers : bool, optional
-        Forwarded to :class:`AveragedModel`; when ``True`` also averages
-        module buffers. Default ``True``.
-
     Raises
     ------
     pydantic.ValidationError

@@ -81,54 +81,84 @@ class AtomicNumberTable:
 
 
 class AtomicData(BaseModel, DataMixin):
-    """Atomic data structure for molecular systems.
+    """Graph-structured container for a single atomic system.
 
-    Represents molecular systems as graphs with atomic properties and interactions.
-    Uses Pydantic for validation and serialization, with DataMixin for graph functionality.
+    ``AtomicData`` is the core input/output record throughout nvalchemi: a
+    molecule, cluster, or periodic cell represented as a graph whose nodes are
+    atoms and whose (optional) edges encode pairwise interactions. It is a
+    :class:`pydantic.BaseModel`, so every tensor field is type- and
+    shape-validated on construction, and it mixes in
+    :class:`~nvalchemi.data.data.DataMixin` for graph conveniences
+    (indexing, device movement, property grouping, serialization).
 
-    Attributes
-    ----------
-    atomic_numbers : torch.Tensor
-        Atomic numbers of each atom [n_nodes]
-    positions : torch.Tensor
-        Cartesian coordinates [n_nodes, 3]
-    atomic_masses : torch.Tensor
-        Atomic masses [n_nodes]
-    neighbor_list : torch.Tensor
-        Neighbor list [n_edges, 2]
-    node_attrs : torch.Tensor
-        Node attributes [n_nodes, n_node_feats]
-    shifts : torch.Tensor
-        Cartesian displacement vectors for each edge [n_edges, 3],
-        computed as ``neighbor_list_shifts @ cell``.
-    neighbor_list_shifts : torch.Tensor
-        Integer lattice image indices for periodic edges [n_edges, 3].
-    neighbor_matrix : torch.Tensor
-        Dense neighbor matrix [n_nodes, max_neighbors]
-    neighbor_matrix_shifts : torch.Tensor
-        Periodic shifts for the dense neighbor matrix [n_nodes, max_neighbors, 3]
-    num_neighbors : torch.Tensor
-        Number of valid neighbors per atom [n_nodes]
-    cell : torch.Tensor
-        Unit cell vectors [3, 3]
-    pbc : torch.Tensor
-        Periodic boundary conditions [3]
-    forces : torch.Tensor
-        Atomic forces [n_nodes, 3]
-    energy : torch.Tensor
-        Total energy [1]
-    stress : torch.Tensor
-        Stress tensor [1, 3, 3]
-    virial : torch.Tensor
-        Virial tensor [1, 3, 3]
-    dipole : torch.Tensor
-        Dipole moment [1, 3]
-    charges : torch.Tensor
-        Partial atomic charges [n_nodes]
-    charge : torch.Tensor
-        Total system charge [1]
-    info : dict
-        Additional information about the system
+    The only required fields are ``positions`` (``[V, 3]``) and
+    ``atomic_numbers`` (``[V]``); everything else — neighbor lists, cell/PBC,
+    labels such as ``energy``/``forces``/``stress``, velocities — is optional
+    and defaults to ``None``. Fields are organized into node-, edge-, and
+    system-level groups (see :attr:`node_properties`, :attr:`edge_properties`,
+    :attr:`system_properties`), and custom keys can be attached at runtime via
+    :meth:`add_node_property`, :meth:`add_edge_property`, and
+    :meth:`add_system_property` (``extra="allow"`` on the model config permits
+    these). To collate many systems into one GPU-friendly graph, pass a list of
+    ``AtomicData`` to :class:`~nvalchemi.data.Batch`.
+
+    Beyond the plain constructor, build instances from common toolkits with the
+    :meth:`from_atoms` (ASE ``Atoms``) and :meth:`from_structure` (pymatgen
+    ``Structure``/``Molecule``) classmethods. Several ``model_validator`` hooks
+    run after construction and shape the resulting object: node/edge tensor
+    counts are checked for consistency against ``atomic_numbers`` /
+    ``neighbor_list``; all floating-point tensors are cast to the dtype of
+    ``positions`` (emitting a :class:`UserWarning` when a cast happens);
+    ``atomic_masses`` are auto-filled from ``periodictable`` when omitted; and
+    all tensors are moved onto a single consistent device.
+
+    Each field below is validated by its type. Field shapes use jaxtyping axis
+    labels: ``V`` atoms/nodes, ``E`` edges, ``B`` graphs (batch), ``H`` features.
+
+    Examples
+    --------
+    Minimal construction requires only positions and atomic numbers:
+
+    >>> import torch
+    >>> from nvalchemi.data import AtomicData
+    >>> positions = torch.randn(4, 3)
+    >>> atomic_numbers = torch.tensor([1, 6, 6, 1], dtype=torch.long)
+    >>> data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)
+    >>> data.num_nodes
+    4
+
+    Attach edges (a neighbor list of ``[source, target]`` pairs) and
+    system-level labels for a periodic cell:
+
+    >>> neighbor_list = torch.tensor([[0, 1], [1, 0], [1, 2], [2, 1]])
+    >>> data = AtomicData(
+    ...     positions=positions,
+    ...     atomic_numbers=atomic_numbers,
+    ...     neighbor_list=neighbor_list,
+    ...     energy=torch.tensor([[0.5]]),
+    ...     cell=torch.eye(3).unsqueeze(0),
+    ...     pbc=torch.tensor([[True, True, True]]),
+    ... )
+    >>> data.num_edges
+    4
+
+    Interoperate with ASE and batch several systems together:
+
+    >>> from ase.build import molecule
+    >>> from nvalchemi.data import Batch
+    >>> water = AtomicData.from_atoms(molecule("H2O"))
+    >>> batch = Batch([data, water])
+
+    Notes
+    -----
+    - ``atomic_masses`` is optional but never stays ``None``: when omitted it is
+      populated from :mod:`periodictable` using ``atomic_numbers``.
+    - Floating-point fields are coerced to the dtype of ``positions``; passing a
+      ``float64`` label alongside ``float32`` positions triggers a cast and a
+      :class:`UserWarning`. Pass matching dtypes to silence it.
+    - ``validate_assignment=True`` means re-assigning a field re-runs validation;
+      use :meth:`add_node_property` and friends (not raw attribute assignment) to
+      register new custom keys so they are tracked in the correct property group.
     """
 
     # Required fields
@@ -327,7 +357,10 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    info: dict[str, torch.Tensor] = Field(default_factory=dict)
+    info: dict[str, torch.Tensor] = Field(
+        default_factory=dict,
+        description="Additional unstructured information about the system.",
+    )
     # "Node key" means dim(0) == num_nodes; tensors may have any rank.
     _default_node_keys: ClassVar[frozenset[str]] = frozenset(
         {

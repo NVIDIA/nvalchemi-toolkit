@@ -54,25 +54,49 @@ StoreLike: TypeAlias = Store | StorePath | Path | str | dict[str, Any]
 
 
 class ZarrArrayConfig(BaseModel):
-    """Configuration for Zarr array compression, chunking, and sharding.
+    """Per-array storage settings for compression, chunking, and sharding.
 
-    Parameters
-    ----------
-    compressors : tuple[zarr.abc.codec.Codec, ...] | None
-        Compressor codec(s) to apply. E.g. ``(zarr.codecs.ZstdCodec(level=3),)``.
-    filters : tuple[zarr.abc.codec.Codec, ...] | None
-        Array-to-array filter codec(s). E.g. ``(zarr.codecs.TransposeCodec(order=(1, 0)),)``.
-    serializer : zarr.abc.codec.Codec | None
-        Bytes serializer codec. E.g. ``zarr.codecs.BytesCodec(endian="little")``.
-    chunk_size : int | None
-        Chunk length along dimension 0. Other dimensions use their full extent.
-        ``None`` uses Zarr defaults.
-    shard_size : int | None
-        Shard length along dimension 0. When set, multiple chunks are stored
-        in a single storage object. Must be a multiple of ``chunk_size`` when
-        both are specified. ``None`` disables sharding.
-    write_empty_chunks : bool
-        Whether to write chunks that are entirely fill-valued. Default ``True``.
+    A ``ZarrArrayConfig`` bundles the codec and layout choices applied to a
+    single Zarr array written by :class:`AtomicDataZarrWriter`. The codec
+    fields (``compressors``, ``filters``, ``serializer``) accept ``zarr`` v3
+    codec instances and control how bytes are transformed on write; leaving
+    them ``None`` uses Zarr's defaults. ``chunk_size`` sets the chunk length
+    along the leading (row / sample) dimension, with all other dimensions
+    stored at full extent, and ``shard_size`` optionally groups several chunks
+    into one storage object to reduce file count for object stores.
+
+    You rarely construct this directly for a whole store; instead you attach
+    one or more ``ZarrArrayConfig`` instances to a :class:`ZarrWriteConfig`,
+    which routes them to the metadata, core, and custom array groups (and to
+    per-field overrides). Tuning these settings trades write size and speed
+    against read throughput -- see the ``nvalchemi-zarr-perf`` guidance for
+    chunk/shard sizing under shuffled or random access.
+
+    Examples
+    --------
+    Zstandard compression with 1024-row chunks::
+
+        from zarr.codecs import ZstdCodec
+
+        cfg = ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024)
+
+    Group four chunks into each shard (``shard_size`` must be a multiple of
+    ``chunk_size``)::
+
+        cfg = ZarrArrayConfig(chunk_size=256, shard_size=1024)
+
+    Notes
+    -----
+    When both ``chunk_size`` and ``shard_size`` are set, ``shard_size`` must be
+    an exact multiple of ``chunk_size``; an ``after`` validator raises
+    ``ValueError`` otherwise. ``compressors`` and ``filters`` are tuples of
+    codecs applied in order, and ``arbitrary_types_allowed`` is enabled so that
+    native ``zarr`` codec objects can be stored as field values.
+
+    .. seealso::
+
+       :ref:`zarr_compression_guide` -- choosing codecs, chunk sizes, and shard
+       sizes to balance store size against read and write throughput.
     """
 
     compressors: Annotated[
@@ -124,31 +148,53 @@ class ZarrArrayConfig(BaseModel):
 
 
 class ZarrWriteConfig(BaseModel):
-    """Top-level write configuration for ``AtomicDataZarrWriter``.
+    """Top-level storage plan handed to ``AtomicDataZarrWriter``.
 
-    Provides per-group defaults and optional per-field overrides.
+    A ``ZarrWriteConfig`` collects the :class:`ZarrArrayConfig` settings for a
+    whole store and decides which one applies to each array the writer emits.
+    Arrays are grouped by role: ``meta`` covers bookkeeping arrays (pointers
+    and masks), ``core`` covers the standard ``AtomicData`` fields (positions,
+    energy, forces, ...), and ``custom`` covers any user-added arrays. Each
+    group defaults to a plain :class:`ZarrArrayConfig`, so an empty
+    ``ZarrWriteConfig()`` is a valid "use Zarr defaults everywhere" plan.
 
-    Parameters
-    ----------
-    meta : ZarrArrayConfig
-        Config for metadata arrays (pointers, masks). Usually no compression.
-    core : ZarrArrayConfig
-        Config for core data arrays (positions, energy, etc.).
-    custom : ZarrArrayConfig
-        Config for user-added custom arrays.
-    field_overrides : dict[str, ZarrArrayConfig]
-        Per-field overrides. Keys are field names (e.g. ``"positions"``).
-        Takes precedence over group-level config.
+    For finer control, ``field_overrides`` maps an individual field name to its
+    own :class:`ZarrArrayConfig`; a matching override wins over the group-level
+    config for that field. This lets you, for example, compress ``positions``
+    differently from the rest of the core arrays while leaving everything else
+    on the shared ``core`` settings. Pass the completed config to the writer to
+    control on-disk compression, chunking, and sharding across the store.
 
     Examples
     --------
-    >>> from zarr.codecs import ZstdCodec, BloscCodec
-    >>> config = ZarrWriteConfig(
-    ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),
-    ...     field_overrides={
-    ...         "positions": ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),))
-    ...     },
-    ... )
+    Compress core arrays with Zstd, but give ``positions`` its own Blosc/LZ4
+    codec via an override::
+
+        >>> from zarr.codecs import ZstdCodec, BloscCodec
+        >>> config = ZarrWriteConfig(
+        ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),
+        ...     field_overrides={
+        ...         "positions": ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),))
+        ...     },
+        ... )
+
+    Accept Zarr defaults for every array group::
+
+        >>> config = ZarrWriteConfig()
+
+    Notes
+    -----
+    ``meta``, ``core``, and ``custom`` each default to a fresh
+    :class:`ZarrArrayConfig` via ``default_factory``, so omitting a group is
+    equivalent to passing an unconfigured one. ``field_overrides`` is keyed by
+    field name and takes precedence over the group config only for the fields
+    it names. ``arbitrary_types_allowed`` is enabled so nested configs may hold
+    native ``zarr`` codec objects.
+
+    .. seealso::
+
+       :ref:`zarr_compression_guide` -- choosing codecs, chunk sizes, and shard
+       sizes to balance store size against read and write throughput.
     """
 
     meta: Annotated[

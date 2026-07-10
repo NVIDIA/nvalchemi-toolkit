@@ -88,22 +88,44 @@ __all__ = [
 
 
 class BufferConfig(BaseModel):
-    """Buffer capacities for pipeline communication.
+    """Pre-allocated send/receive buffer capacities for pipeline communication.
 
-    Required by :class:`_CommunicationMixin` whenever the stage
-    participates in inter-rank communication (i.e. ``prior_rank`` or
-    ``next_rank`` is set).  Buffers are lazily created via
-    ``Batch.empty()`` on the first simulation step, once a concrete
-    batch is available as a template.
+    A ``BufferConfig`` declares the maximum size of the ``Batch`` that a
+    distributed dynamics stage may exchange with a neighbouring rank. The
+    three capacities size the flattened graph tensors independently:
+    ``num_systems`` bounds how many graphs fit in the buffer, ``num_nodes``
+    bounds the combined atom count across those graphs, and ``num_edges``
+    bounds the combined edge count. Because the buffers are fixed-size, they
+    must be large enough to hold the biggest batch that will ever cross the
+    rank boundary; batches that exceed any capacity cannot be communicated.
 
-    Attributes
-    ----------
-    num_systems : int
-        Maximum number of graphs the buffer can hold.
-    num_nodes : int
-        Total node (atom) capacity across all graphs.
-    num_edges : int
-        Total edge capacity across all graphs.
+    You supply a ``BufferConfig`` when a stage participates in inter-rank
+    communication, i.e. it is wired into a :class:`DistributedPipeline` with a
+    ``prior_rank`` and/or ``next_rank``. The buffers themselves are created
+    lazily via ``Batch.empty()`` on the first simulation step, once a concrete
+    batch is available to act as a dtype/device template, so only the capacities
+    are needed up front. Set a capacity to ``0`` for a dimension the batch does
+    not carry (for example ``num_edges=0`` when edges are recomputed downstream
+    rather than communicated).
+
+    Examples
+    --------
+    Size a buffer for up to four graphs totalling 50 atoms, with no edges
+    sent across the boundary::
+
+        from nvalchemi.dynamics.base import BufferConfig
+
+        buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
+
+    A buffer that also carries edge connectivity::
+
+        buffer_cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+
+    Notes
+    -----
+    All three fields are constrained to be ``>= 0``. Choose the capacities from
+    the worst-case batch you expect to communicate: undersizing any dimension
+    fails at runtime, while oversizing wastes pre-allocated memory.
     """
 
     num_systems: Annotated[

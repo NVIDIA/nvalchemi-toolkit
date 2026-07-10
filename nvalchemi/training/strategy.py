@@ -277,68 +277,113 @@ def default_training_fn(model: BaseModelMixin, batch: Batch) -> dict[str, torch.
 class TrainingStrategy(BaseModel, HookRegistryMixin):
     """Pydantic-driven supervised training loop for MLIP models.
 
-    Attributes
-    ----------
-    models : dict[str, BaseModelMixin]
-        Named models visible to ``training_fn`` and hooks. Single-model inputs
-        are stored under ``"main"``; :class:`torch.nn.ModuleDict` inputs are
-        accepted and normalized to a plain ``dict``.
-    optimizer_configs : dict[str, list[OptimizerConfig]]
-        Optimizer/scheduler configs keyed by model name. Keys may target a
-        subset of ``models``; omitted models are frozen/eval during ``run``.
-    num_epochs : int | None
-        Epoch count; mutually exclusive with ``num_steps``. At runtime,
-        epochs are converted into a target step count from the dataloader
-        length and ``epoch_step_modifier``.
-    num_steps : int | None
-        Target step count; mutually exclusive with ``num_epochs``.
-    epoch_step_modifier : float
-        Positive multiplier applied when converting ``num_epochs`` to a
-        target step count. Hooks may inspect this value through
-        ``ctx.workflow``.
-    hooks : list[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
-        Hooks executed at the stages declared by :class:`TrainingStage`.
-        Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a
-        single :class:`TrainingUpdateOrchestrator` (see Notes). Duplicate
-        hook object instances are rejected, and the list is **not**
-        expected to be mutated once the ``TrainingStrategy`` context
-        manager has been entered.
-    training_fn : Callable[..., Mapping[str, torch.Tensor]]
-        Explicit forward-pass callable. Single-model strategies call
-        ``(model, batch)``; named-model strategies call ``(models, batch)``.
-    loss_fn : ComposedLossFunction
-        Composed loss whose components drive target collection. Leaf losses are
-        accepted and normalized to one-component composed losses.
-    loss_target_assembler : LossTargetAssemblyProtocol
-        Callable that builds the target mapping passed to ``loss_fn`` from the
-        configured loss, prediction mapping, current batch, and optional workflow.
-        Defaults to :func:`~nvalchemi.training.losses.assemble_loss_targets`,
-        which reads each component ``target_key`` from the batch.
-    devices : list[torch.device]
-        One device shared by all models, or one device per model for helper
-        placement. Named-model ``run`` currently supports one device only.
-    distributed_manager : DistributedManager | None
-        Optional external distributed manager. The strategy passes this through
-        hook contexts for distributed-aware hooks.
-    step_count : int
-        Runtime optimizer-step counter, excluded from specs. Batches whose
-        optimizer step is skipped by update hooks do not advance this counter.
-    global_step_count : int
-        Runtime optimizer-step counter across all data-parallel workers,
-        excluded from specs. This advances by the distributed world size when
-        an optimizer step runs, so checkpoint restarts can recover sampler
-        progress without assuming the same world size.
-    batch_count : int
-        Runtime batch counter, excluded from specs. This advances for every
-        completed batch, including batches whose optimizer step is skipped.
-    epoch_count : int
-        Runtime epoch counter, excluded from specs.
-    epoch_step_count : int
-        Runtime counter for batches consumed within the current epoch,
-        excluded from specs.
+    ``TrainingStrategy`` is the top-level object that owns a supervised
+    training run. You construct it declaratively with the models to train,
+    the optimizer/scheduler recipe, a duration, a loss, and a forward-pass
+    function, then call :meth:`run` with a dataloader to execute the loop.
+    Because the strategy is a :class:`pydantic.BaseModel`, construction
+    validates the whole configuration up front — mismatched optimizer keys,
+    an invalid duration, or an ill-typed ``training_fn`` surface as a
+    :class:`pydantic.ValidationError` before any training starts.
+
+    The strategy accepts either a single wrapped model (a
+    :class:`~nvalchemi.models.base.BaseModelMixin`), which is stored internally
+    under the key ``"main"``, or a ``{name: model}`` mapping for distillation
+    and multi-model workflows. That choice drives the ``training_fn`` calling
+    convention: single-model strategies call ``training_fn(model, batch)`` and
+    named-model strategies call ``training_fn(models, batch)``. Most workflows
+    use the provided :func:`default_training_fn`, which runs a forward pass and
+    prefixes output keys with ``predicted_`` for loss-target assembly. The
+    loss may be a leaf loss (auto-normalized to a one-component
+    :class:`~nvalchemi.training.losses.composition.ComposedLossFunction`) or an
+    explicit composition such as ``EnergyMSELoss() + ForceMSELoss(...)``.
+
+    ``optimizer_configs`` accepts a single :class:`OptimizerConfig`, a list, or
+    a ``{model_name: [OptimizerConfig, ...]}`` mapping; unkeyed forms require a
+    single-model input. Keys may target a subset of ``models`` — any model
+    without a config is temporarily set to eval mode and frozen during
+    :meth:`run`, which is what makes teacher/auxiliary networks in distillation
+    work. Named-model training functions that consume those frozen models must
+    still run their forward passes under ``torch.no_grad()`` or detach the
+    outputs unless autograd through them is intentional.
+
+    Duration is set by exactly one of ``num_epochs`` or ``num_steps`` (both the
+    default, or setting both, is rejected). Internally the target is always an
+    optimizer-step count; ``num_epochs`` is converted from the dataloader
+    length scaled by ``epoch_step_modifier``, so epoch-based runs require a
+    sized dataloader. Behavior is customized through ``hooks`` (checkpointing,
+    logging, gradient clipping, EMA, DDP, mixed precision, ...) and validation
+    is enabled by attaching a :class:`~nvalchemi.training._validation.ValidationConfig`
+    via ``validation_config``. Runs are restartable: :meth:`save_checkpoint` and
+    :meth:`restore_checkpoint` persist the recipe plus runtime counters, while
+    :meth:`to_spec_dict` / :meth:`from_spec_dict` handle JSON-based recipe-only
+    save/load.
+
+    Examples
+    --------
+    Single-model supervised training for a fixed number of epochs:
+
+    >>> import torch  # doctest: +SKIP
+    >>> from nvalchemi.training import (  # doctest: +SKIP
+    ...     EnergyMSELoss,
+    ...     ForceMSELoss,
+    ...     OptimizerConfig,
+    ...     TrainingStrategy,
+    ...     default_training_fn,
+    ... )
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models=model,
+    ...     optimizer_configs=OptimizerConfig(
+    ...         optimizer_cls=torch.optim.Adam,
+    ...         optimizer_kwargs={"lr": 1e-3},
+    ...     ),
+    ...     num_epochs=10,
+    ...     training_fn=default_training_fn,
+    ...     loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
+    ...     devices=[torch.device("cuda")],
+    ... )
+    >>> strategy.run(train_loader)  # doctest: +SKIP
+
+    Step-based training with periodic validation and a checkpoint hook:
+
+    >>> from nvalchemi.training import ValidationConfig  # doctest: +SKIP
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models=model,
+    ...     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    ...     num_steps=50_000,
+    ...     training_fn=default_training_fn,
+    ...     loss_fn=EnergyMSELoss(),
+    ...     validation_config=ValidationConfig(
+    ...         validation_data=val_batches,
+    ...         every_n_steps=1_000,
+    ...     ),
+    ...     hooks=[CheckpointHook(root_folder="runs/exp")],
+    ... )
+    >>> strategy.run(train_loader)  # doctest: +SKIP
+
+    Named-model (distillation) setup optimizing only the student while the
+    teacher stays frozen because it is absent from ``optimizer_configs``:
+
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models={"student": student, "teacher": teacher},
+    ...     optimizer_configs={
+    ...         "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+    ...     },
+    ...     num_steps=10_000,
+    ...     training_fn=distillation_training_fn,
+    ...     loss_fn=EnergyMSELoss(),
+    ... )
 
     Notes
     -----
+    Exactly one of ``num_epochs`` and ``num_steps`` must be set; ``num_epochs``
+    additionally requires a sized dataloader so it can be converted to a step
+    target. Every ``optimizer_configs`` key must name a model present in
+    ``models``, and each entry must contain at least one
+    :class:`OptimizerConfig`. ``devices`` must have length ``1`` or
+    ``len(models)``; named-model :meth:`run` currently supports a single shared
+    device only.
+
     Use :meth:`to_spec_dict` / :meth:`from_spec_dict` for JSON-based save/load.
     Optimizer configs, loss specs, devices, importable training functions, and
     best-effort model specs are serialized. Runtime ``models`` and
@@ -357,11 +402,47 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     :class:`ValueError` directly.
     """
 
-    models: dict[str, BaseModelMixin]
-    optimizer_configs: dict[str, list[OptimizerConfig]] = Field(default_factory=dict)
-    num_epochs: int | None = Field(default=None, ge=1)
-    num_steps: int | None = Field(default=None, ge=1)
-    epoch_step_modifier: float = Field(default=1.0, gt=0, allow_inf_nan=False)
+    models: Annotated[
+        dict[str, BaseModelMixin],
+        Field(
+            description=(
+                "Named models visible to ``training_fn`` and hooks. Single-model "
+                "inputs are stored under ``\"main\"``; :class:`torch.nn.ModuleDict` "
+                "inputs are accepted and normalized to a plain ``dict``."
+            )
+        ),
+    ]
+    optimizer_configs: dict[str, list[OptimizerConfig]] = Field(
+        default_factory=dict,
+        description=(
+            "Optimizer/scheduler configs keyed by model name. Keys may target a "
+            "subset of ``models``; omitted models are frozen/eval during ``run``."
+        ),
+    )
+    num_epochs: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Epoch count; mutually exclusive with ``num_steps``. At runtime, "
+            "epochs are converted into a target step count from the dataloader "
+            "length and ``epoch_step_modifier``."
+        ),
+    )
+    num_steps: int | None = Field(
+        default=None,
+        ge=1,
+        description="Target step count; mutually exclusive with ``num_epochs``.",
+    )
+    epoch_step_modifier: float = Field(
+        default=1.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Positive multiplier applied when converting ``num_epochs`` to a "
+            "target step count. Hooks may inspect this value through "
+            "``ctx.workflow``."
+        ),
+    )
     hooks: list[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] = Field(
         default_factory=list,
         description=(
@@ -372,8 +453,26 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             "``hooks=[CheckpointHook(...), MyClipGradHook()]``."
         ),
     )
-    training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
-    loss_fn: ComposedLossFunction
+    training_fn: Annotated[
+        Callable[..., Mapping[str, torch.Tensor]] | None,
+        Field(
+            description=(
+                "Explicit forward-pass callable. Single-model strategies call "
+                "``(model, batch)``; named-model strategies call "
+                "``(models, batch)``."
+            )
+        ),
+    ] = None
+    loss_fn: Annotated[
+        ComposedLossFunction,
+        Field(
+            description=(
+                "Composed loss whose components drive target collection. Leaf "
+                "losses are accepted and normalized to one-component composed "
+                "losses."
+            )
+        ),
+    ]
     loss_target_assembler: Annotated[LossTargetAssemblyProtocol, SkipValidation()] = (
         Field(
             default=assemble_loss_targets,
@@ -384,22 +483,100 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             ),
         )
     )
-    devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
+    devices: list[torch.device] = Field(
+        default_factory=lambda: [torch.device("cpu")],
+        description=(
+            "One device shared by all models, or one device per model for helper "
+            "placement. Named-model ``run`` currently supports one device only."
+        ),
+    )
     distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
         default=None,
         exclude=True,
+        description=(
+            "Optional external distributed manager. The strategy passes this "
+            "through hook contexts for distributed-aware hooks."
+        ),
     )
-    step_count: int = Field(default=0, ge=0, exclude=True)
-    global_step_count: int = Field(default=0, ge=0, exclude=True)
-    batch_count: int = Field(default=0, ge=0, exclude=True)
-    epoch_count: int = Field(default=0, ge=0, exclude=True)
-    epoch_step_count: int = Field(default=0, ge=0, exclude=True)
-    single_model_input: bool = Field(default=False, exclude=True)
-    last_validation: dict[str, Any] | None = Field(default=None, exclude=True)
+    step_count: int = Field(
+        default=0,
+        ge=0,
+        exclude=True,
+        description=(
+            "Runtime optimizer-step counter, excluded from specs. Batches whose "
+            "optimizer step is skipped by update hooks do not advance this "
+            "counter."
+        ),
+    )
+    global_step_count: int = Field(
+        default=0,
+        ge=0,
+        exclude=True,
+        description=(
+            "Runtime optimizer-step counter across all data-parallel workers, "
+            "excluded from specs. This advances by the distributed world size "
+            "when an optimizer step runs, so checkpoint restarts can recover "
+            "sampler progress without assuming the same world size."
+        ),
+    )
+    batch_count: int = Field(
+        default=0,
+        ge=0,
+        exclude=True,
+        description=(
+            "Runtime batch counter, excluded from specs. This advances for every "
+            "completed batch, including batches whose optimizer step is skipped."
+        ),
+    )
+    epoch_count: int = Field(
+        default=0,
+        ge=0,
+        exclude=True,
+        description="Runtime epoch counter, excluded from specs.",
+    )
+    epoch_step_count: int = Field(
+        default=0,
+        ge=0,
+        exclude=True,
+        description=(
+            "Runtime counter for batches consumed within the current epoch, "
+            "excluded from specs."
+        ),
+    )
+    single_model_input: bool = Field(
+        default=False,
+        exclude=True,
+        description=(
+            "Runtime flag recording whether a single model was supplied (stored "
+            'under ``"main"``) rather than a named mapping. Set automatically '
+            "during validation and used to pick the ``training_fn`` call convention."
+        ),
+    )
+    last_validation: dict[str, Any] | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Most recent validation summary dict, or ``None`` before the first "
+            "validation pass. Exposed to hooks via ``ctx.validation``."
+        ),
+    )
     inference_model: nn.Module | nn.ModuleDict | None = Field(
-        default=None, exclude=True
+        default=None,
+        exclude=True,
+        description=(
+            "Optional inference-time model (e.g. EMA weights) used in place of the "
+            "live training model for validation when ``ValidationConfig.use_ema`` "
+            "is set."
+        ),
     )
-    validation_config: ValidationConfig | None = Field(default=None, exclude=True)
+    validation_config: ValidationConfig | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Validation configuration controlling when and how validation runs. "
+            "``None`` disables validation."
+        ),
+    )
 
     _context_depth: int = PrivateAttr(default=0)
     _ctx: TrainContext | None = PrivateAttr(default=None)
