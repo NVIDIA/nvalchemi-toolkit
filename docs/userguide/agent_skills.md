@@ -12,13 +12,33 @@ Skills live in the repository under `.claude/skills/`.
 
 ## Installing skills
 
+There are three ways to get the skills, depending on how you use `nvalchemi`:
+
 **Inside a repository clone** --- nothing to install. Claude Code discovers
 `.claude/skills/` automatically; other agents are routed to the right
 `SKILL.md` by the table in the repository's `AGENTS.md`.
 
-**Outside a clone** --- copy the skill folders from `.claude/skills/` into
-your project's skills directory, or your user-level one (e.g.
-`~/.claude/skills/`) if you work with `nvalchemi` across many checkouts.
+**From the installed package (recommended for library users)** --- the
+skills ship inside the `nvalchemi` wheel. After `pip install`/`uv add`, run:
+
+```console
+$ nvalchemi-skills list
+$ nvalchemi-skills install                    # auto-detect agents
+$ nvalchemi-skills install --target claude --scope user
+```
+
+`--scope project` (default) installs into the current project's agent
+directories; `--scope user` installs into your home configuration (e.g.
+`~/.claude/skills/`). Skills installed this way always match the API version
+of the package you installed, unlike copies taken from the repository's
+`main` branch.
+
+**Straight from GitHub (no Python environment needed)** --- any agent
+platform supported by the open agent-skills tooling:
+
+```console
+$ npx skills add NVIDIA/nvalchemi-toolkit
+```
 
 ## Available skills
 

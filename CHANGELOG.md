@@ -4,6 +4,11 @@
 
 ### Added
 
+- Installable agent skills. The `.claude/skills/` guides now ship inside the
+  `nvalchemi` wheel, and a new `nvalchemi-skills` console command lists them
+  and copies them into agent skill directories (Claude Code, Cursor, Codex,
+  GitHub Copilot, OpenCode, Gemini, or the tool-agnostic `.agents` layout),
+  version-matched to the installed package.
 - New `nvalchemi-distributed-training` agent skill covering
   `DistributedManager`, `DDPHook`, distributed samplers, and rank-safe
   validation, checkpointing, and reporting.

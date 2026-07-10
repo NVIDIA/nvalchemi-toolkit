@@ -4,8 +4,8 @@ This folder contains task-focused guides ("skills") for working with the
 `nvalchemi` API. Each skill is a plain Markdown file with YAML frontmatter,
 readable by any coding agent or human. Claude Code discovers them
 automatically inside a clone; other agents reach them through the routing
-table in the repository's `AGENTS.md`. To use them outside this repository,
-copy the skill folders into your project's or home skills directory.
+table in the repository's `AGENTS.md`, and installed-package users can copy
+them locally (see "Installing the skills" below).
 
 ## Which skill do I need?
 
@@ -38,6 +38,18 @@ training-api -> distributed-training
 dynamics-hooks -> dynamics-api | dynamics-implementation
 reporting (orthogonal: attaches to training and dynamics)
 ```
+
+## Installing the skills
+
+- **Inside a clone**: nothing to do. Claude Code loads the skills
+  automatically; other agents should follow the routing table in
+  `AGENTS.md`.
+- **From an installed package**: the skills ship inside the `nvalchemi`
+  wheel. Run `nvalchemi-skills install` to copy them into your project's or
+  home agent directories (`--help` lists targets). Installed skills match
+  the API version of the package you installed.
+- **Straight from GitHub** (any agent, no Python needed):
+  `npx skills add NVIDIA/nvalchemi-toolkit`.
 
 ## Authoring conventions
 

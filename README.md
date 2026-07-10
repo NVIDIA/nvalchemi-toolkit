@@ -43,9 +43,10 @@ The repository ships agent-facing guidance at two levels:
 
 - **Skills** — task-specific API guides under `.claude/skills/`. Claude Code
   discovers them automatically when working inside a clone; other platforms
-  are routed to the right `SKILL.md` by the table in `AGENTS.md`. To use
-  them outside this repository, copy the folder contents into your
-  project's or home skills directory.
+  are routed to the right `SKILL.md` by the table in `AGENTS.md`. Outside a
+  clone, install the skills from the packaged wheel
+  (`nvalchemi-skills install`, version-matched to the installed API) or
+  straight from GitHub (`npx skills add NVIDIA/nvalchemi-toolkit`).
 - **`AGENTS.md`** — repository-wide guidance (setup, conventions, gotchas,
   and the skill routing table). Agents that follow the `AGENTS.md`
   convention (e.g. Codex, Cursor, OpenCode, GitHub Copilot) load it
