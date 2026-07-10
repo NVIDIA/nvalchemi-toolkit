@@ -520,7 +520,11 @@ def _build_batch_from_fields(
         if name in ("positions", "atomic_numbers"):
             continue
         if name in known:
-            setattr(data, name, tensor)
+            # Bypass validate_assignment (already-valid migrated tensor): it
+            # re-runs all model validators, and for the enum-union field
+            # ``atom_categories`` the failed coercion repr()s the tensor -> a
+            # per-atom device->host ``.item()`` storm every migration step.
+            object.__setattr__(data, name, tensor)
         else:
             data.add_node_property(name, tensor)
     return BatchCls.from_data_list([data], device=device)

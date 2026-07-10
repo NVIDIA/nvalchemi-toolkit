@@ -650,7 +650,13 @@ class AtomicData(BaseModel, DataMixin):
         self, key: str, value: torch.Tensor, node_dim: int = 0
     ) -> None:
         """Add a node property to the graph."""
-        setattr(self, key, value)
+        # Bypass ``validate_assignment``: it re-runs every model validator on
+        # each call (a hot-path op in halo exchange + migration), and for an
+        # enum-union field (e.g. ``atom_categories``) Pydantic's failed coercion
+        # attempt repr()s the whole tensor -> one device->host ``.item()`` per
+        # atom. ``value`` is already a valid tensor, so validation is pure
+        # overhead. Mirrors the ``self.__dict__[...] = ...`` bypass used above.
+        object.__setattr__(self, key, value)
         self.__node_keys__.add(key)
 
     def add_edge_property(self, key: str, value: Any) -> None:
