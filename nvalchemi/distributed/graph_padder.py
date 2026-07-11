@@ -33,12 +33,43 @@ This module owns two pieces of that mechanism:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+import contextvars
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Iterator, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
 
 __all__ = ["COOPadder", "DenseBatchPadder", "GraphPadder", "resolve_cap"]
+
+
+# Ambient DD group for collective cap agreement. When a group is set (by the
+# framework around the compiled-DD padding scope), :func:`resolve_cap`
+# all-reduce-MAXes each cap's real count so every rank grows to an *identical*
+# cap and the compiled graph recompiles in lockstep. A per-rank-local cap
+# desyncs on an uneven partition: one rank crosses a bucket boundary and
+# recompiles while its peers keep the cached graph, their halo all_to_all
+# sequences drift out of step, and NCCL hangs at the watchdog timeout. Outside
+# this scope (eager, single-GPU) caps grow locally — no collective, no change.
+_CAP_AGREEMENT: contextvars.ContextVar[tuple[Any, Any] | None] = contextvars.ContextVar(
+    "_CAP_AGREEMENT", default=None
+)
+
+
+@contextmanager
+def cap_agreement_group(group: Any, device: Any) -> Iterator[None]:
+    """Make :func:`resolve_cap` grow caps collectively over ``group``.
+
+    The framework wraps the compiled-DD padding scope in this so every rank
+    agrees one cap per key (grow-only, MAX-reduced across ``group``) and stays
+    in graph-shape lockstep. ``device`` is where the scalar reduction tensor
+    lives (matches the collective backend). A no-op for single-rank groups.
+    """
+    token = _CAP_AGREEMENT.set((group, device))
+    try:
+        yield
+    finally:
+        _CAP_AGREEMENT.reset(token)
 
 
 @runtime_checkable
@@ -138,6 +169,23 @@ def resolve_cap(
         The (possibly grown) capacity for ``key``, recorded in ``state``.
     """
     need = real + extra
+
+    # Collective agreement: under a compiled-DD pad scope, grow every rank's cap
+    # off the *global* max real count so the resolved cap (and thus the padded
+    # graph shape) is identical on all ranks. Bucketing a per-rank-local count
+    # would let one rank cross a boundary and recompile alone -> halo all_to_all
+    # desync -> hang. Runs eagerly (framework side), so the .item() sync never
+    # reaches the compiled trace.
+    _agree = _CAP_AGREEMENT.get()
+    if _agree is not None:
+        import torch  # noqa: PLC0415
+        import torch.distributed as dist  # noqa: PLC0415
+
+        _group, _device = _agree
+        if dist.is_initialized() and dist.get_world_size(_group) > 1:
+            _t = torch.tensor([need], device=_device, dtype=torch.int64)
+            dist.all_reduce(_t, op=dist.ReduceOp.MAX, group=_group)
+            need = int(_t.item())
 
     def _bucket(x: int, factor: float) -> int:
         return ((int(x * factor) + 1 + stride - 1) // stride) * stride

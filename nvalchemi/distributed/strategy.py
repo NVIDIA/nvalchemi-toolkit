@@ -752,30 +752,38 @@ def _halo_run_forward(
     _pad_active = _dd_compile
     _orig_atoms = _orig_edges = None
     if _pad_active:
-        from nvalchemi.distributed.graph_padder import resolve_cap  # noqa: PLC0415
-
-        # max_send required this step. ``meta.send_sizes`` is identical on
-        # every rank, so ranks grow this cap in lockstep and the halo
-        # all_to_all sizes stay matched. It's a send-buffer cap, not a
-        # graph-shape cap (the graph padder owns those), so it lives here.
-        _ms_req = max((max(r) for r in meta.send_sizes), default=0)
-        resolve_cap(
-            dist_model._cap_state,
-            "max_send",
-            _ms_req,
-            initial_factor=1.20,
-            grow_factor=1.30,
-            stride=16,
+        from nvalchemi.distributed.graph_padder import (  # noqa: PLC0415
+            cap_agreement_group,
+            resolve_cap,
         )
-        # The padded view is transient — only the compiled forward needs
-        # fixed shapes. Stash the real-sized storage groups to restore after
-        # the forward, since ``halo_exchange`` reuses ``padded_batch`` in
-        # place and a cap-sized buffer would mismatch next step.
-        _groups = padded_batch._storage.groups
-        _orig_atoms = _groups.get("atoms")
-        _orig_edges = _groups.get("edges")
-        # Pad to the atom/edge caps from ``dist_model._cap_state`` (grow-only).
-        dist_model._graph_padder.pad(padded_batch, dist_model._cap_state)
+
+        # Grow every cap off the *global* max real count so all ranks resolve
+        # the same cap and recompile in lockstep. A per-rank-local cap desyncs
+        # on an uneven partition (one rank crosses a bucket boundary and
+        # recompiles alone) -> halo all_to_all drift -> NCCL hang. The scope
+        # covers both the max_send cap (below) and the padder's atom/edge caps.
+        _cap_group = mesh_group(dist_model._halo_config.mesh)
+        with cap_agreement_group(_cap_group, padded_batch.positions.device):
+            # max_send required this step — a send-buffer cap (not a graph-shape
+            # cap; the graph padder owns those), so it lives here.
+            _ms_req = max((max(r) for r in meta.send_sizes), default=0)
+            resolve_cap(
+                dist_model._cap_state,
+                "max_send",
+                _ms_req,
+                initial_factor=1.20,
+                grow_factor=1.30,
+                stride=16,
+            )
+            # The padded view is transient — only the compiled forward needs
+            # fixed shapes. Stash the real-sized storage groups to restore after
+            # the forward, since ``halo_exchange`` reuses ``padded_batch`` in
+            # place and a cap-sized buffer would mismatch next step.
+            _groups = padded_batch._storage.groups
+            _orig_atoms = _groups.get("atoms")
+            _orig_edges = _groups.get("edges")
+            # Pad to the atom/edge caps from ``dist_model._cap_state`` (grow-only).
+            dist_model._graph_padder.pad(padded_batch, dist_model._cap_state)
 
     # Make the live per-step context ambient for the wrapper's forward, so
     # context-aware helpers and adapter bodies read it through
