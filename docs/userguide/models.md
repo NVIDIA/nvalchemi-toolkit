@@ -37,9 +37,10 @@ potentials:
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
 | {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
 | {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
+| {py:class}`~nvalchemi.models.pet.PETWrapper` | metatrain's pure-torch `PETBackend` (PET-MAD foundation models) | Requires the `pet` optional dependency (`metatrain` + `upet`) |
 
 {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
-and {py:class}`~nvalchemi.models.uma.UMAWrapper`
+{py:class}`~nvalchemi.models.uma.UMAWrapper`, and {py:class}`~nvalchemi.models.pet.PETWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not
 break other imports.
 
@@ -187,6 +188,71 @@ fast = UMAWrapper.from_checkpoint(
 
 See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
 runnable end-to-end molecular-dynamics walkthrough.
+
+### Using PET (metatrain)
+
+PET (Point-Edge Transformer) is a graph-transformer foundation model from the
+[metatrain](https://github.com/metatensor/metatrain) project.
+{py:class}`~nvalchemi.models.pet.PETWrapper` wraps metatrain's pure-torch
+`PETBackend` --- structure preprocessing, featurization, and prediction, with
+no `metatomic.torch.System` / `metatensor.torch.TensorMap` at call time --- so
+the forward pass is `torch.compile`-friendly. It supports all PET-MAD models
+as well as other PET-based checkpoints from the
+[`lab-cosmo/upet`](https://github.com/lab-cosmo/upet) repository.
+
+**1. Install the optional dependency:**
+
+```bash
+uv sync --extra pet
+# or, with pip:  pip install 'nvalchemi-toolkit[pet]'
+```
+
+The `pet` extra pulls in `metatrain` (currently sourced from its GitHub `main`
+branch until the pure-torch `PETBackend` lands in a tagged PyPI release --- see
+`[tool.uv.sources].metatrain` in `pyproject.toml`) and `upet`, the package used
+to resolve and fetch named checkpoints from HuggingFace.
+
+**2. Load a checkpoint.** Fetch a named model directly from the
+`lab-cosmo/upet` HuggingFace repository (list available names via
+`upet.list_upet()`):
+
+```python
+from nvalchemi.models.pet import PETWrapper
+import torch
+
+model = PETWrapper.from_checkpoint(device=torch.device("cuda"), dtype=torch.float32)
+# or, pick a specific model/version:
+model = PETWrapper.from_checkpoint(model="pet-mad-xs", version="1.6.0")
+```
+
+Or load a local checkpoint file directly (older layouts are auto-upgraded to
+the current metatrain checkpoint format):
+
+```python
+model = PETWrapper.from_checkpoint(
+    checkpoint_path="pet-mad-xs-v1.6.0.ckpt",
+    device=torch.device("cuda"),
+    dtype=torch.float32,
+)
+```
+
+Only the `energy` output is registered on the backend --- forces and stress
+are always derived via autograd (`autograd_outputs = {"forces", "stress"}`);
+the non-conservative PET heads and the long-range module are skipped.
+
+**`torch.compile`.** `PETWrapper.from_checkpoint(..., compile_model=True,
+**compile_kwargs)` compiles the three backend building blocks (`preprocess`,
+`calculate_features`, `predict`), forwarding `compile_kwargs` (e.g.
+`fullgraph=True`) to each `torch.compile` call. This requires a checkpoint
+trained with the `'solver'` adaptive-cutoff method (`pet-mad` >= v1.6.0) ---
+`'grid'`-method checkpoints (`pet-mad` <= v1.5.0) raise `ValueError` because
+autograd backward through the compiled grid cutoff aborts; run those eagerly
+instead. `torch.compile` has a fixed per-call overhead and warmup, so it only
+pays off for larger systems, on GPU, and over long trajectories.
+
+See {doc}`the PET NVT example </auto_examples/advanced/10_pet_nvt>` for a
+runnable end-to-end molecular-dynamics walkthrough (falls back to a
+Lennard-Jones potential in CI when no checkpoint / `metatrain` is available).
 
 ## Architecture overview
 

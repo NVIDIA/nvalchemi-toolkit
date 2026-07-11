@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from nvalchemi.models.ewald import EwaldModelWrapper
     from nvalchemi.models.lj import LennardJonesModelWrapper
     from nvalchemi.models.mace import MACEWrapper
+    from nvalchemi.models.pet import PETWrapper
     from nvalchemi.models.pipeline import (
         PipelineGroup,
         PipelineModelWrapper,
@@ -41,6 +42,7 @@ __all__ = [
     "AIMNet2Wrapper",
     "MACEWrapper",
     "UMAWrapper",
+    "PETWrapper",
     # Pipeline composition
     "PipelineModelWrapper",
     "PipelineStep",
@@ -74,6 +76,10 @@ def __getattr__(name: str):
         from nvalchemi.models.mace import MACEWrapper
 
         return MACEWrapper
+    elif name == "PETWrapper":
+        from nvalchemi.models.pet import PETWrapper
+
+        return PETWrapper
     elif name == "PMEModelWrapper":
         from nvalchemi.models.pme import PMEModelWrapper
 
