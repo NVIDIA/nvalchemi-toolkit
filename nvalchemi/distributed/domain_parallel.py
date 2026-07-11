@@ -283,8 +283,18 @@ class DomainParallel(BaseDynamics):
             dyn.pre_update(batch)
         dyn._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
 
-        # 3. Wrap positions into the periodic box.
-        self._wrap_positions(batch)
+        # 3. Wrap positions into the periodic box — but ONLY on axes that are
+        # not spatially partitioned. Wrapping a *partitioned* axis teleports an
+        # owned atom that has drifted just past the periodic boundary a full box
+        # length onto the far side, out of its owner's ghost region, so this
+        # step computes its force with the wrong (missing) neighbors and injects
+        # energy (migration only corrects ownership next step). On the
+        # partitioned axis, migration bounds positions instead; the halo design
+        # tolerates small unwrapped boundary drift (``keeps_owner``) and the
+        # neighbor build uses minimum-image PBC. Non-partitioned axes have no
+        # migration to bound them, so they DO need wrapping (safe there — every
+        # rank spans the full extent of a non-partitioned axis).
+        self._wrap_owned_positions(batch)
 
         # 4-6. Compute via DistributedModel. ``_distributed_compute``
         # fires the inner BEFORE_COMPUTE / AFTER_COMPUTE hooks on the
@@ -517,25 +527,42 @@ class DomainParallel(BaseDynamics):
     # Position wrapping
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _wrap_positions(batch: Batch) -> None:
-        """Wrap atom positions back into the periodic box (fractional
-        coordinates modulo 1 along any PBC dim)."""
+    def _wrap_owned_positions(self, batch: Batch) -> None:
+        """Wrap owned positions into the box on the NON-partitioned PBC axes.
+
+        Reuses the shared warp-kernel wrapper
+        :func:`nvalchemi.hooks.periodic.wrap_positions_into_cell` (respects
+        per-dimension periodicity); the partitioned-axis skip is expressed by
+        zeroing that axis in the PBC mask, so the partitioned axis is left to
+        migration (wrapping it teleports owned boundary atoms out of ghost
+        coverage — see the rationale at the call site in :meth:`step`).
+        """
         cell = getattr(batch, "cell", None)
         pbc = getattr(batch, "pbc", None)
-        if cell is None or pbc is None or not pbc.any():
+        if cell is None or pbc is None or not bool(pbc.any()):
             return
 
-        # Convention is ``cart = frac @ cell`` (cell rows are lattice vectors),
-        # so the inverse is ``frac = cart @ inv(cell)`` — NOT ``inv(cell).T``.
-        # The two agree only for orthogonal cells (diagonal inverse); the ``.T``
-        # wrapped atoms incorrectly in skewed / triclinic cells.
-        cell_3x3 = cell.squeeze(0)
-        inv_cell = torch.linalg.inv(cell_3x3)
-        frac = batch.positions @ inv_cell
-        pbc_mask = pbc.squeeze(0)
-        frac[:, pbc_mask] = frac[:, pbc_mask] % 1.0
-        batch.positions = frac @ cell_3x3
+        wrap_pbc = pbc.clone()
+        rank_grid = getattr(
+            getattr(self._sharded_batch, "partitioner", None), "rank_grid", None
+        )
+        if rank_grid is not None:  # spatial partition: don't wrap the split axes
+            for i, p in enumerate(rank_grid):
+                if int(p) > 1:
+                    wrap_pbc[..., i] = False
+        if not bool(wrap_pbc.any()):
+            return
+
+        from nvalchemi.hooks.periodic import wrap_positions_into_cell  # noqa: PLC0415
+
+        batch_idx = getattr(batch, "batch_idx", None)
+        if batch_idx is None:
+            batch_idx = torch.zeros(
+                batch.positions.shape[0],
+                dtype=torch.long,
+                device=batch.positions.device,
+            )
+        wrap_positions_into_cell(batch.positions, cell, wrap_pbc, batch_idx)
 
     # ------------------------------------------------------------------
     # Gather (trajectory output)
