@@ -39,8 +39,9 @@ import torch
 import torch.distributed as dist
 
 from nvalchemi.distributed._core.gather_primitives import (
-    funcol_all_to_all_fixed,
+    _halo_p2p_enabled,
     funcol_all_to_all_v_rows,
+    halo_exchange_fixed,
     mesh_group,
 )
 from nvalchemi.distributed._core.halo_types import (
@@ -342,18 +343,29 @@ def particle_halo_padding(
         positions, ghost_masks, config
     )
 
-    # 3. Exchange via indexed_all_to_all_v.
-    from physicsnemo.distributed.utils import indexed_all_to_all_v_wrapper
-
+    # Exchange ghost rows through the neighbor point-to-point path when enabled,
+    # else physicsnemo's indexed ``all_to_all_v``.
     group = mesh_group(config.mesh)
+    world_size = dist.get_world_size(group=group)
+    if _halo_p2p_enabled():
+        received = _funcol_indexed_all_to_all_v_rows(
+            extended_positions,
+            send_indices,
+            sizes,
+            config.mesh,
+            config.rank,
+            world_size,
+        )
+    else:
+        from physicsnemo.distributed.utils import indexed_all_to_all_v_wrapper
 
-    received = indexed_all_to_all_v_wrapper(
-        tensor=extended_positions,
-        indices=send_indices,
-        sizes=sizes,
-        dim=0,
-        group=group,
-    )
+        received = indexed_all_to_all_v_wrapper(
+            tensor=extended_positions,
+            indices=send_indices,
+            sizes=sizes,
+            dim=0,
+            group=group,
+        )
 
     # 4. Padded output: [owned | ghosts].
     if received.shape[0] > 0:
@@ -1187,7 +1199,7 @@ def halo_forward_static_op(
     (default group); the trace sees only the fake. Owned rows pass through;
     ghost rows are gathered from neighbors via a uniform-split all_to_all."""
     send_rows = padded_in.index_select(0, send_index)
-    recv = funcol_all_to_all_fixed(send_rows, world_size, None)
+    recv = halo_exchange_fixed(send_rows, world_size, None)
     recv = recv * _row_mask_like(recv_real, recv).to(recv.dtype)
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     rowidx = torch.arange(padded_in.shape[0], device=padded_in.device)
@@ -1217,7 +1229,7 @@ def _hfs_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     grad_recv = grad_ghost.index_select(0, recv_dest) * _row_mask_like(
         recv_real, grad_out
     ).to(grad_out.dtype)
-    grad_send = funcol_all_to_all_fixed(grad_recv, ws, None)
+    grad_send = halo_exchange_fixed(grad_recv, ws, None)
     grad_in = grad_out * (~ghostmask).to(grad_out.dtype)
     grad_in = grad_in.index_add(0, send_index, grad_send)
     return grad_in, None, None, None, None, None
@@ -1247,13 +1259,13 @@ def halo_scatter_correct_static_op(
 
     # reverse: ghost rows (recv-slot order) -> owning rank -> index_add into owners.
     ghost_rows = padded_in.index_select(0, recv_dest) * recv_real_f
-    back = funcol_all_to_all_fixed(ghost_rows, world_size, None)
+    back = halo_exchange_fixed(ghost_rows, world_size, None)
     owned_only = (padded_in * (~ghostmask).to(padded_in.dtype)).to(acc_dt)
     owned_acc = owned_only.index_add(0, send_index, back.to(acc_dt)).to(padded_in.dtype)
 
     # forward: re-broadcast corrected owners to ghosts.
     send_rows = owned_acc.index_select(0, send_index)
-    recv = funcol_all_to_all_fixed(send_rows, world_size, None) * recv_real_f
+    recv = halo_exchange_fixed(send_rows, world_size, None) * recv_real_f
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     return torch.where(ghostmask, ghost_acc, owned_acc)
 

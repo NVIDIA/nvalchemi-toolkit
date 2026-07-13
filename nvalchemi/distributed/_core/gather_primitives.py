@@ -26,6 +26,7 @@ when its spec declares ``gather="distributed"`` or ``scatter="distributed"``.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -266,6 +267,209 @@ def funcol_fixed_scatter_add(
     return acc.to(values.dtype) if _acc_dt != values.dtype else acc
 
 
+def _halo_p2p_enabled() -> bool:
+    """Whether the halo exchange uses neighbor-only point-to-point communication
+    instead of a world-wide ``all_to_all``.
+
+    Defaults on for multi-node runs and off for single-node, overridable with the
+    ``NVALCHEMI_HALO_P2P`` environment variable (``"1"`` or ``"0"``). Multi-node is
+    inferred from ``WORLD_SIZE`` exceeding ``LOCAL_WORLD_SIZE``, both read from the
+    environment and identical across ranks so every rank agrees on the mode (a
+    disagreement would deadlock the exchange). A missing ``LOCAL_WORLD_SIZE`` is
+    treated as single-node.
+
+    Returns
+    -------
+    bool
+        ``True`` to use neighbor point-to-point exchange.
+    """
+    override = os.environ.get("NVALCHEMI_HALO_P2P")
+    if override is not None:
+        return override == "1"
+    try:
+        world = int(os.environ.get("WORLD_SIZE", "1"))
+        local = int(os.environ.get("LOCAL_WORLD_SIZE", str(world)))
+    except ValueError:
+        return False
+    return world > local
+
+
+def _neighbor_p2p_v_1d(
+    send_1d: torch.Tensor,
+    send_counts: list[int],
+    recv_counts: list[int],
+    group: Any,
+) -> torch.Tensor:
+    """Variable-size exchange on a 1-D tensor via batched point-to-point sends.
+
+    Equivalent to ``all_to_all_v`` but posts ``isend`` / ``irecv`` only for ranks
+    with a nonzero count, so cost scales with the neighbor count rather than the
+    world size. ``send_counts`` and ``recv_counts`` are rows of the symmetric,
+    all-gathered halo count matrix, so both ends of every edge agree and no
+    deadlock is possible. NCCL only.
+
+    Parameters
+    ----------
+    send_1d : torch.Tensor
+        Flattened send buffer, concatenated per destination rank.
+    send_counts : list[int]
+        Element count sent to each rank, zero for non-neighbors.
+    recv_counts : list[int]
+        Element count received from each rank, zero for non-neighbors.
+    group : Any
+        Process group to exchange over.
+
+    Returns
+    -------
+    torch.Tensor
+        Received elements concatenated in source-rank order.
+    """
+    rank = dist.get_rank(group=group)
+    world_size = dist.get_world_size(group=group)
+    recv = torch.empty(sum(recv_counts), dtype=send_1d.dtype, device=send_1d.device)
+    send = send_1d.contiguous()
+
+    s_off = [0]
+    for c in send_counts:
+        s_off.append(s_off[-1] + c)
+    r_off = [0]
+    for c in recv_counts:
+        r_off.append(r_off[-1] + c)
+
+    ops: list[Any] = []
+    for r in range(world_size):
+        if r == rank:
+            # Local slice is copied, never sent.
+            if send_counts[r] > 0:
+                recv[r_off[r] : r_off[r + 1]].copy_(send[s_off[r] : s_off[r + 1]])
+            continue
+        if send_counts[r] > 0:
+            ops.append(
+                dist.P2POp(
+                    dist.isend,
+                    send[s_off[r] : s_off[r + 1]].contiguous(),
+                    r,
+                    group=group,
+                )
+            )
+        if recv_counts[r] > 0:
+            ops.append(
+                dist.P2POp(dist.irecv, recv[r_off[r] : r_off[r + 1]], r, group=group)
+            )
+    if ops:
+        for work in dist.batch_isend_irecv(ops):
+            work.wait()
+    return recv
+
+
+# Neighbor ranks for the fixed-shape halo point-to-point path, published per
+# forward by the strategy; ``None`` selects the collective fallback.
+_HALO_NEIGHBOR_RANKS: list[int] | None = None
+
+
+def set_halo_neighbor_ranks(neighbors: list[int] | None) -> None:
+    """Publish the neighbor ranks used by the fixed-shape halo exchange.
+
+    Parameters
+    ----------
+    neighbors : list[int] | None
+        Geometric neighbor ranks, or ``None`` to select the collective fallback.
+    """
+    global _HALO_NEIGHBOR_RANKS
+    _HALO_NEIGHBOR_RANKS = list(neighbors) if neighbors is not None else None
+
+
+def _neighbor_p2p_fixed(
+    send_rows: torch.Tensor,
+    world_size: int,
+    neighbors: list[int],
+    group: Any = None,
+) -> torch.Tensor:
+    """Neighbor-only exchange for the fixed-shape halo layout.
+
+    ``send_rows`` has ``world_size * cap`` rows, where block ``[r*cap:(r+1)*cap]``
+    is the slot for rank ``r``. Only the ``neighbors`` blocks are exchanged; the
+    local block is copied and all other blocks are left zero. ``neighbors`` must be
+    symmetric (a rank lists ``r`` iff ``r`` lists that rank), so every edge's send
+    and receive are both posted and the exchange cannot deadlock regardless of how
+    atoms are distributed. Runs eagerly, so it is safe inside a custom op under
+    ``torch.compile``.
+
+    Parameters
+    ----------
+    send_rows : torch.Tensor
+        ``(world_size * cap, ...)`` send buffer in per-rank block layout.
+    world_size : int
+        Number of ranks in ``group``.
+    neighbors : list[int]
+        Symmetric geometric neighbor ranks to exchange with.
+    group : Any, optional
+        Process group; defaults to the world group.
+
+    Returns
+    -------
+    torch.Tensor
+        Received buffer, same shape as ``send_rows``.
+    """
+    m = send_rows.shape[0] // world_size
+    rank = dist.get_rank(group=group)
+    recv = torch.zeros_like(send_rows)
+    recv[rank * m : (rank + 1) * m] = send_rows[rank * m : (rank + 1) * m]
+
+    ops: list[Any] = []
+    for r in neighbors:
+        if r == rank:
+            continue
+        sl = slice(r * m, (r + 1) * m)
+        ops.append(dist.P2POp(dist.isend, send_rows[sl].contiguous(), r, group=group))
+        ops.append(dist.P2POp(dist.irecv, recv[sl], r, group=group))
+    if ops:
+        for work in dist.batch_isend_irecv(ops):
+            work.wait()
+    return recv
+
+
+def halo_exchange_fixed(
+    send_rows: torch.Tensor,
+    world_size: int,
+    group: Any = None,
+) -> torch.Tensor:
+    """Fixed-shape halo exchange dispatching between neighbor P2P and collective.
+
+    Uses :func:`_neighbor_p2p_fixed` when :func:`_halo_p2p_enabled` is true, the
+    run is eager on an NCCL group, and a neighbor set has been published;
+    otherwise falls back to the uniform :func:`funcol_all_to_all_fixed`. A drop-in
+    replacement for the latter.
+
+    Parameters
+    ----------
+    send_rows : torch.Tensor
+        ``(world_size * cap, ...)`` send buffer in per-rank block layout.
+    world_size : int
+        Number of ranks in ``group``.
+    group : Any, optional
+        Process group; defaults to the world group.
+
+    Returns
+    -------
+    torch.Tensor
+        Received buffer, same shape as ``send_rows``.
+    """
+    neighbors = _HALO_NEIGHBOR_RANKS
+    if (
+        neighbors is not None
+        and _halo_p2p_enabled()
+        and not torch.compiler.is_compiling()
+    ):
+        try:
+            is_nccl = dist.get_backend(group) == "nccl"
+        except Exception:  # noqa: BLE001
+            is_nccl = False
+        if is_nccl:
+            return _neighbor_p2p_fixed(send_rows, world_size, neighbors, group)
+    return funcol_all_to_all_fixed(send_rows, world_size, None)
+
+
 def funcol_all_to_all_v_rows(
     send_rows: Any,
     send_counts: list[int],
@@ -279,6 +483,10 @@ def funcol_all_to_all_v_rows(
     (non-autograd — callers that need gradients provide their own adjoint), and
     reshapes back. ``send_counts`` / ``recv_counts`` must be plain ``int`` lists
     (graph constants under compile), not runtime tensors.
+
+    Runs the exchange as neighbor point-to-point (:func:`_neighbor_p2p_v_1d`) when
+    :func:`_halo_p2p_enabled` is true and tracing is not active; otherwise uses the
+    traceable collective.
     """
     trailing = tuple(send_rows.shape[1:])
     row_size = 1
@@ -287,12 +495,23 @@ def funcol_all_to_all_v_rows(
     flat_send = send_rows.contiguous().reshape(-1)
     send_flat = [c * row_size for c in send_counts]
     recv_flat = [c * row_size for c in recv_counts]
+    total_recv = sum(recv_counts)
+
+    if _halo_p2p_enabled() and not torch.compiler.is_compiling():
+        group = mesh_group(mesh) if mesh is not None else None
+        try:
+            is_nccl = dist.get_backend(group) == "nccl"
+        except Exception:  # noqa: BLE001
+            is_nccl = False
+        if is_nccl:
+            flat_recv = _neighbor_p2p_v_1d(flat_send, send_flat, recv_flat, group)
+            return flat_recv.reshape((total_recv,) + trailing)
+
     flat_recv = funcol.wait_tensor(
         funcol.all_to_all_single(
             flat_send, recv_flat, send_flat, _funcol_group_arg(mesh)
         )
     )
-    total_recv = sum(recv_counts)
     return flat_recv.reshape((total_recv,) + trailing)
 
 

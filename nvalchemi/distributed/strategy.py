@@ -48,7 +48,10 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 import torch
 import torch.distributed as dist
 
-from nvalchemi.distributed._core.gather_primitives import mesh_group
+from nvalchemi.distributed._core.gather_primitives import (
+    mesh_group,
+    set_halo_neighbor_ranks,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -712,6 +715,10 @@ def _halo_run_forward(
 
     padded_batch = sharded.padded_batch
     meta = sharded.halo_meta
+
+    # Publish the geometric neighbor ranks for the neighbor point-to-point halo
+    # exchange; the grid-adjacency set is symmetric, so the exchange cannot deadlock.
+    set_halo_neighbor_ranks(dist_model._halo_config.neighbor_ranks)
 
     # Flag a degenerate halo partition once, up front.
     dist_model._check_partition_health(meta, padded_batch.positions.device)
