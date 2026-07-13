@@ -28,6 +28,7 @@ I/O and pipelines
    AtomicDataZarrWriter
    AtomicDataZarrReader
    Dataset
+   InMemoryDataset
    DataLoader
    Reader
 

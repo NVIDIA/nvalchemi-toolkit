@@ -696,7 +696,11 @@ class BaseModelMixin(abc.ABC):
             ]
         )
 
-    def make_neighbor_hooks(self, max_neighbors: int | None = None) -> list:
+    def make_neighbor_hooks(
+        self,
+        max_neighbors: int | None = None,
+        neighbor_list_method: str | None = None,
+    ) -> list:
         """Return a list of :class:`~nvalchemi.hooks.NeighborListHook` instances
         for this model's neighbor configuration.
 
@@ -708,6 +712,9 @@ class BaseModelMixin(abc.ABC):
         max_neighbors : int | None, optional
             Maximum neighbors per atom for MATRIX format.  When ``None``
             (default), auto-estimated from the cutoff at first use.
+        neighbor_list_method : str | None, optional
+            Explicit ``nvalchemiops`` neighbor-list method to use.  When
+            ``None`` (default), the hook selects an appropriate method.
         """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
         from nvalchemi.hooks import NeighborListHook  # noqa: PLC0415
@@ -720,6 +727,7 @@ class BaseModelMixin(abc.ABC):
                 nc,
                 skin=nc.skin,
                 max_neighbors=max_neighbors,
+                method=neighbor_list_method,
                 stage=DynamicsStage.BEFORE_COMPUTE,
             )
         ]

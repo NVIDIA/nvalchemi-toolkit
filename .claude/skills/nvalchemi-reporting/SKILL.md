@@ -3,10 +3,11 @@ name: nvalchemi-reporting
 description: >-
   How to add observability to nvalchemi dynamics and training workflows using
   ReportingOrchestrator, RichReporter, TensorBoardReporter, scalar extraction,
-  custom reporter callbacks, and dynamics LoggingHook. Use when Codex needs to
-  show live progress, write TensorBoard summaries, preserve dynamics CSV rows,
-  add rank-safe distributed reporting, preview Rich dashboards, or decide
-  between logging and reporting for training or molecular dynamics runs.
+  custom reporter callbacks, and dynamics LoggingHook. Use when showing live
+  progress, writing TensorBoard summaries, preserving dynamics CSV rows,
+  adding rank-safe distributed reporting, previewing Rich dashboards, or
+  deciding between logging and reporting for training or molecular dynamics
+  runs.
 ---
 
 # nvalchemi Reporting

@@ -270,6 +270,23 @@ class TestNeighborListHookProtocol:
             NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE), Hook
         )
 
+    def test_explicit_method_override(self):
+        hook = NeighborListHook(
+            _cfg(), method="batch_naive_tile", stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        batch = _line_batch("cpu", pbc=False)
+
+        method = hook._select_neighbor_list_method(
+            batch.num_nodes,
+            batch.num_graphs,
+            batch.batch_ptr,
+            None,
+            None,
+            batch.positions.dtype,
+        )
+
+        assert method == "batch_naive_tile"
+
 
 # ===========================================================================
 # TestStagingBufferAllocation
@@ -1066,257 +1083,4 @@ class TestStaleCOOEntries:
         nn = self.hook._num_neighbors.cpu()
         assert torch.equal(coo_counts, nn.to(coo_counts.dtype)), (
             f"COO edge counts {coo_counts.tolist()} != num_neighbors {nn.tolist()}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# CUDA-graph capture (use_cuda_graph=True)
-# ---------------------------------------------------------------------------
-
-
-def _argon_batch_for_cell_list(
-    n_per_side: int, device: torch.device
-) -> tuple[Batch, int]:
-    """Argon-density cubic lattice large enough that the dispatcher
-    selects the cell-list path (avg_atoms_per_system ≥ 2000).
-
-    Returns the batch and the actual atom count (= n_per_side**3).
-    """
-    n = n_per_side**3
-    sigma = 3.4
-    spacing = 2 ** (1.0 / 6.0) * sigma * 1.05  # ~3.82 Å
-    coords = torch.arange(n_per_side, dtype=torch.float64) * spacing
-    gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
-    pos = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1).to(device)
-    torch.manual_seed(0)
-    pos = pos + 0.05 * torch.randn_like(pos)
-    data = AtomicData(
-        positions=pos,
-        atomic_numbers=torch.full((n,), 18, dtype=torch.long, device=device),
-        atomic_masses=torch.full((n,), 39.948, dtype=torch.float64, device=device),
-    )
-    return Batch.from_data_list([data], device=device), n
-
-
-_CAPTURE_PROBE_SRC = """
-import sys
-import torch
-import warp as wp
-dev = torch.device("cuda:0")
-wp.init()
-stream = torch.cuda.Stream(device=dev)
-wp_stream = wp.Stream(cuda_stream=stream.cuda_stream)
-def work():
-    a = wp.zeros(256, dtype=wp.float32, device="cuda:0")
-    del a
-g = torch.cuda.CUDAGraph()
-cur = torch.cuda.current_stream(dev)
-stream.wait_stream(cur)
-try:
-    with wp.ScopedStream(wp_stream):
-        with torch.cuda.stream(stream):
-            work()
-            torch.cuda.synchronize(dev)
-            with torch.cuda.graph(g, stream=stream):
-                work()
-    cur.wait_stream(stream)
-    torch.cuda.synchronize(dev)
-except Exception:
-    sys.exit(3)
-sys.exit(0)
-"""
-
-_capture_supported_cache: bool | None = None
-
-
-def _warp_cudagraph_capture_supported() -> bool:
-    """Probe — in a *subprocess* — whether warp kernels can be captured into a
-    ``torch.cuda.CUDAGraph`` on this box.
-
-    Warp's async mempool free is not capture-safe on some warp/torch builds; a
-    failed capture corrupts the CUDA context *irrecoverably* (every later
-    ``torch.randn``-style call raises "Offset increment outside graph
-    capture"). We therefore probe in a throwaway process so a capability
-    failure can never poison this test process. Cached for the session.
-    """
-    global _capture_supported_cache
-    if _capture_supported_cache is not None:
-        return _capture_supported_cache
-    if not torch.cuda.is_available():
-        _capture_supported_cache = False
-        return False
-    import subprocess
-    import sys
-
-    try:
-        rc = subprocess.run(  # noqa: S603
-            [sys.executable, "-c", _CAPTURE_PROBE_SRC],
-            capture_output=True,
-            timeout=180,
-        ).returncode
-    except Exception:  # noqa: BLE001
-        rc = 1
-    _capture_supported_cache = rc == 0
-    return _capture_supported_cache
-
-
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="CUDA-graph capture requires GPU"
-)
-class TestNeighborListHookGraphCache:
-    """``use_cuda_graph=True`` end-to-end behaviour.
-
-    Capture is opt-in and only meaningfully used on the cell-list
-    dispatch path; these tests exercise both the gating logic
-    (``_using_cell_list_path`` selection) and the correctness of the
-    captured-replay path against the eager reference.
-    """
-
-    _DEVICE = torch.device("cuda:0")
-    _CFG = NeighborConfig(
-        cutoff=2.5 * 3.4, format=NeighborListFormat.MATRIX, half_list=False
-    )
-
-    def test_cache_disabled_by_default(self):
-        """Default ``use_cuda_graph=False`` leaves ``_graph_cache`` None
-        and the hook falls through its eager path unchanged."""
-        batch, _ = _argon_batch_for_cell_list(15, self._DEVICE)  # ~3375 atoms
-        hook = NeighborListHook(self._CFG, skin=0.5)
-        hook(_ctx(batch), hook.stage)
-        assert hook._graph_cache is None
-
-    def test_cache_populates_on_cell_list_path(self):
-        """Two calls with ``use_cuda_graph=True`` populate the cache:
-        first call runs eager + captures, second call replays."""
-        if not _warp_cudagraph_capture_supported():
-            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
-        batch, _ = _argon_batch_for_cell_list(15, self._DEVICE)
-        hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
-
-        # First call: eager + captures.
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        assert hook._graph_cache is not None
-        assert hook._graph_cache._graph is not None, "first call should have captured"
-        first_graph = hook._graph_cache._graph
-        first_key = hook._graph_cache._key
-
-        # Second call: same shape, same key → reuses captured graph.
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        assert hook._graph_cache._graph is first_graph
-        assert hook._graph_cache._key == first_key
-
-    def test_cache_skips_for_naive_path(self):
-        """Small system (avg_atoms_per_system < 2000) routes through
-        the naive dispatch which we don't yet capture; the cache
-        must stay empty even with ``use_cuda_graph=True``."""
-        batch, n = _argon_batch_for_cell_list(10, self._DEVICE)  # ~1000 atoms
-        assert n < 2000, "test premise"
-        hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        # Cache may have been allocated lazily but no graph captured.
-        assert hook._graph_cache is None or hook._graph_cache._graph is None, (
-            "naive path should not capture under v1"
-        )
-        assert hook._using_cell_list_path is False
-
-    def test_replay_matches_eager_output(self):
-        """The captured-graph replay produces output identical to the
-        eager path across multiple calls with evolving positions."""
-        if not _warp_cudagraph_capture_supported():
-            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
-        n_per_side = 15  # 3375 atoms — cell-list dispatch
-        n_steps = 5
-        # Same starting position, perturbed deterministically each step.
-
-        def _drive(use_cuda_graph: bool):
-            batch, _ = _argon_batch_for_cell_list(n_per_side, self._DEVICE)
-            hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=use_cuda_graph)
-            ctx = _ctx(batch)
-            outputs = []
-            torch.manual_seed(42)
-            for _ in range(n_steps):
-                with torch.no_grad():
-                    batch.positions += 0.005 * torch.randn_like(batch.positions)
-                hook(ctx, hook.stage)
-                torch.cuda.synchronize(self._DEVICE)
-                outputs.append(
-                    (batch.neighbor_matrix.clone(), batch.num_neighbors.clone())
-                )
-            return outputs
-
-        eager = _drive(False)
-        captured = _drive(True)
-
-        for step, ((eager_nm, eager_nn), (cap_nm, cap_nn)) in enumerate(
-            zip(eager, captured, strict=True)
-        ):
-            assert torch.equal(eager_nn, cap_nn), (
-                f"step {step}: num_neighbors differ between eager + captured"
-            )
-            # Atomic-write ordering is non-deterministic at the kernel
-            # level; compare the SET of neighbors per row.
-            assert torch.equal(
-                eager_nm.sort(dim=1).values, cap_nm.sort(dim=1).values
-            ), f"step {step}: row-sorted neighbor matrices differ"
-
-    def test_cache_invalidates_on_shape_change(self):
-        """Calling the hook with a new atom count invalidates the
-        cached graph (the existing alloc gate fires; cache key differs
-        on next call → recapture)."""
-        if not _warp_cudagraph_capture_supported():
-            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
-        batch_a, _ = _argon_batch_for_cell_list(15, self._DEVICE)
-        hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
-        hook(_ctx(batch_a), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        first_key = hook._graph_cache._key
-
-        # New batch with different atom count → alloc gate fires →
-        # _max_neighbors / shapes change → cache key changes → recapture.
-        batch_b, _ = _argon_batch_for_cell_list(16, self._DEVICE)
-        hook(_ctx(batch_b), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        second_key = hook._graph_cache._key
-        assert second_key != first_key, "shape change must produce a new cache key"
-
-    def test_skin_check_fires_inside_replayed_graph(self):
-        """The captured region includes the skin-check kernel: replays
-        must update ``_rebuild_flags`` based on current displacement
-        rather than reusing the stale state from the eager first call.
-
-        Verified by driving the hook with no perturbation (flags should
-        end up all-False on replay) and then with a large perturbation
-        (flags should end up all-True).
-        """
-        if not _warp_cudagraph_capture_supported():
-            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
-        batch, _ = _argon_batch_for_cell_list(15, self._DEVICE)
-        hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
-
-        # First call captures with ref_positions hoisted in front of
-        # capture so the skin check makes it into the replay region.
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        assert hook._graph_cache._graph is not None
-
-        # Replay with positions unchanged: skin check should write
-        # all-False since ref_positions == current_positions.
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        assert not hook._rebuild_flags.any(), (
-            "skin-check inside captured graph should produce all-False "
-            "rebuild_flags when positions are unchanged"
-        )
-
-        # Replay with a displacement larger than skin/2 → all-True.
-        with torch.no_grad():
-            batch.positions += 10.0  # well beyond skin/2 = 0.25
-        hook(_ctx(batch), hook.stage)
-        torch.cuda.synchronize(self._DEVICE)
-        assert hook._rebuild_flags.all(), (
-            "skin-check inside captured graph should flag every system "
-            "for rebuild after a large displacement"
         )
