@@ -674,18 +674,17 @@ class TestForward:
         out = wrapper.forward(pbc_batch)
         assert out["energy"].shape == (1, 1)
 
-    def test_training_flag_passed_to_model_is_always_false(self, wrapper, single_batch):
-        # The wrapper forward passes ``training=False`` to the inner MACE
-        # forward unconditionally ("Only inference supported right now",
-        # mace.py), independent of the wrapper's train/eval mode. The inner
-        # ``training`` kwarg is MACE-internal (stochastic/normalization
-        # behavior); fine-tuning still works via autograd over the
-        # trainable parameters (see TestFineTuningWorkflow).
+    def test_training_flag_follows_wrapper_mode(self, wrapper, single_batch):
+        # The wrapper forward passes ``training=self.training`` to the inner
+        # MACE forward: train mode retains the autograd graph through
+        # forces/stresses so force/stress losses can backprop (fine-tuning),
+        # while eval mode (inference, MD, DD) takes the cheaper
+        # no-create-graph path.
         wrapper.train()
         wrapper.forward(single_batch)
         wrapper.eval()
         wrapper.forward(single_batch)
-        assert wrapper.model.training_flags[-2:] == [False, False]
+        assert wrapper.model.training_flags[-2:] == [True, False]
 
 
 # ---------------------------------------------------------------------------
@@ -713,10 +712,10 @@ class TestFineTuningWorkflow:
 
         strategy.run([_make_finetune_batch()] * 8)
 
-        # The inner-model ``training`` kwarg is always False (see
-        # test_training_flag_passed_to_model_is_always_false); fine-tuning
-        # works via autograd regardless, so the trainable scale still moves.
-        assert wrapper.model.training_flags == [False] * 8
+        # Fine-tuning runs the wrapper in train mode, so the inner-model
+        # ``training`` kwarg is True across the run (retains the graph for
+        # the force/stress loss); the trainable scale moves via autograd.
+        assert wrapper.model.training_flags == [True] * 8
         assert id(wrapper.model.scale) in _optimizer_param_ids(strategy)
         assert wrapper.model.scale.detach().abs() < initial_scale.abs()
 
@@ -738,9 +737,10 @@ class TestFineTuningWorkflow:
 
         strategy.run([_make_finetune_batch()])
 
-        # Inner-model ``training`` kwarg is always False (inference-only
-        # forward); the wrapper's own train/eval mode is what's restored.
-        assert wrapper.model.training_flags == [False]
+        # The strategy trains the (eval) wrapper in train mode — so the
+        # inner-model ``training`` kwarg is True during the forward — then
+        # restores the wrapper's own eval mode.
+        assert wrapper.model.training_flags == [True]
         assert wrapper.training is False
 
 
@@ -909,21 +909,18 @@ class TestFromCheckpointErrors:
         self, monkeypatch, mock_model
     ):
         """cuEq ImportError should reference the [mace] extra."""
-        import builtins
-
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "cuequivariance":
-                raise ImportError("no module named cuequivariance")
-            return real_import(name, *args, **kwargs)
+        from nvalchemi._optional import OptionalDependency
 
         monkeypatch.setattr(
             "mace.calculators.foundations_models.download_mace_mp_checkpoint",
             lambda _: "unused",
         )
         monkeypatch.setattr("torch.load", lambda *a, **kw: mock_model)
-        monkeypatch.setattr(builtins, "__import__", mock_import)
+        # ``from_checkpoint`` gates cuEq through the OptionalDependency
+        # framework (not a bare ``import cuequivariance``), so force the
+        # dependency unavailable at that layer — the cueq check fires before
+        # the CUDA-device check, so this raises regardless of device.
+        monkeypatch.setattr(OptionalDependency.CUEQUIVARIANCE, "_available", False)
 
         with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
             MACEWrapper.from_checkpoint("medium", enable_cueq=True)
