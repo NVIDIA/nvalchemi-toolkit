@@ -826,22 +826,33 @@ class TestFusedStage:
         # Should stop after 1 step (convergence), NOT 10000
         assert fused.step_count == 1
 
-    def test_counter_graduation_reported_in_exit_converged(self) -> None:
-        """n_steps counter migration is reported via step()'s exit_converged."""
-        model = NonConservativeDemoModel()
-        dynamics = BaseDynamics(model=model, n_steps=2)
+    def test_counter_and_hook_graduation_reported_in_exit_converged(self) -> None:
+        """Counter and hook graduations in the same step are both reported."""
+        dynamics = BaseDynamics(
+            model=NonConservativeDemoModel(),
+            n_steps=2,
+            convergence_hook=ConvergenceHook(
+                criteria={"key": "energy_change", "threshold": 0.5}
+            ),
+        )
         fused = FusedStage(sub_stages=[(0, dynamics)])
 
-        batch = create_batch_with_status(n_graphs=1)
-        batch.status = torch.tensor([0])
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        batch.energy_change = torch.ones(2)
 
         batch, exit_converged = fused.step(batch)
         assert exit_converged is None
 
+        # Sample 1 converges via the hook; sample 0 hits the n_steps counter.
+        batch.energy_change = torch.tensor([1.0, 0.0])
         batch, exit_converged = fused.step(batch)
-        assert batch.status.view(-1).tolist() == [fused.exit_status]
+        assert batch.status.view(-1).tolist() == [fused.exit_status] * 2
         assert exit_converged is not None
-        assert exit_converged.tolist() == [0]
+        assert exit_converged.tolist() == [0, 1]
+        # Sample 0's counter was reset on migration; sample 1 left via the
+        # hook first, so its counter kept step 1's value.
+        assert batch.n_steps_counter_0.view(-1).tolist() == [0, 1]
 
 
 # -----------------------------------------------------------------------------
