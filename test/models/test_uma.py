@@ -422,12 +422,14 @@ class TestMLIPSpec:
     def test_inherits_uma_storage_modes(self, mock_omol):
         """Spec carries the halo storage policy (default modes).
 
-        The per-layer edge→node halo correction is handled by the
-        :class:`ScatterOutputs` ``OpAdapter`` on the fused Triton kernel
-        (see :meth:`test_edge_to_node_ops_scatter_corrected`), NOT by a
-        ``scatter_mode`` override — so the policy keeps the preset's default
-        ``halo_correction`` / ``halo_read`` modes. (The old ``scatter="local"``
-        override belonged to the retired ``gp_utils``/replicated design.)
+        The per-block edge→node aggregation is owned-complete under the halo
+        (ghost-shell) policy, so the correction is a per-block input refresh +
+        boundary fold ``MethodAdapter``\\s on the fairchem backbone (see
+        :meth:`test_registers_boundary_fold_adapters`), NOT a ``scatter_mode``
+        override — so the policy keeps the preset's default ``halo_read`` gather
+        mode. (The old ``scatter="local"`` override and the ``ScatterOutputs``
+        Triton ``custom_ops`` both belonged to the retired ``gp_utils``/
+        replicated design.)
         """
         from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
 
@@ -437,47 +439,51 @@ class TestMLIPSpec:
         assert policy.gather_mode == "halo_read"
         assert spec.system_reductions is True
 
-    def test_registers_five_triton_ops(self, mock_omol):
-        """All five ``torch.ops.fairchem._kernel_*`` ops appear in custom_ops."""
+    def test_no_triton_custom_ops(self, mock_omol):
+        """No ``custom_ops``: the retired ``gp_utils``/replicated design
+        registered five ``torch.ops.fairchem._kernel_*`` OpAdapters (two carrying
+        ``ScatterOutputs``); the current halo design corrects at the fairchem
+        module boundary via fold adapters instead, so ``custom_ops`` is empty."""
         spec = mock_omol.distribution_spec()
-        assert len(spec.distribution.custom_ops) == 5
-        names = {str(op.op).split(".")[-1] for op in spec.distribution.custom_ops}
-        expected = {
-            "default",  # all 5 are .default overloads — so just check count
-        }
-        assert expected.issubset(names)
+        assert spec.distribution.custom_ops == ()
 
-    def test_edge_to_node_ops_scatter_corrected(self, mock_omol):
-        """The two node-shaped edge→node kernels (forward + its node-shaped
-        adjoint) carry ``ScatterOutputs`` for per-layer halo correction; the
-        other three (node→edge + edge/weight-shaped adjoints) are pass-through.
+    def test_registers_boundary_fold_adapters(self, mock_omol):
+        """The per-block edge→node correction and the owned-only + all-reduce
+        energy/element-reference reduction are carried by method/function fold
+        adapters on the fairchem backbone (lowered onto ``third_party_helpers``),
+        which replaced the retired ``ScatterOutputs`` Triton OpAdapters.
 
-        None gather inputs: the ``x`` input arrives padded (owned + halo), so
-        a ``gather_inputs`` would double-pad it (the bug the halo-dispatch fix
-        removed). Correction happens on the OUTPUT via ``ScatterOutputs``.
+        Under the refresh-only halo policy the edge→node folds reduce to a pure
+        input refresh (owned-complete); under graph-parallel the same adapters
+        become an all-reduce — the point here is only that they are declared.
         """
         spec = mock_omol.distribution_spec()
-        scatter_corrected = [
-            op for op in spec.distribution.custom_ops if op.scatter_outputs == (0,)
-        ]
-        passthrough = [
-            op for op in spec.distribution.custom_ops if op.scatter_outputs == ()
-        ]
-        assert len(scatter_corrected) == 2, (
-            f"expected 2 ScatterOutputs ops; got "
-            f"{[str(op.op) for op in scatter_corrected]}"
-        )
-        assert len(passthrough) == 3
-        # The forward edge→node kernel is the certain ScatterOutputs case.
-        assert any(
-            "permute_wigner_inv_edge_to_node.default" in str(op.op)
-            for op in scatter_corrected
-        )
-        # No op gathers inputs (padded x in, output-side correction only).
-        for op_spec in spec.distribution.custom_ops:
-            assert op_spec.gather_inputs == (), (
-                f"unexpected gather_inputs on {op_spec.op}: {op_spec.gather_inputs}"
-            )
+        helpers = spec.distribution.third_party_helpers
+        methods = {
+            (h.class_name, h.method_name) for h in helpers if hasattr(h, "method_name")
+        }
+        funcs = {
+            (h.module_path.split(".")[-1], h.attr_name)
+            for h in helpers
+            if hasattr(h, "attr_name")
+        }
+        # Per-block input refresh + the two edge→node aggregation recombines that
+        # replaced the ScatterOutputs OpAdapters.
+        assert ("eSCNMD_Block", "forward") in methods
+        assert ("Edgewise", "forward") in methods
+        assert ("EdgeDegreeEmbedding", "forward") in methods
+        # Owned-only + all_reduce per-system energy reduction, patched on both
+        # module bindings of ``reduce_node_to_system``.
+        assert ("outputs", "reduce_node_to_system") in funcs
+        assert ("escn_md", "reduce_node_to_system") in funcs
+        # Element-reference undo summed over owned atoms only.
+        assert ("ElementReferences", "undo_refs") in methods
+        # MoLE composition-consistency guard (version-selected between the
+        # fairchem<=2.19 and >=2.21 method names).
+        assert ("eSCNMDBackbone", "_get_composition_info") in methods or (
+            "eSCNMDMoeBackbone",
+            "_get_merged_mole_consistency_info",
+        ) in methods
 
 
 # ===========================================================================
