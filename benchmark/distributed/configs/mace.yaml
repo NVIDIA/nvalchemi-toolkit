@@ -1,0 +1,35 @@
+# MACE — alpha-quartz SiO2 supercell, full PBC.
+#
+# Multi-GPU + cueq needs CUEQUIVARIANCE_OPS_PARALLEL_COMPILE=0 to avoid a
+# cross-rank JIT race. cueq forces fp32; plain MACE defaults to fp64 (toggle
+# with --set dtype=fp32 for a same-precision comparison). Enable kernels /
+# compile per run with --set loader.enable_cueq=true / loader.compile=true.
+model: MACE
+dtype: fp64
+default_sizes: [1000, 4000]
+
+system:
+  builder: build_sio2_supercell
+  sizing: sio2_repeats_for_size
+  pbc: true
+  charges: false
+  compute_neighbors: true
+
+loader:
+  kind: mace
+  checkpoint: medium-mpa-0
+  enable_cueq: false
+  compile: false
+
+forward:
+  cutoff_attr: cutoff
+  upfront_halo_exchange: true
+  dd_compile_capable: true
+
+nvt:
+  cutoff_attr: cutoff
+  max_neighbors: 384   # SiO2 + cutoff+skin + NVT thermal jitter; ~50% headroom
+  skin: 0.5
+  dt: 0.5
+  temperature: 300.0
+  friction: 0.01

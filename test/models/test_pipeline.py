@@ -30,10 +30,12 @@ from collections import OrderedDict
 
 import pytest
 import torch
+import torch._dynamo
 from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -41,9 +43,11 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 from nvalchemi.models.pipeline import (
+    _PIPELINE_NEIGHBOR_SOURCES_ATTR,
     PipelineGroup,
     PipelineModelWrapper,
     PipelineStep,
+    _NeighborSourceData,
 )
 
 # ---------------------------------------------------------------------------
@@ -581,18 +585,18 @@ class TestPipelineAutogradGroup:
             groups=[PipelineGroup(steps=[model], use_autograd=True)]
         )
         original_step_id = id(pipe.groups[0].steps[0])
-        assert original_step_id in pipe._step_needs_neighbor_adapt
+        assert original_step_id in pipe._step_active_overrides
         assert "forces" not in pipe._step_active_overrides[original_step_id]
 
         ema_pipe = copy.deepcopy(pipe)
         copied_step_id = id(ema_pipe.groups[0].steps[0])
         assert copied_step_id != original_step_id
-        assert copied_step_id not in ema_pipe._step_needs_neighbor_adapt
+        assert copied_step_id not in ema_pipe._step_active_overrides
 
         ema_pipe.model_config.active_outputs = {"energy", "forces"}
         ema_pipe(simple_batch)
 
-        assert copied_step_id in ema_pipe._step_needs_neighbor_adapt
+        assert copied_step_id in ema_pipe._step_active_overrides
         assert "forces" not in ema_pipe._step_active_overrides[copied_step_id]
         assert model.model_config.active_outputs == {"energy", "forces"}
 
@@ -817,36 +821,22 @@ class TestPipelineModelConfigSynthesis:
             )
 
 
-class TestPipelineNeighborHooks:
-    """Tests for make_neighbor_hooks."""
+class TestPipelineNeighborAdaptationApi:
+    """Tests for pipeline-level neighbor adaptation options."""
 
-    def test_no_hooks_without_neighbor_config(self):
-        pipe = PipelineModelWrapper(
-            groups=[
-                PipelineGroup(steps=[MockEnergyForceModel()]),
-            ]
-        )
-        hooks = pipe.make_neighbor_hooks()
-        assert hooks == []
+    def test_neighbor_adaptation_invalid_mode_raises(self):
+        with pytest.raises(ValueError, match="neighbor_adaptation"):
+            PipelineModelWrapper(
+                groups=[PipelineGroup(steps=[MockEnergyForceModel()])],
+                neighbor_adaptation="on a good day",
+            )
 
-    def test_single_hook_with_neighbor_config(self):
-        class _NLModel(MockEnergyForceModel):
-            def __init__(self):
-                super().__init__()
-                self.model_config = ModelConfig(
-                    outputs=frozenset({"energy", "forces"}),
-                    needs_pbc=False,
-                    neighbor_config=NeighborConfig(cutoff=5.0),
-                    active_outputs={"energy", "forces"},
-                )
-
-        pipe = PipelineModelWrapper(
-            groups=[
-                PipelineGroup(steps=[_NLModel()]),
-            ]
-        )
-        hooks = pipe.make_neighbor_hooks()
-        assert len(hooks) == 1
+    def test_max_cutoff_ratio_must_be_at_least_one(self):
+        with pytest.raises(ValueError, match="max_cutoff_ratio"):
+            PipelineModelWrapper(
+                groups=[PipelineGroup(steps=[MockEnergyForceModel()])],
+                max_cutoff_ratio=0.99,
+            )
 
     def test_forwards_neighbor_list_method(self):
         class _NLModel(MockEnergyForceModel):
@@ -965,6 +955,22 @@ class _MatrixModel4(_CaptureMixin, MockEnergyForceModel):
         )
 
 
+class _MatrixModel7(_CaptureMixin, MockEnergyForceModel):
+    """MATRIX model at cutoff 7 — within default auto adaptation ratio."""
+
+    def __init__(self):
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            needs_pbc=False,
+            neighbor_config=NeighborConfig(
+                cutoff=7.0,
+                format=NeighborListFormat.MATRIX,
+            ),
+            active_outputs={"energy", "forces"},
+        )
+
+
 class _COOModel4(_CaptureMixin, MockEnergyForceModel):
     """COO model at cutoff 4 — needs both format conversion AND filtering."""
 
@@ -979,6 +985,113 @@ class _COOModel4(_CaptureMixin, MockEnergyForceModel):
             ),
             active_outputs={"energy", "forces"},
         )
+
+
+class TestPipelineNeighborPlanning:
+    """Tests for internal neighbor source planning."""
+
+    def test_always_mode_uses_single_max_source(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
+        )
+
+        assert [s.config.cutoff for s in pipe._neighbor_sources] == [10.0]
+        tight_plan = pipe._step_neighbor_plans[id(pipe.groups[0].steps[1])]
+        assert tight_plan.source_id == 0
+        assert tight_plan.needs_cutoff_adaptation is True
+
+    def test_never_mode_creates_exact_cutoff_sources(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="never",
+        )
+
+        assert [s.config.cutoff for s in pipe._neighbor_sources] == [10.0, 4.0]
+        for plan in pipe._step_neighbor_plans.values():
+            assert plan.needs_cutoff_adaptation is False
+
+    def test_auto_mode_groups_within_ratio_and_splits_large_gap(self):
+        wide = _MatrixModel10()
+        mid = _MatrixModel7()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, mid, tight])],
+        )
+
+        assert [s.config.cutoff for s in pipe._neighbor_sources] == [10.0, 4.0]
+        wide_plan = pipe._step_neighbor_plans[id(pipe.groups[0].steps[0])]
+        mid_plan = pipe._step_neighbor_plans[id(pipe.groups[0].steps[1])]
+        tight_plan = pipe._step_neighbor_plans[id(pipe.groups[0].steps[2])]
+        assert wide_plan.source_id == 0
+        assert wide_plan.needs_cutoff_adaptation is False
+        assert mid_plan.source_id == 0
+        assert mid_plan.needs_cutoff_adaptation is True
+        assert tight_plan.source_id == 1
+        assert tight_plan.needs_cutoff_adaptation is False
+
+    def test_auto_mode_uses_max_cutoff_ratio(self):
+        wide = _MatrixModel10()
+        mid = _MatrixModel7()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, mid])],
+            max_cutoff_ratio=1.2,
+        )
+
+        assert [s.config.cutoff for s in pipe._neighbor_sources] == [10.0, 7.0]
+
+
+class TestPipelineNeighborHookFactory:
+    """Tests for single-source and multi-source neighbor hook creation."""
+
+    def test_no_hooks_without_neighbor_config(self):
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[MockEnergyForceModel()])],
+        )
+
+        assert pipe.make_neighbor_hooks() == []
+
+    def test_single_source_returns_neighbor_list_hook(self):
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[_MatrixModel10(), _MatrixModel7()])],
+        )
+
+        hooks = pipe.make_neighbor_hooks()
+
+        assert len(hooks) == 1
+        assert isinstance(hooks[0], NeighborListHook)
+        assert hooks[0].config.cutoff == 10.0
+
+    def test_multi_source_returns_composite_hook(self):
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[_MatrixModel10(), _MatrixModel4()])],
+        )
+
+        hooks = pipe.make_neighbor_hooks()
+
+        assert len(hooks) == 1
+        hook = hooks[0]
+        assert type(hook).__name__ == "_PipelineNeighborListHook"
+        assert [h.config.cutoff for h in hook.hooks] == [10.0, 4.0]
+
+    def test_composite_hook_source_count_is_static(self):
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[_MatrixModel10(), _MatrixModel4()])],
+        )
+
+        hooks1 = pipe.make_neighbor_hooks()
+        hooks2 = pipe.make_neighbor_hooks()
+
+        assert len(hooks1) == 1
+        assert len(hooks2) == 1
+        assert type(hooks1[0]).__name__ == "_PipelineNeighborListHook"
+        assert type(hooks2[0]).__name__ == "_PipelineNeighborListHook"
+        assert len(hooks1[0].hooks) == 2
+        assert len(hooks2[0].hooks) == 2
 
 
 class TestPipelineNeighborAdaptation:
@@ -1012,6 +1125,7 @@ class TestPipelineNeighborAdaptation:
         tight = _MatrixModel4()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
         )
         batch = _make_neighbor_batch()
         pipe(batch)
@@ -1037,17 +1151,22 @@ class TestPipelineNeighborAdaptation:
         """Deep-copied pipelines still filter neighbors per sub-model cutoff."""
         wide = _MatrixModel10()
         tight = _MatrixModel4()
-        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[wide, tight])])
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
+        )
         tight_step_id = id(pipe.groups[0].steps[1])
-        assert pipe._step_needs_neighbor_adapt[tight_step_id] is True
+        assert pipe._step_neighbor_plans[tight_step_id].needs_cutoff_adaptation is True
 
         copied = copy.deepcopy(pipe)
         tight_copy = copied.groups[0].steps[1].model
-        assert id(copied.groups[0].steps[1]) not in copied._step_needs_neighbor_adapt
+        copied_tight_step_id = id(copied.groups[0].steps[1])
+        assert copied_tight_step_id not in copied._step_neighbor_plans
 
         batch = _make_neighbor_batch()
         copied(batch)
 
+        assert copied_tight_step_id in copied._step_neighbor_plans
         expected_nn = torch.tensor([2, 2, 2, 0], dtype=torch.int32)
         torch.testing.assert_close(tight_copy.captured_num_neighbors, expected_nn)
 
@@ -1057,6 +1176,7 @@ class TestPipelineNeighborAdaptation:
         coo_model = _COOModel4()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[matrix_model, coo_model])],
+            neighbor_adaptation="always",
         )
         batch = _make_neighbor_batch()
         pipe(batch)
@@ -1083,6 +1203,7 @@ class TestPipelineNeighborAdaptation:
         tight = _MatrixModel4()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
         )
         batch = _make_neighbor_batch()
         orig_nm = batch.neighbor_matrix.clone()
@@ -1107,6 +1228,7 @@ class TestPipelineNeighborAdaptation:
         tight = _MatrixModel4()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[wide, tight])],
+            neighbor_adaptation="always",
         )
         batch = _make_neighbor_batch()
         orig_k = batch.neighbor_matrix.shape[1]  # K=3
@@ -1149,6 +1271,7 @@ class TestPipelineNeighborAdaptation:
         wide = _MatrixModel10()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[tight, wide])],
+            neighbor_adaptation="always",
         )
         pipe(batch)
 
@@ -1167,6 +1290,7 @@ class TestPipelineNeighborAdaptation:
         matrix_model = _MatrixModel10()
         pipe = PipelineModelWrapper(
             groups=[PipelineGroup(steps=[coo_model, matrix_model])],
+            neighbor_adaptation="always",
         )
         batch = _make_neighbor_batch()
         pipe(batch)
@@ -1174,6 +1298,117 @@ class TestPipelineNeighborAdaptation:
         # neighbor_list was temporarily added for coo_model, must be gone.
         assert "neighbor_list" not in batch.__dict__
         assert "edge_ptr" not in batch.__dict__
+
+    def test_auto_large_cutoff_gap_uses_exact_tight_source(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+        )
+        batch = _make_neighbor_batch()
+
+        tight_nm = torch.tensor(
+            [[1, 2], [0, 2], [0, 1], [4, 4]],
+            dtype=torch.int32,
+        )
+        tight_nn = torch.tensor([2, 2, 2, 0], dtype=torch.int32)
+        batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = (
+            _NeighborSourceData(
+                source_id=0,
+                config=pipe._neighbor_sources[0].config,
+                neighbor_matrix=batch.neighbor_matrix,
+                num_neighbors=batch.num_neighbors,
+                neighbor_matrix_shifts=batch.neighbor_matrix_shifts,
+            ),
+            _NeighborSourceData(
+                source_id=1,
+                config=pipe._neighbor_sources[1].config,
+                neighbor_matrix=tight_nm,
+                num_neighbors=tight_nn,
+                neighbor_matrix_shifts=torch.zeros(4, 2, 3, dtype=torch.int32),
+            ),
+        )
+
+        pipe(batch)
+
+        torch.testing.assert_close(
+            wide.captured_num_neighbors,
+            torch.tensor([3, 3, 3, 3], dtype=torch.int32),
+        )
+        torch.testing.assert_close(tight.captured_num_neighbors, tight_nn)
+        assert (
+            pipe._step_neighbor_plans[
+                id(pipe.groups[0].steps[1])
+            ].needs_cutoff_adaptation
+            is False
+        )
+
+    def test_multi_source_missing_hook_raises(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+        )
+        batch = _make_neighbor_batch()
+
+        assert len(pipe._neighbor_sources) == 2
+        assert _PIPELINE_NEIGHBOR_SOURCES_ATTR not in batch.__dict__
+
+        with pytest.raises(
+            RuntimeError, match="planned multiple neighbor-list sources"
+        ):
+            pipe(batch)
+
+    def test_auto_within_ratio_filters_from_wide_source(self):
+        wide = _MatrixModel10()
+        mid = _MatrixModel7()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, mid])],
+        )
+        batch = _make_neighbor_batch()
+
+        pipe(batch)
+
+        assert len(pipe._neighbor_sources) == 1
+        assert pipe._step_neighbor_plans[
+            id(pipe.groups[0].steps[1])
+        ].needs_cutoff_adaptation
+        expected_nn = torch.tensor([2, 3, 3, 2], dtype=torch.int32)
+        torch.testing.assert_close(mid.captured_num_neighbors, expected_nn)
+
+    def test_multi_source_selection_restores_original_batch_attrs(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[wide, tight])])
+        batch = _make_neighbor_batch()
+        orig_nm = batch.neighbor_matrix.clone()
+        orig_nn = batch.num_neighbors.clone()
+        orig_cutoff = batch._neighbor_list_cutoff
+
+        tight_nm = torch.full((4, 1), 4, dtype=torch.int32)
+        tight_nn = torch.zeros(4, dtype=torch.int32)
+        batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = (
+            _NeighborSourceData(
+                source_id=0,
+                config=pipe._neighbor_sources[0].config,
+                neighbor_matrix=batch.neighbor_matrix,
+                num_neighbors=batch.num_neighbors,
+                neighbor_matrix_shifts=batch.neighbor_matrix_shifts,
+            ),
+            _NeighborSourceData(
+                source_id=1,
+                config=pipe._neighbor_sources[1].config,
+                neighbor_matrix=tight_nm,
+                num_neighbors=tight_nn,
+                neighbor_matrix_shifts=torch.zeros(4, 1, 3, dtype=torch.int32),
+            ),
+        )
+
+        pipe(batch)
+
+        torch.testing.assert_close(batch.neighbor_matrix, orig_nm)
+        torch.testing.assert_close(batch.num_neighbors, orig_nn)
+        assert batch._neighbor_list_cutoff == orig_cutoff
 
 
 # ===========================================================================
@@ -1564,8 +1799,6 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["forces"] is not None
 
-        import torch._dynamo
-
         torch._dynamo.config.suppress_errors = True
         compiled_pipe = torch.compile(pipe, fullgraph=False)
         out_compiled = compiled_pipe(batch)
@@ -1598,8 +1831,6 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["energy"] is not None
         assert out_eager["forces"] is not None
-
-        import torch._dynamo
 
         torch._dynamo.config.suppress_errors = True
         compiled_pipe = torch.compile(pipe, fullgraph=False)

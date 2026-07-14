@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """MACE model wrapper.
 
 Wraps any MACE model (``MACE``, ``ScaleShiftMACE``, etc.) as a
@@ -175,6 +176,345 @@ def _patch_e3nn_irrep_len_for_compile() -> None:
         pass
 
 
+# cuEquivariance support — distributed wiring for cueq-converted MACE.
+#
+# On CUDA the converter fuses the InteractionBlock's ``conv_tp`` into one opaque
+# kernel that absorbs the gather + tensor-product + scatter with the edge indices
+# *internal*, hiding both from ShardTensor dispatch — so under DD it computes a
+# purely local message (no halo gather of ghost senders, no reverse-exchange of
+# ghost-receiver partials) and is silently wrong on non-degenerate partitions.
+# The fix unfuses the conv for the DD scope (``_cueq_conv_unfuse_adapters``):
+# the conv reverts to the external ``node_feats[sender]`` gather + ``scatter_sum``
+# that plain MACE uses, where the halo handlers already fire. The remaining cueq
+# kernels are node/edge-local and get pass-through OpAdapters.
+
+
+def _mace_uses_cueq(model: nn.Module) -> bool:
+    """True iff any submodule of *model* is a cuequivariance kernel.
+
+    Walks ``named_modules`` and checks class module path. Cheap enough to
+    call per-``distribution_spec`` access — MACE's module tree is shallow.
+    """
+    for mod in model.modules():
+        mod_path = type(mod).__module__
+        if mod_path.startswith("cuequivariance"):
+            return True
+    return False
+
+
+def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
+    """Build adapters that unfuse each cueq conv ``conv_tp`` for the DD scope.
+
+    ``mace.cli.convert_e3nn_cueq`` enables *conv fusion* on CUDA: the message
+    pass (gather senders → channel-wise TP → scatter to receivers) becomes one
+    opaque ``cuequivariance`` kernel that takes the sender/receiver indices
+    internally (``conv_tp(node_feats, edge_attrs, tp_weights, edge_index)``).
+    That kernel gathers + scatters on **rank-local** indices and bypasses
+    ShardTensor dispatch, so under DD it computes a purely local message — no
+    halo gather of ghost senders, no reverse-exchange of ghost-receiver partials
+    to their owners — silently wrong on any non-degenerate partition (a
+    degenerate partition masks it: the halo correction is a no-op there).
+
+    The fix is **mode-dependent** (one adapter, two behaviours, chosen by the
+    framework's compile signal — mirrors :func:`neighbor_refresh_adapters`):
+
+    * **Eager DD** — unfuse to the *external* gather + scatter plain (non-cueq)
+      MACE uses: ``scatter_sum(conv_tp(node_feats[sender], edge_attrs,
+      tp_weights), receiver)``. ``node_feats[sender]`` routes through the halo
+      read-refresh and ``scatter_sum`` through the halo scatter-correction
+      dispatch handlers (which the fused kernel bypasses).
+    * **Compiled DD** — keep the conv **fused**. The fused cueq kernel streams
+      the per-edge message instead of materializing it, so the saved-for-backward
+      footprint matches single-GPU compiled (the unfused per-edge message is a
+      ~N·feat saved activation that roughly doubles compiled-DD peak memory and
+      halves max-N). Halo correctness comes from the message-passing refresh
+      adapter's ``scatter_to_owners`` on the block output, which fires only under
+      compile and is force-equivalent to the external scatter (validated).
+
+    Both forms are machine-precision force-equivalent to the single-process cueq
+    reference. Declared on the spec, so the framework installs it only inside the
+    distributed scope; single-process keeps the fused kernel untouched. Returns
+    one :class:`ModuleForwardAdapter` per fused conv (empty when none are fused).
+    """
+    from mace.tools.scatter import scatter_sum  # noqa: PLC0415
+
+    from nvalchemi.distributed._core.adapter import (  # noqa: PLC0415
+        ModuleForwardAdapter,
+    )
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        compile_routing_active,
+    )
+
+    def _make_conv_forward(conv_tp: Any) -> Any:
+        fused_forward = conv_tp.forward  # cueq fused conv (with_cueq_conv_fusion)
+        seg_forward = conv_tp.original_forward  # raw per-edge SegmentedPolynomial
+
+        def _conv_forward(
+            node_feats: torch.Tensor,
+            edge_attrs: torch.Tensor,
+            tp_weights: torch.Tensor,
+            edge_index: torch.Tensor,
+        ) -> torch.Tensor:
+            if compile_routing_active():
+                # Compiled DD: stay fused (no per-edge message materialized);
+                # the refresh adapter's scatter_to_owners halo-corrects the
+                # block output.
+                return fused_forward(node_feats, edge_attrs, tp_weights, edge_index)
+            # Eager DD: per-edge channel-wise TP (no internal indices), then the
+            # external scatter the halo-correction dispatch handler intercepts.
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            mji = seg_forward([tp_weights, node_feats[sender], edge_attrs])[0]
+            return scatter_sum(
+                src=mji, index=receiver, dim=0, dim_size=node_feats.shape[0]
+            )
+
+        return _conv_forward
+
+    adapters = []
+    for inter in getattr(model, "interactions", []):
+        conv_tp = getattr(inter, "conv_tp", None)
+        # Only the conv-fusion wrapper carries ``original_forward`` (the raw
+        # SegmentedPolynomial); the non-fused ChannelWiseTensorProduct path is
+        # already DD-correct and has nothing to unfuse.
+        if conv_tp is None or not hasattr(conv_tp, "original_forward"):
+            continue
+        adapters.append(
+            ModuleForwardAdapter(
+                conv_tp, _make_conv_forward(conv_tp), label="cueq_conv_halo"
+            )
+        )
+    return tuple(adapters)
+
+
+def _mace_product_block_static_index_forward(
+    original: Any,
+    self: Any,
+    node_feats: torch.Tensor,
+    sc: "torch.Tensor | None",
+    node_attrs: torch.Tensor,
+) -> torch.Tensor:
+    """Wrap ``EquivariantProductBasisBlock.forward`` to derive the cueq
+    symmetric-contraction element index with a static-shape ``argmax`` instead of
+    the data-dependent ``torch.nonzero(node_attrs)[:, 1]``.
+
+    Mirrors mace's cueq branch exactly except for the index op. ``argmax`` returns
+    one index per row (== ``nonzero[:, 1]`` for genuine one-hot rows), so under
+    DD-compile the inert dead-padding rows (``Z=0`` -> all-zero one-hot) map to
+    element 0 and ``index_attrs`` keeps ``n_padded`` rows — matching ``node_feats``
+    and avoiding the cueq ``uniform_1d`` "batch dim mismatch". The non-cueq path
+    has no ``nonzero``, so it delegates to the original. Declared on the cueq spec
+    (see :func:`_mace_cueq_spec`); installed only inside the distributed scope, so
+    single-process keeps the stock forward.
+    """
+    use_cueq = False
+    use_cueq_mul_ir = False
+    if getattr(self, "use_agnostic_product", False):
+        node_attrs = torch.ones(
+            (node_feats.shape[0], 1), dtype=node_feats.dtype, device=node_feats.device
+        )
+    cfg = getattr(self, "cueq_config", None)
+    if cfg is not None:
+        if cfg.enabled and (cfg.optimize_all or cfg.optimize_symmetric):
+            use_cueq = True
+        if cfg.layout_str == "mul_ir":
+            use_cueq_mul_ir = True
+    if not use_cueq:
+        # Stock path (symmetric_contractions takes node_attrs directly) — no
+        # nonzero, nothing to correct.
+        return original(self, node_feats, sc, node_attrs)
+    if use_cueq_mul_ir:
+        node_feats = torch.transpose(node_feats, 1, 2)
+    index_attrs = node_attrs.argmax(dim=1).int()
+    node_feats = self.symmetric_contractions(node_feats.flatten(1), index_attrs)
+    if self.use_sc and sc is not None:
+        return self.linear(node_feats) + sc
+    return self.linear(node_feats)
+
+
+def _with_all_reduce_stress(spec: Any) -> Any:
+    """Declare ``stress`` as a cross-rank ``ALL_REDUCE`` output on a halo spec.
+
+    MACE computes stress with the displacement/strain trick, so under domain
+    decomposition each rank produces a per-rank *partial* virial (the strain leaf
+    deforms only its owned atoms). ``SPEC_MPNN_HALO`` ships stress as
+    ``PER_GRAPH / Reduce.NONE`` — which only divides the over-counted replicated-
+    energy gradient by ``world_size`` and never sums the partials, giving wrong
+    stress on a non-degenerate partition. ``ALL_REDUCE`` restores the global virial
+    (``/world_size`` then cross-rank sum). Mirrors UMA's stress override; the
+    ``outputs=`` lowering composes additively with the preset (energy/forces/
+    atomic_energies classifications are preserved).
+    """
+    import dataclasses  # noqa: PLC0415
+
+    from nvalchemi.distributed.output_kinds import (  # noqa: PLC0415
+        OutputKind,
+        OutputSpec,
+        Reduce,
+    )
+
+    return dataclasses.replace(
+        spec,
+        outputs={
+            "stress": OutputSpec(kind=OutputKind.PER_GRAPH, reduce=Reduce.ALL_REDUCE)
+        },
+    )
+
+
+_MACE_CUEQ_SPEC_CACHE: Any = None
+
+
+def _mace_cueq_spec() -> Any:
+    """Return the MACE MLIPSpec for the cueq path.
+
+    The message gather + scatter are made halo-correct by *unfusing* the conv
+    (see :func:`_cueq_conv_unfuse_adapters`, declared per-wrapper in
+    :meth:`distribution_spec`): the conv reverts to the external
+    ``node_feats[sender]`` gather + ``scatter_sum`` that plain MACE uses, so the
+    cueq kernels here are all node/edge-local and declared as **pass-throughs**
+    (``uniform_1d`` — the channel-wise TP / symmetric contraction;
+    ``indexed_linear_B/C`` — linear layers; ``segmented_transpose`` — layout
+    transpose; ``fused_tensor_product`` + backwards — present for cueq builds
+    that route the TP through it). The pass-through OpAdapter unwraps ShardTensor
+    args to local, runs the opaque kernel, and re-wraps so distribution metadata
+    survives the kernel boundary; no per-op cross-rank correction is needed.
+
+    Declares the cueq kernels by qualified op name, so the spec builds without
+    ``cuequivariance``/``cuequivariance_ops_torch`` imported. Each name is
+    resolved to its live ``torch.ops.cuequivariance.*`` op lazily, when the
+    adapter installs at DD runtime (where the cueq extension is present).
+    """
+    global _MACE_CUEQ_SPEC_CACHE
+    if _MACE_CUEQ_SPEC_CACHE is not None:
+        return _MACE_CUEQ_SPEC_CACHE
+
+    from nvalchemi.distributed.spec import (
+        SPEC_MPNN_HALO,
+        OpAdapter,
+    )
+
+    # All node/edge-local opaque kernels — pass-through (unwrap → run → re-wrap).
+    # The conv's cross-rank correction lives in the unfuse adapter + the external
+    # scatter's halo handler, not on any of these ops. Declared by qualified op
+    # name (not a live handle): the spec is data, so it can be built without the
+    # ``cuequivariance_ops_torch`` extension loaded — ``OpAdapter`` resolves each
+    # name to its live op at ``install`` time (i.e. only when a cueq model
+    # actually runs under DD, where the extension is present).
+    _custom_ops = (
+        OpAdapter("cuequivariance::fused_tensor_product"),
+        OpAdapter("cuequivariance::fused_tensor_product_bwd"),
+        OpAdapter("cuequivariance::fused_tensor_product_bwd_bwd"),
+        OpAdapter("cuequivariance::uniform_1d"),
+        OpAdapter("cuequivariance::indexed_linear_B"),
+        OpAdapter("cuequivariance::indexed_linear_C"),
+        OpAdapter("cuequivariance::segmented_transpose"),
+    )
+    # cueq fuses the tensor products / linear / symmetric contractions but does
+    # NOT replace e3nn's ``SphericalHarmonics``, whose ``forward`` calls a
+    # scripted kernel and an in-place ``sh.mul_(cat)`` normalization that both
+    # mishandle sharded tensors (the scripted kernel faults; the in-place op
+    # fails under compile). Marshal the whole ``SphericalHarmonics.forward`` so
+    # both run on a plain local tensor.
+    #
+    from nvalchemi.distributed._core.adapter import MethodAdapter
+
+    _marshal = (
+        MethodAdapter(
+            "e3nn.o3",
+            "SphericalHarmonics",
+            "forward",
+            mode="marshal",
+        ),
+        # cueq's ``EquivariantProductBasisBlock.forward`` derives the per-node
+        # element index for the symmetric contraction with
+        # ``torch.nonzero(node_attrs)[:, 1]``. Under DD-compile the graph is padded
+        # to fixed-shape caps with inert dead atoms (``Z=0`` -> all-zero one-hot
+        # ``node_attrs`` row), so ``nonzero`` UNDERCOUNTS — ``index_attrs`` gets
+        # fewer rows than ``node_feats`` (``n_padded``) and the cueq ``uniform_1d``
+        # kernel raises "batch dim mismatch" (caught in the fake impl on some
+        # backends, at eager runtime on others). The wrap swaps in
+        # ``node_attrs.argmax(dim=1)`` — one index per row, == ``nonzero[:, 1]``
+        # for real one-hot rows; dead rows map to element 0 and are stripped from
+        # the owned-only output. Static-shape, so it also sidesteps the
+        # data-dependent ``nonzero`` under compile. Non-cueq path is untouched.
+        MethodAdapter(
+            "mace.modules.blocks",
+            "EquivariantProductBasisBlock",
+            "forward",
+            _mace_product_block_static_index_forward,
+        ),
+    )
+    from nvalchemi.distributed.spec import CompilePolicy, ForceStrategy
+
+    # cueq fused kernels + the SphericalHarmonics marshal on the MPNN-halo
+    # preset, plus the MACE compile policy: forces come from autograd over a
+    # compiled energy-only forward.
+    _MACE_CUEQ_SPEC_CACHE = _with_all_reduce_stress(
+        SPEC_MPNN_HALO.with_adapters(*_custom_ops, *_marshal).with_compile(
+            CompilePolicy(
+                static_shapes=True,
+                force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
+                # MACE is fully differentiable in positions + cell, so the
+                # framework strain-autograd gives correct compiled-DD stress.
+                stress_via_strain=True,
+            )
+        )
+    )
+    return _MACE_CUEQ_SPEC_CACHE
+
+
+_MACE_SCRIPTED_SPEC_CACHE: Any = None
+
+
+def _mace_scripted_spec() -> Any:
+    """Return the MACE non-cueq MLIPSpec with scripted-op marshalling wired.
+
+    Plain (non-cueq) MACE runs e3nn's ``SphericalHarmonics`` layer, whose
+    ``forward`` calls a scripted kernel and an in-place ``sh.mul_(cat)``
+    normalization. On the distributed halo path the scripted kernel mishandles
+    sharded tensors and faults. Auto-discovery only wraps scripted *submodules*,
+    not a scripted *function* called from a plain ``forward``, so MACE marshals
+    the whole ``SphericalHarmonics.forward`` explicitly. Cached.
+    """
+    global _MACE_SCRIPTED_SPEC_CACHE
+    if _MACE_SCRIPTED_SPEC_CACHE is not None:
+        return _MACE_SCRIPTED_SPEC_CACHE
+
+    from nvalchemi.distributed._core.adapter import MethodAdapter
+    from nvalchemi.distributed.spec import SPEC_MPNN_HALO
+
+    # Marshal the whole SphericalHarmonics.forward: unwrap the sharded input to
+    # its local tensor once so both the scripted kernel and the in-place
+    # ``sh.mul_(cat)`` run on a plain local tensor, then re-wrap the output.
+    _marshal = (
+        MethodAdapter(
+            "e3nn.o3",
+            "SphericalHarmonics",
+            "forward",
+            mode="marshal",
+        ),
+    )
+    from nvalchemi.distributed.spec import (  # noqa: PLC0415
+        CompilePolicy,
+        ForceStrategy,
+    )
+
+    # The SphericalHarmonics marshal on the MPNN-halo preset, plus the MACE
+    # compile policy (forces via autograd over a compiled energy-only forward).
+    _MACE_SCRIPTED_SPEC_CACHE = _with_all_reduce_stress(
+        SPEC_MPNN_HALO.with_adapters(*_marshal).with_compile(
+            CompilePolicy(
+                static_shapes=True,
+                force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
+                # MACE is fully differentiable in positions + cell, so the
+                # framework strain-autograd gives correct compiled-DD stress.
+                stress_via_strain=True,
+            )
+        )
+    )
+    return _MACE_SCRIPTED_SPEC_CACHE
+
+
 @OptionalDependency.MACE.require
 class MACEWrapper(nn.Module, BaseModelMixin):
     """Wrapper for any MACE model implementing the :class:`~nvalchemi.models.base.BaseModelMixin` interface.
@@ -217,6 +557,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         self.model = model
         self._checkpoint_spec = reconstruction_spec
 
+        # e3nn's ``Irrep.__len__`` raises under TorchDynamo guard-building, so
+        # any compiled MACE needs this idempotent compat shim before the first
+        # traced forward.
+        _patch_e3nn_irrep_len_for_compile()
+
         # Cache the model dtype — determined at construction, stable thereafter.
         self._cached_model_dtype: torch.dtype = next(model.parameters()).dtype
 
@@ -227,18 +572,21 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         node_emb = torch.zeros(max(z_table) + 1, len(z_table))
         for i, z in enumerate(z_table):
             node_emb[z, i] = 1.0
-        # Cast to model device+dtype so _node_attrs needs no per-step conversion.
-        # Must use the model's device here: from_checkpoint moves the inner model
-        # to the target device before calling cls(model), so the buffer must be
-        # placed on that device from construction rather than relying on a
-        # subsequent .to() call that never happens.
+        # Place on the model's device+dtype so _node_attrs needs no per-step
+        # conversion. Use the model's device (from_checkpoint moves the inner
+        # model before calling cls(model), so no later .to() is guaranteed).
         model_device = next(model.parameters()).device
         node_emb = node_emb.to(device=model_device, dtype=self._cached_model_dtype)
         # persistent=False: derived from model.atomic_numbers, excluded from
         # state_dict but still tracked for device / dtype moves.
         self.register_buffer("_node_emb", node_emb, persistent=False)
         self.model_config = ModelConfig(
-            outputs=frozenset({"energy", "forces", "stress", "hessian"}),
+            # ``atomic_energies`` (per-atom energy = MACE's raw ``node_energy``)
+            # is a normal output; the distributed force path requests it to get
+            # a per-node energy to differentiate, and callers may ask for it too.
+            outputs=frozenset(
+                {"energy", "forces", "stress", "hessian", "atomic_energies"}
+            ),
             active_outputs={"energy", "forces"},
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
@@ -275,6 +623,58 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             "node_embeddings": (hidden_dim,),
             "graph_embeddings": (hidden_dim,),
         }
+
+    def distribution_spec(self, strategy: Any = None) -> Any:
+        """MLIPSpec for MACE under domain decomposition.
+
+        MACE uses the MPNN halo spec: every message-passing layer scatters over
+        edges into ``node_feats`` (halo rows kept in sync), and a final
+        per-graph scatter over node energies produces total energy (halo rows
+        dropped, then all-reduced across ranks). For cueq-converted checkpoints
+        the fused ``conv_tp`` kernel hides that gather/scatter, so the spec
+        installs a mode-dependent conv adapter for the DD scope
+        (``_cueq_conv_unfuse_adapters``): under eager DD it unfuses to the
+        external gather + scatter plain MACE uses (halo handlers fire); under
+        compiled DD it keeps the conv fused for memory parity with single-GPU
+        and relies on the refresh adapter's ``scatter_to_owners`` for halo
+        correctness.
+
+        Memoized on first access. The per-checkpoint additions over the base
+        spec are: the message-passing halo refresh (``neighbor_refresh_adapters``
+        discovers the concrete InteractionBlocks and declares their per-node
+        output halo-corrected under compile; ``NVALCHEMI_MACE_NO_REFRESH=1`` drops
+        it, debug only) and, for cueq, the conv unfuse adapters.
+        """
+        import os  # noqa: PLC0415
+
+        from nvalchemi.distributed.config import StrategyKind  # noqa: PLC0415
+
+        if strategy == StrategyKind.GRAPH_PARTITION:
+            raise NotImplementedError(
+                "MACE supports the halo strategy; "
+                "graph-partition is not implemented for MACE."
+            )
+
+        cached = getattr(self, "_dist_spec_cache", None)
+        if cached is None:
+            from nvalchemi.distributed import neighbor_refresh_adapters  # noqa: PLC0415
+
+            uses_cueq = _mace_uses_cueq(self.model)
+            base = _mace_cueq_spec() if uses_cueq else _mace_scripted_spec()
+            refresh = (
+                ()
+                if os.environ.get("NVALCHEMI_MACE_NO_REFRESH") == "1"
+                else neighbor_refresh_adapters(self.model.interactions)
+            )
+            # cueq conv fusion (CUDA) hides the message gather/scatter in an
+            # opaque kernel that bypasses halo correction. The mode-dependent
+            # adapter unfuses it under eager DD (external-scatter path, joining
+            # plain MACE) and keeps it fused under compiled DD (memory parity
+            # with single-GPU; halo handled by the refresh adapter).
+            halo_conv = _cueq_conv_unfuse_adapters(self.model) if uses_cueq else ()
+            cached = base.with_adapters(*refresh, *halo_conv)
+            self._dist_spec_cache = cached
+        return cached
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -333,11 +733,24 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         the pipeline handles format conversion and cutoff filtering
         before calling this model.
 
-        .. note::
-            This method does **not** call ``super().adapt_input()`` because
-            :class:`~nvalchemi.data.Batch` does not implement ``model_dump()``,
-            which the base implementation requires.  Gradient enabling on
-            ``positions`` is handled manually here instead.
+        Parameters
+        ----------
+        data : AtomicData | Batch
+            The input system; an ``AtomicData`` is promoted to a single-graph
+            ``Batch``.
+        **kwargs
+            Unused; accepted for interface compatibility.
+
+        Returns
+        -------
+        dict[str, Any]
+            MACE inputs: ``positions``, ``node_attrs``, ``batch``, ``ptr``,
+            ``edge_index`` ``[2, E]``, ``shifts`` ``[E, 3]``, ``cell`` ``[B, 3, 3]``.
+
+        Notes
+        -----
+        Does not call ``super().adapt_input()`` (``Batch`` has no ``model_dump``);
+        gradient enabling on ``positions`` is handled here.
         """
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
@@ -350,14 +763,13 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         edge_index = data.neighbor_list.long().T  # [2, E]
         E = edge_index.shape[1]
 
-        # Cast positions to model dtype, then enable gradients on the converted
-        # tensor.  We always clone before enabling grad so that data.positions
-        # is never mutated in-place (which would happen when dtype already
-        # matches and .to() returns the same storage).
+        # Enable grad on positions for force/stress; clone first so we never
+        # mutate a caller leaf in-place, but pass a grad-requiring tensor through
+        # unchanged (it already carries its upstream graph).
         positions = data.positions.to(dtype=dtype)
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
-        if compute_forces or compute_stresses:
+        if (compute_forces or compute_stresses) and not positions.requires_grad:
             positions = positions.clone()
             positions.requires_grad_(True)
 
@@ -383,19 +795,26 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         else:
             cell = cell_raw.to(dtype=dtype, device=device)
 
-        # Pre-compute physical shift vectors [E, 3].
-        # MACE's prepare_graph always reads data["shifts"] (physical Å vectors)
-        # directly; it only recomputes them internally when
-        # compute_displacement=True (stress path).  We must supply "shifts" for
-        # the energy/force-only path.
+        # Physical shifts [E, 3] = neighbor_list_shifts @ cell[graph]; MACE's
+        # energy/force-only path reads data["shifts"] directly. Drop sentinel
+        # edges (endpoint == n_atoms) first — a sentinel sender is out of bounds
+        # and would fault the sender-indexed gathers below.
         # Convention: shifts[e] = neighbor_list_shifts[e] @ cell[graph_of_sender_e]
         # matching get_symmetric_displacement in mace.modules.utils.
+        n_atoms = positions.shape[0]
+        valid = (edge_index[0] < n_atoms) & (edge_index[1] < n_atoms)
+        edge_index = edge_index[:, valid]
+        neighbor_list_shifts = neighbor_list_shifts[valid]
+
         sender = edge_index[0]  # [E] — source node indices
         batch_per_edge = data.batch_idx[sender]
         shifts = torch.einsum("eb,ebc->ec", neighbor_list_shifts, cell[batch_per_edge])
+
+        node_attrs = self._node_attrs(data)
+
         return {
             "positions": positions,
-            "node_attrs": self._node_attrs(data),
+            "node_attrs": node_attrs,
             # MACE requires int64 for graph-topology tensors.
             "batch": data.batch_idx.long(),
             "ptr": data.batch_ptr.long(),
@@ -409,12 +828,24 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     def adapt_output(
         self, raw_output: dict[str, Any], data: AtomicData | Batch
     ) -> ModelOutputs:
-        """Map MACE output keys to nvalchemi standard keys.
+        """Map MACE raw outputs to nvalchemi standard keys.
 
-        MACE uses ``"energy"`` / ``"stress"`` / ``"hessian"``; nvalchemi
-        expects ``"energy"`` / ``"stress"`` / ``"hessian"``.
-        Renaming happens *before* calling ``super()`` so the base auto-mapper
-        sees the canonical key names.
+        Normalizes ``energy`` shape, forwards ``forces`` / ``stress`` / ``hessian``
+        when present, and exposes MACE's ``node_energy`` as ``atomic_energies``,
+        then delegates to the base auto-mapper.
+
+        Parameters
+        ----------
+        raw_output : dict[str, Any]
+            The dict returned by ``MACE.forward``.
+        data : AtomicData | Batch
+            The input system the outputs were computed for.
+
+        Returns
+        -------
+        ModelOutputs
+            The standardized outputs (subset of ``energy``, ``forces``,
+            ``stress``, ``hessian``, ``atomic_energies``).
         """
         energy = raw_output["energy"]
         mapped: dict[str, Any] = {
@@ -426,6 +857,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             mapped["stress"] = raw_output["stress"]
         if raw_output.get("hessian") is not None:
             mapped["hessian"] = raw_output["hessian"]
+        # Per-atom energy = MACE's raw ``node_energy``. The base auto-mapper
+        # keeps it only when ``atomic_energies`` is active, so it is free
+        # otherwise.
+        if raw_output.get("node_energy") is not None:
+            mapped["atomic_energies"] = raw_output["node_energy"]
 
         return super().adapt_output(mapped, data)
 
@@ -434,16 +870,30 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the MACE model and return the output."""
+        """Run the MACE model for the active outputs.
+
+        Pure and distribution-agnostic: computes exactly what
+        ``model_config.active_outputs`` requests. Forces/stress run MACE's
+        internal autograd; an ``atomic_energies``-only request runs an
+        energy-only forward returning per-atom energy.
+
+        Parameters
+        ----------
+        data : AtomicData | Batch
+            The input system (with neighbor data attached).
+        **kwargs
+            Forwarded to :meth:`adapt_input`.
+
+        Returns
+        -------
+        ModelOutputs
+            The standardized outputs for the active set.
+        """
+        active = self.model_config.active_outputs & self.model_config.outputs
+        compute_forces = "forces" in active
+        compute_stresses = "stress" in active
+
         model_inputs = self.adapt_input(data, **kwargs)
-
-        compute_forces = "forces" in (
-            self.model_config.active_outputs & self.model_config.outputs
-        )
-        compute_stresses = "stress" in (
-            self.model_config.active_outputs & self.model_config.outputs
-        )
-
         raw_output = self.model.forward(
             model_inputs,
             compute_force=compute_forces,
@@ -451,6 +901,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # compute_displacement enables the MACE displacement trick required
             # for stress computation via autograd through cell @ neighbor_list_shifts.
             compute_displacement=compute_stresses,
+            # Train mode retains the autograd graph through forces/stresses so
+            # force/stress losses can backprop; eval mode (inference, MD, DD)
+            # keeps the cheaper no-create-graph path.
             training=self.training,
         )
         result = self.adapt_output(raw_output, data)
@@ -465,10 +918,19 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> AtomicData | Batch:
         """Compute node and graph embeddings without forces or stresses.
 
-        Writes ``node_embeddings`` (shape ``[N, hidden_dim]``) and
-        ``graph_embeddings`` (shape ``[B, hidden_dim]``, sum-pooled over atoms)
-        into *data* in-place and returns it.  Does **not** mutate
-        ``model_config``.
+        Parameters
+        ----------
+        data : AtomicData | Batch
+            The input system; an ``AtomicData`` is promoted to a ``Batch``.
+        **kwargs
+            Forwarded to :meth:`adapt_input`.
+
+        Returns
+        -------
+        AtomicData | Batch
+            *data*, with ``node_embeddings`` ``[N, hidden_dim]`` and
+            ``graph_embeddings`` ``[B, hidden_dim]`` (sum-pooled) written in
+            place. ``model_config`` is not mutated.
         """
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
@@ -491,11 +953,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 "Ensure the model is a standard MACE variant."
             )
 
-        # Write node embeddings directly to the atoms group to avoid the
-        # default "system" routing in MultiLevelStorage for unknown keys.
-        # If we wrote via `data.node_embeddings = ...`, it would land in the
-        # system group (batch_size = [N]) and then block the graph_embeddings
-        # write (batch_size = [B]) from going to the same group.
+        # Write to the atoms group directly: a plain attribute set would route to
+        # the system group and block the later per-graph graph_embeddings write.
         atoms_group = data._atoms_group
         if atoms_group is not None:
             atoms_group["node_embeddings"] = node_feats
@@ -589,7 +1048,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         ------
         ImportError
             If ``mace-torch`` is not installed, or if ``enable_cueq=True``
-            and ``cuequivariance`` is not installed.
+            and either ``cuequivariance`` or the ``cuequivariance-ops-torch``
+            CUDA kernels (the ``cu12`` / ``cu13`` dependency groups) are missing.
         ValueError
             If ``enable_cueq=True`` and ``device`` is not a CUDA device.
         """
@@ -613,13 +1073,17 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         # Step 2: cuEq conversion.
         if enable_cueq:
-            try:
-                import cuequivariance  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "cuequivariance is required for enable_cueq=True. "
-                    "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-                )
+            _cueq = "MACEWrapper.from_checkpoint(enable_cueq=True)"
+            OptionalDependency.CUEQUIVARIANCE.is_available() or (
+                OptionalDependency.CUEQUIVARIANCE._raise_error(_cueq)
+            )
+            # ``cuequivariance-torch`` alone is not enough: the fused kernels come
+            # from the CUDA-version-specific ``cuequivariance-ops-torch`` (cu12 /
+            # cu13 groups). Fail fast with the install guidance rather than deep in
+            # the forward when ``torch.ops.cuequivariance.*`` turns out unregistered.
+            OptionalDependency.CUEQUIVARIANCE_OPS.is_available() or (
+                OptionalDependency.CUEQUIVARIANCE_OPS._raise_error(_cueq)
+            )
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             if target_device.type != "cuda":
@@ -642,8 +1106,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         if atomic_energy_overrides is not None:
             _apply_atomic_energies(model, atomic_energy_overrides)
 
-        # Step 3: torch.compile — inference-only after this point.
+        # Step 3: torch.compile the model for single-process inference —
+        # inference-only after this point.
         if compile_model:
+            # Apply the e3nn compile-compat shim before tracing. (It is also
+            # applied idempotently in __init__, but compile runs first here.)
             _patch_e3nn_irrep_len_for_compile()
             model.eval()
             for param in model.parameters():

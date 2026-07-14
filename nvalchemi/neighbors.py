@@ -209,6 +209,21 @@ def compute_neighbors(
     pbc = getattr(batch, "pbc", None)
     cell = getattr(batch, "cell", None)
 
+    # Drop cell + pbc when the system is non-periodic so the nvalchemiops
+    # naive kernel's default ``wrap_positions=True`` doesn't fold
+    # boundary-adjacent atoms through the cell. Symptom: an atom at
+    # slightly-negative coord (e.g. +0.05 Å Gaussian jitter on a
+    # lattice starting at 0) gets wrapped to the far end of the cell,
+    # loses every neighbor that's supposed to be in its first shell.
+    # Only hits the naive code path (< 2000 atoms); the cell-list path
+    # for larger systems handles wrap_positions safely. In distributed
+    # halo mode, rank slices often fall on the wrong side of that
+    # threshold and silently drop pairs. See
+    # ``examples/debug_nl_negative_coord.py``.
+    if pbc is not None and not bool(pbc.any()):
+        pbc = None
+        cell = None
+
     if max_neighbors is None:
         max_neighbors = estimate_max_neighbors(cutoff=cutoff)
         # Non-PBC hard cap: an atom can see at most (N_system - 1)
