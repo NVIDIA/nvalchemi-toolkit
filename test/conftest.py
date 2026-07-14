@@ -39,7 +39,13 @@ def _fairchem_installed() -> bool:
     """``True`` iff ``fairchem.core`` (the UMA backbone) is importable."""
     import importlib.util
 
-    return importlib.util.find_spec("fairchem.core") is not None
+    try:
+        return importlib.util.find_spec("fairchem.core") is not None
+    except ModuleNotFoundError:
+        # ``find_spec`` on a dotted name imports the parent package to read its
+        # ``__path__``; when ``fairchem`` itself is absent (the cu13/mace env
+        # that has no UMA stack) that import raises rather than returning None.
+        return False
 
 
 def pytest_collection_modifyitems(
