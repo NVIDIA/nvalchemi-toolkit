@@ -14,8 +14,89 @@
 # limitations under the License.
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 import torch
+import torch.distributed as dist
+
+
+def _cueq_ops_registered() -> bool:
+    """``True`` iff the cuequivariance fused-tensor-product torch ops are
+    registered. Importing ``cuequivariance``/``cuequivariance_torch`` is not
+    enough — the ``torch.ops.cuequivariance`` namespace is populated only when a
+    compatible build registers its custom ops, and version skews (e.g. 0.10 vs
+    the 0.8-era op names) leave it empty."""
+    try:
+        import cuequivariance_torch  # noqa: F401  (side effect: op registration)
+
+        return hasattr(torch.ops.cuequivariance, "fused_tensor_product")
+    except Exception:
+        return False
+
+
+def _fairchem_installed() -> bool:
+    """``True`` iff ``fairchem.core`` (the UMA backbone) is importable."""
+    import importlib.util
+
+    return importlib.util.find_spec("fairchem.core") is not None
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Auto-skip environment-gated tests so they skip (not fail) where a
+    capability is absent:
+
+    * ``@pytest.mark.multigpu`` — needs >=2 CUDA GPUs (override with
+      ``NVALCHEMI_FORCE_MULTIGPU=1`` to see the underlying error).
+    * ``@pytest.mark.requires_cueq`` — needs the ``cuequivariance`` torch ops
+      *registered* (not merely the package installed).
+    * ``@pytest.mark.requires_uma`` — needs ``fairchem-core`` installed.
+    """
+    import os
+
+    force_multigpu = os.environ.get("NVALCHEMI_FORCE_MULTIGPU") == "1"
+    have_multigpu = torch.cuda.is_available() and torch.cuda.device_count() >= 2
+    skip_multigpu = (
+        None
+        if (force_multigpu or have_multigpu)
+        else pytest.mark.skip(reason="requires >=2 CUDA GPUs (mark: multigpu)")
+    )
+    skip_cueq = (
+        None
+        if _cueq_ops_registered()
+        else pytest.mark.skip(reason="cuequivariance torch ops not registered")
+    )
+    skip_uma = (
+        None
+        if _fairchem_installed()
+        else pytest.mark.skip(reason="fairchem-core not installed")
+    )
+    for item in items:
+        if skip_multigpu is not None and "multigpu" in item.keywords:
+            item.add_marker(skip_multigpu)
+        if skip_cueq is not None and "requires_cueq" in item.keywords:
+            item.add_marker(skip_cueq)
+        if skip_uma is not None and "requires_uma" in item.keywords:
+            item.add_marker(skip_uma)
+
+
+@pytest.fixture(autouse=True)
+def _dist_leak_guard():
+    """Tear down a process group that a test leaves initialized.
+
+    A test that calls ``init_process_group`` in the main process and fails
+    before its own teardown (or a fixture that leaks one) otherwise poisons
+    every later test that checks ``dist.is_initialized()`` — e.g. the
+    pipeline-composition guards and rank-resolution helpers. Only groups this
+    test newly initialized are destroyed; a group already up at test start
+    (an outer-scope fixture) is left for its owner to tear down."""
+    was_initialized = dist.is_available() and dist.is_initialized()
+    yield
+    if dist.is_available() and dist.is_initialized() and not was_initialized:
+        with contextlib.suppress(Exception):
+            dist.destroy_process_group()
 
 
 @pytest.fixture(params=["cpu", "cuda"])

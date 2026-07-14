@@ -12,29 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""End-to-end gate for the graph-parallel forward through ``DistributedModel``.
+"""End-to-end gates for the graph-parallel forward through ``DistributedModel``.
 
-A toy MPNN (:class:`ToyGraphParallelMPNNWrapper`) on ``SPEC_MPNN_GP`` runs two
-ways and must agree:
+Each toy MLIP runs two ways over the same system and must agree on energy +
+owned per-atom forces:
 
 * single-process over all atoms (no DD context — the intent verbs are
   identities);
 * graph-parallel through ``DistributedModel`` over a balanced index partition,
-  where the framework hands each rank its owned rows plus a ``neighbor_list``
-  with global senders / owned-local receivers, all-gathers the node features per
-  layer, and all-reduces the owned per-graph energy.
+  where the framework hands each rank its owned rows plus a ``neighbor_list`` /
+  ``neighbor_matrix`` (global senders, owned-local receivers), all-gathers node
+  features per layer, and all-reduces the owned per-graph energy.
 
-Exercises the whole seam: ``GraphParallelPolicy`` topology, ``ShardedBatch``
-contiguous-block partition, owned-target edge prep, the per-layer replicate
-collective and its reduce-scatter adjoint (forces), and sharded output
-consolidation. Energy and per-atom forces must match the single-process
-reference.
+Three toys pin three distinct graph-parallel branches (all gloo / CPU):
+
+* ``mpnn`` — iterated message passing on the COO ``neighbor_list``
+  (``_graph_partition_run_forward``, per-layer node all-gather + reduce-scatter
+  adjoint).
+* ``dense`` — dense ``[n, K]`` ``neighbor_matrix`` (``_graph_parallel_owned_nbmat``
+  + the ``NeighborListFormat.MATRIX`` branch); the machinery PME real-space /
+  AIMNet2 ride.
+* ``dense_full`` — ``gp_replicate_geometry`` full-position path
+  (``_graph_parallel_dense_full_autograd``, owned-aware ``node_energy_key``
+  reduction + autograd over the full-position leaf); the path PME real-space rides.
 """
 
 from __future__ import annotations
 
 import os
 
+import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -49,6 +56,9 @@ from nvalchemi.neighbors import compute_neighbors
 
 _N_ATOMS = 24
 _CUTOFF = 2.5
+
+# Per-toy rendezvous port so concurrently-parametrized spawns do not collide.
+_PORTS = {"mpnn": "29903", "dense": "29904", "dense_full": "29905"}
 
 
 def _full_batch() -> Batch:
@@ -87,17 +97,38 @@ def _owned_counts(n: int, world: int) -> list[int]:
     return counts
 
 
-def _worker(rank: int, world: int) -> None:
+def _build_toy(kind: str):
+    """Instantiate a toy wrapper and resolve the spec its GP branch declares."""
+    if kind == "mpnn":
+        from _toy_graph_parallel_mpnn import (
+            ToyGraphParallelMPNNWrapper,  # noqa: PLC0415
+        )
+
+        return ToyGraphParallelMPNNWrapper().double(), SPEC_MPNN_GP
+    if kind == "dense":
+        from _toy_graph_parallel_dense import (  # noqa: PLC0415
+            ToyGraphParallelDenseWrapper,
+        )
+
+        return ToyGraphParallelDenseWrapper().double(), SPEC_MPNN_GP
+    from _toy_graph_parallel_dense_full import (  # noqa: PLC0415
+        ToyGraphParallelDenseFullWrapper,
+    )
+
+    model = ToyGraphParallelDenseFullWrapper().double()
+    return model, model.distribution_spec
+
+
+def _worker(rank: int, world: int, kind: str, port: str) -> None:
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
-    os.environ.setdefault("MASTER_PORT", "29903")
+    os.environ.setdefault("MASTER_PORT", port)
     dist.init_process_group("gloo", rank=rank, world_size=world)
-    from _toy_graph_parallel_mpnn import ToyGraphParallelMPNNWrapper  # noqa: PLC0415
-    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.device_mesh import init_device_mesh  # noqa: PLC0415
 
     mesh = init_device_mesh("cpu", (world,))
 
     torch.manual_seed(0)
-    model = ToyGraphParallelMPNNWrapper().double()
+    model, spec = _build_toy(kind)
 
     e_ref, f_ref = _reference(model)
 
@@ -106,7 +137,7 @@ def _worker(rank: int, world: int) -> None:
     sharded = ShardedBatch.from_batch(
         full, mesh=mesh, config=cfg, src=0, partition_mode="contiguous_block"
     )
-    dist_model = DistributedModel(model, cfg, spec=SPEC_MPNN_GP)
+    dist_model = DistributedModel(model, cfg, spec=spec)
     out = dist_model(sharded)
 
     counts = _owned_counts(_N_ATOMS, world)
@@ -118,19 +149,18 @@ def _worker(rank: int, world: int) -> None:
         out["forces"], f_ref[offset : offset + n_owned], rtol=1e-8, atol=1e-8
     )
     if rank == 0:
-        print(f"[gp-model w={world}] energy + owned forces match single-process")
+        print(f"[gp-{kind} w={world}] energy + owned forces match single-process")
     dist.barrier()
     dist.destroy_process_group()
 
 
-def test_graph_parallel_model_2ranks() -> None:
-    mp.spawn(_worker, args=(2,), nprocs=2)
-
-
-def test_graph_parallel_model_3ranks() -> None:
-    mp.spawn(_worker, args=(3,), nprocs=3)
+@pytest.mark.parametrize("kind", ["mpnn", "dense", "dense_full"])
+@pytest.mark.parametrize("world", [2, 3])
+def test_graph_parallel_model(kind: str, world: int) -> None:
+    mp.spawn(_worker, args=(world, kind, _PORTS[kind]), nprocs=world)
 
 
 if __name__ == "__main__":
-    for w in (2, 3):
-        mp.spawn(_worker, args=(w,), nprocs=w)
+    for _kind in ("mpnn", "dense", "dense_full"):
+        for _w in (2, 3):
+            mp.spawn(_worker, args=(_w, _kind, _PORTS[_kind]), nprocs=_w)

@@ -24,36 +24,39 @@ import pytest
 import torch.distributed as dist
 
 # ----------------------------------------------------------------------
-# Session-scoped 1-rank gloo init for tests that construct a ShardTensor
+# Function-scoped 1-rank gloo init for tests that construct a ShardTensor
 # without an explicit dist setup.
 #
 # ShardTensor construction requires a real DeviceMesh, which in turn
 # requires a process group. Tests that wrap plain tensors for dispatch
 # unit-testing (test_halo_tensor.py, test_registry_and_contexts.py,
 # test_compile_smoke.py, test_escape_hatches.py) get a default 1-rank
-# gloo group via this session-scoped fixture.
+# gloo group via this fixture.
 #
 # mp.spawn-based tests (test_distributed_all_reduce.py,
 # test_dispatch_trace_gloo.py, etc.) fork their own workers that set
 # MASTER_ADDR/MASTER_PORT and call init_process_group independently —
-# those workers don't inherit this session-scoped state, so they don't
-# collide with our 1-rank default.
+# those workers don't inherit this state, so they don't collide with
+# our 1-rank default.
 # ----------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def _session_gloo_pg():
     """Opt-in 1-rank gloo process group + default DeviceMesh for tests
     that construct :class:`ShardTensor` instances without an explicit
     distributed setup.
 
-    Not autouse: empirically the session-scoped autouse caused
-    interference with ``mp.spawn``-based tests under
-    ``test_validate_cuda.py`` (the parent's gloo group + spawned
-    NCCL workers conflict somewhere in PyTorch's distributed state
-    even when env vars are kept clean via ``init_method``). Tests
-    that need the default mesh pull this fixture by name; tests that
-    do their own dist setup (mp.spawn / torchrun harnesses) ignore it.
+    Function-scoped (not session-scoped): a session-scoped group stays
+    initialized for the rest of the run once any test pulls it, which
+    leaks ``dist.is_initialized()`` into unrelated later tests (e.g. the
+    pipeline-composition guards under ``test/dynamics``). Per-test
+    init/teardown keeps each test isolated. Not autouse: empirically an
+    autouse group interferes with ``mp.spawn``-based tests under
+    ``test_validate_cuda.py`` (the parent's gloo group + spawned NCCL
+    workers conflict in PyTorch's distributed state). Tests that need the
+    default mesh pull this fixture by name; tests that do their own dist
+    setup (mp.spawn / torchrun harnesses) ignore it.
 
     Uses ``init_method`` directly rather than ``MASTER_ADDR`` /
     ``MASTER_PORT`` env vars — env-var-based init pollutes the

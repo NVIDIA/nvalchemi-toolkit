@@ -103,10 +103,10 @@ class TestInit:
 
     def test_lazy_components_start_none(self) -> None:
         """``partition()`` is what initializes the per-step machinery —
-        at construction the partitioner / sharded batch / dist_model
+        at construction the strategy / sharded batch / dist_model
         slots are ``None``."""
         dp, _ = _make_dp()
-        assert dp._partitioner is None
+        assert dp._strategy is None
         assert dp._sharded_batch is None
         assert dp._dist_model is None
 

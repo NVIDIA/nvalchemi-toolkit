@@ -50,6 +50,7 @@ from nvalchemi.distributed._core.particle_halo import (
     particle_halo_padding,
 )
 from nvalchemi.distributed._core.per_system import per_system_reduce
+from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
 from nvalchemi.distributed.config import DomainConfig
 from nvalchemi.distributed.helpers import (
     refresh_neighbors,
@@ -139,12 +140,15 @@ def test_halo_properties_derive_from_meta() -> None:
 def test_sharded_properties_derive_from_gather_meta() -> None:
     gm = MagicMock()
     gm.n_owned = 4
+    gm.n_global = 12
     ctx = DistributedContext(gather_meta=gm, mesh=None)
     assert ctx.is_sharded is True
     assert ctx.is_halo is False
     assert ctx.is_distributed is True
     assert ctx.n_owned == 4
-    assert ctx.n_padded is None
+    # Node-replicate holds the full node set locally, so the padded view is
+    # the global count.
+    assert ctx.n_padded == 12
 
 
 def test_sentinel_has_no_counts() -> None:
@@ -292,7 +296,9 @@ def _test_refresh_neighbors_matches_inline(rank: int, world_size: int) -> None:
     feat_dim = 3
     gen = torch.Generator().manual_seed(10 + rank)
 
-    ctx = DistributedContext(mesh=_MockMesh(rank, world_size), halo_config=cfg)
+    ctx = DistributedContext(
+        mesh=_MockMesh(rank, world_size), halo_config=cfg, policy=HaloStoragePolicy()
+    )
     ctx.halo_meta = meta
 
     # (a) x exactly n_padded (no caps padding).
@@ -332,7 +338,9 @@ def _test_scatter_to_owners_matches_inline(rank: int, world_size: int) -> None:
     feat_dim = 2
     gen = torch.Generator().manual_seed(20 + rank)
 
-    ctx = DistributedContext(mesh=_MockMesh(rank, world_size), halo_config=cfg)
+    ctx = DistributedContext(
+        mesh=_MockMesh(rank, world_size), halo_config=cfg, policy=HaloStoragePolicy()
+    )
     ctx.halo_meta = meta
 
     out = torch.randn((n_padded, feat_dim), dtype=torch.float64, generator=gen)
@@ -357,7 +365,9 @@ def _test_system_sum_owned_matches_global(rank: int, world_size: int) -> None:
     feat_dim = 2
     gen = torch.Generator().manual_seed(30 + rank)
 
-    ctx = DistributedContext(mesh=_MockMesh(rank, world_size), halo_config=cfg)
+    ctx = DistributedContext(
+        mesh=_MockMesh(rank, world_size), halo_config=cfg, policy=HaloStoragePolicy()
+    )
     ctx.halo_meta = meta
 
     # Per-node values over the padded block; only owned rows must count.
@@ -404,7 +414,9 @@ def _test_system_sum_local_is_per_rank_partial(rank: int, world_size: int) -> No
     feat_dim = 2
     gen = torch.Generator().manual_seed(40 + rank)
 
-    ctx = DistributedContext(mesh=_MockMesh(rank, world_size), halo_config=cfg)
+    ctx = DistributedContext(
+        mesh=_MockMesh(rank, world_size), halo_config=cfg, policy=HaloStoragePolicy()
+    )
     ctx.halo_meta = meta
 
     vals = torch.randn((n_padded, feat_dim), dtype=torch.float64, generator=gen)

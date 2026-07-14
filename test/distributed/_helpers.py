@@ -112,24 +112,31 @@ def make_gloo_sharded_batch(
     pbc: torch.Tensor,
     sizes: list[int],
     n_global: int,
+    partitioner: Any = None,
 ):
-    """Build a :class:`ShardedBatch` backed by :class:`_LocalShardTensor`.
+    """Build a sharded batch backed by :class:`_LocalShardTensor`.
 
     Suits gloo-harness tests that want to exercise the
     ``DistributedModel(sharded)`` contract without depending on real
-    ``physicsnemo.ShardTensor`` CUDA paths.
+    ``physicsnemo.ShardTensor`` CUDA paths. When *partitioner* is given, a
+    :class:`HaloShardState` is built (the halo storage flow, which carries a
+    partitioner and a lazily-populated ``padded_batch``); otherwise a plain
+    :class:`ShardedBatch` (the contiguous-block / graph-parallel flow).
     """
-    from nvalchemi.distributed.sharded_batch import ShardedBatch
+    from nvalchemi.distributed.sharded_batch import HaloShardState, ShardedBatch
 
     atom_fields = {
         "positions": _LocalShardTensor(local_positions, sizes),
         "atomic_numbers": _LocalShardTensor(local_numbers, sizes),
         "atomic_masses": _LocalShardTensor(local_masses, sizes),
     }
-    return ShardedBatch(
-        mesh=mesh,
-        atom_fields=atom_fields,
-        cell=cell,
-        pbc=pbc,
-        n_global=n_global,
-    )
+    common = {
+        "mesh": mesh,
+        "atom_fields": atom_fields,
+        "cell": cell,
+        "pbc": pbc,
+        "n_global": n_global,
+    }
+    if partitioner is not None:
+        return HaloShardState(partitioner=partitioner, **common)
+    return ShardedBatch(**common)

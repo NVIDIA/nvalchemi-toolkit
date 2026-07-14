@@ -44,12 +44,12 @@ Run with::
 from __future__ import annotations
 
 import os
-from typing import Any
 
 import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+from _dd_harness import nccl_worker as _worker
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed.config import DomainConfig
@@ -63,24 +63,6 @@ _skip = pytest.mark.skipif(
 
 # D3(BJ) parameters for PBE (Grimme 2010); a2 in Bohr.
 _A1, _A2, _S8 = 0.4289, 4.4407, 0.7875
-
-
-def _init_pg(rank: int, world_size: int, port: str) -> None:
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = port
-    os.environ["RANK"] = str(rank)
-    os.environ["WORLD_SIZE"] = str(world_size)
-    os.environ["LOCAL_RANK"] = str(rank)
-    torch.cuda.set_device(rank)
-    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-
-
-def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
-    _init_pg(rank, world_size, port)
-    try:
-        fn(rank, world_size, *args)
-    finally:
-        dist.destroy_process_group()
 
 
 def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):

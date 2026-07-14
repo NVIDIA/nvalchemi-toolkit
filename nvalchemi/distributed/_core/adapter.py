@@ -300,8 +300,11 @@ class OpAdapter:
             ot.setdefault(_p, SliceOutputsOwned())
         # Accept the op PACKET (``torch.ops.ns.name``) and resolve ``.default``
         # ourselves so callers never type ``.default``. An explicit overload
-        # (``...name.default``) is used as-is.
-        if type(op).__name__ == "OpOverloadPacket":
+        # (``...name.default``) is used as-is. A ``"<ns>::<name>"`` string is a
+        # lazily-resolved op reference — the live op is looked up at
+        # :meth:`install` (runtime), so a spec that names a kernel from an
+        # optional extension can be *declared* without that extension present.
+        if not isinstance(op, str) and type(op).__name__ == "OpOverloadPacket":
             op = op.default
         object.__setattr__(self, "op", op)
         object.__setattr__(self, "arg_transforms", at)
@@ -368,8 +371,15 @@ class OpAdapter:
 
     # -- Lifecycle --
 
+    def _live_op(self) -> Any:
+        """Resolve the op to a live handle. A ``"<ns>::<name>"`` string is
+        looked up now (:func:`_resolve_op`); a live op is returned as-is."""
+        return _resolve_op(self.op) if isinstance(self.op, str) else self.op
+
     def _target_str(self) -> str:
         op = self.op
+        if isinstance(op, str):
+            return op
         schema = getattr(op, "_schema", None)
         if schema is not None and getattr(schema, "name", None):
             return schema.name
@@ -378,15 +388,18 @@ class OpAdapter:
     def install(self) -> dict[str, Any]:
         """Register a ShardTensor-aware dispatch handler on the op (and
         its overload packet, if any). Returns a memento that
-        :meth:`restore` consumes to clear the registration.
+        :meth:`restore` consumes to clear the registration. A lazily-named
+        op is resolved to its live handle here (raises if the declaring
+        module isn't imported).
         """
         # See ``escape_hatches.wrap_custom_op`` for full semantics.
         from nvalchemi.distributed._core.escape_hatches import (
             wrap_custom_op,  # noqa: PLC0415
         )
 
+        op = self._live_op()
         wrap_custom_op(
-            self.op,
+            op,
             gather_inputs=self.gather_inputs,
             scatter_outputs=self.scatter_outputs,
             owned_slice_inputs=self.owned_slice_inputs,
@@ -395,8 +408,8 @@ class OpAdapter:
             slice_outputs_owned=self.slice_outputs_owned,
         )
         # Memento captures the op + packet for clear_handlers.
-        packet = getattr(self.op, "_overloadpacket", None)
-        return {"op": self.op, "packet": packet}
+        packet = getattr(op, "_overloadpacket", None)
+        return {"op": op, "packet": packet}
 
     def restore(self, memento: dict[str, Any]) -> None:
         """Clear the handler registered by :meth:`install`."""
@@ -461,7 +474,10 @@ class OpAdapter:
 def _op_qualname(op: Any) -> str:
     """Return the schema-qualified ``"<namespace>::<name>"`` string for
     a torch op overload (or overload-packet). Falls back to ``str(op)``
-    when no schema is exposed."""
+    when no schema is exposed. A qualified-name string passes through
+    unchanged (an :class:`OpAdapter` may hold a lazily-resolved op name)."""
+    if isinstance(op, str):
+        return op
     schema = getattr(op, "_schema", None)
     if schema is not None and getattr(schema, "name", None):
         return schema.name

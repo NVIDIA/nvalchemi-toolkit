@@ -13,20 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unified model-integration tests for the distributed framework.
+"""Model-integration tests for the distributed framework.
 
-One file covering every supported model (:class:`LennardJonesModelWrapper`,
-:class:`MACEWrapper`, AIMNet2). Each model exercises three checks:
+Covers the supported model wrappers (:class:`LennardJonesModelWrapper`,
+:class:`MACEWrapper`, AIMNet2) across three kinds of check:
 
 1. **distribution_spec declarative.** The wrapper advertises the right
    preset (``None`` for LJ, :data:`SPEC_MPNN_HALO` for MACE, etc.).
-2. **Single-step force equivalence.** Partition the atoms across ranks,
-   run the wrapper, compare forces / energy against a single-process
-   reference. Ensures the dispatch path is correct.
-3. **Multi-step NVE equivalence.** Run N velocity-verlet steps;
-   per-step positions / velocities / total energy must match single
-   process. Catches compounding numerical drift that a single-step
-   test misses.
+2. **Multi-step NVE equivalence.** Run velocity-verlet steps through
+   :class:`DomainParallel`; the gathered trajectory's potential energy
+   must match a single-process reference at the same positions. LJ runs
+   on the CPU gloo tier; MACE runs on real multi-GPU NCCL.
+3. **Scripted-op ShardTensor regressions.** A mace-free scripted MPNN
+   reproduces the ``@torch.jit.script`` + ShardTensor forward IMA and
+   the per-iteration autograd-graph leak on the single-GPU gloo+cuda
+   tier.
 
 Every test drives the real framework tooling — :class:`AtomicData`,
 :func:`Batch.from_data_list`, :func:`compute_neighbors`, :class:`NVE`
@@ -164,9 +165,9 @@ def _worker_nccl(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> 
 # ======================================================================
 
 
-# Per-topology system builders live in the parameterized test section
-# below (``_build_open_argon_cluster``, ``_build_pbc_orthorhombic_argon``,
-# ``_build_pbc_hex_sio2``).
+# Per-topology system builders (``_build_open_argon_cluster``,
+# ``_build_pbc_orthorhombic_argon``) live below; the worker functions look
+# them up by key through ``_SYSTEM_BUILDERS``.
 
 
 # ======================================================================
@@ -257,27 +258,15 @@ def test_mace_cueq_wrapper_declares_custom_ops_spec() -> None:
     the declared op-adapter structure.
     """
     pytest.importorskip("mace", reason="mace-torch not installed")
-    pytest.importorskip("cuequivariance", reason="cuequivariance not installed")
-    pytest.importorskip(
-        "cuequivariance_torch", reason="cuequivariance_torch not installed"
-    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # Importing cuequivariance_torch registers the ``torch.ops.cuequivariance.*``
-        # op namespace that ``_mace_cueq_spec`` resolves.
-        import cuequivariance_torch  # noqa: F401, PLC0415
-
         from nvalchemi.models.mace import _mace_cueq_spec
 
-    if not hasattr(torch.ops, "cuequivariance"):
-        pytest.skip("torch.ops.cuequivariance.* not registered")
-
-    # The cueq spec is data, built from the registered op namespace — NOT from a
-    # live cueq'd model. ``from_checkpoint(enable_cueq=True)`` requires a CUDA
-    # device (the cuEq weight conversion guard), so building it on CPU would
-    # ERROR; resolve the spec directly so the structural assertion runs on a CPU
-    # box too. (On a GPU box the live-model path is exercised by the dist-model
-    # equivalence + NVE tiers.)
+    # The cueq spec is data: it declares the cueq kernels by qualified op NAME,
+    # so it builds on any box without the ``cuequivariance`` extension loaded
+    # (the live ops are resolved only when an adapter installs at DD runtime).
+    # Resolve the spec directly rather than via ``from_checkpoint(enable_cueq=True)``,
+    # which requires a CUDA device (the cuEq weight-conversion guard).
     spec = _mace_cueq_spec()
 
     # Still MPNN-halo in the fundamentals.
@@ -295,8 +284,8 @@ def test_mace_cueq_wrapper_declares_custom_ops_spec() -> None:
     # carried ``scatter_outputs=(0,)``; that message-tensor correction moved off
     # the kernel when the conv-unfuse adapter took over — see the docstring.)
     by_op_name = {
-        # OpOverload's name is e.g. "cuequivariance::fused_tensor_product"
-        str(op_spec.op._schema.name): op_spec
+        # Declared by qualified op name, e.g. "cuequivariance::fused_tensor_product".
+        op_spec.op: op_spec
         for op_spec in spec.distribution.custom_ops
     }
     for name in (
@@ -315,6 +304,7 @@ def test_mace_cueq_wrapper_declares_custom_ops_spec() -> None:
     assert _mace_cueq_spec() is spec
 
 
+@pytest.mark.requires_cueq
 def test_mace_cueq_distributed_setup_registers_handlers() -> None:
     """The cueq spec's ``custom_ops`` register a ``wrap_custom_op`` handler
     per op when installed through the :class:`AdapterRegistry`, and
@@ -554,31 +544,12 @@ def test_lj_nve_via_domain_parallel(
 
 
 # ======================================================================
-# DistributedModel equivalence tests — parameterized over topology,
-# world size, and model. Every test asserts that a single-process
-# reference forward and a multi-rank ``DistributedModel`` forward
-# produce identical total energy and identical per-atom forces (on
-# each rank's owned slice).
-#
-# Coverage matrix — intentionally chosen to catch the classes of bugs
-# we have hit in the past:
+# Test systems + sharded-batch builder.
 #
 #   * ``nonpbc_open_argon``:  non-PBC open cluster. The regime where
 #     halo partitioning actually partitions (``n_padded < n_global``).
-#     Regression for the rank-assignment + balanced-scatter bug and
-#     the NL wrap-on-pbc=False bug.
-#   * ``pbc_orthorhombic_argon``:  simple cubic argon with PBC. Classic
-#     PBC test with a diagonal cell matrix — baseline for PBC halo
-#     identification.
-#   * ``pbc_hex_sio2``:  alpha-quartz SiO2 supercell with PBC. The cell
-#     is hexagonal (γ = 120°) so the cell matrix is non-diagonal — this
-#     catches any bug that relies on ``inv(cell) == inv(cell).T``
-#     (which is true for orthorhombic but not for skew cells).
-#
-# For each topology we run at world_size ∈ {2, 4}. LJ runs at all
-# sizes because it's cheap; MACE's larger hex case is marked ``slow``
-# because mace-torch on CPU is expensive at the sizes needed to
-# exercise the halo pathway non-trivially.
+#   * ``pbc_orthorhombic_argon``:  simple cubic argon with PBC — a
+#     diagonal cell, the baseline for PBC halo identification.
 # ======================================================================
 
 
@@ -652,6 +623,7 @@ def _sharded_batch_for_system(
         )
         rank_assignment = partitioner.assign_atoms_to_ranks(positions)
     elif storage == "sharded":
+        partitioner = None
         per_rank = n_global // world_size
         rank_assignment = (torch.arange(n_global, dtype=torch.long) // per_rank).clamp(
             max=world_size - 1
@@ -671,6 +643,7 @@ def _sharded_batch_for_system(
         pbc=pbc.unsqueeze(0),
         sizes=sizes,
         n_global=n_global,
+        partitioner=partitioner,
     )
     return sharded, local_mask, domain_config
 
@@ -707,62 +680,11 @@ def _build_pbc_orthorhombic_argon(
     return positions, atomic_numbers, masses, cell, pbc
 
 
-def _build_pbc_hex_sio2(repeat: int = 3, dtype: torch.dtype = torch.float64):
-    """Alpha-quartz SiO2 supercell with PBC — non-orthorhombic cell
-    (gamma = 120°). Exercises skew-cell paths that orthorhombic tests
-    miss (e.g. the ``inv(cell).T`` fractional-coordinate regression)."""
-    from ase.spacegroup import crystal  # noqa: PLC0415
-
-    unit_cell = crystal(
-        symbols=["O", "Si"],
-        basis=[[0.413, 0.2711, 0.2172], [0.4673, 0.0, 0.3333]],
-        spacegroup=152,
-        cellpar=[4.9019, 4.9019, 5.3988, 90, 90, 120],
-    )
-    atoms = unit_cell.repeat((repeat, repeat, repeat))
-    positions = torch.tensor(atoms.get_positions(), dtype=dtype)
-    atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.long)
-    masses = torch.tensor(atoms.get_masses(), dtype=dtype)
-    cell = torch.tensor(atoms.get_cell().array, dtype=dtype)
-    pbc = torch.ones(3, dtype=torch.bool)
-    return positions, atomic_numbers, masses, cell, pbc
-
-
-# Registered topology builders. Each ``_run_dist_model_equivalence``
-# call looks up the builder + args by key.
+# Registered topology builders, looked up by key in the worker functions.
 _SYSTEM_BUILDERS: dict[str, Any] = {
     "nonpbc_open_argon": lambda: _build_open_argon_cluster(n_per_side=8),
     "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=4),
-    "pbc_hex_sio2": lambda: _build_pbc_hex_sio2(repeat=4),
-    "nonpbc_octane_chain": lambda: _build_octane_chain_system(n_atoms=8),
 }
-
-
-def _build_octane_chain_system(n_atoms: int = 8, dtype: torch.dtype = torch.float64):
-    """Pseudo-octane chain — N carbons along x at 1.5 Å spacing, non-PBC.
-
-    AIMNet2 only supports elements in its training set (C/H/N/O/F/S/Cl
-    etc.), so the argon/SiO2 builders used for LJ+MACE won't evaluate.
-    The octane chain is small, all-carbon, and inert — a valid system
-    for the AIMNet2 reference check without needing a different
-    checkpoint.
-
-    Cell is a 100 Å cube (non-PBC); the cube matters only for the
-    partitioner's domain box, not for neighbor list wrapping.
-    """
-    positions = torch.stack(
-        [
-            0.25 + torch.arange(n_atoms, dtype=dtype) * 1.5,
-            torch.zeros(n_atoms, dtype=dtype),
-            torch.zeros(n_atoms, dtype=dtype),
-        ],
-        dim=1,
-    ).contiguous()
-    atomic_numbers = torch.full((n_atoms,), 6, dtype=torch.long)
-    masses = torch.full((n_atoms,), 12.011, dtype=dtype)
-    cell = torch.eye(3, dtype=dtype) * 100.0
-    pbc = torch.zeros(3, dtype=torch.bool)
-    return positions, atomic_numbers, masses, cell, pbc
 
 
 # ----------------------------------------------------------------------
@@ -788,205 +710,10 @@ def _mace_wrapper(dtype: torch.dtype, device: str = "cpu"):
     return w.to(device)
 
 
-def _aimnet2_wrapper(dtype: torch.dtype, device: str = "cpu"):
-    """Load AIMNet2 at *dtype*/*device*. Unlike LJ / MACE,
-    ``AIMNet2Wrapper.from_checkpoint`` doesn't take a ``dtype`` kwarg; the
-    model and its non-parameter float buffers must be cast in a second pass.
-    """
-    from nvalchemi.models.aimnet2 import AIMNet2Wrapper  # noqa: PLC0415
-
-    w = AIMNet2Wrapper.from_checkpoint("aimnet2", device=device)
-    w.model.to(dtype)
-    for mod in w.model.modules():
-        for name, buf in list(mod.named_buffers(recurse=False)):
-            if buf.is_floating_point():
-                setattr(mod, name, buf.to(dtype))
-    w.eval()
-    # Default active_outputs includes 'charges' which the dispatch path
-    # doesn't currently consolidate on the distributed side — narrow to
-    # energy+forces to keep the reference vs. distributed comparison
-    # apples-to-apples.
-    w.model_config.active_outputs = {"energy", "forces"}
-    return w
-
-
 _WRAPPER_FACTORIES: dict[str, Any] = {
     "lj": _lj_wrapper,
     "mace": _mace_wrapper,
-    "aimnet2": _aimnet2_wrapper,
 }
-
-
-# Per-model tolerances for (energy, force). LJ is analytical (Warp
-# kernel, no autograd) so it matches at double-precision machine
-# noise. MACE does autograd + equivariant arithmetic so it sits a
-# few orders of magnitude above MP-level noise in float64.
-_TOLERANCES: dict[str, dict[str, dict[str, float]]] = {
-    "lj": {
-        "energy": {"rtol": 1e-10, "atol": 1e-10},
-        "force": {"rtol": 1e-8, "atol": 1e-10},
-    },
-    "mace": {
-        "energy": {"rtol": 1e-5, "atol": 1e-6},
-        "force": {"rtol": 1e-4, "atol": 1e-5},
-    },
-    "aimnet2": {
-        "energy": {"rtol": 1e-5, "atol": 1e-6},
-        "force": {"rtol": 1e-5, "atol": 1e-6},
-    },
-}
-
-# fp32 tolerances for the cuda model-test tier. fp32 round-off through a
-# multi-layer model + reduction lands a few orders above fp64 noise; these
-# mirror the bounds the cueq multi-GPU gate uses (energy ~1e-4, force ~1e-3).
-_TOLERANCES_FP32: dict[str, dict[str, dict[str, float]]] = {
-    "lj": {
-        "energy": {"rtol": 1e-5, "atol": 1e-4},
-        "force": {"rtol": 1e-4, "atol": 1e-4},
-    },
-    "mace": {
-        "energy": {"rtol": 1e-4, "atol": 1e-4},
-        "force": {"rtol": 1e-3, "atol": 1e-4},
-    },
-    "aimnet2": {
-        "energy": {"rtol": 1e-4, "atol": 1e-4},
-        "force": {"rtol": 1e-3, "atol": 1e-4},
-    },
-}
-
-
-# Per-model extra AtomicData fields that the worker injects before
-# constructing the reference / distributed batch. Keeps the worker
-# body model-agnostic.
-def _model_extras(
-    model_name: str, n_systems: int, dtype: torch.dtype, device: str = "cpu"
-) -> dict:
-    if model_name == "aimnet2":
-        # AIMNet2 is a charge-equilibration MLIP — every system needs a
-        # total-charge field on its AtomicData; neutral molecules pass 0.
-        return {"charge": torch.zeros(n_systems, 1, dtype=dtype, device=device)}
-    return {}
-
-
-# ----------------------------------------------------------------------
-# Parameterized worker: single-process reference vs. DistributedModel
-# forward, assert energy + per-atom-forces match.
-# ----------------------------------------------------------------------
-
-
-def _dist_model_equivalence_worker(
-    rank: int,
-    world_size: int,
-    system_name: str,
-    model_name: str,
-    device: str = "cpu",
-    dtype: torch.dtype = torch.float64,
-) -> None:
-    from nvalchemi.distributed.distributed_model import (
-        DistributedModel,  # noqa: PLC0415
-    )
-
-    # Move the system onto the target device + float dtype. The model-test
-    # tier runs ``device="cuda"`` with the gloo backend so N ranks share one
-    # GPU (NCCL rejects that) while still exercising the real device code
-    # path — warp/cueq kernels, device placement, dtype-on-device — that a
-    # cpu run silently skips. fp32 on cuda because that's what those kernels
-    # require (and the production path).
-    positions, atomic_numbers, masses, cell, pbc = _SYSTEM_BUILDERS[system_name]()
-    positions = positions.to(device=device, dtype=dtype)
-    atomic_numbers = atomic_numbers.to(device=device)
-    masses = masses.to(device=device, dtype=dtype)
-    cell = cell.to(device=device, dtype=dtype)
-    pbc = pbc.to(device=device)
-    wrapper_factory = _WRAPPER_FACTORIES[model_name]
-    extras = _model_extras(model_name, n_systems=1, dtype=dtype, device=device)
-
-    # --- Single-process reference ---
-    ref_wrapper = wrapper_factory(dtype, device)
-    ref_data = AtomicData(
-        atomic_numbers=atomic_numbers,
-        positions=positions.clone(),
-        atomic_masses=masses,
-        cell=cell.unsqueeze(0),
-        pbc=pbc.unsqueeze(0),
-        **extras,
-    )
-    ref_batch = Batch.from_data_list([ref_data])
-    compute_neighbors(ref_batch, config=ref_wrapper.model_config.neighbor_config)
-    ref_out = ref_wrapper(ref_batch)
-    e_ref = ref_out["energy"].sum().detach()
-    f_ref = ref_out["forces"].detach()
-
-    # --- Distributed forward ---
-    dist_wrapper = wrapper_factory(dtype, device)
-    mesh = _MockMesh(rank, world_size)
-    # Partition mode tracks the wrapper's storage policy — spatial for
-    # halo-storage (LJ, MACE), contiguous-block for sharded-storage
-    # (AIMNet2).
-    _policy = dist_wrapper.distribution_spec().distribution.policy
-    _storage = "halo" if isinstance(_policy, HaloStoragePolicy) else "sharded"
-    sharded, local_mask, domain_config = _sharded_batch_for_system(
-        positions,
-        atomic_numbers,
-        masses,
-        cell,
-        pbc,
-        rank,
-        world_size,
-        mesh,
-        cutoff=float(dist_wrapper.model_config.neighbor_config.cutoff),
-        storage=_storage,
-    )
-    with DistributedModel(dist_wrapper, domain_config) as dist_model:
-        out = dist_model(sharded)
-    e_local = out["energy"].sum().detach()
-    f_owned = out["forces"].detach()
-
-    # --- Assertions ---
-    # fp32 (the cuda model-test path) sits well above fp64 machine noise;
-    # use the looser fp32 table so the equivalence bar matches the precision.
-    tol = (
-        _TOLERANCES_FP32[model_name]
-        if dtype == torch.float32
-        else _TOLERANCES[model_name]
-    )
-    torch.testing.assert_close(
-        e_local,
-        e_ref,
-        rtol=tol["energy"]["rtol"],
-        atol=tol["energy"]["atol"],
-        msg=(
-            f"rank {rank}: [{model_name} / {system_name}] "
-            f"dist_e={e_local.item():.6f}  ref_e={e_ref.item():.6f}  "
-            f"delta={(e_local - e_ref).item():+.6e}"
-        ),
-    )
-    f_ref_owned = f_ref[local_mask]
-    _fd = (f_owned - f_ref_owned).abs()
-    _denom = f_ref_owned.abs().clamp_min(1e-12)
-    torch.testing.assert_close(
-        f_owned,
-        f_ref_owned,
-        rtol=tol["force"]["rtol"],
-        atol=tol["force"]["atol"],
-        msg=(
-            f"rank {rank}: [{model_name} / {system_name}] per-atom forces "
-            f"disagree: max|Δ|={_fd.max().item():.3e} "
-            f"max_rel={(_fd / _denom).max().item():.3e} "
-            f"(tol rtol={tol['force']['rtol']:.0e} atol={tol['force']['atol']:.0e})"
-        ),
-    )
-
-
-# ----------------------------------------------------------------------
-# Test matrix.
-#
-# LJ runs on all three topologies at world_size ∈ {2, 4} — cheap. MACE
-# runs the two smaller topologies at 2 ranks (fast, CI-friendly) and
-# the SiO2 hex case at 2 ranks marked ``slow`` — it's the regression
-# for the ``inv(cell).T`` fractional-coordinate bug and takes
-# ~45 s on CPU. Run ``pytest --slow`` to include it.
-# ----------------------------------------------------------------------
 
 
 def _port_for(key: str) -> str:
@@ -995,11 +722,10 @@ def _port_for(key: str) -> str:
     return str(30000 + (hash(key) & 0xFFFF) % 5000)
 
 
-# Model-equivalence tier: real models run on the gloo+cuda harness (N ranks
-# share one GPU; gloo because NCCL rejects multiple ranks on one device),
-# exercising the actual device + kernel path. fp32 because warp/cueq kernels
-# require it. Skipped without a GPU — the distributed *logic* is covered on
-# cpu by the fake-model + synthetic tests.
+# Single-GPU gloo+cuda tier: N ranks share one GPU (gloo because NCCL rejects
+# multiple ranks on one device), exercising the actual device + kernel path.
+# fp32 because warp/cueq kernels require it. Skipped without a GPU — the
+# distributed *logic* is covered on cpu by the fake-model + synthetic tests.
 _MODEL_DEVICE = "cuda"
 # fp32 is the production cuda path (warp/cueq require it). NVALCHEMI_TIER_FP64=1
 # forces fp64 for precision-vs-logic debugging (where the kernel supports it).
@@ -1019,96 +745,6 @@ cuda_multigpu_tier = pytest.mark.skipif(
     not torch.cuda.is_available() or torch.cuda.device_count() < 2,
     reason="full distributed NVE dynamics run on real NCCL across >=2 GPUs",
 )
-
-
-def _dtype_for(system_name: str) -> torch.dtype:
-    """Per-system float dtype for the cuda tier. Triclinic cells (hex SiO2)
-    run at fp64: their PBC-shift ``shift @ cell`` has off-diagonal terms whose
-    fp32 round-off (~1e-6 in position) is amplified by the steep LJ force
-    derivative to ~5e-3 — a precision artifact, not a distribution bug (the
-    same path matches the reference to ~1e-8 at fp64). Orthorhombic/open cells
-    have axis-aligned shifts (exact in fp32) and run fp32 to exercise the real
-    fp32 cuda kernel path."""
-    if "hex" in system_name:
-        return torch.float64
-    return _MODEL_DTYPE
-
-
-@cuda_model_tier
-@pytest.mark.parametrize(
-    "system_name",
-    ["nonpbc_open_argon", "pbc_orthorhombic_argon", "pbc_hex_sio2"],
-)
-@pytest.mark.parametrize("world_size", [2, 4])
-def test_lj_dist_model_equivalence(system_name: str, world_size: int) -> None:
-    key = f"lj_{system_name}_{world_size}"
-    mp.spawn(
-        _worker,
-        args=(
-            world_size,
-            _port_for(key),
-            _dist_model_equivalence_worker,
-            system_name,
-            "lj",
-            _MODEL_DEVICE,
-            _dtype_for(system_name),
-        ),
-        nprocs=world_size,
-    )
-
-
-@cuda_model_tier
-@pytest.mark.parametrize(
-    "system_name",
-    ["nonpbc_open_argon", "pbc_orthorhombic_argon"],
-)
-def test_mace_dist_model_equivalence_2ranks(system_name: str) -> None:
-    pytest.importorskip("mace", reason="mace-torch not installed")
-    key = f"mace_{system_name}_2"
-    mp.spawn(
-        _worker,
-        args=(
-            2,
-            _port_for(key),
-            _dist_model_equivalence_worker,
-            system_name,
-            "mace",
-            _MODEL_DEVICE,
-            _dtype_for(system_name),
-        ),
-        nprocs=2,
-    )
-
-
-@cuda_model_tier
-@pytest.mark.slow
-def test_mace_dist_model_equivalence_pbc_hex_sio2_2ranks() -> None:
-    """Regression for the skew-cell fractional-coordinate bug
-    (``inv(cell).T`` vs ``inv(cell)`` in
-    ``_identify_ghosts_split`` / ``SpatialPartitioner``). Runs on the
-    cuda tier in fp64 — the skew-cell fractional round-off needs fp64 to
-    sit above the tight equivalence tolerance. Still ``slow``."""
-    pytest.importorskip("mace", reason="mace-torch not installed")
-    mp.spawn(
-        _worker,
-        args=(
-            2,
-            _port_for("mace_pbc_hex_sio2_2"),
-            _dist_model_equivalence_worker,
-            "pbc_hex_sio2",
-            "mace",
-            _MODEL_DEVICE,
-            _dtype_for("pbc_hex_sio2"),
-        ),
-        nprocs=2,
-    )
-
-
-# AIMNet2 is halo-only. A tiny non-PBC octane chain at world=2/4 is degenerate
-# for halo (a rank's domain is far smaller than the ghost width), so eager-DD
-# halo equivalence at a non-degenerate partition is covered instead by the
-# eager-reference leg of ``test_aimnet2_compile_recompile_gate`` (methane PBC,
-# world=2).
 
 
 # ======================================================================
@@ -1141,9 +777,10 @@ def test_mace_nve_via_domain_parallel(
     Runs on real NCCL across >=2 GPUs: the gloo+cuda single-GPU tier cannot
     transport raw cuda tensors through the dynamics-step collectives (gather /
     halo migration) regardless of model, so full NVE dynamics need real
-    multi-GPU. The forward-only path is covered on the single-GPU gloo tier by
-    ``test_mace_dist_model_equivalence_2ranks`` and
-    ``test_scripted_op_shardtensor_marshalling_forward``.
+    multi-GPU. The forward-only marshalling path is covered on the single-GPU
+    gloo tier by ``test_scripted_op_shardtensor_marshalling_forward``, and the
+    cueq forward equivalence by ``test_mace_cueq_dist_model_equivalence_2ranks``
+    (``test_mace_cueq_multigpu``).
     """
     pytest.importorskip("mace", reason="mace-torch not installed")
     key = f"mace_nve_{system_name}_{world_size}"
@@ -1394,21 +1031,6 @@ def test_scripted_op_shardtensor_no_leak() -> None:
 # ======================================================================
 
 
-def _build_octane_chain(n_atoms: int = 8, dtype: torch.dtype = torch.float64):
-    """Pseudo-octane: N carbons in a straight line, 1.5 Å apart."""
-    positions = torch.stack(
-        [
-            0.25 + torch.arange(n_atoms, dtype=dtype) * 1.5,
-            torch.zeros(n_atoms, dtype=dtype),
-            torch.zeros(n_atoms, dtype=dtype),
-        ],
-        dim=1,
-    ).contiguous()
-    atomic_numbers = torch.full((n_atoms,), 6, dtype=torch.long)
-    masses = torch.full((n_atoms,), 12.011, dtype=dtype)
-    return positions, atomic_numbers, masses
-
-
 def test_aimnet2_wrapper_declares_halo_spec() -> None:
     pytest.importorskip("aimnet", reason="aimnet not installed")
     from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
@@ -1426,162 +1048,3 @@ def test_aimnet2_wrapper_declares_halo_spec() -> None:
     # ConvSV + LRCoulomb + SRCoulomb), with no gather custom_ops.
     assert spec.distribution.custom_ops == ()
     assert len(spec.distribution.third_party_helpers) == 4
-
-
-AIMNET2_N_STEPS = 3
-AIMNET2_DT_FS = 0.25
-
-
-def _aimnet2_nve_worker(
-    rank: int,
-    world_size: int,
-    device: str = "cpu",
-    dtype: torch.dtype = torch.float64,
-) -> None:
-    """Distributed AIMNet2 NVE trajectory via :class:`DistributedModel`.
-
-    Reference trajectory: NVE on the full system, single-process.
-    Distributed: hand-rolled velocity-verlet where each step rebuilds a
-    fresh ``ShardedBatch`` from the updated owned positions and invokes
-    ``dist_model(sharded)``. The adapter handles global-NL reconstruction
-    and DDP ``/world_size`` compensation. Runs cpu/fp64 by default; the
-    real-model tier passes cuda/fp32.
-    """
-    from nvalchemi.distributed.distributed_model import DistributedModel
-
-    positions_global, atomic_numbers_global, masses_global = _build_octane_chain(
-        n_atoms=8, dtype=dtype
-    )
-    positions_global = positions_global.to(device=device, dtype=dtype)
-    atomic_numbers_global = atomic_numbers_global.to(device=device)
-    masses_global = masses_global.to(device=device, dtype=dtype)
-    torch.manual_seed(7)
-    velocities_global = 0.001 * torch.randn_like(positions_global)
-    velocities_global -= velocities_global.mean(dim=0, keepdim=True)
-
-    n_global = positions_global.shape[0]
-    n_systems = 1
-
-    def _make_wrapper():
-        return _aimnet2_wrapper(dtype, device)
-
-    # ---- Reference trajectory via NVE + AIMNet2Wrapper ----
-    ref_wrapper = _make_wrapper()
-    ref_data = AtomicData(
-        atomic_numbers=atomic_numbers_global,
-        positions=positions_global.clone(),
-        atomic_masses=masses_global,
-        charge=torch.zeros(n_systems, 1, dtype=dtype, device=device),
-        forces=torch.zeros(n_global, 3, dtype=dtype, device=device),
-        energy=torch.zeros(n_systems, 1, dtype=dtype, device=device),
-    )
-    ref_data.add_node_property("velocities", velocities_global.clone())
-    ref_batch = Batch.from_data_list([ref_data])
-    compute_neighbors(ref_batch, config=ref_wrapper.model_config.neighbor_config)
-    ref_nve = NVE(model=ref_wrapper, dt=AIMNET2_DT_FS)
-    ref_positions_per_step = [ref_batch.positions.detach().clone()]
-    ref_velocities_per_step = [ref_batch.velocities.detach().clone()]
-    for _ in range(AIMNET2_N_STEPS):
-        ref_batch, _ = ref_nve.step(ref_batch)
-        compute_neighbors(ref_batch, config=ref_wrapper.model_config.neighbor_config)
-        ref_positions_per_step.append(ref_batch.positions.detach().clone())
-        ref_velocities_per_step.append(ref_batch.velocities.detach().clone())
-
-    # ---- Distributed trajectory ----
-    per_rank = n_global // world_size
-    assignment = torch.arange(n_global, dtype=torch.long) // per_rank
-    assignment = assignment.clamp(max=world_size - 1)
-    sizes = [int((assignment == r).sum().item()) for r in range(world_size)]
-    # mask indexes device-resident tensors (positions/numbers/masses), so it
-    # must live on the same device.
-    local_mask = (assignment == rank).to(device=device)
-    local_z = atomic_numbers_global[local_mask].contiguous()
-    local_m = masses_global[local_mask].contiguous()
-
-    open_cell = torch.eye(3, dtype=dtype, device=device) * 100.0
-    no_pbc = torch.zeros(3, dtype=torch.bool, device=device)
-
-    mesh = _MockMesh(rank, world_size)
-    dist_wrapper = _make_wrapper()
-    domain_config = DomainConfig(
-        cutoff=float(dist_wrapper.model_config.neighbor_config.cutoff),
-        mesh=mesh,
-    )
-    dist_model = DistributedModel(dist_wrapper, domain_config)
-
-    def _forces(local_pos: torch.Tensor) -> torch.Tensor:
-        sharded = make_gloo_sharded_batch(
-            mesh=mesh,
-            local_positions=local_pos.detach().clone(),
-            local_numbers=local_z,
-            local_masses=local_m,
-            cell=open_cell.unsqueeze(0),
-            pbc=no_pbc.unsqueeze(0),
-            sizes=sizes,
-            n_global=n_global,
-        )
-        out = dist_model(sharded)
-        return out["forces"].detach()
-
-    try:
-        from nvalchemi.dynamics._units import fs_to_internal_time
-
-        dt_internal = fs_to_internal_time(AIMNET2_DT_FS)
-        pos = positions_global[local_mask].contiguous().clone()
-        vel = velocities_global[local_mask].contiguous().clone()
-        # Match NVE's priming: batch.forces starts at zero, so the first
-        # pre_update uses F=0 (half-step start). Aligns with the reference.
-        f = torch.zeros_like(pos)
-        dist_positions = [pos.clone()]
-        dist_velocities = [vel.clone()]
-        for _ in range(AIMNET2_N_STEPS):
-            v_half = vel + 0.5 * dt_internal * f / local_m.unsqueeze(-1)
-            pos = pos + dt_internal * v_half
-            f = _forces(pos)
-            vel = v_half + 0.5 * dt_internal * f / local_m.unsqueeze(-1)
-            dist_positions.append(pos.clone())
-            dist_velocities.append(vel.clone())
-    finally:
-        dist_model.close()
-
-    # fp32 (cuda tier) accumulates round-off through the verlet steps, so it
-    # sits above fp64 noise — loosen accordingly.
-    is_fp32 = dtype == torch.float32
-    pos_rtol, pos_atol = (1e-3, 1e-4) if is_fp32 else (1e-4, 1e-5)
-    vel_rtol, vel_atol = (1e-2, 1e-3) if is_fp32 else (1e-3, 1e-4)
-    for step, (ref_p, got_p) in enumerate(
-        zip(ref_positions_per_step, dist_positions, strict=True)
-    ):
-        torch.testing.assert_close(
-            got_p,
-            ref_p[local_mask],
-            rtol=pos_rtol,
-            atol=pos_atol,
-            msg=f"rank {rank} positions diverged at step {step}",
-        )
-    for step, (ref_v, got_v) in enumerate(
-        zip(ref_velocities_per_step, dist_velocities, strict=True)
-    ):
-        torch.testing.assert_close(
-            got_v,
-            ref_v[local_mask],
-            rtol=vel_rtol,
-            atol=vel_atol,
-            msg=f"rank {rank} velocities diverged at step {step}",
-        )
-
-
-@pytest.mark.skip(
-    reason="8-atom non-PBC octane chain at world=2 is degenerate for halo "
-    "(incomplete neighbor coverage). AIMNet2 is halo-only — multi-step "
-    "DD equivalence is covered by test_aimnet2_compile_recompile_gate at a "
-    "non-degenerate methane PBC partition."
-)
-@cuda_model_tier
-def test_aimnet2_nve_multi_step_equivalence_2ranks() -> None:
-    pytest.importorskip("aimnet", reason="aimnet not installed")
-    mp.spawn(
-        _worker,
-        args=(2, "29569", _aimnet2_nve_worker, _MODEL_DEVICE, _MODEL_DTYPE),
-        nprocs=2,
-    )

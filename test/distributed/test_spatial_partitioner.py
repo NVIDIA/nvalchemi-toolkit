@@ -39,6 +39,21 @@ def _make_orthorhombic_cell(lx: float, ly: float, lz: float) -> torch.Tensor:
     return torch.diag(torch.tensor([lx, ly, lz], dtype=torch.float64))
 
 
+def _make_skew_cell(a: float, c: float, gamma_deg: float = 120.0) -> torch.Tensor:
+    """Create a hexagonal (``gamma != 90``) cell matrix with rows as lattice
+    vectors. The inverse is non-symmetric, so ``inv(cell)`` and ``inv(cell).T``
+    give different fractional coordinates — unlike a diagonal cell."""
+    g = math.radians(gamma_deg)
+    return torch.tensor(
+        [
+            [a, 0.0, 0.0],
+            [a * math.cos(g), a * math.sin(g), 0.0],
+            [0.0, 0.0, c],
+        ],
+        dtype=torch.float64,
+    )
+
+
 def _make_partitioner(
     cell_matrix: torch.Tensor,
     cutoff: float,
@@ -346,6 +361,49 @@ class TestAssignAtomsToRanks:
             expected.append(part.cell_to_rank(int(ix), int(iy), int(iz)))
 
         torch.testing.assert_close(ranks, torch.tensor(expected, dtype=ranks.dtype))
+
+    def test_assign_atoms_skew_cell_uses_inv_not_inv_transpose(self):
+        """On a skew (hex) cell, atom assignment must use ``inv(cell)`` for the
+        fractional coordinates, not ``inv(cell).T``.
+
+        Regression for the skew-cell fractional-coordinate bug: on an
+        orthorhombic cell the two conventions coincide, so this is only
+        observable on a non-symmetric inverse. Assignment must match the
+        ``inv(cell)`` reference and must *differ* from the ``inv(cell).T``
+        reference (proving the skew cell exercises the distinction).
+        """
+        # 6x6x6 hex supercell, cutoff 5 Å -> a real multi-cell grid.
+        cell = _make_skew_cell(a=4.9019 * 6, c=5.3988 * 6, gamma_deg=120.0)
+        part = _make_partitioner(cell, cutoff=5.0, world_size=8)
+
+        torch.manual_seed(0)
+        # Fill the (skewed) box via fractional coords so every atom is inside.
+        frac_rand = torch.rand(300, 3, dtype=torch.float64)
+        positions = frac_rand @ cell
+
+        ranks = part.assign_atoms_to_ranks(positions)
+
+        cells_t = torch.tensor(part.cells_per_dim, dtype=torch.float64)
+        cells_int = torch.tensor(part.cells_per_dim, dtype=torch.int64)
+
+        def _ranks_from_frac(frac: torch.Tensor) -> torch.Tensor:
+            cell_coords = torch.floor(frac * cells_t).to(torch.int64) % cells_int
+            return torch.tensor(
+                [
+                    part.cell_to_rank(*cell_coords[i].tolist())
+                    for i in range(len(positions))
+                ],
+                dtype=ranks.dtype,
+            )
+
+        inv = torch.linalg.inv(cell)
+        expected_correct = _ranks_from_frac(positions @ inv)
+        expected_wrong = _ranks_from_frac(positions @ inv.T)
+
+        torch.testing.assert_close(ranks, expected_correct)
+        # The skew cell must actually distinguish the two conventions, else the
+        # test would silently pass even under the buggy ``.T`` path.
+        assert not torch.equal(expected_correct, expected_wrong)
 
 
 class TestRefineGrid:

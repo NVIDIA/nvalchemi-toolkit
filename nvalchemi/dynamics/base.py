@@ -642,7 +642,11 @@ class _CommunicationMixin:
             The local rank on this node.
         """
         if dist.is_initialized():
-            return dist.get_node_local_rank()
+            # ``fallback_rank=0`` for single-node / single-device contexts where
+            # ``LOCAL_RANK`` isn't exported (e.g. a bare gloo group): without it
+            # ``get_node_local_rank`` raises. torchrun/multi-GPU set ``LOCAL_RANK``
+            # so the real local rank is returned there.
+            return dist.get_node_local_rank(fallback_rank=0)
         return 0
 
     @property

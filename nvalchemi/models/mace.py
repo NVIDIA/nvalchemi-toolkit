@@ -379,31 +379,14 @@ def _mace_cueq_spec() -> Any:
     args to local, runs the opaque kernel, and re-wraps so distribution metadata
     survives the kernel boundary; no per-op cross-rank correction is needed.
 
-    Resolves ``torch.ops.cuequivariance`` lazily so importing this module
-    doesn't require ``cuequivariance``; raises ``ImportError`` if called
-    when it isn't registered.
+    Declares the cueq kernels by qualified op name, so the spec builds without
+    ``cuequivariance``/``cuequivariance_ops_torch`` imported. Each name is
+    resolved to its live ``torch.ops.cuequivariance.*`` op lazily, when the
+    adapter installs at DD runtime (where the cueq extension is present).
     """
     global _MACE_CUEQ_SPEC_CACHE
     if _MACE_CUEQ_SPEC_CACHE is not None:
         return _MACE_CUEQ_SPEC_CACHE
-
-    # Probe the op namespace — raises AttributeError if cueq isn't loaded.
-    try:
-        cueq_ops = torch.ops.cuequivariance
-        # Pass the op packets; OpAdapter resolves ``.default`` itself.
-        fused_fwd = cueq_ops.fused_tensor_product
-        fused_bwd = cueq_ops.fused_tensor_product_bwd
-        fused_bwd_bwd = cueq_ops.fused_tensor_product_bwd_bwd
-        uniform_1d = cueq_ops.uniform_1d
-        indexed_linear_B = cueq_ops.indexed_linear_B
-        indexed_linear_C = cueq_ops.indexed_linear_C
-        segmented_transpose = cueq_ops.segmented_transpose
-    except AttributeError as e:
-        raise ImportError(
-            "torch.ops.cuequivariance.* not registered. Install "
-            "cuequivariance (pip install 'nvalchemi-toolkit[mace]') and "
-            "import cuequivariance_torch before loading a cueq MACE model."
-        ) from e
 
     from nvalchemi.distributed.spec import (
         SPEC_MPNN_HALO,
@@ -412,15 +395,19 @@ def _mace_cueq_spec() -> Any:
 
     # All node/edge-local opaque kernels — pass-through (unwrap → run → re-wrap).
     # The conv's cross-rank correction lives in the unfuse adapter + the external
-    # scatter's halo handler, not on any of these ops.
+    # scatter's halo handler, not on any of these ops. Declared by qualified op
+    # name (not a live handle): the spec is data, so it can be built without the
+    # ``cuequivariance_ops_torch`` extension loaded — ``OpAdapter`` resolves each
+    # name to its live op at ``install`` time (i.e. only when a cueq model
+    # actually runs under DD, where the extension is present).
     _custom_ops = (
-        OpAdapter(fused_fwd),
-        OpAdapter(fused_bwd),
-        OpAdapter(fused_bwd_bwd),
-        OpAdapter(uniform_1d),
-        OpAdapter(indexed_linear_B),
-        OpAdapter(indexed_linear_C),
-        OpAdapter(segmented_transpose),
+        OpAdapter("cuequivariance::fused_tensor_product"),
+        OpAdapter("cuequivariance::fused_tensor_product_bwd"),
+        OpAdapter("cuequivariance::fused_tensor_product_bwd_bwd"),
+        OpAdapter("cuequivariance::uniform_1d"),
+        OpAdapter("cuequivariance::indexed_linear_B"),
+        OpAdapter("cuequivariance::indexed_linear_C"),
+        OpAdapter("cuequivariance::segmented_transpose"),
     )
     # cueq fuses the tensor products / linear / symmetric contractions but does
     # NOT replace e3nn's ``SphericalHarmonics``, whose ``forward`` calls a
@@ -1061,7 +1048,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         ------
         ImportError
             If ``mace-torch`` is not installed, or if ``enable_cueq=True``
-            and ``cuequivariance`` is not installed.
+            and either ``cuequivariance`` or the ``cuequivariance-ops-torch``
+            CUDA kernels (the ``cu12`` / ``cu13`` dependency groups) are missing.
         ValueError
             If ``enable_cueq=True`` and ``device`` is not a CUDA device.
         """
@@ -1085,13 +1073,17 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         # Step 2: cuEq conversion.
         if enable_cueq:
-            try:
-                import cuequivariance  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "cuequivariance is required for enable_cueq=True. "
-                    "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-                )
+            _cueq = "MACEWrapper.from_checkpoint(enable_cueq=True)"
+            OptionalDependency.CUEQUIVARIANCE.is_available() or (
+                OptionalDependency.CUEQUIVARIANCE._raise_error(_cueq)
+            )
+            # ``cuequivariance-torch`` alone is not enough: the fused kernels come
+            # from the CUDA-version-specific ``cuequivariance-ops-torch`` (cu12 /
+            # cu13 groups). Fail fast with the install guidance rather than deep in
+            # the forward when ``torch.ops.cuequivariance.*`` turns out unregistered.
+            OptionalDependency.CUEQUIVARIANCE_OPS.is_available() or (
+                OptionalDependency.CUEQUIVARIANCE_OPS._raise_error(_cueq)
+            )
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             if target_device.type != "cuda":

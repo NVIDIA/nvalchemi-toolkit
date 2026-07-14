@@ -54,13 +54,12 @@ Requires 2+ CUDA GPUs + ``mace-torch`` installed. cuequivariance is NOT used.
 
 from __future__ import annotations
 
-import os
 import warnings
 
 import pytest
 import torch
-import torch.distributed as dist
 import torch.multiprocessing as mp
+from _dd_harness import nccl_worker as _worker
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed.config import DomainConfig
@@ -74,24 +73,6 @@ _skip = pytest.mark.skipif(
     not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
     reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
 )
-
-
-def _init_pg(rank: int, world_size: int, port: str) -> None:
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = port
-    os.environ["RANK"] = str(rank)
-    os.environ["WORLD_SIZE"] = str(world_size)
-    os.environ["LOCAL_RANK"] = str(rank)
-    torch.cuda.set_device(rank)
-    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-
-
-def _worker(rank: int, world_size: int, port: str, fn, *args) -> None:
-    _init_pg(rank, world_size, port)
-    try:
-        fn(rank, world_size, *args)
-    finally:
-        dist.destroy_process_group()
 
 
 def _build_pbc_argon(nx: int = 12, nyz: int = 3, dtype: torch.dtype = torch.float64):
