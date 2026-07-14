@@ -127,6 +127,10 @@ class FIRE(BaseDynamics):
 
     __needs_keys__: set[str] = {"forces"}
     __provides_keys__: set[str] = {"positions", "velocities"}
+    # Under DomainParallel the FIRE velocity mixing is driven by global per-system
+    # power/norm reductions (v·f, v·v, f·f) over ALL atoms; the coordinator
+    # globalizes them so every rank mixes against the same scalars.
+    __dd_thermo_kind__: str = "fire"
 
     def __init__(
         self,
@@ -340,6 +344,12 @@ class FIREVariableCell(BaseDynamics):
 
     __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
+    # FIRE mixing over the atomic DOFs needs global v·f / v·v / f·f (coordinator
+    # globalizes them). The cell propagation is replicated on every rank (stress
+    # is already global from the consolidated forward), so ``cell_velocity`` is
+    # kept byte-identical across ranks by the coordinator's lockstep broadcast.
+    __dd_thermo_kind__: str = "fire"
+    __dd_replicated__: tuple[str, ...] = ("cell_velocity",)
 
     def __init__(
         self,

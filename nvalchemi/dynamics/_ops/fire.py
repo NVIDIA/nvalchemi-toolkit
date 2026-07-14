@@ -110,6 +110,7 @@ def _fire_step_op(
     vv: torch.Tensor,
     ff: torch.Tensor,
     batch_idx: torch.Tensor,
+    compute_reductions: bool = True,
 ) -> None:
     dtype = positions.dtype
     vec_t = _vec_type(dtype)
@@ -135,6 +136,7 @@ def _fire_step_op(
         vv=wp.from_torch(vv, dtype=scl_t),
         ff=wp.from_torch(ff, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+        compute_reductions=compute_reductions,
     )
 
 
@@ -160,6 +162,7 @@ def _fire_step_op_fake(
     vv,
     ff,
     batch_idx,
+    compute_reductions=True,
 ) -> None:
     pass
 
@@ -185,6 +188,7 @@ def _fire_update_op(
     vv: torch.Tensor,
     ff: torch.Tensor,
     batch_idx: torch.Tensor,
+    compute_reductions: bool = True,
 ) -> None:
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)
@@ -206,6 +210,7 @@ def _fire_update_op(
         vv=wp.from_torch(vv, dtype=scl_t),
         ff=wp.from_torch(ff, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+        compute_reductions=compute_reductions,
     )
 
 
@@ -227,6 +232,7 @@ def _fire_update_op_fake(
     vv,
     ff,
     batch_idx,
+    compute_reductions=True,
 ) -> None:
     pass
 
@@ -258,6 +264,7 @@ def fire_step(
     vv: torch.Tensor | None = None,
     ff: torch.Tensor | None = None,
     batch_idx: torch.Tensor | None = None,
+    compute_reductions: bool = True,
 ) -> None:
     """Full FIRE optimization step.
 
@@ -313,6 +320,11 @@ def fire_step(
         Scratch buffer ``[M]`` for Σ(F·F); allocated if None.
     batch_idx : torch.Tensor, optional
         Per-atom system index ``[N]``, int32, non-decreasing.
+    compute_reductions : bool
+        If True (default), the kernel recomputes ``vf/vv/ff`` from the passed
+        atoms.  If False, the supplied ``vf/vv/ff`` are consumed as-is (the
+        caller has already filled them with the desired — e.g. mesh-global —
+        values); only the per-atom revert still runs.
     """
     M = alpha.shape[0]
     dtype = positions.dtype
@@ -346,6 +358,7 @@ def fire_step(
         vv,
         ff,
         batch_idx,
+        compute_reductions=compute_reductions,
     )
 
 
@@ -367,6 +380,7 @@ def fire_update(
     vv: torch.Tensor | None = None,
     ff: torch.Tensor | None = None,
     batch_idx: torch.Tensor | None = None,
+    compute_reductions: bool = True,
 ) -> None:
     """FIRE velocity mixing and parameter update (no MD integration).
 
@@ -407,6 +421,11 @@ def fire_update(
         Scratch buffers ``[M]``; allocated if None.
     batch_idx : torch.Tensor, optional
         Per-atom system index ``[N]``, int32.
+    compute_reductions : bool
+        If True (default), the kernel recomputes ``vf/vv/ff`` from the passed
+        atoms.  If False, the supplied ``vf/vv/ff`` are consumed as-is (the
+        caller has already filled them with the desired — e.g. mesh-global —
+        values).
     """
     M = alpha.shape[0]
     dtype = velocities.dtype
@@ -436,6 +455,7 @@ def fire_update(
         vv,
         ff,
         batch_idx,
+        compute_reductions=compute_reductions,
     )
 
 

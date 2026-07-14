@@ -48,8 +48,8 @@ Notes
   :func:`load_dftd3_params` calls :func:`extract_dftd3_parameters` which
   downloads the Fortran reference archive from the Grimme group website,
   parses it in-memory, and caches the result automatically.
-* Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.active_outputs`` including ``"stress"``.
+* Stress/virial computation (needed for NPT/NPH) is enabled by including
+  ``"stress"`` in ``model_config.active_outputs``.
 * The reference Fortran DFT-D3 implementation uses a cutoff of 95 Bohr
   (~50 Å) with no smoothing.  This wrapper defaults to a shorter cutoff
   (15 Å) with C5-style smoothing controlled by ``smoothing_fraction``.
@@ -91,6 +91,7 @@ __all__ = [
 BOHR_TO_ANGSTROM: float = 0.529177210544
 ANGSTROM_TO_BOHR: float = 1.0 / BOHR_TO_ANGSTROM
 HARTREE_TO_EV: float = 27.211386245981
+
 
 # ---------------------------------------------------------------------------
 # DFT-D3 reference parameter source
@@ -539,6 +540,38 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     # BaseModelMixin required properties
     # ------------------------------------------------------------------
 
+    def distribution_spec(self, strategy: Any = None) -> Any:
+        """Domain-decomposition spec for DFT-D3(BJ).
+
+        Halo-only; the ``strategy`` argument is accepted for the framework
+        contract and ignored.
+
+        DFTD3 has no global coupling (coordination numbers, C6 interpolation,
+        and the dispersion sum are all within-cutoff), so it needs no cross-rank
+        op. The per-system seams are reductions the framework owns: energy from
+        the raw per-atom dispersion energies (``atomic_energies``) and stress
+        from the raw per-atom virial (``atomic_virial``), both reduced
+        owned-aware, so :meth:`forward` carries no distributed logic. Forces are
+        direct per-atom, owned-only.
+
+        Returns
+        -------
+        MLIPSpec
+            :data:`~nvalchemi.distributed.spec.SPEC_DFTD3_HALO`.
+        """
+        import dataclasses  # noqa: PLC0415
+
+        from nvalchemi.distributed.spec import SPEC_DFTD3_HALO  # noqa: PLC0415
+
+        return dataclasses.replace(
+            SPEC_DFTD3_HALO,
+            distribution=dataclasses.replace(
+                SPEC_DFTD3_HALO.distribution, shard_fields=()
+            ),
+            node_energy_key="atomic_energies",
+            node_virial_key="atomic_virial",
+        )
+
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
         return {}
@@ -616,6 +649,18 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         output["energy"] = model_output["energy"]
         if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
+        if (
+            "atomic_energies" in self.model_config.active_outputs
+            and "atomic_energies" in model_output
+        ):
+            output["atomic_energies"] = model_output["atomic_energies"]
+        # Per-atom virial: passed through for the framework's owned-aware
+        # per-system stress reduction under decomposition (``node_virial_key``).
+        if (
+            "atomic_virial" in self.model_config.active_outputs
+            and "atomic_virial" in model_output
+        ):
+            output["atomic_virial"] = model_output["atomic_virial"]
         if "stress" in self.model_config.active_outputs:
             if "virial" in model_output:
                 if not hasattr(data, "cell") or data.cell is None:
@@ -695,9 +740,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         if cell is not None:
             cell_bohr = cell * ANGSTROM_TO_BOHR
 
-        # Also scale a2 from Bohr to Bohr (no conversion needed — a2 is
-        # already stored in Bohr, matching the kernel's expectation).
-
         compute_virial = "stress" in self.model_config.active_outputs
 
         d3_params = D3Parameters(
@@ -709,6 +751,31 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
 
         smoothing_on = self.cutoff * (1.0 - self.smoothing_fraction)
         smoothing_off = self.cutoff
+
+        # Per-atom dispersion energies are needed when the per-system total is
+        # assembled from them; a plain non-PBC run takes the kernel's
+        # per-system energy directly.
+        #
+        # The kernel accumulates each atom's half-share into ``energy[batch_idx[i]]``
+        # and reads the PBC cell as ``cell[batch_idx[i]]``; interactions come from
+        # ``neighbor_matrix``, not ``batch_idx``.
+        want_atomic = (
+            "atomic_energies" in self.model_config.active_outputs
+            or cell_bohr is not None
+        )
+        n_atoms = positions_bohr.shape[0]
+        if want_atomic:
+            eff_batch_idx = torch.arange(
+                n_atoms, device=positions.device, dtype=torch.int32
+            )
+            eff_cell = (
+                cell_bohr.index_select(0, batch_idx.to(torch.long))
+                if cell_bohr is not None
+                else None
+            )
+            eff_num_systems = n_atoms
+        else:
+            eff_batch_idx, eff_cell, eff_num_systems = batch_idx, cell_bohr, B
 
         result = dftd3(
             positions=positions_bohr,
@@ -723,25 +790,49 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             s5_smoothing_off=smoothing_off * ANGSTROM_TO_BOHR,
             d3_params=d3_params,
             fill_value=fill_value,
-            batch_idx=batch_idx,
-            cell=cell_bohr,
+            batch_idx=eff_batch_idx,
+            cell=eff_cell,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_matrix_shifts,
             compute_virial=compute_virial,
-            num_systems=B,
+            num_systems=eff_num_systems,
         )
 
-        # dftd3 returns (energy[B], forces[N,3], coord_num[N])
-        # or (energy[B], forces[N,3], coord_num[N], virial[B,3,3]) when compute_virial=True.
-        if compute_virial:
-            energy_ha, forces_ha_bohr, _coord_num, virial_ha = result
-        else:
-            energy_ha, forces_ha_bohr, _coord_num = result
-            virial_ha = None
+        # Return order (see ``dftd3``): energy, forces, coord_num, virial
+        # (if requested). Under the per-atom ``batch_idx`` these are per-atom.
+        result = list(result)
+        energy_ha = result[0]
+        forces_ha_bohr = result[1]
+        raw_virial_ha = result[3] if compute_virial else None
 
         # Convert units: Hartree -> eV, Hartree/Bohr -> eV/Å.
-        energies_ev = energy_ha.to(positions.dtype) * HARTREE_TO_EV  # (B,)
-        energies_ev = energies_ev.unsqueeze(-1)  # (B, 1)
+        atomic_energies_ev: torch.Tensor | None = None
+        atomic_virial_ev: torch.Tensor | None = None
+        virial_ha: torch.Tensor | None = None
+        if want_atomic:
+            # ``energy_ha`` is per-atom here -> per-system totals in fp64 so the
+            # sum is order-independent.
+            atomic_energies_ev = energy_ha.to(torch.float64) * HARTREE_TO_EV
+            energies_ev = (
+                torch.zeros(B, dtype=torch.float64, device=positions.device)
+                .scatter_add_(0, batch_idx.to(torch.long), atomic_energies_ev)
+                .to(positions.dtype)
+                .unsqueeze(-1)
+            )  # (B, 1)
+            if raw_virial_ha is not None:
+                # Per-atom virial (eV): kept for the framework's owned-aware
+                # per-system stress reduction under decomposition
+                # (``node_virial_key``), and collapsed by the real batch index
+                # for the single-process per-system stress.
+                atomic_virial_ev = raw_virial_ha.to(positions.dtype) * HARTREE_TO_EV
+                virial_ha = torch.zeros(
+                    B, 3, 3, dtype=raw_virial_ha.dtype, device=positions.device
+                ).index_add_(0, batch_idx.to(torch.long), raw_virial_ha)
+        else:
+            energies_ev = (energy_ha.to(positions.dtype) * HARTREE_TO_EV).unsqueeze(
+                -1
+            )  # (B, 1)
+            virial_ha = raw_virial_ha
 
         forces_ev_ang = forces_ha_bohr.to(positions.dtype) * (
             HARTREE_TO_EV / BOHR_TO_ANGSTROM
@@ -751,9 +842,19 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             "energy": energies_ev,
             "forces": forces_ev_ang,
         }
+        if (
+            atomic_energies_ev is not None
+            and "atomic_energies" in self.model_config.active_outputs
+        ):
+            model_output["atomic_energies"] = atomic_energies_ev
         if virial_ha is not None:
             # Virial: Hartree -> eV (purely energy units, no length scaling).
             model_output["virial"] = virial_ha.to(positions.dtype) * HARTREE_TO_EV
+        if (
+            atomic_virial_ev is not None
+            and "atomic_virial" in self.model_config.active_outputs
+        ):
+            model_output["atomic_virial"] = atomic_virial_ev
 
         return self.adapt_output(model_output, data)
 

@@ -48,6 +48,9 @@ class OptionalDependencyError(ImportError):
             f"dependency '{dep.import_name}'.\n\n"
             f"Install with: pip install '{escaped_target}'[/yellow]"
         )
+        note = getattr(dep, "note", "")
+        if note:
+            table.add_row(f"[cyan]{note}[/cyan]")
         if cause:
             table.add_row(f"[red]{type(cause).__name__}: {cause}[/red]")
         console.print(table)
@@ -94,12 +97,25 @@ class OptionalDependency(Enum):
     MACE = ("mace", "nvalchemi-toolkit[mace]")
     AIMNET = ("aimnet", "nvalchemi-toolkit[aimnet]")
     TENSORBOARD = ("tensorboard", "nvalchemi-toolkit[tensorboard]")
-
     UMA = ("fairchem.core", "nvalchemi-toolkit[uma]")
+    CUEQUIVARIANCE = ("cuequivariance", "nvalchemi-toolkit[mace]")
+    # The fused cueq CUDA kernels (``torch.ops.cuequivariance.*``) ship in this
+    # extension, NOT in ``cuequivariance-torch``; it is CUDA-version-specific and
+    # lives in the ``cu12`` / ``cu13`` dependency groups (the ``mace`` extra
+    # alone does not install it).
+    CUEQUIVARIANCE_OPS = (
+        "cuequivariance_ops_torch",
+        "nvalchemi-toolkit[mace,cu13]",
+        "These cuequivariance CUDA kernels are CUDA-version-specific — select "
+        "the 'cu12' or 'cu13' dependency group to match your CUDA build, e.g. "
+        "`uv sync --extra mace --extra cu13` (or --extra cu12).",
+    )
 
-    def __init__(self, import_name: str, install_target: str) -> None:
+    def __init__(self, import_name: str, install_target: str, note: str = "") -> None:
         self.import_name = import_name
         self.install_target = install_target
+        # Extra install guidance shown in the error (e.g. a CUDA-variant choice).
+        self.note = note
         self._available: bool | None = None
         self._import_error: ImportError | None = None
 

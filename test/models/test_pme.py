@@ -26,6 +26,7 @@ Strategy
 from __future__ import annotations
 
 from collections import OrderedDict
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -546,7 +547,7 @@ class TestPMEIntegration:
         assert out["stress"].shape[-2:] == (3, 3)
 
     def test_forward_stress_is_negative_virial_over_volume(self):
-        """ASE-style stress == -virial / volume (eV/A^3)."""
+        """Tensile-positive Cauchy stress == -virial / volume (eV/A^3)."""
         w = _make_pme()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
@@ -571,7 +572,8 @@ class TestPMEIntegration:
             )
 
         with patch(
-            "nvalchemiops.torch.interactions.electrostatics.pme.particle_mesh_ewald",
+            "nvalchemi.models._ops.electrostatics.pme."
+            "particle_mesh_ewald_from_total_charge",
             side_effect=fake_particle_mesh_ewald,
         ):
             out = w.forward(batch)
@@ -595,7 +597,8 @@ class TestPMEIntegration:
             return energies, forces
 
         with patch(
-            "nvalchemiops.torch.interactions.electrostatics.pme.particle_mesh_ewald",
+            "nvalchemi.models._ops.electrostatics.pme."
+            "particle_mesh_ewald_from_total_charge",
             side_effect=_fake_kernel,
         ):
             with pytest.raises(RuntimeError, match="kernel did not return a virial"):
@@ -644,15 +647,20 @@ class TestPMEIntegration:
         )
 
     def test_energies_buffer_detached_after_forward(self):
-        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        """Energy carries grad while the wrapper holds no aliased buffer (#82).
+
+        The merged wrapper uses a fresh-tensor energy path: ``_energies_buf``
+        stays ``None`` so there is no persistent grad-carrying alias to leak
+        across forwards. The grad path lives entirely on the returned energy.
+        """
         w = _make_pme()
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(True)
         self._build_nl(batch, w)
         out = w(batch)
         assert out["energy"].grad_fn is not None
-        assert w._energies_buf.grad_fn is None
-        assert not w._energies_buf.requires_grad
+        # No aliased grad-carrying buffer is held: the #82 hazard is absent.
+        assert w._energies_buf is None
 
     def test_consecutive_forwards_storage_independent(self):
         """Energy from forward N and N+1 do not alias the same storage (#82)."""
@@ -898,3 +906,155 @@ class TestPMECrossModel:
         w = PMEModelWrapper(cutoff=10.0)
         assert hasattr(w, "_cached_k_squared")
         assert hasattr(w, "_cached_mesh_dims")
+
+
+# ===========================================================================
+# Distribution wiring — spec / setup / teardown / single-GPU pass-through
+# ===========================================================================
+
+
+class TestPMEDistributionWiring:
+    """Structural tests for PMEModelWrapper's distribution surface.
+
+    PME reuses the ``_spline_spread`` / ``_batch_spline_spread`` torch
+    custom ops already registered by ``nvalchemiops.torch.spline`` —
+    we just install an owned-slice + all-reduce handler via
+    ``SPEC_PME_HALO.custom_ops``. These tests verify the spec shape,
+    the handler-registration lifecycle, and that single-GPU forward
+    is unaffected when the handlers are installed but no ShardTensor
+    inputs appear. Multi-GPU equivalence lives in
+    ``test/distributed/test_pme_multigpu.py``.
+    """
+
+    def test_distribution_spec_storage_modes(self):
+        """Spec carries halo storage + scatter/gather modes from the preset."""
+        from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
+
+        w = _make_pme()
+        spec = w.distribution_spec()
+        policy = spec.distribution.policy
+        assert isinstance(policy, HaloStoragePolicy)
+        assert policy.scatter_mode == "halo_correction"
+        assert policy.gather_mode == "halo_read"
+        assert spec.system_reductions is True
+
+    def test_distribution_spec_registers_both_spread_ops(self):
+        """Spline-spread, total-charge, and slab-moment ops are all listed.
+
+        The merged wrapper registers SIX OpAdapters: spline_spread /
+        batch_spline_spread (charge mesh), the two total-charge ops, and the
+        two slab-correction moment ops — single + batched for each family.
+        """
+        w = _make_pme()
+        spec = w.distribution_spec()
+        assert len(spec.distribution.custom_ops) == 6
+        op_names = {str(os.op) for os in spec.distribution.custom_ops}
+        expected = {
+            "nvalchemiops.spline_spread.default",
+            "nvalchemiops.batch_spline_spread.default",
+            "alchemiops._pme_compute_partial_total_charge.default",
+            "alchemiops._batch_pme_compute_partial_total_charge.default",
+            "alchemiops._slab_compute_partial_moments.default",
+            "alchemiops._batch_slab_compute_partial_moments.default",
+        }
+        assert op_names == expected
+
+    def test_distribution_spec_owned_slice_and_all_reduce(self):
+        """Each op slices its per-atom args + all-reduces its partial output(s).
+
+        Keyed by the op's overload string (``<ns>.<name>.default``). Each entry
+        is ``(owned_slice_inputs, all_reduce_outputs)``. The charge-mesh /
+        total-charge ops all-reduce a single output; the slab-moment ops
+        all-reduce three (mz, mz2, qtotal).
+        """
+        w = _make_pme()
+        spec = w.distribution_spec()
+        expected = {
+            "nvalchemiops.spline_spread.default": ((0, 1), (0,)),
+            "nvalchemiops.batch_spline_spread.default": ((0, 1, 2), (0,)),
+            "alchemiops._pme_compute_partial_total_charge.default": ((0,), (0,)),
+            "alchemiops._batch_pme_compute_partial_total_charge.default": (
+                (0, 1),
+                (0,),
+            ),
+            "alchemiops._slab_compute_partial_moments.default": (
+                (0, 1),
+                (0, 1, 2),
+            ),
+            "alchemiops._batch_slab_compute_partial_moments.default": (
+                (0, 1, 2),
+                (0, 1, 2),
+            ),
+        }
+        seen = set()
+        for op_spec in spec.distribution.custom_ops:
+            name = str(op_spec.op)
+            assert name in expected, f"unexpected op {name}"
+            exp_owned, exp_all_reduce = expected[name]
+            assert op_spec.owned_slice_inputs == exp_owned, (
+                f"expected owned_slice_inputs={exp_owned} on {name}, "
+                f"got {op_spec.owned_slice_inputs}"
+            )
+            assert op_spec.all_reduce_outputs == exp_all_reduce, (
+                f"expected all_reduce_outputs={exp_all_reduce} on {name}, "
+                f"got {op_spec.all_reduce_outputs}"
+            )
+            assert op_spec.gather_inputs == ()
+            assert op_spec.scatter_outputs == ()
+            seen.add(name)
+        assert seen == set(expected), f"missing ops: {set(expected) - seen}"
+
+    def test_distributed_setup_stashes_halo_metadata(self):
+        """After setup, the wrapper records the live context + global N."""
+        w = _make_pme()
+        assert w._dist_ctx is None
+        assert w._n_global_atoms is None
+
+        ctx = SimpleNamespace(n_atoms_total=512)
+        w.distributed_setup(ctx)
+        assert w._dist_ctx is ctx
+        assert w._n_global_atoms == 512
+
+        w.distributed_teardown()
+        assert w._dist_ctx is None
+        assert w._n_global_atoms is None
+
+    def test_setup_stashes_metadata_teardown_clears_it(self):
+        """Wrapper-side setup/teardown is context-based: it stashes the live
+        :class:`DistributedContext` and the global atom count so the cache is
+        rebuilt from the global ``N``; handler registration is
+        :class:`DistributedModel`'s job (driven by the spec it holds).
+        """
+        w = _make_pme()
+        assert w._dist_ctx is None
+        assert w._n_global_atoms is None
+
+        ctx = SimpleNamespace(n_atoms_total=512)
+        w.distributed_setup(ctx)
+        assert w._dist_ctx is ctx
+        assert w._n_global_atoms == 512
+
+        w.distributed_teardown()
+        assert w._dist_ctx is None
+        assert w._n_global_atoms is None
+
+    def test_single_gpu_forward_unaffected_by_distribution_wiring(self):
+        """With handlers installed but no ShardTensor inputs, forward is
+        bit-identical to the baseline."""
+        pytest.importorskip("nvalchemiops")
+        from nvalchemi.neighbors import compute_neighbors
+
+        w = _make_pme()
+        batch = _make_charged_batch(n_atoms=8, box_size=8.0)
+        compute_neighbors(batch, config=w.model_config.neighbor_config)
+
+        ref = w(batch)["energy"].detach().clone()
+
+        ctx = SimpleNamespace(n_atoms_total=int(batch.positions.shape[0]))
+        try:
+            w.distributed_setup(ctx)
+            wired = w(batch)["energy"].detach().clone()
+        finally:
+            w.distributed_teardown()
+
+        torch.testing.assert_close(wired, ref, atol=0.0, rtol=0.0)

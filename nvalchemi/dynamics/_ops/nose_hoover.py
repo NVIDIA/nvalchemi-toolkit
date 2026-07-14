@@ -152,6 +152,7 @@ def nhc_chain_update(
     step_scale: torch.Tensor,
     dt_chain: torch.Tensor,
     batch_idx: torch.Tensor,
+    compute_ke: bool = True,
 ) -> None:
     """Propagate the Nosé-Hoover chain and scale particle velocities.
 
@@ -189,12 +190,20 @@ def nhc_chain_update(
         Scratch buffer ``[M]``, same dtype for Yoshida-Suzuki chain dt.
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
+    compute_ke : bool, optional
+        When True (default) the kernel computes ``ke2 = Σ m v²`` internally from
+        *velocities*.  When False the caller-supplied *ke2* is used as-is — the
+        domain-parallel path fills it with the mesh-global 2·KE so the thermostat
+        couples to the whole system rather than a single rank's owned shard.
     """
     M = temperature.shape[0]
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)
     scl_t = _scalar_type(dtype)
     total_scale.fill_(1.0)
+    # Only forward the flag when non-default so the common path stays compatible
+    # with ops builds that predate it.
+    extra = {} if compute_ke else {"compute_ke": False}
     _nhc_chain_update(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
@@ -210,6 +219,7 @@ def nhc_chain_update(
         wp.from_torch(dt_chain, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_systems=M,
+        **extra,
     )
 
 
@@ -228,6 +238,7 @@ def _nhc_chain_update_fake(
     step_scale,
     dt_chain,
     batch_idx,
+    compute_ke=True,
 ) -> None:
     pass
 

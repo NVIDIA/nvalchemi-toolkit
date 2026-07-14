@@ -1,0 +1,21 @@
+# Lennard-Jones — non-PBC Argon cluster at the LJ minimum-energy spacing.
+model: LennardJones
+dtype: fp64
+default_sizes: [1000, 4000]
+
+system:
+  builder: build_argon_cluster
+  sizing: n_per_side_for_size
+  pbc: false
+  charges: false
+  compute_neighbors: true
+
+loader:
+  kind: lj
+  epsilon: 0.0104   # AR_LJ_EPSILON
+  sigma: 3.40       # AR_LJ_SIGMA
+  cutoff: 8.5       # 2.5 * sigma
+
+forward:
+  cutoff_attr: cutoff
+  upfront_halo_exchange: true

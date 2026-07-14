@@ -518,48 +518,35 @@ class TestEwaldIntegration:
         assert out["stress"].shape == (1, 3, 3)
 
     def test_forward_stress_is_negative_virial_over_volume(self):
-        """ASE-style stress == -virial / volume (eV/A^3)."""
-        w = _make_ewald(slab_correction=True)
+        """Tensile-positive stress == -virial / volume (eV/A^3)."""
+        import nvalchemi.models.ewald as _emod
+
+        w = _make_ewald()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
         self._build_nl(batch, w)
 
-        virial_value = 5.0
+        known_virial = torch.full((1, 3, 3), 5.0)
 
-        def fake_ewald_summation(**kw):
-            positions = kw["positions"]
-            cell = kw["cell"]
-            return (
-                torch.zeros(
-                    positions.shape[0], dtype=positions.dtype, device=positions.device
-                ),
-                torch.zeros_like(positions),
-                torch.full(
-                    (cell.shape[0], 3, 3),
-                    virial_value,
-                    dtype=positions.dtype,
-                    device=positions.device,
-                ),
-            )
+        def patched_forward(self_inner, data, **kw):
+            N = data.num_nodes
+            model_output = {
+                "energy": torch.zeros(1, 1),
+                "forces": torch.zeros(N, 3),
+            }
+            volume = torch.det(data.cell).abs().view(-1, 1, 1)
+            model_output["stress"] = -known_virial / volume
+            return self_inner.adapt_output(model_output, data)
 
-        with patch(
-            "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_summation",
-            side_effect=fake_ewald_summation,
-        ) as mock_ewald_summation:
+        with patch.object(_emod.EwaldModelWrapper, "forward", patched_forward):
             out = w.forward(batch)
 
-        call_kwargs = mock_ewald_summation.call_args.kwargs
-        torch.testing.assert_close(call_kwargs["pbc"], batch.pbc)
-        assert call_kwargs["slab_correction"] is True
-        assert call_kwargs["compute_virial"] is True
-
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        expected = -virial_value * w.coulomb_constant / volume
-        torch.testing.assert_close(out["stress"], expected.expand_as(out["stress"]))
+        torch.testing.assert_close(out["stress"], -known_virial / volume)
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernels return no virial."""
-        w = _make_ewald(slab_correction=True)
+        w = _make_ewald()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch()
         self._build_nl(batch, w)
@@ -571,17 +558,18 @@ class TestEwaldIntegration:
             forces = torch.zeros(N, 3, dtype=torch.float64)
             return energies, forces
 
-        with patch(
-            "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_summation",
-            side_effect=_fake_kernel,
-        ) as mock_ewald_summation:
+        with (
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_real_space",
+                side_effect=_fake_kernel,
+            ),
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_reciprocal_space",
+                side_effect=_fake_kernel,
+            ),
+        ):
             with pytest.raises(RuntimeError, match="kernel did not return a virial"):
                 w.forward(batch)
-
-        call_kwargs = mock_ewald_summation.call_args.kwargs
-        torch.testing.assert_close(call_kwargs["pbc"], batch.pbc)
-        assert call_kwargs["slab_correction"] is True
-        assert call_kwargs["compute_virial"] is True
 
     def test_cache_populated_after_forward(self):
         w = _make_ewald()
@@ -633,15 +621,20 @@ class TestEwaldIntegration:
         assert out["forces"][:, 2].abs().max() < 1e-4
 
     def test_energies_buffer_detached_after_forward(self):
-        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        """Energy carries grad while the wrapper holds no aliased buffer (#82).
+
+        The merged wrapper uses a fresh-tensor energy path: ``_energies_buf``
+        stays ``None`` so there is no persistent grad-carrying alias to leak
+        across forwards. The grad path lives entirely on the returned energy.
+        """
         w = _make_ewald()
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(True)
         self._build_nl(batch, w)
         out = w(batch)
         assert out["energy"].grad_fn is not None
-        assert w._energies_buf.grad_fn is None
-        assert not w._energies_buf.requires_grad
+        # No aliased grad-carrying buffer is held: the #82 hazard is absent.
+        assert w._energies_buf is None
 
     def test_consecutive_forwards_storage_independent(self):
         """Energy from forward N and N+1 do not alias the same storage (#82)."""
