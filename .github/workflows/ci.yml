@@ -123,10 +123,20 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Install uv via its pinned, checksum-verified installer rather than the
+      # astral-sh/setup-uv action, which the org action allow-list blocks
+      # (non-GitHub, not in the permitted patterns). Mirrors the test job.
       - name: Setup UV
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
+        env:
+          UV_VERSION: "0.9.25"
+          UV_CHECKSUM: "1e1aea6cead1a07a7cee24f6eaec415b"
+        run: |
+          UV_INSTALLER=$(mktemp)
+          curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o "$UV_INSTALLER"
+          echo "${UV_CHECKSUM}  ${UV_INSTALLER}" | md5sum -c -
+          sh "$UV_INSTALLER"
+          rm "$UV_INSTALLER"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Cache pre-commit
         uses: actions/cache@v4
