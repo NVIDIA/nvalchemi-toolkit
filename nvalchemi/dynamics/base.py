@@ -2932,9 +2932,10 @@ class FusedStage(BaseDynamics):
            with new positions) → single shared forward pass → AFTER_COMPUTE.
         4. For each sub-stage: run post_update (final velocity kick at
            r(t+dt) forces), fire AFTER_POST_UPDATE.
-        5. Fire AFTER_STEP hooks on each sub-stage.
-        6. Snapshot status, check convergence per sub-stage and fire
-           ON_CONVERGE if triggered.
+        5. Snapshot status, then fire AFTER_STEP hooks on each sub-stage
+           (ConvergenceHook migrates here) and apply counter migration.
+        6. Check convergence per sub-stage and fire ON_CONVERGE if
+           triggered.
         7. Increment step_count for FusedStage and all sub-stages.
         8. Identify samples that newly graduated during this step.
 
@@ -2994,16 +2995,17 @@ class FusedStage(BaseDynamics):
                 dynamics._masked_post_update(batch, mask)
             dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
 
+        # Snapshot before hook and counter migration so both are reported
+        # in exit_converged.
+        pre_migration_status = batch.status.clone()
+        if pre_migration_status.dim() == 2:
+            pre_migration_status = pre_migration_status.squeeze(-1)
+
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(DynamicsStage.AFTER_STEP, batch)
 
         self._call_hooks(DynamicsStage.AFTER_STEP, batch)
         self._call_fused_hooks(DynamicsStage.AFTER_STEP, batch)
-
-        # Snapshot before the counter migration so it is reported in exit_converged.
-        pre_converge_status = batch.status.clone()
-        if pre_converge_status.dim() == 2:
-            pre_converge_status = pre_converge_status.squeeze(-1)
 
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
             if dynamics.n_steps is None:
@@ -3063,7 +3065,7 @@ class FusedStage(BaseDynamics):
         post_status = batch.status
         if post_status.dim() == 2:
             post_status = post_status.squeeze(-1)
-        newly_graduated = (pre_converge_status < self.exit_status) & (
+        newly_graduated = (pre_migration_status < self.exit_status) & (
             post_status >= self.exit_status
         )
         exit_converged: torch.Tensor | None = (
