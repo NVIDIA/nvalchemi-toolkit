@@ -4,6 +4,7 @@
 
 ### Added
 
+- MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
   default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor
@@ -35,6 +36,16 @@
   key string or a callable). Time-based schedulers step every optimizer
   step as before; metric-driven schedulers step only at validation
   checkpoints, where the validation summary supplies the metric.
+
+### Model Wrappers
+
+- **Pipeline neighbor-list adaptation policy** — `PipelineModelWrapper`
+  now accepts `neighbor_adaptation` (`"auto"`, `"always"`, `"never"`) and
+  `max_cutoff_ratio` (default `1.5`). The default `"auto"` mode only filters
+  a source neighbor list for a smaller cutoff when the source cutoff is at most
+  `max_cutoff_ratio` times the target cutoff; larger gaps get separate source
+  lists. `"always"` builds one max-cutoff source list, while `"never"` builds
+  exact cutoff source groups and skips cutoff filtering.
 
 ### Core Data Layer
 
