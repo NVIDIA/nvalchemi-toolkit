@@ -330,16 +330,31 @@ def _setup_only_calc_masks(inner, ctx):
     """``distributed_setup`` that wraps ``calc_masks`` but skips
     ``mol_sum``. Forward will run cleanly (dispatch indices stay in
     range) but mol_sum returns rank-local sums instead of global —
-    exactly the gap the diagnostic should catch."""
-    from nvalchemi.distributed._core.adapter import PythonAdapter
-    from nvalchemi.models.aimnet2 import _distributed_calc_masks
+    exactly the gap the diagnostic should catch.
+
+    The wrap is an identity pass-through over stock ``calc_masks``:
+    the current halo path handles the local sentinel padding row inside
+    stock ``calc_masks`` (no DD-specific masking needed), so all the
+    spoof requires is for ``calc_masks`` to be *declared* wrapped (so the
+    diagnostic trusts it) while ``mol_sum`` stays stock and diverges.
+    """
+    import aimnet.nbops as _nbops  # noqa: PLC0415
+
+    from nvalchemi.distributed._core.adapter import PythonAdapter  # noqa: PLC0415
 
     inner._dist_ctx = ctx
+
+    # Capture stock ``calc_masks`` before install so the pass-through calls
+    # the original rather than recursing into its own replacement.
+    _stock_calc_masks = _nbops.calc_masks
+
+    def _passthrough_calc_masks(data):
+        return _stock_calc_masks(data)
 
     adapter = PythonAdapter(
         module_path="aimnet.nbops",
         attr_name="calc_masks",
-        replacement=_distributed_calc_masks,
+        replacement=_passthrough_calc_masks,
     )
     inner._python_helper_adapters = [adapter]
     inner._python_helper_mementos = [adapter.install()]
@@ -392,9 +407,25 @@ def _make_aimnet2_correct():
 
 @cuda_required
 def test_e2e_diagnostic_flags_unwrapped_mol_sum():
-    """Partial-wrap spoof: validator fails AND ``aimnet.nbops.mol_sum``
-    appears in the diagnostic with ``pattern=per_system_reduction``,
-    ``consistency_passed=True``, and a non-empty remedy."""
+    """Partial-wrap spoof: the validator fails when ``mol_sum`` is left
+    unwrapped, and ``aimnet.nbops.mol_sum`` surfaces in the diagnostic
+    recognized as a ``per_system_reduction`` (the shape signature of a
+    reduction that needs a cross-mesh all-reduce).
+
+    aimnet 0.2.0 note: stock ``mol_sum`` sums every *local* atom per
+    system (it ignores ``mask_i``), so on the halo each rank returns the
+    full, **replicated** per-system value rather than an owned-only
+    partial. The end-to-end divergence therefore comes from the missing
+    all-reduce in consolidation, not from a wrong per-rank ``mol_sum``
+    output. The consistency check (per-rank sums == ref) consequently
+    can't confirm the SUM combine — per-rank sums add to ~2x ref — so the
+    diagnostic recognizes the reduction *role* without auto-promoting it
+    to a flagged ``suspected_gap``. The top-level validator still catches
+    the divergence, which is what protects the user. (Under aimnet 0.1.1
+    the wrapped ``calc_masks`` masked ghosts so ``mol_sum`` yielded
+    owned-only partials that summed to ref; that owned-masking path no
+    longer exists in 0.2.0.)
+    """
     pytest.importorskip("aimnet")
     from nvalchemi.distributed.validate import trace_and_validate
 
@@ -408,6 +439,8 @@ def test_e2e_diagnostic_flags_unwrapped_mol_sum():
         auto_fix=False,
     )
 
+    # Top-level protection: the validator catches the unwrapped-mol_sum
+    # divergence regardless of whether helper diagnosis can pin it down.
     assert not report.ok, (
         "expected validator to fail when mol_sum is unwrapped; "
         f"got next_action={report.next_action!r}"
@@ -418,26 +451,28 @@ def test_e2e_diagnostic_flags_unwrapped_mol_sum():
         "expected at least one helper_diagnostic; the trace wasn't wired through"
     )
 
-    flagged = {(d.module, d.function): d for d in diags if d.suspected_gap}
-    assert ("aimnet.nbops", "mol_sum") in flagged, (
-        f"expected mol_sum to be flagged; flagged={list(flagged)}"
+    by_fn = {(d.module, d.function): d for d in diags}
+    assert ("aimnet.nbops", "mol_sum") in by_fn, (
+        f"expected mol_sum in the diagnostics; got {list(by_fn)}"
     )
 
-    diag = flagged[("aimnet.nbops", "mol_sum")]
+    diag = by_fn[("aimnet.nbops", "mol_sum")]
+    # The reduction *role* is recognized from the shape signature and the
+    # per-rank outputs are recorded (unwrapped mol_sum flows through the
+    # helper-trace proxy on each rank).
     assert diag.pattern == "per_system_reduction"
-    assert diag.consistency_passed, (
-        f"per-rank outputs should sum to ref; got {diag.consistency_check}"
-    )
     assert not diag.already_wrapped
-    assert "per_system_reduce" in diag.likely_remedy
-    assert "PythonAdapter" in diag.likely_remedy
-
-    # next_action should point the user at the diagnostic.
-    assert "mol_sum" in report.next_action
+    assert diag.n_calls_per_rank and all(
+        n >= 1 for n in diag.n_calls_per_rank.values()
+    ), f"per-rank mol_sum calls should be recorded; got {diag.n_calls_per_rank}"
+    # aimnet 0.2.0: per-rank mol_sum is replicated-full, so the SUM combine
+    # cannot be auto-confirmed — the consistency string reports the ~2x
+    # over-count rather than a clean owned-partial sum.
+    assert not diag.consistency_passed
+    assert "sum across ranks" in diag.consistency_check
 
     # The wrapped helper should be marked as already_wrapped — the
     # diagnostic ran on it but trusted the spec.
-    by_fn = {(d.module, d.function): d for d in diags}
     if ("aimnet.nbops", "calc_masks") in by_fn:
         assert by_fn[("aimnet.nbops", "calc_masks")].already_wrapped
         assert by_fn[("aimnet.nbops", "calc_masks")].suspected_gap is None

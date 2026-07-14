@@ -438,6 +438,16 @@ def _make_aimnet2_wrapper():
     return w
 
 
+def _make_aimnet2_wrapper_with_stress():
+    """AIMNet2 with ``stress`` additionally active — used by the PBC gate
+    to validate the autograd stress path under DD (stress rides the same
+    ``autograd_outputs`` /world_size consolidation as forces, but on a
+    per-graph output; only PBC makes it meaningful)."""
+    w = _make_aimnet2_wrapper()
+    w.model_config.active_outputs = {"energy", "forces", "stress"}
+    return w
+
+
 def _make_octane_chain_for_aimnet2(n_atoms: int = 8, bond: float = 1.5):
     """Pseudo-octane carbon chain for AIMNet2 — 1D along x, ``n_atoms``
     carbons at C-C bond length. Mirrors the production test
@@ -476,7 +486,9 @@ def _make_octane_chain_for_aimnet2(n_atoms: int = 8, bond: float = 1.5):
     return Batch.from_data_list([data], device="cuda")
 
 
-def _make_methane_packing_for_aimnet2(n_per_side: int = 4, spacing: float = 4.4):
+def _make_methane_packing_for_aimnet2(
+    n_per_side: int = 4, spacing: float = 4.4, jitter: float = 0.05, seed: int = 0
+):
     """3-D methane packing with full PBC for AIMNet2 — exercises the
     PBC + ``calc_masks`` / ``mol_sum`` code path that the 1-D carbon chain
     (no PBC) doesn't.
@@ -517,6 +529,21 @@ def _make_methane_packing_for_aimnet2(n_per_side: int = 4, spacing: float = 4.4)
     )  # (M, 3)
 
     positions = (centres.unsqueeze(1) + methane_offsets.unsqueeze(0)).reshape(-1, 3)
+    # Thermal jitter breaks the perfect-crystal symmetry. Without it every
+    # molecule is identical, so the whole system has only ~5 distinct force
+    # vectors (1 C + 4 H), each repeated once per molecule. The validator's
+    # permutation-invariant force check row-sorts the two force sets and pairs
+    # them; with dozens of identical-magnitude copies, fp32 noise interleaves
+    # the symmetry-equivalent duplicates differently between the reference and
+    # the rank-concatenated result, so it pairs e.g. a [+,+,+] copy against a
+    # [+,+,-] copy and reports a spurious ~2x force divergence even though the
+    # force *multiset* is machine-precision identical. Jitter makes every force
+    # distinct so the pairing is unambiguous (mirrors ``_make_bcc_fe_batch``).
+    if jitter:
+        g = torch.Generator().manual_seed(seed)
+        positions = positions + jitter * torch.randn(
+            positions.shape, generator=g, dtype=dtype
+        )
     n_atoms = positions.shape[0]
     atomic_numbers = torch.tensor([6, 1, 1, 1, 1] * (n_atoms // 5), dtype=torch.long)
 
@@ -567,14 +594,22 @@ def test_aimnet2_passes_initial_inference():
 @cuda_required
 def test_aimnet2_methane_pbc_passes():
     """3-D methane packing with full PBC. Exercises the multi-rank halo
-    force path under PBC that the (non-PBC) carbon-chain sample doesn't —
-    owned forces must match the single-process reference."""
+    energy/force/stress path under PBC that the (non-PBC) carbon-chain
+    sample doesn't — owned forces, stress, and energy must all match the
+    single-process reference. Stress rides the autograd /world_size
+    consolidation and is only meaningful under PBC, so this is the gate
+    that covers it for AIMNet2 under DD."""
     pytest.importorskip("aimnet")
     from nvalchemi.distributed.validate import trace_and_validate
 
+    # 6x6x6 = 216 molecules = 1080 atoms: large enough that the world=2
+    # spatial partition is genuinely non-degenerate (each rank has ~100
+    # remote atoms it never sees), so the owned forces exercise the real
+    # partial-halo reverse-consolidation path rather than the trivial
+    # every-rank-sees-everything case a small box collapses to.
     report = trace_and_validate(
-        _make_aimnet2_wrapper,
-        _make_methane_packing_for_aimnet2(n_per_side=4),  # 320 atoms
+        _make_aimnet2_wrapper_with_stress,
+        _make_methane_packing_for_aimnet2(n_per_side=6),  # 1080 atoms
         world_size=2,
         device="cuda:0",
         atol=1e-5,
@@ -582,6 +617,10 @@ def test_aimnet2_methane_pbc_passes():
         auto_fix=True,
     )
     assert report.ok, report.next_action
+    ph = report.attempts[-1].partition_health
+    assert ph is not None and not ph.get("degenerate"), (
+        f"methane PBC gate must be non-degenerate to be meaningful; got {ph}"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -642,6 +681,7 @@ def _make_bcc_fe_batch(n_per_side: int = 4, jitter: float = 0.05, seed: int = 0)
     return Batch.from_data_list([data], device="cuda")
 
 
+@pytest.mark.requires_uma
 @cuda_required
 def test_uma_passes_initial_inference():
     """UMA halo-storage correctness on a 128-atom bcc Fe cell: owned
@@ -668,6 +708,7 @@ def test_uma_passes_initial_inference():
     assert report.ok, report.next_action
 
 
+@pytest.mark.requires_uma
 @cuda_required
 def test_uma_passes_at_n_1024():
     """UMA correctness at n=1024 (BCC 8³ Fe): energy and owned forces
