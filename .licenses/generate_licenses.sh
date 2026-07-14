@@ -70,7 +70,7 @@ uv pip install --python "$PY" "${CONSTRAINT_ARGS[@]}" "${group_args[@]}" .
 
 # pip-licenses runs from an isolated tool env and inspects $PY via --python,
 # so pip-licenses' own deps never pollute the inventory.
-PL=(uvx pip-licenses@latest --python "$PY")
+PL=(uvx pip-licenses@4.1 --python "$PY")
 
 # Collect the inventory once (with full license text), then render all three
 # artifacts from it so manual license overrides apply consistently everywhere.
