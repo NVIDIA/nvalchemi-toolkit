@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.3.1",
+    "nvalchemi-toolkit-ops>=0.4.0",
     "torch>=2.8",
     "click",
     "loguru",
@@ -141,7 +141,6 @@ dependency-metadata = [
 ]
 
 [tool.uv.sources]
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "0.4.0-rc" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
@@ -254,7 +253,10 @@ pythonpath = ["test/distributed"]
 addopts = ["-vv", "-r", "xfXs"]
 markers = [
     "slow: marks tests as slow (deselect with: -m 'not slow')",
-    "cli: marks tests which run CLIs"
+    "cli: marks tests which run CLIs",
+    "multigpu: marks tests that require >=2 CUDA GPUs (auto-skipped otherwise)",
+    "requires_cueq: marks tests needing registered cuequivariance torch ops (auto-skipped otherwise)",
+    "requires_uma: marks tests needing fairchem-core / UMA (auto-skipped otherwise)"
 ]
 asyncio_mode = "auto"
 
