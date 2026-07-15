@@ -1,0 +1,3 @@
+# Add pip constraint lines here to test specific versions, e.g.
+# fairchem-core==2.5.0
+# mace-torch==0.3.14
