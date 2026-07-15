@@ -53,6 +53,23 @@ def _tensor_serialization(tensor: torch.Tensor) -> list[float | int | list]:
     return tensor.detach().cpu().tolist()
 
 
+def _warn_first(seen: set, key: object, message: str, *, stacklevel: int = 2) -> None:
+    """Emit ``message`` as a ``UserWarning`` the first time ``key`` is seen.
+
+    ``key`` is recorded in ``seen`` so repeats stay silent. ``stacklevel`` is
+    relative to the caller (this frame is added on top).
+    """
+    if key not in seen:
+        seen.add(key)
+        warnings.warn(message, UserWarning, stacklevel=stacklevel + 1)
+
+
+# Process-global record of (field, src_dtype, tgt_dtype) casts already warned
+# about, so check_fp_dtype_consistency warns once per cast rather than per
+# construction. Module-level so it stays out of the AtomicData schema.
+_FP_CAST_WARNED: set[tuple[str, str, str]] = set()
+
+
 class AtomicNumberTable:
     """
     Atomic number table
@@ -386,6 +403,12 @@ class AtomicData(BaseModel, DataMixin):
         }
     )
 
+    # FP fields exempt from the positions-dtype cast below. Empty by default. Set
+    # it globally (``AtomicData.precision_preserving_keys = frozenset({"energy"})``)
+    # or on a subclass to keep a high-precision label, e.g. a fp64 total energy
+    # (~1e4-1e5 eV, which fp32 would quantize to ~1e-2 eV).
+    precision_preserving_keys: ClassVar[frozenset[str]] = frozenset()
+
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True, validate_assignment=True, extra="allow"
@@ -482,31 +505,28 @@ class AtomicData(BaseModel, DataMixin):
     @model_validator(mode="after")
     def check_fp_dtype_consistency(self) -> AtomicData:
         """
-        Ensures all floating point tensors are at the same precision
-        as the positions tensor.
+        Cast floating point tensors to the positions dtype. Fields in
+        ``precision_preserving_keys`` are exempt. Casting is unconditional, but
+        each distinct ``(field, src, tgt)`` cast warns only once per process.
         """
         dtype = self.positions.dtype
-        casted: list[str] = []
         for key in self.model_dump().keys():
+            if key in self.precision_preserving_keys:
+                continue
             value = getattr(self, key)
-            if isinstance(value, torch.Tensor):
-                tensor_dtype = value.dtype
-                if tensor_dtype.is_floating_point and tensor_dtype != dtype:
-                    # using __dict__ to avoid re-validation
-                    self.__dict__[key] = value.to(dtype)
-                    casted.append(key)
-        if casted:
-            casted.sort()
-            # Keep the warning attributed to the user's AtomicData(...) call
-            # instead of Pydantic's internal validation frames. This may need
-            # adjustment if Pydantic's construction stack changes.
-            warnings.warn(
-                f"AtomicData fields {casted} were cast from their original "
-                f"dtypes to {dtype} to match positions. "
-                f"Pass tensors with matching dtypes to silence this warning.",
-                UserWarning,
-                stacklevel=3,
-            )
+            if not (isinstance(value, torch.Tensor) and value.dtype.is_floating_point):
+                continue
+            if value.dtype != dtype:
+                # stacklevel=3 keeps the warning on the user's AtomicData(...) call
+                _warn_first(
+                    _FP_CAST_WARNED,
+                    (key, str(value.dtype), str(dtype)),
+                    f"AtomicData field '{key}' was cast from {value.dtype} to "
+                    f"{dtype} to match positions; pass a matching dtype to silence "
+                    f"this (warned once per field/dtype).",
+                    stacklevel=3,
+                )
+                self.__dict__[key] = value.to(dtype)  # __dict__ skips re-validation
         return self
 
     @model_validator(mode="after")
