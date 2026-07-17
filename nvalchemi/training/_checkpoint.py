@@ -1149,6 +1149,35 @@ def _optimizer_scheduler_maps_from_strategy(
     return optimizers, schedulers
 
 
+def _load_model_state(
+    model: nn.Module,
+    weights: Mapping[str, Any],
+    *,
+    model_name: str,
+    strategy_metadata: Mapping[str, Any] | None,
+) -> None:
+    """Load full model state, or a checkpoint-declared partial state."""
+    if (
+        strategy_metadata is None
+        or strategy_metadata.get("model_state_load") != "partial"
+    ):
+        model.load_state_dict(weights)
+        return
+
+    result = model.load_state_dict(weights, strict=False)
+    if result.unexpected_keys:
+        raise RuntimeError(
+            "Partial checkpoint contains unexpected tensor keys for model "
+            f"{model_name!r}: {sorted(result.unexpected_keys)}."
+        )
+    missing_saved_keys = set(weights) & set(result.missing_keys)
+    if missing_saved_keys:
+        raise RuntimeError(
+            "Partial checkpoint saved tensor keys were not consumed for model "
+            f"{model_name!r}: {sorted(missing_saved_keys)}."
+        )
+
+
 def _restore_checkpoint_into_strategy(
     root: Path,
     manifest: CheckpointManifest,
@@ -1183,7 +1212,12 @@ def _restore_checkpoint_into_strategy(
             weights_only=True,
             map_location=map_location,
         )
-        model.load_state_dict(weights)
+        _load_model_state(
+            model,
+            weights,
+            model_name=name,
+            strategy_metadata=strategy_metadata,
+        )
         spec_path = root / "models" / name / "spec.json"
         spec = _load_spec(spec_path) if spec_path.exists() else None
         loaded_models[name] = (model, spec)
