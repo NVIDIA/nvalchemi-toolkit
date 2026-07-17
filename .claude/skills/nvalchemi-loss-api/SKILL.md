@@ -187,7 +187,7 @@ helper methods — one overload per layout. See these implementations in
 `nvalchemi/training/losses/terms.py` as the reference pattern for
 multi-layout losses.
 
-```text
+```python
 from plum import dispatch, overload
 
 @overload

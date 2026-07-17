@@ -218,10 +218,9 @@ chains are documented in `.claude/skills/README.md`.
 | `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
 | `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
 | `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
-| `nvalchemi-training-api` | Training from scratch: strategy, losses, optimizers, validation, checkpoints |
+| `nvalchemi-training-api` | Training from scratch: strategy, losses, optimizers, validation, checkpoints; scaling to multi-GPU/multi-node (DDP) |
 | `nvalchemi-fine-tuning` | Adapting a pretrained model to new reference data |
 | `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
-| `nvalchemi-distributed-training` | Multi-GPU/multi-node training: DDP, rank-safe patterns |
 | `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
 | `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
 | `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |

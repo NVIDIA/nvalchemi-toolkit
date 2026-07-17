@@ -333,23 +333,3 @@ sentinel.send(dst=1)  # signal "no more data"
 reconstructed = batch.to_data_list()
 batch_again = Batch.from_data_list(reconstructed)
 ```
-
----
-
-## Troubleshooting
-
-Error messages below are quoted from `nvalchemi/data/atomic_data.py`,
-`nvalchemi/data/batch.py`, and `nvalchemi/_optional.py`.
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `ValueError: Inconsistent number of atoms in <key>: expected N, got M` | A per-atom tensor's leading dimension does not match `positions.shape[0]` | Make every node-level tensor `(num_atoms, ...)`; check for accidental transposes or per-graph tensors passed as per-atom |
-| `ValueError: Inconsistent number of edges in <key>: expected N, got M` | A per-edge tensor's leading dimension does not match the edge count from `edge_index` | Make every edge-level tensor `(num_edges, ...)` and keep `edge_index` shaped `(2, num_edges)` |
-| `ValueError: Atom categories must be a list of `` `AtomCategory` `` enums` | `atom_categories` passed as raw ints/strings | Pass `AtomCategory` enum members (or a `torch.long` tensor of their values) |
-| `ValueError: Non-integer sum of atomic charges: ...` | Per-atom charges do not sum to an integer total charge | Fix the charges array or set an explicit integer structure charge |
-| `ValueError: Cannot create batch from empty data list` | `Batch.from_data_list([])` | Guard the call site; skip empty shards before batching |
-| `KeyError: Attribute '<key>' not found in batch` | Indexing `batch["<key>"]` for a field never set on the source `AtomicData` | Check `data.keys()` before access; custom fields must be set on every system in the batch |
-| `ValueError: mask shape X != num_graphs N` | A graph mask passed to `put`/`extract` has the wrong length | Build masks with `torch.ones(batch.num_graphs, dtype=torch.bool)` and slice from there |
-| `ValueError: defrag requires copied_mask or a prior put` (also `trim requires ...`) | Calling `defrag()`/`trim()` on a batch that never recorded which graphs were copied out | Pass `copied_mask=` explicitly, or call `put(..., mask=...)` first |
-| `OptionalDependencyError` mentioning `nvalchemi-toolkit[ase]` | `from_ase`/`to_ase` called without the `ase` extra installed | Install the extra, e.g. `uv sync --extra cu13 --extra ase` |
-| Model forward fails on dtype/device | `atomic_numbers` not `torch.long`, or CPU tensors mixed into a CUDA batch | Construct with `dtype=torch.long` for atomic numbers; move whole objects with `data.to(device)` rather than individual tensors |

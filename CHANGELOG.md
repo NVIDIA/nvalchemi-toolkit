@@ -4,14 +4,6 @@
 
 ### Added
 
-- New `nvalchemi-distributed-training` agent skill covering
-  `DistributedManager`, `DDPHook`, distributed samplers, and rank-safe
-  validation, checkpointing, and reporting.
-- Skill routing table in `AGENTS.md` and authoring conventions plus a
-  "which skill do I need?" guide in `.claude/skills/README.md`;
-  `Troubleshooting` sections in the data-structures, data-storage,
-  training-api, and dynamics-api skills. The repository now ships a
-  `CLAUDE.md` that imports `AGENTS.md`.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
   default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor

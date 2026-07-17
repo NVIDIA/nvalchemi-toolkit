@@ -4,9 +4,11 @@ description: >-
   How to configure nvalchemi training workflows with TrainingStrategy, custom
   training functions, standalone or composed losses, loss-weight schedules,
   optimizer and scheduler configs, validation, hooks, restartable checkpoints,
-  and model-agnostic inputs. Use when training a model from scratch or setting
-  up optimizers, schedulers, validation, or checkpointing for a training run;
-  for adapting a pretrained model, see nvalchemi-fine-tuning.
+  model-agnostic inputs, and scaling to multiple GPUs or nodes with
+  DistributedManager and DDPHook. Use when training a model from scratch,
+  setting up optimizers, schedulers, validation, or checkpointing, or scaling a
+  run across GPUs or nodes (DDP); for adapting a pretrained model, see
+  nvalchemi-fine-tuning.
 ---
 
 # nvalchemi Training API
@@ -199,7 +201,7 @@ Training workflows should be fully checkpointable and reproducible:
 - Make data splits, sampler state, seeds, units, dtype/device choices, and config
   files explicit in the run directory.
 - For multi-GPU or multi-node runs (DDP, rank-safe checkpointing), see the
-  `nvalchemi-distributed-training` skill.
+  *Scaling to multiple GPUs* section below.
 
 Strategy checkpoints are restart packages: model weights, optimizer and scheduler
 state, strategy counters, checkpointable hook state, and reconstruction metadata.
@@ -226,19 +228,54 @@ desired. See `docs/modules/training/checkpoints.rst`.
 
 ---
 
-## Troubleshooting
+## Scaling to multiple GPUs (DDP)
 
-Error messages below are quoted from `nvalchemi/training/strategy.py` and
-`nvalchemi/training/_strategy_validation.py`; all are raised at
-`TrainingStrategy` construction time.
+Data-parallel training routes through `DistributedManager` (re-exported from
+PhysicsNeMo as `nvalchemi.distributed.DistributedManager`); prefer it as the
+single entry point. It owns rank, device, and process-group state, and passing
+it to `TrainingStrategy` alongside a `DDPHook` gives every hook the same runtime
+view, so one script runs unchanged on one process or many (with world size one,
+`DDPHook` is a no-op). See `docs/userguide/distributed_training.md` for the full
+guide.
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `ValueError: training_fn must be provided explicitly. To opt into the stock single-model behavior, use ...` | No `training_fn` given and the stock behavior was not opted into | `from nvalchemi.training import default_training_fn` and pass `training_fn=default_training_fn`, or supply your own |
-| `ValueError: models must contain at least one BaseModelMixin.` | Empty `models`, or a raw `torch.nn.Module` passed where a wrapped model is required | Wrap the model first — see the `nvalchemi-model-wrapping` skill |
-| `ValueError: Exactly one of num_epochs or num_steps must be set; got ...` | Both or neither duration argument supplied | Pass `num_epochs=` or `num_steps=`, never both |
-| `ValueError: optimizer_configs key '<k>' is not present in models; available model keys: [...]` | Named `optimizer_configs` mapping uses a key missing from `models` | Use identical keys in both mappings; models without an optimizer entry stay frozen |
-| `ValueError: devices must contain at least one torch.device.` / `devices must have length 1 or len(models)=N` | Empty or mis-sized `devices` list | Pass one shared device or exactly one device per model |
-| `ValueError: loss_fn weights[<idx>]: ...` | A custom weight schedule cannot be serialized for restartable checkpoints | Implement `to_spec()` on the schedule (see `nvalchemi-loss-api`) |
-| `ValueError: hooks must not contain duplicate hook instances; ...` | The same hook object appears twice in `hooks=[...]` | Create distinct hook instances |
-| Loss raises on dtype mismatch at first step | Built-in losses default to `dtype_policy="strict"` | See "Losses And Scheduling" above for `dtype_policy` choices |
+```python
+from nvalchemi.distributed import DistributedManager
+from nvalchemi.training.hooks import DDPHook
+
+DistributedManager.initialize()          # also handles single-process runs
+manager = DistributedManager()
+
+strategy = TrainingStrategy(
+    models=model,
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW, optimizer_kwargs={"lr": 1e-4}
+    ),
+    loss_fn=EnergyMSELoss() + ForceMSELoss(),
+    distributed_manager=manager,
+    hooks=[DDPHook(), CheckpointHook("runs/ddp/checkpoints", epoch_interval=1)],
+    num_epochs=20,
+)
+strategy.run(train_loader)
+```
+
+`DDPHook` (during strategy setup) wraps the trainable models in
+`DistributedDataParallel`, selects the rank-local device, and injects a
+distributed sampler into the active dataloader, so no manual sampler wiring is
+needed. Rank-safety is handled for you: validation all-reduces its metrics
+across ranks (so never rank-gate the validation call), and `CheckpointHook`
+writes from global rank 0 only, unwrapping DDP so checkpoints store plain
+weights. Reporting is rank-aware too (see `nvalchemi-reporting`).
+
+Launch one process per GPU with `torchrun`:
+
+```bash
+torchrun --standalone --nproc_per_node=4 train.py
+# runnable example:
+uv run --extra cuXX torchrun --standalone --nproc_per_node=2 \
+    examples/intermediate/06_ddp_mlp_training.py --backend auto
+```
+
+For multi-node launches (`torchrun --nnodes`/`--rdzv_endpoint` or Slurm `srun`),
+the rank helpers (`get_rank`, `get_world_size`, `barrier`, `all_reduce` in
+`nvalchemi/training/distributed.py`), and sampler/backend tuning, see
+`docs/userguide/distributed_training.md`.

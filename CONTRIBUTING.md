@@ -78,7 +78,7 @@ This will not only help developers pass the CI pipeline, but also accelerate rev
 Contributions that have not used pre-commit will *not be reviewed*.
 
 `pre-commit` is installed as part of the `dev` optional dependencies defined in `pyproject.toml`.
-If using `uv`, then running `uv sync --extra cu13 --group docs` (or `make install`)
+If using `uv`, then running `uv sync --extra cuXX --group docs` (or `make install`)
 will include the required dependencies for pre-commit hooks and for building
 documentation. Do not use `uv sync --all-extras`: the CUDA variants and some model
 extras are mutually exclusive.

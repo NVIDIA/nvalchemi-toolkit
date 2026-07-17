@@ -15,10 +15,9 @@ copy the skill folders into your project's or home skills directory.
 | Write, read, compose, or stream atomic data with the Zarr pipeline | `nvalchemi-data-storage` |
 | Tune Dataset/DataLoader throughput or Zarr chunking | `nvalchemi-zarr-perf` |
 | Wrap an MLIP or custom PyTorch model for use in nvalchemi | `nvalchemi-model-wrapping` |
-| Train a model from scratch (strategy, optimizers, validation) | `nvalchemi-training-api` |
+| Train a model from scratch, or scale it across GPUs/nodes (DDP) | `nvalchemi-training-api` |
 | Adapt a pretrained model to new reference data | `nvalchemi-fine-tuning` |
 | Choose, weight, mask, or implement loss functions | `nvalchemi-loss-api` |
-| Scale training across GPUs or nodes (DDP, rank safety) | `nvalchemi-distributed-training` |
 | Run MD, relaxation, or EOS scans; compose batched pipelines | `nvalchemi-dynamics-api` |
 | Add per-step callbacks (neighbor lists, convergence, logging) | `nvalchemi-dynamics-hooks` |
 | Implement a new integrator, optimizer, or sampler class | `nvalchemi-dynamics-implementation` |
@@ -34,7 +33,6 @@ when you are new to an area:
 ```text
 data-structures -> data-storage -> zarr-perf
 model-wrapping + loss-api -> training-api -> fine-tuning
-training-api -> distributed-training
 dynamics-hooks -> dynamics-api | dynamics-implementation
 reporting (orthogonal: attaches to training and dynamics)
 ```
@@ -61,9 +59,6 @@ Exactly two YAML fields — no agent-specific fields (such as
 - `## Overview` comes first: what the skill covers, why, and pointers to
   the deeper `docs/userguide/` pages.
 - Then task-oriented H2 sections in workflow order.
-- `## Troubleshooting` (optional but recommended for complex areas) goes
-  second-to-last, formatted as a `| Symptom | Cause | Fix |` table with
-  error messages quoted verbatim from the source.
 - `## Key files` (optional) goes last.
 
 ### Content rules
@@ -76,8 +71,6 @@ Exactly two YAML fields — no agent-specific fields (such as
 - Every repository path mentioned must exist.
 - Wrap prose and code at 88 characters (markdownlint MD013 applies to code
   blocks; tables are exempt).
-- Address the reader directly ("you", imperative). Never write "agents
-  should" or "load the skill" — write "see the `<name>` skill".
 - Cross-reference sibling skills by backticked name; reference repository
   files by their path from the repo root.
 

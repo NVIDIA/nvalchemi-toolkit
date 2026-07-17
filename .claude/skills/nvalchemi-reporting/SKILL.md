@@ -175,7 +175,7 @@ Guidelines:
 Reporters can be rank-gated. Defaults are conservative for terminal and file
 outputs: rank zero writes or renders unless a reporter requires all ranks for a
 collective reduction. For setting up the distributed training run itself, see
-the `nvalchemi-distributed-training` skill.
+the `nvalchemi-training-api` skill's *Scaling to multiple GPUs* section.
 
 ```python
 reporting = ReportingOrchestrator(
