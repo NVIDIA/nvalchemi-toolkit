@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.3.1",
+    "nvalchemi-toolkit-ops>=0.4.0",
     "torch>=2.8",
     "click",
     "loguru",
@@ -141,7 +141,6 @@ dependency-metadata = [
 ]
 
 [tool.uv.sources]
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "0.4.0-rc" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
@@ -215,7 +214,10 @@ url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.ruff]
-exclude = [".licenses/", ".ci/", ".github/", ".git/", "build/", "dist/"]
+exclude = [".licenses/", ".ci/", ".github/", ".git/", "build/", "dist/", "nvalchemi/distributed/_core/_upstream/"]
+# force-exclude so pre-commit (which passes explicit file paths) still skips the
+# vendored _upstream copy.
+force-exclude = true
 
 [tool.ruff.lint]
 # Enable flake8/pycodestyle (`E`), Pyflakes (`F`), flake8-bandit (`S`),
@@ -232,6 +234,9 @@ ignore = ["E501", "S311", "F722", "F821"]
 "__init__.py" = ["F401"]
 "docs/*.py" = ["F401"]
 "examples/*.py" = ["E402", "S101"]
+# Benchmarks insert the suite dir on sys.path before importing it (E402) and
+# use asserts as sanity gates (S101) — same policy as examples/tests.
+"benchmark/**/*.py" = ["E402", "S101"]
 
 # Ignore `S101` (assertions) in all `test` files.
 "test/*.py" = ["S101"]
@@ -239,11 +244,19 @@ ignore = ["E501", "S311", "F722", "F821"]
 [tool.pytest.ini_options]
 testpaths = ["test"]
 norecursedirs = [".git", "third_party"]
+# Make the shared distributed-test helpers importable from any subfolder
+# (test/distributed/{_core,validate,model}/…) via ``from _helpers import …`` /
+# ``from _toy_gnn import …``. conftest *fixtures* auto-apply to subdirs; the
+# module-level helper classes need test/distributed on the path.
+pythonpath = ["test/distributed"]
 # show extra info on xfailed, xpassed, and skipped tests
 addopts = ["-vv", "-r", "xfXs"]
 markers = [
     "slow: marks tests as slow (deselect with: -m 'not slow')",
-    "cli: marks tests which run CLIs"
+    "cli: marks tests which run CLIs",
+    "multigpu: marks tests that require >=2 CUDA GPUs (auto-skipped otherwise)",
+    "requires_cueq: marks tests needing registered cuequivariance torch ops (auto-skipped otherwise)",
+    "requires_uma: marks tests needing fairchem-core / UMA (auto-skipped otherwise)"
 ]
 asyncio_mode = "auto"
 
@@ -298,5 +311,5 @@ fail-under = 95
 color = true
 omit-covered-files = false
 verbose = 2
-exclude = ["setup.py", "test/*", "docs", "build"]
+exclude = ["setup.py", "test/*", "docs", "build", "examples", "nvalchemi/distributed/_core/_upstream"]
 ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]

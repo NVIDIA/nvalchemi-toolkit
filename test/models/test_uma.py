@@ -14,12 +14,15 @@
 # limitations under the License.
 """Tests for UMAWrapper (fairchem-core predict-unit wrapper).
 
-Organised in two tiers:
+Organised in tiers:
 
 * **Structural tests** (``Test*`` classes using ``_Mock*`` predict units)
   exercise ``adapt_input`` / ``adapt_output`` / forward composition,
   task-name validation, and model-config correctness — no checkpoint
   needed, fast, always run when ``fairchem-core`` is importable.
+* **Distribution-spec tests** (``TestMLIPSpec``) assert the domain-
+  decomposition halo policy and custom-op registration carried on the
+  wrapper's ``distribution_spec`` — also mock-only, no checkpoint.
 * **Checkpoint tests** load a real fairchem checkpoint (default
   ``uma-s-1p1``, override via ``NVALCHEMI_UMA_CKPT`` / ``NVALCHEMI_UMA_DEVICE``)
   and cover forward-equivalence vs ``FAIRChemCalculator``, charged-input
@@ -408,6 +411,79 @@ class TestForward:
         out = mock_omol(batch)
         assert out["energy"].shape == (2, 1)
         assert out["forces"].shape == (22, 3)
+
+
+# ===========================================================================
+# Distribution spec — domain-decomposition halo policy (mock-only)
+# ===========================================================================
+
+
+class TestMLIPSpec:
+    def test_inherits_uma_storage_modes(self, mock_omol):
+        """Spec carries the halo storage policy (default modes).
+
+        The per-block edge→node aggregation is owned-complete under the halo
+        (ghost-shell) policy, so the correction is a per-block input refresh +
+        boundary fold ``MethodAdapter``\\s on the fairchem backbone (see
+        :meth:`test_registers_boundary_fold_adapters`), NOT a ``scatter_mode``
+        override — so the policy keeps the preset's default ``halo_read`` gather
+        mode. (The old ``scatter="local"`` override and the ``ScatterOutputs``
+        Triton ``custom_ops`` both belonged to the retired ``gp_utils``/
+        replicated design.)
+        """
+        from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
+
+        spec = mock_omol.distribution_spec()
+        policy = spec.distribution.policy
+        assert isinstance(policy, HaloStoragePolicy)
+        assert policy.gather_mode == "halo_read"
+        assert spec.system_reductions is True
+
+    def test_no_triton_custom_ops(self, mock_omol):
+        """No ``custom_ops``: the retired ``gp_utils``/replicated design
+        registered five ``torch.ops.fairchem._kernel_*`` OpAdapters (two carrying
+        ``ScatterOutputs``); the current halo design corrects at the fairchem
+        module boundary via fold adapters instead, so ``custom_ops`` is empty."""
+        spec = mock_omol.distribution_spec()
+        assert spec.distribution.custom_ops == ()
+
+    def test_registers_boundary_fold_adapters(self, mock_omol):
+        """The per-block edge→node correction and the owned-only + all-reduce
+        energy/element-reference reduction are carried by method/function fold
+        adapters on the fairchem backbone (lowered onto ``third_party_helpers``),
+        which replaced the retired ``ScatterOutputs`` Triton OpAdapters.
+
+        Under the refresh-only halo policy the edge→node folds reduce to a pure
+        input refresh (owned-complete); under graph-parallel the same adapters
+        become an all-reduce — the point here is only that they are declared.
+        """
+        spec = mock_omol.distribution_spec()
+        helpers = spec.distribution.third_party_helpers
+        methods = {
+            (h.class_name, h.method_name) for h in helpers if hasattr(h, "method_name")
+        }
+        funcs = {
+            (h.module_path.split(".")[-1], h.attr_name)
+            for h in helpers
+            if hasattr(h, "attr_name")
+        }
+        # Per-block input refresh + the two edge→node aggregation recombines that
+        # replaced the ScatterOutputs OpAdapters.
+        assert ("eSCNMD_Block", "forward") in methods
+        assert ("Edgewise", "forward") in methods
+        assert ("EdgeDegreeEmbedding", "forward") in methods
+        # Owned-only + all_reduce per-system energy reduction, patched on both
+        # module bindings of ``reduce_node_to_system``.
+        assert ("outputs", "reduce_node_to_system") in funcs
+        assert ("escn_md", "reduce_node_to_system") in funcs
+        # Element-reference undo summed over owned atoms only.
+        assert ("ElementReferences", "undo_refs") in methods
+        # MoLE composition-consistency guard (version-selected between the
+        # fairchem<=2.19 and >=2.21 method names).
+        assert ("eSCNMDBackbone", "_get_composition_info") in methods or (
+            "eSCNMDMoeBackbone",
+            "_get_merged_mole_consistency_info",
+        ) in methods
 
 
 # ===========================================================================

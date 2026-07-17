@@ -1,0 +1,23 @@
+# PME — same charge-neutral NaCl-like lattice as Ewald, full PBC (directly comparable).
+model: PME
+dtype: fp64
+default_sizes: [512, 1000]
+
+system:
+  builder: build_nacl
+  sizing: n_per_side_for_size
+  pbc: true
+  charges: true
+  compute_neighbors: true
+
+loader:
+  kind: electrostatic
+  module: nvalchemi.models.pme
+  class: PMEModelWrapper
+  cutoff: 6.0
+  hybrid_forces: false   # route through the staged bindings under halo
+
+forward:
+  cutoff_attr: cutoff
+  upfront_halo_exchange: true
+  seed_force_energy: true

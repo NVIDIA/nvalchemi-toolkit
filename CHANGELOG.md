@@ -4,6 +4,7 @@
 
 ### Added
 
+- MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
   default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor
@@ -106,6 +107,10 @@
   backward tape onto `_energies_buf`, causing linear per-step slowdown
   and unbounded GPU memory growth. `detach_()` the buffer after each
   forward.
+- **FusedStage graduation not reported** — `FusedStage.step()` returned
+  `exit_converged=None` for samples graduated via a sub-stage's `n_steps`
+  counter or its `ConvergenceHook`, so consumers of the returned indices
+  (e.g. `DistributedPipeline`) silently dropped such samples.
 
 ### Deprecated
 

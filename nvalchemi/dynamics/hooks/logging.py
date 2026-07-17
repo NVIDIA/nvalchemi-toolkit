@@ -314,7 +314,11 @@ class LoggingHook:
             td.set("status", torch.zeros(num_graphs, device=dev))
 
         if batch.energy is not None:
-            td.set("energy", batch.energy.squeeze(-1))
+            # ``reshape`` (not ``squeeze(-1)``): per-graph energy arrives as
+            # ``[num_graphs, 1]`` single-process but ``[num_graphs]`` after the DD
+            # forward consolidates it — squeezing the latter yields a 0-D scalar
+            # that mismatches the per-graph TensorDict batch size.
+            td.set("energy", batch.energy.reshape(num_graphs))
 
         if batch.forces is not None:
             norms = torch.linalg.vector_norm(batch.forces, dim=-1)

@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Manual license determinations for packages whose PyPI metadata exposes no",
+    "usable SPDX identifier (License field empty, 'UNKNOWN', or carrying the full",
+    "license text instead of an id). generate_licenses.sh applies these to the",
+    "License field across summary.md, details.json and Third_party_attr.txt.",
+    "Each entry was verified against the package's bundled LICENSE file (or, where",
+    "no file ships, the upstream/EULA noted in 'evidence'). Matching is by",
+    "case-insensitive name with '_' and '-' treated alike. Update when versions",
+    "change or new UNKNOWN/full-text packages appear in the reviewer report."
+  ],
+  "overrides": {
+    "ase_db_backends": {
+      "license": "LGPL-2.1-or-later",
+      "evidence": "bundled LICENSE: 'GNU Lesser General Public License ... version 2.1 ... or (at your option) any later version'"
+    },
+    "google-crc32c": {
+      "license": "Apache-2.0",
+      "evidence": "bundled LICENSE: Apache License 2.0"
+    },
+    "torch-ema": {
+      "license": "MIT",
+      "evidence": "bundled LICENSE: MIT permission grant (Copyright 2019 Samuel G. Fadel)"
+    },
+    "cuda-toolkit": {
+      "license": "NVIDIA CUDA Toolkit EULA (proprietary)",
+      "evidence": "no license file shipped in the wheel; governed by the NVIDIA CUDA Toolkit EULA: https://docs.nvidia.com/cuda/eula/"
+    },
+    "cuequivariance": {
+      "license": "Apache-2.0",
+      "evidence": "bundled LICENSE: Apache License 2.0"
+    },
+    "cuequivariance-torch": {
+      "license": "Apache-2.0",
+      "evidence": "bundled LICENSE: Apache License 2.0"
+    },
+    "cuequivariance-ops-cu12": {
+      "license": "NVIDIA Software License Agreement (proprietary)",
+      "evidence": "License field: 'LICENSE AGREEMENT FOR NVIDIA MATH LIBRARIES SOFTWARE DEVELOPMENT KITS'"
+    },
+    "cuequivariance-ops-cu13": {
+      "license": "NVIDIA Software License Agreement (proprietary)",
+      "evidence": "License field: 'LICENSE AGREEMENT FOR NVIDIA MATH LIBRARIES SOFTWARE DEVELOPMENT KITS'"
+    },
+    "cuequivariance-ops-torch-cu12": {
+      "license": "NVIDIA Software License Agreement (proprietary)",
+      "evidence": "License field: 'Other/Proprietary License (NVIDIA Proprietary Software)' + NVIDIA Math Libraries SDK agreement"
+    },
+    "cuequivariance-ops-torch-cu13": {
+      "license": "NVIDIA Software License Agreement (proprietary)",
+      "evidence": "License field: 'Other/Proprietary License (NVIDIA Proprietary Software)' + NVIDIA Math Libraries SDK agreement"
+    },
+    "matscipy": {
+      "license": "LGPL-2.1-or-later",
+      "evidence": "License field: 'GNU LESSER GENERAL PUBLIC LICENSE Version 2.1 ... or (at your option) any later version'"
+    },
+    "clusterscope": {
+      "license": "MIT",
+      "evidence": "bundled LICENSE: MIT License (Copyright 2020 Facebook)"
+    }
+  }
+}

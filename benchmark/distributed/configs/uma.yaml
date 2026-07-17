@@ -1,0 +1,36 @@
+# UMA (fairchem-core) — bcc iron supercell (2 atoms / cell), full PBC.
+#
+# UMA ships in its own extras group (fairchem-core pins a newer e3nn than the
+# MACE ecosystem); install with `uv sync --extra uma` and set HF_TOKEN. UMA
+# runs fp32 and builds its own neighbour list via fairchem's predict_unit.
+# Select the fairchem inference mode with --set loader.inference=compile|turbo.
+model: UMA
+dtype: fp32
+default_sizes: [128, 1024]
+
+system:
+  builder: build_bcc_fe
+  sizing: bcc_fe_cells_for_size
+  pbc: true
+  charges: false
+  compute_neighbors: false   # predict_unit handles the NL internally
+  partition_mode: spatial
+
+loader:
+  kind: uma
+  checkpoint: uma-s-1p1
+  task: omat
+  inference: default
+
+forward:
+  cutoff_attr: cutoff
+  upfront_halo_exchange: true
+  has_stress: true
+
+nvt:
+  cutoff_attr: cutoff
+  max_neighbors: null   # no NeighborListHook — UMA builds its own NL
+  skin: 0.5
+  dt: 0.5
+  temperature: 300.0
+  friction: 0.01
