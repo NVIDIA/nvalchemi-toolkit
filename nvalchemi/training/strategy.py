@@ -599,12 +599,22 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         )
 
     def _replace_hooks_with_registry_validation(self, hooks: Sequence[Hook]) -> None:
-        """Replace hook storage after validating each hook through the base registry."""
-        previous_hooks = self.hooks
+        """Replace hook storage after validating hooks through the base registry.
+
+        Update-hook folding rebuilds the hook list after some hooks may already
+        have registered. Preserve those hooks by identity so one-time
+        registration-time activities such as those involving model mutation
+        are not replayed.
+        """
+        previous_hooks = list(self.hooks)
+        registered_hook_ids = {id(hook) for hook in previous_hooks}
         self.hooks = []
         try:
             for hook in hooks:
-                HookRegistryMixin.register_hook(self, hook)
+                if id(hook) in registered_hook_ids:
+                    self.hooks.append(hook)
+                else:
+                    HookRegistryMixin.register_hook(self, hook)
         except Exception:
             self.hooks = previous_hooks
             raise
