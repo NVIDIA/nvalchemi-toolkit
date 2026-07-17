@@ -16,7 +16,7 @@
 AIMNet2 + Ewald Pipeline Geometry Optimization
 ===============================================
 
-This example demonstrates the **autograd pipeline** — the most powerful
+This example demonstrates the **autograd pipeline** — a powerful
 composition pattern in nvalchemi — by combining a machine-learning
 potential (AIMNet2) with a long-range electrostatics model (Ewald
 summation) for geometry optimization of water clusters.
