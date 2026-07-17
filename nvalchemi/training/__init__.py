@@ -35,7 +35,12 @@ from nvalchemi.training._validation import (
     ValidationLoop,
 )
 from nvalchemi.training.finetune import FineTuningStrategy
-from nvalchemi.training.hooks import CheckpointHook, DDPHook, EMAHook
+from nvalchemi.training.hooks import (
+    CheckpointHook,
+    DDPHook,
+    EMAHook,
+    LoRACheckpointHook,
+)
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
@@ -66,6 +71,10 @@ from nvalchemi.training.optimizers import (
     step_optimizers,
     zero_gradients,
 )
+from nvalchemi.training.peft import (
+    LoRAConfig,
+    LoRAFineTuningStrategy,
+)
 from nvalchemi.training.runtime import (
     configure_dataloader,
     configure_parallelism,
@@ -95,6 +104,9 @@ __all__ = [
     "EMAHook",
     "FineTuningStrategy",
     "LinearWeight",
+    "LoRAConfig",
+    "LoRACheckpointHook",
+    "LoRAFineTuningStrategy",
     "LossWeightSchedule",
     "OptimizerConfig",
     "PiecewiseWeight",
@@ -108,6 +120,7 @@ __all__ = [
     "ValidationConfig",
     "ValidationLoop",
     "assemble_loss_targets",
+    "available_lora_wrappers",
     "configure_dataloader",
     "configure_parallelism",
     "create_model_spec",
@@ -118,9 +131,22 @@ __all__ = [
     "load_checkpoint",
     "move_to_devices",
     "register_type_serializer",
+    "register_builtin_lora_wrappers",
     "save_checkpoint",
     "setup_optimizers",
     "step_lr_schedulers",
     "step_optimizers",
     "zero_gradients",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Lazily expose PEFT wrapper helpers."""
+    if name in {
+        "available_lora_wrappers",
+        "register_builtin_lora_wrappers",
+    }:
+        from nvalchemi.training import peft
+
+        return getattr(peft, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
