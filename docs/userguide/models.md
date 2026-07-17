@@ -111,6 +111,33 @@ Avoid saving only `ema.state_dict()` for MACE training restarts. Strategy
 checkpoints preserve the model reconstruction recipe, model weights, optimizer
 state, runtime counters, and checkpointable hook state together.
 
+### Repairing methods on EMA copies
+
+{py:class}`~nvalchemi.training.hooks.EMAHook` uses
+{py:class}`torch.optim.swa_utils.AveragedModel`, which deep-copies the live model
+when constructing its averaged copy. Most wrappers require no special handling.
+If a third-party model attaches runtime methods that do not survive
+`deepcopy`, its wrapper can optionally implement `modify_ema_methods()`:
+
+```python
+class MyPotentialWrapper(nn.Module, BaseModelMixin):
+    def modify_ema_methods(self) -> None:
+        """Restore runtime methods on this EMA model copy."""
+        my_method_to_patch_runtime_methods()
+```
+
+The hook calls this method once on the copied wrapper immediately after EMA
+construction and before applying any pending EMA checkpoint weights. The method
+must modify only `self`, must not change parameters or buffers, and should be
+safe when called on a freshly copied model.
+
+```{tip}
+{py:class}`~nvalchemi.models.mace.MACEWrapper` implements this
+interface to restore cuEquivariance's fused convolution method.
+Take a look at the the `MACEWrapper.modify_ema_methods` to see
+how this is done.
+```
+
 ### Using UMA (fairchem-core)
 
 UMA (Universal Models for Atoms) is a multi-task foundation model: one

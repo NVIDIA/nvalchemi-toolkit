@@ -465,6 +465,13 @@ Access the averaged model weights via ``ema.averaged_model`` after training.
 
    averaged_model = ema.averaged_model
 
+``AveragedModel`` constructs its module with ``deepcopy``. If a model wrapper
+defines a callable ``modify_ema_methods()`` method, ``EMAHook`` calls it once on
+the copied module immediately after construction and before loading pending EMA
+checkpoint weights. This optional interface is intended for wrappers whose
+third-party models install runtime methods that ``deepcopy`` does not preserve;
+ordinary models do not need to implement it.
+
 Restartable update hooks
 ------------------------
 
