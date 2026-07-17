@@ -198,8 +198,8 @@ pipe = PipelineModelWrapper(
             use_autograd=True,
         ),
     ]
-)
-pipe.set_config("active_outputs", {"energy", "forces", "stress", "charge"})
+).eval()
+pipe.set_config("active_outputs", {"energy", "forces", "stress", "charges"})
 print(f"\nPipeline: {[type(m).__name__ for m in pipe._models]}")
 print(f"  Output Capabilities: {sorted(pipe.model_config.outputs)}")
 print(f"  Active Outputs: {sorted(pipe.model_config.active_outputs)}")
