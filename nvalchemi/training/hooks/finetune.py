@@ -44,16 +44,21 @@ def _matched_names(
     names: set[str],
     *,
     label: str,
+    target_type: Literal["parameter", "module"] = "parameter",
 ) -> set[str]:
     """Return names matched by glob patterns, raising on empty matches."""
+    example = {
+        "parameter": "main.model.projection.weight",
+        "module": "main.model.projection",
+    }[target_type]
     matched: set[str] = set()
     for pattern in patterns:
         pattern_matches = {name for name in names if fnmatch.fnmatchcase(name, pattern)}
         if not pattern_matches:
             raise ValueError(
-                f"{label} pattern {pattern!r} did not match any parameter. "
-                "Patterns are matched against fully qualified names like "
-                "'main.model.projection.weight'."
+                f"{label} pattern {pattern!r} did not match any {target_type}. "
+                "Patterns are matched against fully-qualified names like "
+                f"{example!r}."
             )
         matched.update(pattern_matches)
     return matched
