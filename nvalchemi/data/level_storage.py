@@ -1326,6 +1326,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             if batch_idx is not None
             else None
         )
+        self._batch_ptr_capacity: int | None = None
         if batch_ptr is not None:
             self._batch_ptr = batch_ptr.to(device=self.device, dtype=torch.int32)
         elif batch_ptr_capacity is not None and not self._data.is_empty():
@@ -1337,6 +1338,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             self._batch_ptr[1 : n_seg + 1] = cum
             if cap > n_seg + 1:
                 self._batch_ptr[n_seg + 1 :].fill_(cum[-1].item() if n_seg else 0)
+            self._batch_ptr_capacity = cap
         else:
             self._batch_ptr = None
         self._batch_ptr_np: np.ndarray | None = None
@@ -1672,6 +1674,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if getattr(self, "_num_segments", None) is not None:
             object.__setattr__(out, "_num_segments", self._num_segments)
             object.__setattr__(out, "_num_elements_kept", self._num_elements_kept)
+        out._batch_ptr_capacity = self._batch_ptr_capacity
         return out
 
     # -- Concatenation ------------------------------------------------------
@@ -1775,6 +1778,27 @@ class SegmentedLevelStorage(BaseLevelStorage):
             object.__delattr__(self, "_num_elements_kept")
         return self
 
+    def _restore_batch_ptr_capacity(self) -> None:
+        """Re-extend ``_batch_ptr`` to its pre-allocated capacity.
+
+        :meth:`put` trims ``_batch_ptr`` to the number of active segments,
+        which would otherwise destroy the headroom reserved via
+        ``batch_ptr_capacity`` (e.g. by :meth:`Batch.empty`) and make every
+        subsequent :meth:`put` a no-op. The tail is filled with the total
+        element count, matching the ``__init__`` invariant.
+        """
+        cap = self._batch_ptr_capacity
+        if cap is None or self._batch_ptr is None:
+            return
+        n = self._batch_ptr.shape[0]
+        if n >= cap:
+            return
+        new_bp = torch.empty(cap, device=self.device, dtype=torch.int32)
+        new_bp[:n] = self._batch_ptr
+        new_bp[n:] = self._batch_ptr[n - 1]
+        object.__setattr__(self, "_batch_ptr", new_bp)
+        object.__setattr__(self, "_batch_ptr_np", None)
+
     def compute_put_per_system_fit_mask(
         self,
         source: SegmentedLevelStorage,
@@ -1812,6 +1836,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
         source._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
+        self._restore_batch_ptr_capacity()
         num_dest_segments = len(self)
         min_batch_ptr_size = num_dest_segments + n_seg + 2
         if self._batch_ptr.shape[0] < min_batch_ptr_size:
@@ -1871,6 +1896,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             object.__setattr__(src, "_copied_mask", out_mask)
         src._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
+        self._restore_batch_ptr_capacity()
         num_dest_segments = len(self)
         min_batch_ptr_size = num_dest_segments + n_seg + 2
         dest_batch_ptr = self._batch_ptr

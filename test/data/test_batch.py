@@ -853,6 +853,39 @@ class TestBatchPutDefrag:
         assert copied_mask.sum().item() == 0
         assert buffer.num_graphs == 2
 
+    def test_put_repeatedly_into_empty_buffer(self):
+        """A Batch.empty buffer with remaining capacity accepts repeated puts."""
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        for expected in range(1, 4):
+            src = Batch.from_data_list([_minimal_atomic_data(2)])
+            mask = torch.ones(1, dtype=torch.bool)
+            copied_mask = torch.zeros(1, dtype=torch.bool)
+            buffer.put(src, mask, copied_mask=copied_mask)
+            assert copied_mask.all()
+            assert buffer.num_graphs == expected
+
+    def test_put_zero_put_reuses_buffer(self):
+        """zero() restores a put-filled buffer to its freshly-allocated state."""
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        src = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)],
+        )
+        mask = torch.ones(2, dtype=torch.bool)
+        buffer.put(src, mask)
+        assert buffer.num_graphs == 2
+        buffer.zero()
+        assert buffer.num_graphs == 0
+        buffer.put(src, mask)
+        assert buffer.num_graphs == 2
+        assert buffer.num_nodes_list == [2, 3]
+        torch.testing.assert_close(buffer.positions[:5], src.positions[:5])
+
     def test_defrag_with_copied_mask(self):
         """defrag(copied_mask) compacts batch by removing graphs where copied_mask is True."""
         batch = Batch.from_data_list(

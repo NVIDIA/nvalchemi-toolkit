@@ -111,6 +111,11 @@
   `exit_converged=None` for samples graduated via a sub-stage's `n_steps`
   counter or its `ConvergenceHook`, so consumers of the returned indices
   (e.g. `DistributedPipeline`) silently dropped such samples.
+- **`Batch.empty` buffer capacity lost on put** (#136) — the first
+  `put()` trimmed the pre-allocated `batch_ptr`, so every later `put()`
+  silently copied nothing and `zero()` preserved the trimmed size.
+  `SegmentedLevelStorage` now remembers its `batch_ptr` capacity and
+  re-extends it before the put capacity checks.
 
 ### Deprecated
 

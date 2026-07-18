@@ -773,6 +773,34 @@ class TestSegmentedLevelStorage:
         assert len(src) == 0
         assert src.num_elements() == 0
 
+    def test_put_twice_restores_batch_ptr_capacity(self):
+        """put re-extends batch_ptr from the stored capacity, so repeated puts append."""
+        device = "cpu"
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(10, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[0],
+            device=device,
+            batch_ptr_capacity=6,
+            validate=False,
+        )
+        for i in range(1, 4):
+            src = SegmentedLevelStorage(
+                data={
+                    "x": torch.full(
+                        (2, 1), float(i), device=device, dtype=torch.float32
+                    ),
+                },
+                segment_lengths=[2],
+                device=device,
+                validate=False,
+            )
+            dest.put(src, torch.tensor([True], device=device))
+            assert len(dest) == i + 1  # 1 initial (length 0) + i appended
+        torch.testing.assert_close(
+            dest["x"][:6],
+            torch.tensor([[1.0], [1.0], [2.0], [2.0], [3.0], [3.0]], device=device),
+        )
+
     def test_put_with_copied_mask_out_segmented(self):
         """put with copied_mask provided updates it in place; defrag uses it."""
         device = "cpu"
