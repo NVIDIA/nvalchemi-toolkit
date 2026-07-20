@@ -119,6 +119,8 @@ The context manager handles:
    convergence-driven stages. For a fixed-duration stage, wrap the dynamics
    in a single-sub-stage :class:`~nvalchemi.dynamics.FusedStage`; its
    per-system step counter graduates each system after the configured budget.
+   Combining ``n_steps`` with a convergence criterion on the inner dynamics
+   graduates each system when either condition is reached.
 
 **Launching with** ``torchrun``
 

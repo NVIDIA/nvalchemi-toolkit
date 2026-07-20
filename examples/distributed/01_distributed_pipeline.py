@@ -41,9 +41,10 @@ running in parallel across 4 GPUs using
    }
 
 Each FIRE rank draws molecules from a dataset, optimises them until
-convergence, and sends them to the paired Langevin rank for 20 steps of
-short MD production.  A :class:`~nvalchemi.dynamics.hooks.SnapshotHook`
-on the Langevin ranks writes the trajectories to a
+convergence or a 50-step limit, and sends them to the paired Langevin rank
+for 20 steps of short MD production. A
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook` on the Langevin ranks writes
+the trajectories to a
 :class:`~nvalchemi.dynamics.HostMemory` sink.
 
 .. note::
@@ -184,11 +185,12 @@ def build_dataset() -> list[AtomicData]:
 # with each other.
 
 
-def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
-    """Create a FIRE optimiser stage."""
-    return FIRE(
+def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FusedStage:
+    """Create a convergence- or step-limited FIRE optimiser stage."""
+    dynamics = FIRE(
         model=model,
         dt=1.0,
+        n_steps=50,
         convergence_hook=ConvergenceHook(
             criteria=[
                 {
@@ -199,8 +201,8 @@ def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
                 }
             ],
         ),
-        **kwargs,
     )
+    return FusedStage(sub_stages=[(0, dynamics)], **kwargs)
 
 
 def make_langevin(

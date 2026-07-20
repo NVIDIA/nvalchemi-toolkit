@@ -87,7 +87,8 @@
 - **Distributed dynamics lifecycle** — keep per-system integrator state aligned
   when pipeline receives and graduates systems, clear reusable communication
   buffers before every send without shrinking their segmented capacity, and run
-  fixed-duration distributed MD stages with explicit per-system step budgets.
+  distributed stages with explicit per-system step budgets and optional early
+  convergence.
 - **Zarr dataloader custom fields** — validated `Dataset` batch paths now
   preserve reader field-level metadata so custom atom-, edge-, and
   system-level tensors survive batching like the `skip_validation` path.
