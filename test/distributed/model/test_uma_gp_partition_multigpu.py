@@ -177,6 +177,8 @@ def _worker(rank: int, world_size: int) -> None:
     reason="Need 2+ CUDA GPUs",
 )
 def test_uma_gp_partition_2ranks() -> None:
+    pytest.importorskip("fairchem.core", reason="fairchem-core not installed")
+
     w = int(os.environ.get("UMA_GP_WORLD", "2"))
     mp.spawn(_worker, args=(w,), nprocs=w)
 
