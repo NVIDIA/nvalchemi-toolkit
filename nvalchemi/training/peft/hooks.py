@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping
-from dataclasses import asdict, is_dataclass
 from enum import Enum
 from typing import Any, ClassVar
 
@@ -53,20 +52,61 @@ __all__ = [
 ]
 
 
+def _lora_apply_metadata(
+    model: Any,
+    result: Any | None = None,
+) -> dict[str, Any]:
+    """Build adapter metadata for a model as part of :class:`LoRAApplyHook`."""
+    # If no result is provided, record empty adapter metadata for this model.
+    if result is None:
+        return {
+            "lora_module_names": [],
+            "lora_trainable_names": [],
+            "base_model_fingerprint": _peft.compute_base_fingerprint(model),
+            "lora_n_wrapped": 0,
+            "lora_n_trainable": 0,
+            "lora_n_frozen": 0,
+        }
+
+    # Update the metadata with the results of the LoRA application.
+    wrapped_module_names = [
+        name for name, module in model.named_modules() if _peft.is_lora_layer(module)
+    ]
+    trainable_names = getattr(result, "trainable_names", [])
+    if not isinstance(trainable_names, (list, tuple, set)):
+        raise TypeError(
+            "LoRA apply result trainable_names must be a list, tuple, or set, "
+            f"got {type(trainable_names).__name__}."
+        )
+    if not all(isinstance(name, str) for name in trainable_names):
+        raise TypeError("LoRA apply result trainable_names must contain only strings.")
+    trainable_names = list(trainable_names)
+
+    metadata = {
+        "lora_module_names": wrapped_module_names,
+        "lora_trainable_names": trainable_names,
+        "base_model_fingerprint": getattr(result, "base_fingerprint", ""),
+        "lora_n_wrapped": getattr(result, "n_wrapped", len(wrapped_module_names)),
+        "lora_n_trainable": getattr(result, "n_trainable", None),
+        "lora_n_frozen": getattr(result, "n_frozen", None),
+    }
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
 def _lora_metadata_trainable_parameter_names(
     models: Mapping[str, nn.Module],
     metadata: Mapping[str, Any],
-    names: set[str],
+    all_qualified_names: set[str],
 ) -> set[str]:
     """Return LoRA trainable names for LoRATrainableParameterHook from adapter metadata stored in LoRAApplyHook.
-    
+
     Parameters
     ----------
     models : Mapping[str, nn.Module]
         Mapping of model names to models.
     metadata : Mapping[str, Mapping[str, Any]]
         Mapping of model names to LoRA metadata dictionaries.
-    names : set[str]
+    all_qualified_names : set[str]
         Set of all qualified parameter names.
 
     Returns
@@ -82,12 +122,13 @@ def _lora_metadata_trainable_parameter_names(
         # Skip non-conforming or missing entries defensively so explicit trainable sources can still apply.
         if not isinstance(model_metadata, Mapping):
             continue
-        trainable_names = model_metadata.get("trainable_names")
+        trainable_names = model_metadata.get("lora_trainable_names")
         if trainable_names is None:
             continue
         if not isinstance(trainable_names, (list, tuple, set)):
             raise TypeError(
-                f"trainable_names must be a list, tuple, or set, got {type(trainable_names)}"
+                "lora_trainable_names must be a list, tuple, or set, "
+                f"got {type(trainable_names)}"
             )
 
         prefix = f"{model_name}."
@@ -100,7 +141,7 @@ def _lora_metadata_trainable_parameter_names(
             # Adapter application reports model-local names; nvalchemi filters
             # use model-qualified names.
             qualified_name = f"{prefix}{name}"
-            if qualified_name in names:
+            if qualified_name in all_qualified_names:
                 allowed.add(qualified_name)
             else:
                 missing.append(qualified_name)
@@ -118,25 +159,29 @@ def _filter_trainable_matches_by_lora_modules(
     models: Mapping[str, nn.Module],
     metadata: Mapping[str, Any],
 ) -> set[str]:
-    """Return candidate names outside metadata-recorded LoRA modules."""
+    """Return candidate parameter names excluding metadata-recorded LoRA modules."""
     # Build set of LoRA module prefixes from metadata.
     lora_prefixes: set[str] = set()
     for model_name in models:
         model_metadata = metadata.get(model_name)
+        # Check for missing or non-conforming metadata.
         if not isinstance(model_metadata, Mapping):
             continue
-        lora_modules = model_metadata.get("lora_modules", ())
+        lora_modules = model_metadata.get("lora_module_names", ())
         if not isinstance(lora_modules, (list, tuple, set)):
             raise TypeError(
-                f"lora_modules must be a list, tuple, or set, got {type(lora_modules)}"
+                "lora_module_names must be a list, tuple, or set, "
+                f"got {type(lora_modules)}"
             )
+        # Build set of LoRA module prefixes from metadata.
         for module_name in lora_modules:
             if not isinstance(module_name, str):
                 continue
             module_prefix = f"{module_name}." if module_name else ""
             lora_prefixes.add(f"{model_name}.{module_prefix}")
 
-    # Only add names that are not owned by LoRA wrapper modules.
+    # Filter out parameter names owned by LoRA wrapper modules by checking
+    # if they start with any of the LoRA module prefixes.
     filtered: set[str] = set()
     for name in candidate_names:
         if any(name.startswith(prefix) for prefix in lora_prefixes):
@@ -145,77 +190,44 @@ def _filter_trainable_matches_by_lora_modules(
     return filtered
 
 
-def _lora_config_metadata(lora_config: Any) -> dict[str, Any]:
-    """Return JSON-compatible LoRA config metadata."""
-    if isinstance(lora_config, dict):
-        metadata = dict(lora_config)
-    elif is_dataclass(lora_config):
-        metadata = asdict(lora_config)
-    else:
-        raise TypeError(
-            "LoRA config metadata must be built from a dict or dataclass instance."
-        )
-    metadata.pop("target_filter", None)
-    if callable(metadata.get("init")):
-        metadata.pop("init")
-    return {key: value for key, value in metadata.items() if value is not None}
-
-
-def _lora_apply_metadata(
-    model: Any,
-    result: Any,
-    lora_config: Any | None = None,
-) -> dict[str, Any]:
-    """Build adapter metadata for a model after LoRA injection."""
-    model_lora_config = getattr(model, "_lora_config", None)
-    if isinstance(model_lora_config, dict):
-        metadata = dict(model_lora_config)
-    elif lora_config is not None:
-        metadata = _lora_config_metadata(lora_config)
-    else:
-        raise ValueError("LoRA adapter metadata is missing from the wrapped model.")
-    wrapped_module_names = [
-        name for name, module in model.named_modules() if _peft.is_lora_layer(module)
-    ]
-    trainable_names = getattr(result, "trainable_names", [])
-    if not isinstance(trainable_names, (list, tuple, set)):
-        trainable_names = []
-    if not all(isinstance(name, str) for name in trainable_names):
-        raise TypeError("LoRA apply result trainable_names must contain only strings.")
-    trainable_names = list(trainable_names)
-
-    metadata.update(
-        {
-            "lora_modules": wrapped_module_names,
-            "trainable_names": trainable_names,
-            "base_model_fingerprint": getattr(result, "base_fingerprint", ""),
-            "n_wrapped": getattr(result, "n_wrapped", len(wrapped_module_names)),
-            "n_trainable": getattr(result, "n_trainable", None),
-            "n_frozen": getattr(result, "n_frozen", None),
-        }
-    )
-    return {key: value for key, value in metadata.items() if value is not None}
-
-
 class LoRAApplyHook(BaseModel):
     """Apply LoRA adapters to models.
-    This hook is automatically prepended by :class:`LoRAFineTuningStrategy`.
+
+    This hook is automatically prepended by :class:`~nvalchemi.training.LoRAFineTuningStrategy`.
 
     Parameters
     ----------
-    lora_config : LoRAConfig
-        Expected LoRA configuration applied to each model in the workflow.
-    wrapper_registrations : LoRAWrapperRegistrations
-        Expected custom layer-to-wrapper registrations applied before adapter
-        injection.
+    lora_target_patterns : tuple[str, ...]
+        Shell-style glob patterns matched against model-prefixed module names,
+        using the same ``*``, ``?``, and ``[...]`` syntax as
+        ``trainable_patterns``. Dots are literal path separators. For example,
+        ``"main.model.projection"`` selects exactly
+        ``"main.model.projection"``, ``"student.model.*projection"`` selects
+        projection-like modules under ``student.model``, and
+        ``"main.model.readout*"`` selects modules whose final path component
+        starts with ``readout``. Patterns without glob characters are exact
+        matches.
+    lora_rank : int
+        Rank of the low-rank adapter factors.
+    lora_alpha : float, optional
+        Scaling numerator for adapter updates. Defaults to ``1.0``.
+    lora_dropout : float, optional
+        Dropout probability on the adapter input path. Defaults to ``0.0``.
+    lora_wrap_mlp : bool, optional
+        Also target supported feed-forward sub-blocks discovered by the adapter
+        implementation. This is only supported for single-model strategies.
+        Defaults to ``False``.
+    wrapper_registrations : LoRAWrapperRegistrations, optional
+        Custom layer-to-wrapper registrations installed before adapter
+        injection. Each pair maps a base layer class to the adapter wrapper
+        class that should handle it. Defaults to ``()``.
 
     Notes
     -----
-    Although ``lora_config`` and ``wrapper_registrations`` use broad typing,
-    their expected types are still ``LoRAConfig`` and
-    ``LoRAWrapperRegistrations``. The public configuration is validated by
-    ``LoRAFineTuningStrategy`` before creating this hook, and the broad typing
-    avoids forcing Pydantic to rebuild schemas for PhysicsNeMo LoRA classes.
+    ``wrapper_registrations`` is typed broadly on the Pydantic field because it
+    stores runtime class objects. The expected public shape is still
+    ``LoRAWrapperRegistrations``, and ``LoRAFineTuningStrategy`` validates it
+    before creating this hook.
 
     Attributes
     ----------
@@ -223,9 +235,36 @@ class LoRAApplyHook(BaseModel):
         Required by the hook protocol; always ``1``.
     stage : None
         This hook does not run at training stages.
+
+    Examples
+    --------
+    Exact module names can be written as patterns without glob characters:
+
+    >>> hook = LoRAApplyHook(
+    ...     lora_target_patterns=("main.model.projection",),
+    ... )
+
+    Glob patterns match module names from ``model.named_modules()``, prefixed with
+    the model key such as ``"main"``:
+
+    >>> hook = LoRAApplyHook(
+    ...     lora_target_patterns=("main.model.*projection",),
+    ...     lora_rank=4,
+    ...     lora_alpha=1.0,
+    ... )
+
+    In multi-model workflows, the prefix helps to identify which model receives adapters:
+
+    >>> hook = LoRAApplyHook(
+    ...     lora_target_patterns=("student.model.projection",),
+    ... )
     """
 
-    lora_config: Any
+    lora_target_patterns: tuple[str, ...] = Field(min_length=1)
+    lora_rank: int = 8
+    lora_alpha: float = 1.0
+    lora_dropout: float = 0.0
+    lora_wrap_mlp: bool = False
     wrapper_registrations: tuple[tuple[type[Any], type[Any]], ...] = ()
 
     frequency: ClassVar[int] = 1
@@ -242,7 +281,17 @@ class LoRAApplyHook(BaseModel):
         return
 
     def on_register(self, workflow: Any) -> None:
-        """Register wrappers, inject adapters, and store apply results."""
+        """Register wrappers, inject adapters, and store apply results.
+
+        The public configuration is validated by ``LoRAFineTuningStrategy``
+        before creating this hook. During registration, model-prefixed targets
+        are converted to model-local targets for each model to be compatible
+        with the PhysicsNeMo ``apply_lora`` function. For example,
+        ``"student.model.projection"`` becomes the PhysicsNeMo
+        ``target_modules`` entry ``"model.projection"`` for the ``"student"``
+        model. Adapters are then injected, and apply results are stored as
+        workflow metadata for checkpointing and export.
+        """
 
         from nvalchemi.training.peft.wrappers import register_builtin_lora_wrappers
 
@@ -257,27 +306,82 @@ class LoRAApplyHook(BaseModel):
                 "LoRAApplyHook must be registered before optimizers are built."
             )
 
-        # Register built-in lora and user-defined wrappers
+        # Register built-in and user-defined LoRA wrappers
         register_builtin_lora_wrappers()
         for layer_cls, wrapper_cls in self.wrapper_registrations:
             _peft.register_lora_wrapper(layer_cls, wrapper_cls)
 
-        if getattr(self.lora_config, "extras_trainable", []):
-            raise ValueError(
-                "LoRAFineTuningStrategy does not support LoRAConfig's extras_trainable. "
-                "Use trainable_patterns or module_patches to select extra trainable parameters."
+        # Apply LoRA to models and store metadata.
+        # Adapter selectors operate on one model at a time. Convert
+        # model-prefixed selectors such as "student.model.projection" to
+        # model-local selectors before delegating to the PhysicsNeMo
+        # ``apply_lora`` function.
+        metadata: dict[str, dict[str, Any]] = {}
+
+        # Get all module names in the models.
+        model_names = set(models)
+        module_names = {
+            f"{model_name}.{name}"
+            for model_name, model in models.items()
+            for name, _module in model.named_modules()
+            if name
+        }
+
+        # Identify module names that match the LoRA target patterns.
+        matched_module_names = tuple(
+            sorted(
+                _matched_names(
+                    self.lora_target_patterns,
+                    module_names,
+                    label="LoRA target",
+                    target_type="module",
+                )
+            )
+        )
+
+        # Apply LoRA to each model.
+        for model_name, model in models.items():
+            # Identify module names that are local to the model and match the LoRA target patterns.
+            local_targets: list[str] = []
+            for target in matched_module_names:
+                prefix, separator, module_name = target.partition(".")
+                if not separator:
+                    raise ValueError(
+                        f"LoRA target module {target!r} must include a model prefix, "
+                        "for example 'main.model.projection'."
+                    )
+                if prefix not in model_names:
+                    raise KeyError(
+                        f"LoRA target module {target!r} references unknown model "
+                        f"{prefix!r}; available models: {sorted(model_names)}."
+                    )
+                if prefix == model_name:
+                    local_targets.append(module_name)
+
+            # Reconstruct the LoRA configuration for this model.
+            model_lora_config = _peft.LoRAConfig(
+                rank=self.lora_rank,
+                alpha=self.lora_alpha,
+                target_modules=local_targets or ["__nvalchemi_no_lora_target__"],
+                lora_dropout=self.lora_dropout,
+                extras_trainable=[],
+                wrap_mlp=self.lora_wrap_mlp,
+                init="default",
             )
 
-        # Apply LoRA adapters to models and store metadata
-        metadata: dict[str, dict[str, Any]] = {}
-        for model_name, model in models.items():
-            result: _peft.ApplyResult = _peft.apply_lora(model, self.lora_config)
+            # If no target modules are found, record empty adapter metadata for this model.
+            if not local_targets:
+                metadata[model_name] = _lora_apply_metadata(model)
+                continue
+
+            # Apply LoRA to the model and store the result in the metadata.
+            result: _peft.ApplyResult = _peft.apply_lora(model, model_lora_config)
             metadata[model_name] = _lora_apply_metadata(
                 model,
                 result,
-                self.lora_config,
             )
 
+        # Store the adapter metadata in the workflow.
         setattr(workflow, "_lora_metadata", metadata)
 
 
@@ -436,9 +540,9 @@ class LoRACheckpointHook(CheckpointHook):
             self.checkpoint_dir,
             strategy=ctx.workflow,
         )
-        # When include_base_parameters is False, the only change is that we only save trainable parameters
-        # instead of all parameters.
-        adapter_checkpoint.filter_lora_snapshot(snapshot, ctx.workflow)
+        # Keep only trainable tensors and mark model state as partial so restore
+        # loads the saved tensors non-strictly into the LoRA-wrapped models.
+        adapter_checkpoint.filter_snapshot_to_trainable_state(snapshot, ctx.workflow)
         if not self.async_save:
             self.last_checkpoint_index = _write_checkpoint_snapshot(
                 self.checkpoint_dir,

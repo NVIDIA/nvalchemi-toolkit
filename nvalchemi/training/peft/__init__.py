@@ -27,7 +27,6 @@ __all__ = [
     "EquivariantLoRALinear",
     "LoRAApplyHook",
     "LoRACheckpointHook",
-    "LoRAConfig",
     "LoRAFineTuningStrategy",
     "LoRATrainableParameterHook",
     "available_lora_wrappers",
@@ -37,11 +36,10 @@ __all__ = [
 
 def __getattr__(name: str) -> object:
     """Lazily expose PEFT helpers with optional dependency boundaries."""
-    if name in {"LoRAConfig", "LoRAFineTuningStrategy"}:
-        from nvalchemi.training.peft.lora import LoRAConfig, LoRAFineTuningStrategy
+    if name == "LoRAFineTuningStrategy":
+        from nvalchemi.training.peft.lora import LoRAFineTuningStrategy
 
         exports = {
-            "LoRAConfig": LoRAConfig,
             "LoRAFineTuningStrategy": LoRAFineTuningStrategy,
         }
         return exports[name]

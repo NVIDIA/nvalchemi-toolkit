@@ -71,10 +71,6 @@ from nvalchemi.training.optimizers import (
     step_optimizers,
     zero_gradients,
 )
-from nvalchemi.training.peft import (
-    LoRAConfig,
-    LoRAFineTuningStrategy,
-)
 from nvalchemi.training.runtime import (
     configure_dataloader,
     configure_parallelism,
@@ -104,7 +100,6 @@ __all__ = [
     "EMAHook",
     "FineTuningStrategy",
     "LinearWeight",
-    "LoRAConfig",
     "LoRACheckpointHook",
     "LoRAFineTuningStrategy",
     "LossWeightSchedule",
@@ -141,8 +136,9 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
-    """Lazily expose PEFT wrapper helpers."""
+    """Lazily expose PEFT helpers."""
     if name in {
+        "LoRAFineTuningStrategy",
         "available_lora_wrappers",
         "register_builtin_lora_wrappers",
     }:

@@ -26,6 +26,7 @@ from typing import Any, Literal, TypeAlias
 
 import torch
 from torch import nn
+from torch.func import functional_call
 
 from nvalchemi.training.peft import _peft
 
@@ -373,6 +374,12 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
             )
         if not hasattr(base_layer, "weight"):
             raise TypeError("e3nn fully connected layer has no weight parameter.")
+        if dropout != 0.0:
+            raise ValueError(
+                "E3NNFullyConnectedLoRALayer does not support nonzero dropout "
+                "because e3nn fully connected LoRA must be applied in weight "
+                "space to match merge_into_base."
+            )
         self.base_layer = base_layer
         for param in self.base_layer.parameters():
             param.requires_grad = False
@@ -407,13 +414,15 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Run the frozen base layer plus the scalar LoRA residual."""
-        out = self.base_layer(x)
-        if self.enabled:
-            out = (
-                out
-                + ((self.lora_dropout(x) @ self.lora_A) @ self.lora_B) * self.scaling
-            )
-        return out
+        if not self.enabled:
+            return self.base_layer(x)
+
+        # e3nn _Layer normalizes ``weight`` inside forward. Applying the LoRA
+        # delta as an output residual would skip that normalization and would
+        # not match ``merge_into_base``.
+        # ``functional_call`` substitutes the effective weight for this call
+        # without mutating the frozen base layer parameter.
+        return functional_call(self.base_layer, {"weight": self._merged_weight()}, (x,))
 
     @torch.no_grad()
     def merge_into_base(self) -> None:

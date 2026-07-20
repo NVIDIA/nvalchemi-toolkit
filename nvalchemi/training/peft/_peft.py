@@ -19,8 +19,6 @@ from __future__ import annotations
 from physicsnemo.experimental import peft as _physicsnemo_peft
 from physicsnemo.experimental.peft import utils as _physicsnemo_peft_utils
 
-__all__ = ["LoRAConfig", "LoRAInit"]
-
 LoRAConfig = _physicsnemo_peft.LoRAConfig
 LoRAInit = _physicsnemo_peft.config.LoRAInit
 LoRALayer = _physicsnemo_peft.LoRALayer
@@ -31,5 +29,6 @@ is_lora_layer = _physicsnemo_peft.is_lora_layer
 load_adapter = _physicsnemo_peft.load_adapter
 merge_lora = _physicsnemo_peft.merge_lora
 register_lora_wrapper = _physicsnemo_peft.register_lora_wrapper
+resolve_targets = _physicsnemo_peft.resolve_targets
 save_adapter = _physicsnemo_peft.save_adapter
 wrappable_types = _physicsnemo_peft.lora.wrappable_types
