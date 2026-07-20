@@ -924,8 +924,22 @@ class _CommunicationMixin:
         if self.send_buffer is None:
             raise RuntimeError("No send buffer to write to.")
 
-        self.send_buffer.put(self.active_batch, mask=mask)
-        self.active_batch = self.active_batch.trim(copied_mask=mask)
+        previous_batch = self.active_batch
+        remaining_indices = torch.where(~mask)[0]
+        self.send_buffer.put(previous_batch, mask=mask)
+        self.active_batch = previous_batch.trim(copied_mask=mask)
+
+        # Graph-indexed metadata and integrator state refer to the old batch
+        # layout. Keep only state for retained graphs and prevent the next hook
+        # context from applying stale convergence indices to the smaller batch.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1106,13 +1120,26 @@ class _CommunicationMixin:
         converged_indices : torch.Tensor
             Integer indices of converged samples.
         """
-        graduated = self.active_batch.index_select(converged_indices)
-        all_indices = set(range(self.active_batch.num_graphs))
+        previous_batch = self.active_batch
+        graduated = previous_batch.index_select(converged_indices)
+        all_indices = set(range(previous_batch.num_graphs))
         remaining = sorted(all_indices - set(converged_indices.tolist()))
         if remaining:
-            self.active_batch = self.active_batch.index_select(remaining)
+            self.active_batch = previous_batch.index_select(remaining)
         else:
             self.active_batch = None
+
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            remaining_indices = torch.tensor(
+                remaining, dtype=torch.long, device=previous_batch.device
+            )
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
         if self.debug_mode:
             logger.debug(
                 "[rank {}] final stage, {} converged graphs removed",
@@ -1631,11 +1658,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n_new: int,
         template_batch: Batch,
     ) -> None:
-        """Synchronize ``self._state`` after an inflight batch refill.
+        """Synchronize ``self._state`` after active-batch membership changes.
 
-        Called by :meth:`_refill_check` after graduated systems have been
-        removed and replacement systems appended.  Removes state rows for
-        graduated systems and appends fresh default state for the new ones.
+        Called after graduated systems have been removed, with optional
+        replacement systems appended. Removes state rows for graduated systems
+        and appends fresh default state for the new ones.
 
         If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
         this method is a no-op.
@@ -2848,10 +2875,9 @@ class FusedStage(BaseDynamics):
         """Fan out state sync to all sub-stages.
 
         ``FusedStage`` itself holds no ``_state``; each sub-stage does.
-        This override delegates to every sub-stage so that inflight
-        batch refills (via :meth:`~BaseDynamics._refill_check`) keep
-        each sub-stage's ``_state`` aligned with the new batch
-        composition.
+        This override delegates to every sub-stage so that active-batch
+        membership changes keep each sub-stage's ``_state`` aligned with the
+        new batch composition.
 
         Parameters
         ----------
