@@ -111,6 +111,15 @@ The context manager handles:
    pipeline.run()      # loop until all stages report done
    pipeline.cleanup()
 
+.. warning::
+
+   A plain :class:`~nvalchemi.dynamics.BaseDynamics` stage is advanced with
+   ``step()`` inside a distributed pipeline, so its ``n_steps`` constructor
+   argument does not graduate systems. Use a convergence criterion for
+   convergence-driven stages. For a fixed-duration stage, wrap the dynamics
+   in a single-sub-stage :class:`~nvalchemi.dynamics.FusedStage`; its
+   per-system step counter graduates each system after the configured budget.
+
 **Launching with** ``torchrun``
 
 .. code-block:: bash

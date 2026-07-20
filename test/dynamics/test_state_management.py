@@ -442,6 +442,37 @@ class TestStateInvariant:
 class TestPipelineStateMutation:
     """Pipeline extraction must invalidate state tied to the old batch layout."""
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_receive_then_partial_removal_keeps_nvt_state_aligned(self):
+        """Received systems get state before a non-contiguous graduation."""
+        from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+
+        device = torch.device("cuda")
+        dyn = NVTLangevin(
+            model=_make_model().to(device),
+            dt=0.1,
+            temperature=300.0,
+            friction=0.1,
+        )
+        dyn.active_batch = _make_batch(2).to(device)
+        dyn.step(dyn.active_batch)
+        assert dyn._state.num_graphs == 2
+
+        dyn._buffer_to_batch(_make_batch(2, seed=10).to(device))
+        assert dyn.active_batch is not None
+        assert dyn.active_batch.num_graphs == 4
+        assert dyn._state.num_graphs == 4
+
+        converged = torch.tensor([0, 3], device=device)
+        dyn._remove_converged_final_stage(converged)
+        assert dyn.active_batch is not None
+        assert dyn.active_batch.num_graphs == 2
+        assert dyn._state.num_graphs == 2
+
+        dyn.step(dyn.active_batch)
+        torch.cuda.synchronize()
+        assert dyn._state.num_graphs == dyn.active_batch.num_graphs
+
     @pytest.mark.parametrize("final_stage", [False, True], ids=["sender", "final"])
     def test_partial_removal_is_safe_for_next_step(self, final_stage):
         """Non-contiguous graduation keeps convergence and FIRE state aligned."""
