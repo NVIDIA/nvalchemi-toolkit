@@ -1388,6 +1388,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         -------
         int
             The checkpoint index that was written.
+
+        Notes
+        -----
+        In distributed training, this method writes immediately on the calling
+        process. When saving to a shared checkpoint directory, call it from only
+        one rank, typically global rank 0, and synchronize other ranks before
+        loading the checkpoint. Use :class:`~nvalchemi.training.hooks.CheckpointHook`
+        for periodic checkpointing with rank-zero guarding.
         """
         from nvalchemi.training._checkpoint import save_checkpoint
 
