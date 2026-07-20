@@ -71,6 +71,7 @@ from nvalchemi.training.optimizers import (
     step_optimizers,
     zero_gradients,
 )
+from nvalchemi.training.reference_energies import fit_atomic_reference_energies
 from nvalchemi.training.runtime import (
     configure_dataloader,
     configure_parallelism,
@@ -121,6 +122,7 @@ __all__ = [
     "create_model_spec",
     "create_model_spec_from_json",
     "default_training_fn",
+    "fit_atomic_reference_energies",
     "freeze_unconfigured_models",
     "loss_component_to_spec",
     "load_checkpoint",
