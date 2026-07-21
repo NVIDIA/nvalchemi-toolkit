@@ -65,8 +65,6 @@ from typing import Any
 
 import hydra
 import torch
-from omegaconf import DictConfig, OmegaConf
-
 from _mace_models import build_training_mace_model, get_e0s
 from _mace_training_helpers import (
     GradientClipHook,
@@ -83,6 +81,8 @@ from _mace_training_helpers import (
     save_final_checkpoint,
     stress_target_scale,
 )
+from omegaconf import DictConfig, OmegaConf
+
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
     DataLoader,
