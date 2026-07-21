@@ -2021,6 +2021,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         if not graduated_mask.any():
             return batch
 
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
+
         remaining_indices = torch.where(~graduated_mask)[0]
 
         if self.sinks and graduated_mask.any():

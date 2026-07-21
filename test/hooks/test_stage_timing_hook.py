@@ -239,6 +239,68 @@ class TestAutoBackend:
 
 
 # ------------------------------------------------------------------
+# Device robustness (multi-GPU event handles)
+# ------------------------------------------------------------------
+
+
+class TestDeviceRobustness:
+    def test_cuda_event_uses_batch_device_context(self) -> None:
+        """Event creation and recording use the batch's explicit CUDA device."""
+        profiler = StageTimingHook("detailed", timer_backend="cuda_event")
+        batch = MagicMock()
+        batch.device = torch.device("cuda:3")
+        event = MagicMock()
+
+        with (
+            patch("torch.cuda.device") as device_context,
+            patch("torch.cuda.Event", return_value=event),
+        ):
+            profiler._record(batch, profiler._profiled_stages[0], 0, 0)
+
+        device_context.assert_called_once_with(batch.device)
+        event.record.assert_called_once_with()
+        assert profiler._cuda_device == batch.device
+
+    def test_flush_discards_partial_cuda_deltas_on_error(self) -> None:
+        """A CUDA event error skips the entire timing sample."""
+        profiler = StageTimingHook("detailed", enable_nvtx=True)
+        stages = profiler._profiled_stages
+        elapsed_calls = 0
+
+        class _EventuallyBadEvent:
+            def elapsed_time(self, other):  # noqa: ANN001, ANN202
+                nonlocal elapsed_calls
+                elapsed_calls += 1
+                if elapsed_calls == 2:
+                    raise RuntimeError("CUDA error: invalid resource handle")
+                return 1.0
+
+        profiler._backend_resolved = "cuda_event"
+        profiler._cuda_device = None
+        profiler._current_step = 0
+        profiler._step_cuda_events = {s: _EventuallyBadEvent() for s in stages}
+
+        with (
+            patch("torch.cuda.synchronize"),
+            patch("nvalchemi.hooks.stage_timing.nvtx") as mock_nvtx,
+        ):
+            profiler._flush_step(rank=0)  # must not raise
+
+        assert profiler._steps_recorded == 0
+        assert all(profiler.timings[s] == [] for s in stages)
+        mock_nvtx.pop_range.assert_called_once_with()
+
+    def test_cuda_events_pinned_to_batch_device(self, gpu_device: str) -> None:
+        """CUDA timing events are pinned to the batch's device, not the ambient
+        current device."""
+        profiler = StageTimingHook("step")
+        dynamics = _make_dynamics(hooks=[profiler], n_steps=1, device=gpu_device)
+        batch = _make_batch(device=gpu_device)
+        dynamics.run(batch)
+        assert profiler._cuda_device == batch.device
+
+
+# ------------------------------------------------------------------
 # NVTX
 # ------------------------------------------------------------------
 
