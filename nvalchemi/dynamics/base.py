@@ -925,7 +925,13 @@ class _CommunicationMixin:
             raise RuntimeError("No send buffer to write to.")
 
         self.send_buffer.put(self.active_batch, mask=mask)
+        remaining = torch.where(~mask)[0]
         self.active_batch = self.active_batch.trim(copied_mask=mask)
+        # Trimming drops the sent graphs, so realign per-system integrator state
+        # and stale converged indices with the smaller batch (else the next step
+        # over-indexes them).
+        self._sync_state_to_batch(remaining, 0, self.active_batch)
+        self._last_converged = None
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1993,6 +1999,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         if not graduated_mask.any():
             return batch
+
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
 
         remaining_indices = torch.where(~graduated_mask)[0]
 

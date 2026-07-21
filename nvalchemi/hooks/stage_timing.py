@@ -195,6 +195,9 @@ class StageTimingHook:
         self._current_step: int = -1
         self._step_cuda_events: dict[Enum, torch.cuda.Event] = {}
         self._step_cpu_timestamps: dict[Enum, int] = {}
+        # Device the CUDA events live on; all record/sync/measure pin to it so
+        # multi-GPU runs don't hit an invalid-handle across device contexts.
+        self._cuda_device: torch.device | None = None
 
         # Accumulated timing: transition endpoint -> list of delta_s.
         self.timings: dict[Enum, list[float]] = {s: [] for s in self._profiled_stages}
@@ -269,8 +272,12 @@ class StageTimingHook:
         if self._backend_resolved is None:
             self._backend_resolved = self._resolve_backend(dev)
         if self._backend_resolved == "cuda_event":
-            event = torch.cuda.Event(enable_timing=True)
-            event.record()
+            # Create + record on the batch's device so the event handle is valid
+            # when measured, regardless of the ambient current device.
+            with torch.cuda.device(dev):
+                event = torch.cuda.Event(enable_timing=True)
+                event.record()
+            self._cuda_device = dev
             self._step_cuda_events[current_stage] = event
         else:
             self._step_cpu_timestamps[current_stage] = time.perf_counter_ns()
@@ -330,22 +337,21 @@ class StageTimingHook:
         if len(ordered) < 2:
             return
 
-        if use_cuda:
-            torch.cuda.synchronize()
-
-        deltas: dict[Enum, float] = {}
-        for i in range(1, len(ordered)):
-            prev_stage, curr_stage = ordered[i - 1], ordered[i]
-            if use_cuda:
-                prev_ev = self._step_cuda_events[prev_stage]
-                curr_ev = self._step_cuda_events[curr_stage]
-                delta_s = prev_ev.elapsed_time(curr_ev) / 1000.0
+        # Measure on the events' own device; a stray CUDA error degrades to a
+        # skipped sample rather than aborting the run (timing is best-effort).
+        try:
+            if use_cuda and self._cuda_device is not None:
+                with torch.cuda.device(self._cuda_device):
+                    torch.cuda.synchronize(self._cuda_device)
+                    deltas = self._cuda_deltas(ordered)
+            elif use_cuda:
+                torch.cuda.synchronize()
+                deltas = self._cuda_deltas(ordered)
             else:
-                prev_ts = self._step_cpu_timestamps[prev_stage]
-                curr_ts = self._step_cpu_timestamps[curr_stage]
-                delta_s = (curr_ts - prev_ts) / 1e9
-            deltas[curr_stage] = delta_s
-            self.timings[curr_stage].append(delta_s)
+                deltas = self._cpu_deltas(ordered)
+        except RuntimeError as exc:
+            logger.debug("StageTimingHook: skipped step timing ({})", exc)
+            return
 
         t_since_init_s = (time.perf_counter_ns() - self._t0_ns) / 1e9
         self._steps_recorded += 1
@@ -361,6 +367,28 @@ class StageTimingHook:
         # Close NVTX range for the last stage in this step.
         if self.enable_nvtx and nvtx is not None:
             nvtx.pop_range()
+
+    def _cuda_deltas(self, ordered: list[Enum]) -> dict[Enum, float]:
+        """Per-transition deltas (s) from recorded CUDA events."""
+        deltas: dict[Enum, float] = {}
+        for i in range(1, len(ordered)):
+            prev_ev = self._step_cuda_events[ordered[i - 1]]
+            curr_ev = self._step_cuda_events[ordered[i]]
+            delta_s = prev_ev.elapsed_time(curr_ev) / 1000.0
+            deltas[ordered[i]] = delta_s
+            self.timings[ordered[i]].append(delta_s)
+        return deltas
+
+    def _cpu_deltas(self, ordered: list[Enum]) -> dict[Enum, float]:
+        """Per-transition deltas (s) from perf-counter timestamps."""
+        deltas: dict[Enum, float] = {}
+        for i in range(1, len(ordered)):
+            prev_ts = self._step_cpu_timestamps[ordered[i - 1]]
+            curr_ts = self._step_cpu_timestamps[ordered[i]]
+            delta_s = (curr_ts - prev_ts) / 1e9
+            deltas[ordered[i]] = delta_s
+            self.timings[ordered[i]].append(delta_s)
+        return deltas
 
     # ------------------------------------------------------------------
     # CSV output
@@ -460,6 +488,7 @@ class StageTimingHook:
             self.timings[stage].clear()
         self._step_cuda_events.clear()
         self._step_cpu_timestamps.clear()
+        self._cuda_device = None
         self._current_step = -1
         self._backend_resolved = None
         self._t0_ns = time.perf_counter_ns()

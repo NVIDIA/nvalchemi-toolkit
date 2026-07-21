@@ -239,6 +239,44 @@ class TestAutoBackend:
 
 
 # ------------------------------------------------------------------
+# Device robustness (multi-GPU event handles)
+# ------------------------------------------------------------------
+
+
+class TestDeviceRobustness:
+    def test_flush_survives_cuda_event_error(self) -> None:
+        """A CUDA event error during flush is swallowed — timing never aborts
+        the run."""
+        profiler = StageTimingHook("step")
+        stages = profiler._profiled_stages
+
+        class _BadEvent:
+            def elapsed_time(self, other):  # noqa: ANN001, ANN202
+                raise RuntimeError("CUDA error: invalid resource handle")
+
+        profiler._backend_resolved = "cuda_event"
+        profiler._cuda_device = None
+        profiler._current_step = 0
+        profiler._step_cuda_events = {s: _BadEvent() for s in stages}
+
+        with patch("torch.cuda.synchronize"):
+            profiler._flush_step(rank=0)  # must not raise
+
+        assert profiler._steps_recorded == 0
+        assert all(profiler.timings[s] == [] for s in stages)
+
+    def test_cuda_events_pinned_to_batch_device(self, gpu_device: str) -> None:
+        """CUDA timing events are pinned to the batch's device, not the ambient
+        current device."""
+        profiler = StageTimingHook("step")
+        dynamics = _make_dynamics(hooks=[profiler], n_steps=1, device=gpu_device)
+        batch = _make_batch(device=gpu_device)
+        dynamics.run(batch)
+        assert profiler._cuda_device is not None
+        assert profiler._cuda_device.type == "cuda"
+
+
+# ------------------------------------------------------------------
 # NVTX
 # ------------------------------------------------------------------
 
