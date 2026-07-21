@@ -104,6 +104,12 @@ class EMAHook(BaseModel, TrainingUpdateHook):
     monkey-patched modules whose deepcopy/load path materializes registered
     tensors on CPU or in a default dtype usable without model-specific hooks.
 
+    .. note::
+       If the copied module defines ``modify_ema_methods()``, the hook calls it
+       once immediately after constructing the averaged model. Model wrappers
+       can use this optional interface to restore runtime methods discarded by
+       ``deepcopy``.
+
     Parameters
     ----------
     model_key : str, optional
@@ -228,6 +234,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         return averaged
 
     def _ensure_initialized(self, ctx: TrainContext) -> None:
+        """Construct and repair the averaged model, then restore pending state."""
         if self._averaged_model is not None:
             return
         try:
@@ -240,6 +247,13 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             ) from exc
 
         self._averaged_model = self._build_averaged_model(_unwrap_model(source))
+        # in the event there are user-defined methods that need
+        # to re-patch effects that are not included in the deepcopy
+        modify_ema_methods = getattr(
+            self._averaged_model.module, "modify_ema_methods", None
+        )
+        if callable(modify_ema_methods):
+            modify_ema_methods()
         if self._pending_averaged_state is not None:
             source_tensors = _module_tensors(_unwrap_model(source))
             self._averaged_model.load_state_dict(self._pending_averaged_state)
