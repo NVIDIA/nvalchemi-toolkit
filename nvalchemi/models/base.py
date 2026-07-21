@@ -514,7 +514,10 @@ class BaseModelMixin(abc.ABC):
             OrderedDict with expected output keys and their values
             (or ``None`` if not present).  Tensors may be graph-attached.
         """
-        output = OrderedDict((key, None) for key in self.output_data())
+        # ``output_data()`` returns a set, whose iteration order is randomized
+        # per process (str hashing). Sort so every rank seeds the output dict in
+        # an identical key order.
+        output = OrderedDict((key, None) for key in sorted(self.output_data()))
         if isinstance(model_output, dict):
             for key in output:
                 value = model_output.get(key)

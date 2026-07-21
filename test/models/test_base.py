@@ -486,6 +486,38 @@ class TestBaseModelMixinAdaptOutput:
         out = model.adapt_output(raw, None)
         assert out["forces"] is None
 
+    def test_output_key_order_is_sorted_deterministic(self):
+        """Regression (NVBUGS 6472536): the output dict must be seeded in a
+        rank-independent key order. ``output_data()`` returns a set, whose
+        iteration order is randomized per process (str hashing), so
+        ``adapt_output`` must sort. Under DomainParallel, consolidation issues
+        one collective per key in dict order — a per-rank order desyncs the NCCL
+        schedule and deadlocks (ranks issue ALLREDUCE vs ALLTOALL at the same
+        seq)."""
+
+        class _MultiOutModel(DemoModelWrapper):
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "forces", "stress"}),
+                    needs_pbc=False,
+                    active_outputs={"stress", "energy", "forces"},
+                )
+
+            def adapt_output(self, model_output, data):
+                return BaseModelMixin.adapt_output(self, model_output, data)
+
+        model = _MultiOutModel()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.randn(3, 3),
+            "stress": torch.randn(1, 3, 3),
+        }
+        out = model.adapt_output(raw, None)
+        keys = list(out.keys())
+        assert keys == sorted(keys)
+        assert keys == ["energy", "forces", "stress"]
+
     def test_non_dict_output(self):
         """Base adapt_output returns all None for non-dict output."""
 

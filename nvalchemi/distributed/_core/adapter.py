@@ -678,6 +678,7 @@ def auto_marshal_scripted_submodules(
     reach the scripted graph.
     """
     import torch  # noqa: PLC0415
+    import torch.distributed as dist  # noqa: PLC0415
 
     wrap_cls = _marshalling_module_cls()
     mementos: list[tuple[Any, str, Any]] = []
@@ -697,13 +698,27 @@ def auto_marshal_scripted_submodules(
             continue
         setattr(parent, child, wrap_cls(mod))
         mementos.append((parent, child, mod))
-        logger.warning(
+        # Per-submodule detail stays available at DEBUG; the default path gets a
+        # single rank-0 summary below (this fires for every scripted submodule of
+        # every layer × every rank — e.g. ~30×N for MACE — so a warning per hit
+        # buries the log).
+        logger.debug(
             "auto-marshalled scripted submodule %r for the distributed path "
-            "(ShardTensor inputs unwrapped to local). If a result diverges, "
-            "exclude it via DomainConfig.scripted_marshal_exclude or declare a "
-            "JitAdapter; disable auto-discovery with scripted_marshal='declared'.",
+            "(ShardTensor inputs unwrapped to local).",
             name,
         )
+
+    if mementos:
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        if rank == 0:
+            logger.info(
+                "auto-marshalled %d scripted submodule(s) for the distributed "
+                "path (ShardTensor inputs unwrapped to local). If a result "
+                "diverges, exclude via DomainConfig.scripted_marshal_exclude or "
+                "declare a JitAdapter; disable auto-discovery with "
+                "scripted_marshal='declared'.",
+                len(mementos),
+            )
     return mementos
 
 
