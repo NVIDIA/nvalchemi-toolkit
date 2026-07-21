@@ -29,3 +29,7 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
 **09 — UMA NVE/NVT**: Driving the fairchem UMA foundation model through
 NVE / NVT dynamics with energy-drift tracking; OMat crystals and OMol
 molecules via task selection on ``UMAWrapper.from_checkpoint``.
+
+**10 — MACE Training**: Training a ScaleShiftMACE model with the ALCHEMI
+training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
+validation, and distributed launch patterns.
