@@ -18,14 +18,13 @@ dynamics, hooks/reporting, and training/finetuning workflows.
 
 ## Repository Practices
 
-- Read `CONTRIBUTING.md` and the docs under `docs/userguide/about/` before broad
-  changes; keep work tightly scoped.
-- Use DCO sign-off for commits: `git commit -s -m "fix: describe change"`.
-- Prefer Conventional Commits-style messages unless maintainers request otherwise.
-- Install and run pre-commit hooks for development. PRs that skip pre-commit are
-  not expected to be reviewed.
+- Commits need DCO sign-off and Conventional Commits-style messages:
+  `git commit -s -m "fix: describe change"`. Pre-commit hooks are required;
+  PRs that skip them are not expected to be reviewed. See `CONTRIBUTING.md`
+  for DCO details, hook setup, and CI stages.
 - The PR template expects a short description, testing notes, changelog updates,
   docstring/docs updates where applicable, and the relevant type-of-change box.
+- Keep work tightly scoped; read `docs/userguide/about/` before broad changes.
 
 ## CUDA And Environment Setup
 
@@ -106,9 +105,10 @@ uv run --extra cu12 pytest \
   test/data/test_data_mixin.py::TestMoveObjToDevice::test_move_tensor_to_device
 ```
 
-Coverage is configured in `pyproject.toml` with `fail_under = 75`, branch
-coverage disabled, and `nvalchemi.coverage.xml` as the XML output. Interrogate
-docstring coverage requires 95%.
+Coverage: `pyproject.toml` sets `fail_under = 75`, but the local `make pytest`
+and `make testmon-coverage` targets pass `--cov-fail-under=0` / `--fail-under=0`,
+so local runs report coverage without enforcing the threshold; CI enforces it
+separately. Interrogate docstring coverage requires 95%.
 
 ## Tooling And Style
 
@@ -165,6 +165,9 @@ be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
 - `asyncio_mode = "auto"` is enabled.
 - Prefer existing demo/test utilities such as `DemoModelWrapper`, `DemoDynamics`,
   and local `conftest.py` fixtures over bespoke scaffolding.
+- CUDA-dependent tests guard with `torch.cuda.is_available()` (see
+  `test/conftest.py`) and skip cleanly on CPU-only machines; the rest of the
+  suite runs on CPU.
 - Add or update regression tests for behavior changes, especially model adapters,
   dynamics hooks, data serialization, training specs, and optional-dependency
   paths.
@@ -191,15 +194,34 @@ Import from concrete modules when optional exports might pull unavailable extras
 For example, prefer `from nvalchemi.models.base import BaseModelMixin` in code
 that should not import optional model backends.
 
-## Documentation And Agent Skills
+## Documentation
 
 - User docs live in `docs/userguide/`; API docs live in `docs/modules/`; examples
   live in `examples/`.
 - Project conventions, including virial/stress/pressure signs, are documented in
   `docs/userguide/about/conventions.md`.
-- Agent-facing API skills live in `.claude/skills/`. Check the relevant
-  `SKILL.md` before nontrivial work in data structures/storage, dynamics,
-  hooks, model wrapping, training, finetuning, reporting, losses, or Zarr
-  performance.
 - When docs, examples, or public APIs change, update related docs and consider
   `CHANGELOG.md` because the PR template asks for it.
+- `CLAUDE.md` at the repo root only imports this file (`@AGENTS.md`); put
+  agent guidance here, not there.
+
+## Agent Skills
+
+Task-focused API guides live in `.claude/skills/<name>/SKILL.md`. They are
+plain Markdown, readable by any agent: before nontrivial work in an area
+below, read the matching `SKILL.md`. Authoring conventions and dependency
+chains are documented in `.claude/skills/README.md`.
+
+| Skill | Use when |
+|-------|----------|
+| `nvalchemi-data-structures` | Building or batching atomic systems; shape, dtype, or device errors |
+| `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
+| `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
+| `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
+| `nvalchemi-training-api` | Training from scratch: strategy, losses, optimizers, validation, checkpoints; scaling to multi-GPU/multi-node (DDP) |
+| `nvalchemi-fine-tuning` | Adapting a pretrained model to new reference data |
+| `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
+| `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
+| `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
+| `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |
+| `nvalchemi-reporting` | Progress dashboards, TensorBoard, or CSV observability |
