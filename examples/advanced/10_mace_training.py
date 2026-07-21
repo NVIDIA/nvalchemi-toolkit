@@ -65,22 +65,6 @@ from typing import Any
 
 import hydra
 import torch
-from _mace_models import build_training_mace_model, get_e0s
-from _mace_training_helpers import (
-    GradientClipHook,
-    JsonLinesLogger,
-    ScaleField,
-    ToDType,
-    TrainingMetricsLogger,
-    TwoStageCosineConstantLR,
-    close_zarr_loaders,
-    count_model_parameters,
-    get_cfg,
-    get_dtype,
-    make_validation_sampler,
-    save_final_checkpoint,
-    stress_target_scale,
-)
 from omegaconf import DictConfig, OmegaConf
 
 from nvalchemi.data.datapipes import (
@@ -107,6 +91,41 @@ from nvalchemi.training import (
     default_training_fn,
 )
 from nvalchemi.training.hooks import TrainingUpdateHook
+
+if __package__:
+    from ._mace_models import build_training_mace_model, get_e0s
+    from ._mace_training_helpers import (
+        GradientClipHook,
+        JsonLinesLogger,
+        ScaleField,
+        ToDType,
+        TrainingMetricsLogger,
+        TwoStageCosineConstantLR,
+        close_zarr_loaders,
+        count_model_parameters,
+        get_cfg,
+        get_dtype,
+        make_validation_sampler,
+        save_final_checkpoint,
+        stress_target_scale,
+    )
+else:
+    from _mace_models import build_training_mace_model, get_e0s
+    from _mace_training_helpers import (
+        GradientClipHook,
+        JsonLinesLogger,
+        ScaleField,
+        ToDType,
+        TrainingMetricsLogger,
+        TwoStageCosineConstantLR,
+        close_zarr_loaders,
+        count_model_parameters,
+        get_cfg,
+        get_dtype,
+        make_validation_sampler,
+        save_final_checkpoint,
+        stress_target_scale,
+    )
 
 _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
 # Samples per Zarr read during startup materialization; 32768 is used instead of
@@ -255,7 +274,7 @@ def _loader(
 #
 # The runnable script reads architecture hyperparameters from Hydra and builds
 # the wrapped model through ``_build_model(cfg, device)``, which calls
-# :func:`examples.advanced._mace_models.build_training_mace_model` to set
+# :func:`~examples.advanced._mace_models.build_training_mace_model` to set
 # ``active_outputs`` and attach a checkpointable model spec.
 
 # sphinx_gallery_start_ignore
