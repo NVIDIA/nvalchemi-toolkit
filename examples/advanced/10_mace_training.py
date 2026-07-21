@@ -27,7 +27,8 @@ At a high level, the ALCHEMI training workflow has the following structure:
 
    [Graph Data] -> [Model Architecture] -> [Supervised Objective] -> [Runtime Hooks] -> [TrainingStrategy]
 
-**Data** — MatPES r2SCAN structures are read from ALCHEMI-compatible Zarr splits.
+**Data** — MatPES r2SCAN 2025.2 structures, obtained from
+`MatPES <https://matpes.ai/>`__, are read from ALCHEMI-compatible Zarr splits.
 Each sample contains graph inputs (positions, atom types, periodic boundary
 metadata) and supervised labels (energy, forces, stress).
 
@@ -120,12 +121,19 @@ _DATALOADER_USE_STREAMS = True
 # %%
 # Loading train and validation data
 # ---------------------------------
-# This pipeline reads MatPES r2SCAN structures from ALCHEMI-compatible Zarr
-# splits. :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw
-# samples from disk; :class:`~nvalchemi.data.datapipes.InMemoryDataset`
-# materializes each split once as a :class:`~nvalchemi.data.Batch` on the target
-# device, and :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or
-# sequential training batches from that in-memory batch.
+# The source data is the `MatPES r2SCAN 2025.2 release <https://matpes.ai/>`__,
+# distributed as JSONL (one structure record per line). Download the JSONL file,
+# split records into train, validation, and test sets, convert each record to
+# :class:`~nvalchemi.data.AtomicData` using its structure, energy, forces, and
+# stress labels, then write each split as an ALCHEMI Zarr store with
+# :class:`~nvalchemi.data.datapipes.AtomicDataZarrWriter`.
+#
+# This pipeline reads those Zarr splits with
+# :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader`.
+# :class:`~nvalchemi.data.datapipes.InMemoryDataset` materializes each split once
+# as a :class:`~nvalchemi.data.Batch` on the target device, and
+# :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or sequential
+# batches from that in-memory batch.
 #
 # The default configuration uses a per-process training batch size of 256 and a
 # validation batch size of 512. Given that the structure sizes in this dataset range from
