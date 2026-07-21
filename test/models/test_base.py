@@ -487,7 +487,7 @@ class TestBaseModelMixinAdaptOutput:
         assert out["forces"] is None
 
     def test_output_key_order_is_sorted_deterministic(self):
-        """Regression (NVBUGS 6472536): the output dict must be seeded in a
+        """The output dict must be seeded in a
         rank-independent key order. ``output_data()`` returns a set, whose
         iteration order is randomized per process (str hashing), so
         ``adapt_output`` must sort. Under DomainParallel, consolidation issues
