@@ -140,12 +140,61 @@ _DATALOADER_USE_STREAMS = True
 # %%
 # Loading train and validation data
 # ---------------------------------
-# The source data is the `MatPES r2SCAN 2025.2 release <https://matpes.ai/>`__,
-# distributed as JSONL (one structure record per line). Download the JSONL file,
-# split records into train, validation, and test sets, convert each record to
-# :class:`~nvalchemi.data.AtomicData` using its structure, energy, forces, and
-# stress labels, then write each split as an ALCHEMI Zarr store with
+# The source data is the `MatPES r2SCAN 2025.2 release
+# <https://huggingface.co/datasets/materialyze/matpes>`__ on Hugging Face. This
+# example expects separate train, validation, and test Zarr stores. Load each
+# MatPES split file, for example the train, validation, and test JSON/JSONL files,
+# and convert each split independently to an ALCHEMI Zarr store with
 # :class:`~nvalchemi.data.datapipes.AtomicDataZarrWriter`.
+#
+# A minimal converter for this workflow should map each pymatgen/MSON ``structure``
+# dictionary to atomic numbers, Cartesian positions, cell, and PBC tensors;
+# write ``energy`` as a system label, ``forces`` as an atom label, and convert
+# Voigt-6 ``stress`` to a ``3 x 3`` system tensor.
+#
+# .. code-block:: python
+#
+#    import periodictable as pt
+#    import torch
+#
+#    from nvalchemi.data import AtomicData
+#    from nvalchemi.data.atomic_data import voigt_to_matrix
+#    from nvalchemi.data.datapipes import AtomicDataZarrWriter
+#
+#    def atomic_numbers_from_element_symbols(sites):
+#        return torch.as_tensor(
+#            [
+#                int(pt.elements.symbol(site["species"][0]["element"]).number)
+#                for site in sites
+#            ],
+#            dtype=torch.int32,
+#        )
+#
+#    writer = AtomicDataZarrWriter("r2scan-2025.2-train.zarr")
+#    chunk_size = 8192
+#    chunk = []
+#    initialized = False
+#    for record in jsonl_records:
+#        structure = record["structure"]
+#        chunk.append(
+#            AtomicData(
+#                atomic_numbers=atomic_numbers_from_element_symbols(structure["sites"]),
+#                positions=torch.as_tensor([site["xyz"] for site in structure["sites"]]),
+#                cell=torch.as_tensor(structure["lattice"]["matrix"]).reshape(1, 3, 3),
+#                pbc=torch.as_tensor(structure["lattice"].get("pbc", [True] * 3)).reshape(1, 3),
+#                energy=torch.as_tensor([[record["energy"]]]),
+#                forces=torch.as_tensor(record["forces"]),
+#                stress=voigt_to_matrix(torch.as_tensor(record["stress"])).reshape(1, 3, 3),
+#            )
+#        )
+#
+#        if len(chunk) >= chunk_size:
+#            writer.append(chunk) if initialized else writer.write(chunk)
+#            initialized = True
+#            chunk.clear()
+#
+#    if chunk:
+#        writer.append(chunk) if initialized else writer.write(chunk)
 #
 # This pipeline reads those Zarr splits with
 # :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader`.
