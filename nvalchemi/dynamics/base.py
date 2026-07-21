@@ -3917,6 +3917,16 @@ class DistributedPipeline:
             elif stage._recv_template is not None:
                 stage._ensure_buffers(stage._recv_template)
 
+            # Zero the send buffer each step (draining any in-flight send first)
+            # so a step with nothing to graduate — including the done signal —
+            # sends a genuinely empty buffer. Otherwise the downstream keeps
+            # appending the last sent batch and never drains (livelock).
+            if stage.next_rank is not None and stage.send_buffer is not None:
+                if stage._pending_send_handle is not None:
+                    stage._pending_send_handle.wait()
+                    stage._pending_send_handle = None
+                stage.send_buffer.zero()
+
             if stage.active_batch is not None:
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
                 n_conv = (
