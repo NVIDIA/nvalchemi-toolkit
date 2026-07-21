@@ -67,8 +67,8 @@ import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
 
-from examples.advanced._mace_models import build_training_mace_model, get_e0s
-from examples.advanced._mace_training_helpers import (
+from _mace_models import build_training_mace_model, get_e0s
+from _mace_training_helpers import (
     GradientClipHook,
     JsonLinesLogger,
     ScaleField,
@@ -424,7 +424,7 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
 #
 #    import torch
 #
-#    from examples.advanced._mace_training_helpers import TwoStageCosineConstantLR
+#    from _mace_training_helpers import TwoStageCosineConstantLR
 #    from nvalchemi.training import OptimizerConfig
 #
 #    optimizer_config = OptimizerConfig(
@@ -486,7 +486,7 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 #
 #    from pathlib import Path
 #
-#    from examples.advanced._mace_training_helpers import (
+#    from _mace_training_helpers import (
 #        GradientClipHook,
 #        TrainingMetricsLogger,
 #    )
