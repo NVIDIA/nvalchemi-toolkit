@@ -869,6 +869,23 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # Forward pass
     # ------------------------------------------------------------------
 
+    def modify_ema_methods(self) -> None:
+        """Restore cuEquivariance methods discarded by EMA model copying.
+
+        ``torch.optim.swa_utils.AveragedModel`` deep-copies its source model.
+        cuEquivariance fused convolution modules attach their specialized
+        ``forward`` method at runtime, and that instance method is not retained
+        by the copy. Reapply MACE's fusion wrapper only when it is missing.
+        """
+        from mace.modules.wrapper_ops import with_cueq_conv_fusion
+
+        for interaction in getattr(self.model, "interactions", ()):
+            if not hasattr(interaction, "conv_fusion"):
+                continue
+            conv_tp = interaction.conv_tp
+            if "forward" not in vars(conv_tp):
+                with_cueq_conv_fusion(conv_tp)
+
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
         """Run the MACE model for the active outputs.
 

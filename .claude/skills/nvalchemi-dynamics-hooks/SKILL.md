@@ -34,8 +34,9 @@ from nvalchemi.dynamics.hooks import (
     LoggingHook,
     MaxForceClampHook,
     NaNDetectorHook,
-    ProfilerHook,
     SnapshotHook,
+    StageTimingHook,
+    TorchProfilerHook,
 )
 ```
 
@@ -225,20 +226,26 @@ EnergyDriftMonitorHook(
 WrapPeriodicHook(frequency=10, stage=DynamicsStage.AFTER_POST_UPDATE)
 ```
 
-### Profiling hook (multi-stage, uses plum dispatch)
+### Profiling hooks (multi-stage)
 
-**ProfilerHook** — NVTX ranges and wall-clock timing. Fires at multiple
-stages via `_runs_on_stage` and uses `plum.dispatch` to support
-dynamics and custom workflows with appropriate domain annotations.
+**StageTimingHook** — per-stage NVTX ranges and wall-clock timing. Registers
+itself at every profiled stage via `_runs_on_stage`, records timestamps, and
+computes per-transition deltas (optionally written to CSV or console).
 
 ```python
-ProfilerHook(
-    profiled_stages="all",                  # "all", "step", or "detailed"
+StageTimingHook(
+    profiled_stages="all",                  # "all", "step", "detailed", or a set[Enum]
     frequency=1,
-    enable_nvtx=True,                       # NVTX annotation for Nsight Systems
+    enable_nvtx=True,                       # NVTX push/pop ranges for Nsight Systems
     timer_backend="auto",                   # "auto", "cuda_event", or "perf_counter"
+    log_path="timing.csv",                  # optional CSV of per-transition timings
+    show_console=False,                     # print a timing table via loguru
 )
 ```
+
+Call `profiler.summary()` after the run for aggregated per-stage timings. For
+full kernel-level PyTorch profiler traces, use **TorchProfilerHook**, which
+captures traces through PhysicsNeMo's profiler wrapper.
 
 ---
 
@@ -340,8 +347,9 @@ class UniversalLoggerHook:
         print(f"[custom] stage={stage.name}, graphs={ctx.batch.num_graphs}")
 ```
 
-The built-in `ProfilerHook` uses exactly this pattern to instrument
-dynamics and custom workflows with appropriate NVTX domain annotations.
+Use this `plum.dispatch` pattern when one hook must handle several
+context/stage types. Built-in multi-stage hooks like `StageTimingHook`
+instead use the simpler `_runs_on_stage` approach from Option 2.
 
 ---
 
@@ -364,7 +372,7 @@ hooks = [
     SnapshotHook(sink=my_sink, frequency=50),
     EnergyDriftMonitorHook(threshold=1e-4),
     # 6. Profiling
-    ProfilerHook(),
+    StageTimingHook(),
 ]
 
 dynamics = DemoDynamics(model=model, n_steps=10000, dt=0.5, hooks=hooks)

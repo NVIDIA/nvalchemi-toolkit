@@ -351,7 +351,12 @@ class StageTimingHook:
                 deltas = self._cpu_deltas(ordered)
         except RuntimeError as exc:
             logger.debug("StageTimingHook: skipped step timing ({})", exc)
+            if self.enable_nvtx and nvtx is not None:
+                nvtx.pop_range()
             return
+
+        for stage, delta_s in deltas.items():
+            self.timings[stage].append(delta_s)
 
         t_since_init_s = (time.perf_counter_ns() - self._t0_ns) / 1e9
         self._steps_recorded += 1
@@ -376,7 +381,6 @@ class StageTimingHook:
             curr_ev = self._step_cuda_events[ordered[i]]
             delta_s = prev_ev.elapsed_time(curr_ev) / 1000.0
             deltas[ordered[i]] = delta_s
-            self.timings[ordered[i]].append(delta_s)
         return deltas
 
     def _cpu_deltas(self, ordered: list[Enum]) -> dict[Enum, float]:
@@ -387,7 +391,6 @@ class StageTimingHook:
             curr_ts = self._step_cpu_timestamps[ordered[i]]
             delta_s = (curr_ts - prev_ts) / 1e9
             deltas[ordered[i]] = delta_s
-            self.timings[ordered[i]].append(delta_s)
         return deltas
 
     # ------------------------------------------------------------------

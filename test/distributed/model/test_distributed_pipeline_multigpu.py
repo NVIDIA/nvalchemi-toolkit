@@ -314,7 +314,8 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
     from nvalchemi.distributed.distributed_pipeline import DistributedPipelineModel
     from nvalchemi.distributed.partitioner import SpatialPartitioner
     from nvalchemi.distributed.sharded_batch import ShardedBatch
-    from nvalchemi.neighbors import compute_neighbors
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.hooks import DynamicsContext
 
     dtype = torch.float64
     device = torch.device(f"cuda:{rank}")
@@ -331,7 +332,9 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
         batch = Batch.from_data_list(
             [_md_make_data(an, positions, masses, cell, pbc, device, dtype)]
         )
-        compute_neighbors(batch, config=ref_pipe.model_config.neighbor_config)
+        neighbor_ctx = DynamicsContext(batch=batch, model=ref_pipe)
+        for hook in ref_pipe.make_neighbor_hooks():
+            hook(neighbor_ctx, DynamicsStage.BEFORE_COMPUTE)
         out = ref_pipe(batch)
         e_ref.copy_(out["energy"].sum().detach().view(1))
         f_ref.copy_(out["forces"].detach())

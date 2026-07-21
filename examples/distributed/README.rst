@@ -61,7 +61,7 @@ Running the Examples
    # CPU/debug mode (set backend="gloo" in the script first):
    torchrun --nproc_per_node=4 --master_port=29500 examples/distributed/01_distributed_pipeline.py
 
-**02 — Monitoring with LoggingHook, ProfilerHook, and ZarrData** (4 GPUs required):
+**02 — Monitoring with LoggingHook, StageTimingHook, and ZarrData** (4 GPUs required):
 
 .. code-block:: bash
 
@@ -79,7 +79,7 @@ Example Descriptions
 
 **02 — Distributed Monitoring**
    Same topology as example 01, augmented with per-rank LoggingHook and
-   ProfilerHook for observability, and ZarrData sinks for persistent
+   StageTimingHook for observability, and ZarrData sinks for persistent
    trajectory storage.  Shows post-run log collation on rank 0.
 
 Domain-Decomposition Examples

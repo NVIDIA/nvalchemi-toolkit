@@ -248,6 +248,29 @@ class TestBatchZero:
         assert batch.num_graphs == 0
         assert batch.system_capacity == 5
 
+    def test_batch_zero_preserves_capacity_after_smaller_put(self):
+        """A reused buffer accepts a larger payload after a smaller one."""
+        template = _minimal_atomic_data(2)
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=16,
+            num_edges=0,
+            template=template,
+        )
+        small = Batch.from_data_list([_minimal_atomic_data(2)])
+        larger = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)]
+        )
+
+        buffer.put(small, torch.ones(1, dtype=torch.bool))
+        assert buffer.num_graphs == 1
+
+        buffer.zero()
+        buffer.put(larger, torch.ones(2, dtype=torch.bool))
+
+        assert buffer.num_graphs == 2
+        assert buffer.num_nodes_list == [2, 2]
+
 
 # -----------------------------------------------------------------------------
 # Per-graph reconstruction

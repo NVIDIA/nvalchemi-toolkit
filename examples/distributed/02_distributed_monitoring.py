@@ -366,13 +366,17 @@ def main() -> None:
             }
 
             pipeline = DistributedPipeline(stages=stages, **pipeline_kwargs)
-            try:
-                with fire_logger, langevin_logger:
-                    with pipeline:
+            with pipeline:
+                try:
+                    with fire_logger, langevin_logger:
                         pipeline.run()
-            finally:
-                fire_profiler.close()
-                langevin_profiler.close()
+                finally:
+                    fire_profiler.close()
+                    langevin_profiler.close()
+
+                # Keep the process group alive until every rank has flushed its
+                # CSV files; rank 0 reads them after the context exits.
+                dist.barrier()
 
             return rank, fire_logger, langevin_logger, fire_profiler, langevin_profiler
 
@@ -393,11 +397,6 @@ def main() -> None:
     # ``fmax``.  We aggregate the mean step time per rank from the profiler
     # CSV files as well.
     #
-    # Sync before rank 0 reads the CSVs — skip if the pipeline already tore
-    # down the process group on exit (the run itself is a global sync).
-    if dist.is_initialized():
-        dist.barrier()
-
     if rank == 0:
         _print_post_run_summary(num_ranks=4)
 
