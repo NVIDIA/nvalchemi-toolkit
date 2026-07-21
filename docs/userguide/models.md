@@ -134,7 +134,7 @@ safe when called on a freshly copied model.
 ```{tip}
 {py:class}`~nvalchemi.models.mace.MACEWrapper` implements this
 interface to restore cuEquivariance's fused convolution method.
-Take a look at the the `MACEWrapper.modify_ema_methods` to see
+Take a look at the `MACEWrapper.modify_ema_methods` to see
 how this is done.
 ```
 
