@@ -23,6 +23,8 @@ Tests for BaseDynamics per-system _state batch lifecycle:
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 import torch
 
@@ -430,6 +432,87 @@ class TestStateInvariant:
         for _ in range(3):
             dyn.step(batch)
             assert dyn._state.num_graphs == batch.num_graphs == 3
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineStateMutation
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineStateMutation:
+    """Pipeline extraction must invalidate state tied to the old batch layout."""
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_receive_then_partial_removal_keeps_nvt_state_aligned(self):
+        """Received systems get state before a non-contiguous graduation."""
+        from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+
+        device = torch.device("cuda")
+        dyn = NVTLangevin(
+            model=_make_model().to(device),
+            dt=0.1,
+            temperature=300.0,
+            friction=0.1,
+        )
+        dyn.active_batch = _make_batch(2).to(device)
+        dyn.step(dyn.active_batch)
+        assert dyn._state.num_graphs == 2
+
+        dyn._buffer_to_batch(_make_batch(2, seed=10).to(device))
+        assert dyn.active_batch is not None
+        assert dyn.active_batch.num_graphs == 4
+        assert dyn._state.num_graphs == 4
+
+        converged = torch.tensor([0, 3], device=device)
+        dyn._remove_converged_final_stage(converged)
+        assert dyn.active_batch is not None
+        assert dyn.active_batch.num_graphs == 2
+        assert dyn._state.num_graphs == 2
+
+        dyn.step(dyn.active_batch)
+        torch.cuda.synchronize()
+        assert dyn._state.num_graphs == dyn.active_batch.num_graphs
+
+    @pytest.mark.parametrize("final_stage", [False, True], ids=["sender", "final"])
+    def test_partial_removal_is_safe_for_next_step(self, final_stage):
+        """Non-contiguous graduation keeps convergence and FIRE state aligned."""
+        from nvalchemi.dynamics.optimizers.fire import FIRE
+
+        dyn = FIRE(model=_make_model(), dt=0.1)
+        dyn.active_batch = _make_batch(4)
+        dyn.step(dyn.active_batch)
+
+        # Make state-row preservation observable and reproduce the example's
+        # partial convergence: old graph indices 0 and 3 leave the batch.
+        dyn._state.alpha.copy_(torch.tensor([0.1, 0.2, 0.3, 0.4]))
+        converged = torch.tensor([0, 3])
+        dyn._last_converged = converged
+
+        if final_stage:
+            dyn._remove_converged_final_stage(converged)
+        else:
+            dyn.send_buffer = Mock()
+            mask = torch.zeros(4, dtype=torch.bool)
+            mask[converged] = True
+            dyn._batch_to_buffer(mask)
+
+        assert dyn.active_batch is not None
+        assert dyn.active_batch.num_graphs == 2
+
+        # Build the next hook context before inspecting the repaired metadata.
+        # Before the fix this performs mask[[0, 3]] for a two-graph batch,
+        # reproducing the example's out-of-bounds indexing failure.
+        context = dyn._build_context(dyn.active_batch)
+        assert context.converged_mask is None
+
+        assert dyn._last_converged is None
+        assert dyn._state.num_graphs == 2
+        torch.testing.assert_close(dyn._state.alpha, torch.tensor([0.2, 0.3]))
+
+        # BEFORE_STEP builds a hook context before doing any integration.  This
+        # was the exact next-iteration crash when _last_converged still held 3.
+        dyn.step(dyn.active_batch)
+        assert dyn._state.num_graphs == dyn.active_batch.num_graphs
 
 
 # ---------------------------------------------------------------------------

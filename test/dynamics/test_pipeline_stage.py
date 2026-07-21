@@ -872,7 +872,7 @@ class TestPoststepNoConvergenceSend:
     """Test that _poststep_sync_buffers uses send_buffer when nothing converges."""
 
     def test_sends_buffer_when_no_convergence_and_next_rank(self) -> None:
-        """When nothing converges and next_rank is set, send the send_buffer."""
+        """When nothing converges, clear and send the empty send_buffer."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
             active_batch=batch,
@@ -887,6 +887,7 @@ class TestPoststepNoConvergenceSend:
 
         stage._poststep_sync_buffers(converged_indices=None)
 
+        mock_send_buffer.zero.assert_called_once()
         mock_send_buffer.isend.assert_called_once_with(dst=1)
         # Active batch should be unchanged (no samples graduated)
         assert stage.active_batch_size == 3
@@ -958,6 +959,28 @@ class TestPoststepNoConvergenceSend:
         stage._poststep_sync_buffers(converged_indices=None)
 
         assert stage._pending_send_handle is mock_handle
+
+    def test_fully_async_waits_before_reusing_send_buffer(self) -> None:
+        """A pending send completes before its buffer is cleared and reused."""
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=3),
+            next_rank=1,
+            comm_mode="fully_async",
+            buffer_config=_DEFAULT_CFG,
+        )
+        prior_handle = Mock()
+        next_handle = Mock()
+        send_buffer = Mock()
+        send_buffer.isend.return_value = next_handle
+        stage.send_buffer = send_buffer
+        stage._pending_send_handle = prior_handle
+
+        stage._poststep_sync_buffers(converged_indices=None)
+
+        prior_handle.wait.assert_called_once()
+        send_buffer.zero.assert_called_once()
+        send_buffer.isend.assert_called_once_with(dst=1)
+        assert stage._pending_send_handle is next_handle
 
     def test_convergence_sends_send_buffer(self) -> None:
         """When converged_indices is provided, put into send_buffer and send it."""

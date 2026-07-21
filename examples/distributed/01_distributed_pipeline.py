@@ -41,9 +41,10 @@ running in parallel across 4 GPUs using
    }
 
 Each FIRE rank draws molecules from a dataset, optimises them until
-convergence, and sends them to the paired Langevin rank for short MD
-production.  A :class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook`
-on the Langevin ranks writes completed trajectories to a
+convergence or a 50-step limit, and sends them to the paired Langevin rank
+for 20 steps of short MD production. A
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook` on the Langevin ranks writes
+the trajectories to a
 :class:`~nvalchemi.dynamics.HostMemory` sink.
 
 .. note::
@@ -70,13 +71,13 @@ from nvalchemi.dynamics import (
     FIRE,
     ConvergenceHook,
     DistributedPipeline,
+    FusedStage,
     HostMemory,
     NVTLangevin,
     SizeAwareSampler,
 )
-from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
-from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
-from nvalchemi.hooks import DynamicsContext
+from nvalchemi.dynamics.base import BufferConfig
+from nvalchemi.dynamics.hooks import SnapshotHook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -119,33 +120,6 @@ class InMemoryDataset:
         """Get the metadata associated with idx"""
         d = self._data[idx]
         return d.num_nodes, d.num_edges
-
-
-class DownstreamDoneHook:
-    """Set ``stage.done = True`` after *patience* consecutive idle steps.
-
-    Downstream (non-inflight) stages never set ``done`` on their own.
-    This hook counts consecutive steps where the batch is empty (no
-    graphs to integrate) and marks the stage as finished once the
-    patience limit is reached.
-
-    The dispatching dynamics engine is available as ``ctx.workflow``.
-    """
-
-    stage = DynamicsStage.AFTER_STEP
-    frequency = 1
-
-    def __init__(self, patience: int = 5) -> None:
-        self.patience = patience
-        self._idle_steps = 0
-
-    def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
-        if ctx.batch.num_graphs == 0:
-            self._idle_steps += 1
-        else:
-            self._idle_steps = 0
-        if self._idle_steps >= self.patience and ctx.workflow is not None:
-            ctx.workflow.done = True
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +185,9 @@ def build_dataset() -> list[AtomicData]:
 # with each other.
 
 
-def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
-    """Create a FIRE optimiser stage."""
-    return FIRE(
+def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FusedStage:
+    """Create a convergence- or step-limited FIRE optimiser stage."""
+    dynamics = FIRE(
         model=model,
         dt=1.0,
         n_steps=50,
@@ -227,8 +201,8 @@ def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
                 }
             ],
         ),
-        **kwargs,
     )
+    return FusedStage(sub_stages=[(0, dynamics)], **kwargs)
 
 
 def make_langevin(
@@ -236,32 +210,17 @@ def make_langevin(
     sink: HostMemory,
     rank: int,
     **kwargs,
-) -> NVTLangevin:
-    """Create an NVTLangevin MD stage with a snapshot hook."""
-    done_hook = DownstreamDoneHook(patience=10)
-    stage = NVTLangevin(
+) -> FusedStage:
+    """Create a fixed-duration NVTLangevin stage with trajectory snapshots."""
+    dynamics = NVTLangevin(
         model=model,
         dt=0.5,
         temperature=300.0,
         friction=0.01,
         n_steps=20,
-        hooks=[
-            ConvergedSnapshotHook(sink=sink, frequency=1),
-            done_hook,
-        ],
-        convergence_hook=ConvergenceHook(
-            criteria=[
-                {
-                    "key": "forces",
-                    "threshold": 0.01,
-                    "reduce_op": "norm",
-                    "reduce_dims": -1,
-                }
-            ],
-        ),
-        **kwargs,
+        hooks=[SnapshotHook(sink=sink, frequency=1)],
     )
-    return stage
+    return FusedStage(sub_stages=[(0, dynamics)], **kwargs)
 
 
 # %%
@@ -272,10 +231,9 @@ def make_langevin(
 # (``dist.init_process_group``) and assigns each rank its GPU device.
 # On ``__exit__`` it tears down the process group gracefully.
 #
-# ``pipeline.run()`` blocks until the local stage signals completion
-# (``dynamics.done = True``).  Upstream ranks finish when their sampler
-# is exhausted; downstream ranks finish via ``DownstreamDoneHook`` after
-# a configurable number of idle steps with no incoming systems.
+# ``pipeline.run()`` blocks until every stage signals completion. Upstream
+# ranks finish when their sampler is exhausted. Downstream ranks finish after
+# the upstream rank is done and all fixed-duration MD work has drained.
 
 
 def main() -> None:
@@ -364,12 +322,19 @@ def main() -> None:
     pipeline = DistributedPipeline(stages=stages, backend=backend, debug_mode=True)
     with pipeline:
         pipeline.run()
-
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    if rank == 1:
-        logger.info(f"Rank 1 sink collected {len(sink_a)} samples")
-    elif rank == 3:
-        logger.info(f"Rank 3 sink collected {len(sink_b)} samples")
+        rank = dist.get_rank()
+        if rank == 1:
+            expected_frames = len(dataset_a) * 20
+            assert len(sink_a) == expected_frames, (
+                f"rank 1 collected {len(sink_a)} of {expected_frames} frames"
+            )
+            logger.info(f"Rank 1 sink collected {len(sink_a)} trajectory frames")
+        elif rank == 3:
+            expected_frames = len(dataset_b) * 20
+            assert len(sink_b) == expected_frames, (
+                f"rank 3 collected {len(sink_b)} of {expected_frames} frames"
+            )
+            logger.info(f"Rank 3 sink collected {len(sink_b)} trajectory frames")
 
 
 if __name__ == "__main__":

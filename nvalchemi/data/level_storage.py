@@ -1895,8 +1895,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
             )
         if new_num_dest is not None:
             new_n = int(new_num_dest.item())
-            object.__setattr__(self, "_batch_ptr", dest_batch_ptr[: new_n + 1].clone())
-            self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
+            self.segment_lengths = (
+                dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n]
+            )
             object.__setattr__(self, "_batch_ptr_np", None)
             if hasattr(self, "_num_segments"):
                 object.__delattr__(self, "_num_segments")
