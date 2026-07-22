@@ -69,6 +69,11 @@ batch = Batch.from_data_list([data1, data2])
 writer.write(batch)
 ```
 
+`write()` creates the store and refuses to run twice: a second call raises
+`FileExistsError: Zarr store already exists at <path>`. To add samples to an
+existing store use `append()`; to rebuild from scratch, write to a fresh
+path. Keep scripts re-runnable by doing one or the other explicitly.
+
 ### Appending to an existing store
 
 ```python
@@ -231,7 +236,7 @@ loader = DataLoader(
 )
 
 # For throughput tuning (skip_validation, prefetch_factor, chunk/shard
-# sizing), load the nvalchemi-zarr-perf agent skill.
+# sizing), see the nvalchemi-zarr-perf skill.
 
 for batch in loader:
     # batch is a Batch with concatenated tensors on target device

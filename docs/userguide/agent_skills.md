@@ -12,17 +12,13 @@ Skills live in the repository under `.claude/skills/`.
 
 ## Installing skills
 
-Point your AI assistant at the repository and ask it to install the skills
-from `.claude/skills/`. Most assistants will auto-detect them once the
-repository is open.
+**Inside a repository clone** --- nothing to install. Claude Code discovers
+`.claude/skills/` automatically; other agents are routed to the right
+`SKILL.md` by the table in the repository's `AGENTS.md`.
 
-**Project-level install (recommended)** --- keeps the skills scoped to your
-`nvalchemi` project so they are loaded only when you work in this repository.
-
-**User-level install** --- if you work with `nvalchemi` frequently across
-multiple checkouts or worktrees, you can install the skills in your user
-configuration directory (e.g. `~/.claude/skills/`) so they are always
-available.
+**Outside a clone** --- copy the skill folders from `.claude/skills/` into
+your project's skills directory, or your user-level one (e.g.
+`~/.claude/skills/`) if you work with `nvalchemi` across many checkouts.
 
 ## Available skills
 
@@ -38,3 +34,7 @@ available.
 | `nvalchemi-dynamics-api` | How to configure and run dynamics simulations, compose multi-stage pipelines ({py:class}`~nvalchemi.dynamics.FusedStage`, {py:class}`~nvalchemi.dynamics.DistributedPipeline`), use inflight batching, and manage data sinks. | {ref}`dynamics_guide` |
 | `nvalchemi-dynamics-implementation` | How to implement a dynamics integrator by subclassing {py:class}`~nvalchemi.dynamics.base.BaseDynamics` and overriding `pre_update()` and `post_update()`. | {ref}`dynamics_guide` |
 | `nvalchemi-dynamics-hooks` | How to use and write dynamics hooks --- callbacks that observe or modify batch state at specific points during each simulation step. | {ref}`hooks_guide` |
+| `nvalchemi-training-api` | How to configure training workflows with {py:class}`~nvalchemi.training.TrainingStrategy`: losses, optimizers, schedulers, validation, hooks, restartable checkpoints, and scaling to multiple GPUs or nodes with `DistributedManager` and `DDPHook`. | {ref}`training_guide` |
+| `nvalchemi-fine-tuning` | How to adapt a pretrained model to new reference data with {py:class}`~nvalchemi.training.FineTuningStrategy`, module patches, and trainable-parameter filters. | {ref}`finetuning_guide` |
+| `nvalchemi-loss-api` | How to use built-in loss functions and implement custom losses --- residual types, per-atom normalization, masking, and graph-balanced reductions. | {ref}`losses_guide` |
+| `nvalchemi-reporting` | How to add observability with `ReportingOrchestrator`, `RichReporter`, `TensorBoardReporter`, and the dynamics `LoggingHook`. | {ref}`reporting_guide` |

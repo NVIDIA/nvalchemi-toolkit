@@ -1,0 +1,33 @@
+# AIMNet2 — fully-periodic methane (CH4) packing (5 atoms / molecule).
+#
+# AIMNet2's warp kernels are float32-only, so the whole run is fp32. Request
+# compiled inference with --set loader.compile=true.
+model: AIMNet2
+dtype: fp32
+default_sizes: [500, 2000]
+
+system:
+  builder: build_methane_packing   # takes n_atoms directly (no sizing helper)
+  sizing: null
+  pbc: true
+  charges: false
+  compute_neighbors: true
+
+loader:
+  kind: aimnet2
+  checkpoint: aimnet2
+  compile: false
+
+forward:
+  cutoff_attr: model_config.neighbor_config.cutoff
+  upfront_halo_exchange: false   # per-layer ghost refresh happens inside the forward
+  charge_zero: true              # neutral-molecule scalar charge
+  dd_compile_capable: true
+
+nvt:
+  cutoff_attr: _cutoff
+  max_neighbors: 128   # methane density is lower than SiO2
+  skin: 0.5
+  dt: 0.5
+  temperature: 300.0
+  friction: 0.01

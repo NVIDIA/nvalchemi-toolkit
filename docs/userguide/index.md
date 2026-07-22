@@ -44,6 +44,13 @@ For install options, refer to the install guide below.
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
 
+## Distributed Simulations
+
+- {doc}`Overview: Domain Decomposition <distributed>`
+- {doc}`ShardTensor: Per-Atom Fields Across Ranks <distributed_shardtensor>`
+- {doc}`Bring Your Own Model: Authoring a Spec <distributed_byo>`
+- {doc}`Architecture & design (deep dive) <distributed_design>`
+
 ## Advanced Usage
 
 - [Distributed Training](distributed_training)
@@ -75,6 +82,17 @@ training_finetuning
 hooks
 reporting
 dynamics
+```
+
+```{toctree}
+:caption: Distributed Simulations
+:maxdepth: 1
+:hidden:
+
+distributed
+distributed_shardtensor
+distributed_byo
+distributed_design
 ```
 
 ```{toctree}

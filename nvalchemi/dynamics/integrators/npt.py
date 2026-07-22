@@ -157,6 +157,19 @@ class NPT(BaseDynamics):
     __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
+    # Domain-parallel intent (read by the dynamics coordinator; inert
+    # single-process). The barostat + particle thermostat couple to the
+    # mesh-global kinetic energy, kinetic pressure tensor, and DOF; the NHC
+    # chains + cell velocity are replicated state kept byte-identical across ranks.
+    __dd_thermo_kind__: str = "npt"
+    __dd_replicated__: tuple[str, ...] = (
+        "nhc_eta",
+        "nhc_eta_dot",
+        "nhc_b_eta",
+        "nhc_b_eta_dot",
+        "cell_velocity",
+    )
+
     def __init__(
         self,
         model: BaseModelMixin,

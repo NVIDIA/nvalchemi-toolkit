@@ -185,7 +185,8 @@ fused_3 = fused + extra_stage   # append to existing FusedStage
 
 `DistributedPipeline` chains dynamics stages across multiple ranks using
 `torch.distributed`. Each rank runs one stage; converged samples are sent
-to the next rank.
+to the next rank. This is pipeline parallelism for dynamics, distinct from
+data-parallel multi-GPU *training* (DDP).
 
 ### Composition with `|` operator
 

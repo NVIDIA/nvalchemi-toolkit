@@ -42,15 +42,15 @@ NVIDIA GPUs.
 The repository ships agent-facing guidance at two levels:
 
 - **Skills** — task-specific API guides under `.claude/skills/`. Claude Code
-  discovers them automatically when working inside a clone; for other
-  platforms (e.g. Cursor, OpenCode), or to use them outside this repository,
-  copy the folder contents into your project's or home skills directory.
-- **`AGENTS.md`** — repository-wide guidance (setup, conventions, gotchas).
-  Agents that follow the `AGENTS.md` convention (e.g. Codex, Cursor,
-  OpenCode) load it natively. Claude Code auto-loads `CLAUDE.md` instead: to
-  get the same guidance there, add a `CLAUDE.md` to your clone containing the
-  single line `@AGENTS.md` (an import), or symlink it
-  (`ln -s AGENTS.md CLAUDE.md`).
+  discovers them automatically when working inside a clone; other platforms
+  are routed to the right `SKILL.md` by the table in `AGENTS.md`. To use
+  them outside this repository, copy the folder contents into your
+  project's or home skills directory.
+- **`AGENTS.md`** — repository-wide guidance (setup, conventions, gotchas,
+  and the skill routing table). Agents that follow the `AGENTS.md`
+  convention (e.g. Codex, Cursor, OpenCode, GitHub Copilot) load it
+  natively; the repository also ships a `CLAUDE.md` that imports it, so
+  Claude Code gets the same guidance automatically.
 
 ### Example Snippets
 

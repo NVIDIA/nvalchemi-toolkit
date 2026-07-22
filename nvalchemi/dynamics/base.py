@@ -49,6 +49,7 @@ execution without needing explicit multiple inheritance.
 from __future__ import annotations
 
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from enum import Enum
@@ -664,7 +665,11 @@ class _CommunicationMixin:
             The local rank on this node.
         """
         if dist.is_initialized():
-            return dist.get_node_local_rank()
+            # ``fallback_rank=0`` for single-node / single-device contexts where
+            # ``LOCAL_RANK`` isn't exported (e.g. a bare gloo group): without it
+            # ``get_node_local_rank`` raises. torchrun/multi-GPU set ``LOCAL_RANK``
+            # so the real local rank is returned there.
+            return dist.get_node_local_rank(fallback_rank=0)
         return 0
 
     @property
@@ -827,47 +832,38 @@ class _CommunicationMixin:
         if incoming_batch.num_graphs == 0:
             return
 
-        if self.active_batch is None:
-            if incoming_batch.num_graphs <= self.max_batch_size:
-                # reform the batch without padding
-                self.active_batch = Batch.from_data_list(
-                    incoming_batch.to_data_list(), device=incoming_batch.device
-                )
-            else:
-                # slice out samples that will fit in the active batch
-                # and move the rest to overflow
-                data_list = incoming_batch.to_data_list()
-                fit = data_list[: self.max_batch_size]
-                overflow = data_list[self.max_batch_size :]
-                self.active_batch = Batch.from_data_list(
-                    fit, device=incoming_batch.device
-                )
-                self._overflow_to_sinks(
-                    Batch.from_data_list(overflow, device=incoming_batch.device)
-                )
-            return
+        ensure_bookkeeping = getattr(self, "_ensure_bookkeeping_fields", None)
+        if callable(ensure_bookkeeping):
+            ensure_bookkeeping(incoming_batch)
 
+        n_existing = self.active_batch_size
         room = self.room_in_active_batch
         if room <= 0:
             self._overflow_to_sinks(incoming_batch)
             return
 
         data_list = incoming_batch.to_data_list()
-        if len(data_list) <= room:
-            existing = self.active_batch.to_data_list()
-            self.active_batch = Batch.from_data_list(
-                existing + data_list, device=incoming_batch.device
-            )
+        admitted = data_list[:room]
+        overflow = data_list[room:]
+        if self.active_batch is None:
+            combined = admitted
         else:
-            fit = data_list[:room]
-            overflow = data_list[room:]
-            existing = self.active_batch.to_data_list()
-            self.active_batch = Batch.from_data_list(
-                existing + fit, device=incoming_batch.device
-            )
+            combined = self.active_batch.to_data_list() + admitted
+        self.active_batch = Batch.from_data_list(combined, device=incoming_batch.device)
+
+        if overflow:
             self._overflow_to_sinks(
                 Batch.from_data_list(overflow, device=incoming_batch.device)
             )
+
+        # Received graphs extend the active-batch layout. Preserve state for
+        # resident graphs and append freshly initialized state for arrivals.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            existing_indices = torch.arange(
+                n_existing, dtype=torch.long, device=self.active_batch.device
+            )
+            sync_state(existing_indices, len(admitted), self.active_batch)
 
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Stage incoming data through the recv buffer into the active batch.
@@ -942,8 +938,22 @@ class _CommunicationMixin:
         if self.send_buffer is None:
             raise RuntimeError("No send buffer to write to.")
 
-        self.send_buffer.put(self.active_batch, mask=mask)
-        self.active_batch = self.active_batch.trim(copied_mask=mask)
+        previous_batch = self.active_batch
+        remaining_indices = torch.where(~mask)[0]
+        self.send_buffer.put(previous_batch, mask=mask)
+        self.active_batch = previous_batch.trim(copied_mask=mask)
+
+        # Graph-indexed metadata and integrator state refer to the old batch
+        # layout. Keep only state for retained graphs and prevent the next hook
+        # context from applying stale convergence indices to the smaller batch.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1124,13 +1134,26 @@ class _CommunicationMixin:
         converged_indices : torch.Tensor
             Integer indices of converged samples.
         """
-        graduated = self.active_batch.index_select(converged_indices)
-        all_indices = set(range(self.active_batch.num_graphs))
+        previous_batch = self.active_batch
+        graduated = previous_batch.index_select(converged_indices)
+        all_indices = set(range(previous_batch.num_graphs))
         remaining = sorted(all_indices - set(converged_indices.tolist()))
         if remaining:
-            self.active_batch = self.active_batch.index_select(remaining)
+            self.active_batch = previous_batch.index_select(remaining)
         else:
             self.active_batch = None
+
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            remaining_indices = torch.tensor(
+                remaining, dtype=torch.long, device=previous_batch.device
+            )
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
         if self.debug_mode:
             logger.debug(
                 "[rank {}] final stage, {} converged graphs removed",
@@ -1169,6 +1192,14 @@ class _CommunicationMixin:
             Typically obtained from ``BaseDynamics._check_convergence()``.
             If ``None``, no samples are graduated.
         """
+        if self.next_rank is not None:
+            # The send buffer is reused every iteration. A fully asynchronous
+            # send must finish before its storage is cleared and repopulated.
+            if self._pending_send_handle is not None:
+                self._pending_send_handle.wait()
+                self._pending_send_handle = None
+            self.send_buffer.zero()
+
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
         if has_converged:
@@ -1649,11 +1680,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n_new: int,
         template_batch: Batch,
     ) -> None:
-        """Synchronize ``self._state`` after an inflight batch refill.
+        """Synchronize ``self._state`` after active-batch membership changes.
 
-        Called by :meth:`_refill_check` after graduated systems have been
-        removed and replacement systems appended.  Removes state rows for
-        graduated systems and appends fresh default state for the new ones.
+        Called after graduated systems have been removed, with optional
+        replacement systems appended. Removes state rows for graduated systems
+        and appends fresh default state for the new ones.
 
         If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
         this method is a no-op.
@@ -2011,6 +2042,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         if not graduated_mask.any():
             return batch
+
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
 
         remaining_indices = torch.where(~graduated_mask)[0]
 
@@ -2866,10 +2901,9 @@ class FusedStage(BaseDynamics):
         """Fan out state sync to all sub-stages.
 
         ``FusedStage`` itself holds no ``_state``; each sub-stage does.
-        This override delegates to every sub-stage so that inflight
-        batch refills (via :meth:`~BaseDynamics._refill_check`) keep
-        each sub-stage's ``_state`` aligned with the new batch
-        composition.
+        This override delegates to every sub-stage so that active-batch
+        membership changes keep each sub-stage's ``_state`` aligned with the
+        new batch composition.
 
         Parameters
         ----------
@@ -2954,9 +2988,10 @@ class FusedStage(BaseDynamics):
            with new positions) → single shared forward pass → AFTER_COMPUTE.
         4. For each sub-stage: run post_update (final velocity kick at
            r(t+dt) forces), fire AFTER_POST_UPDATE.
-        5. Fire AFTER_STEP hooks on each sub-stage.
-        6. Snapshot status, check convergence per sub-stage and fire
-           ON_CONVERGE if triggered.
+        5. Snapshot status, then fire AFTER_STEP hooks on each sub-stage
+           (ConvergenceHook migrates here) and apply counter migration.
+        6. Check convergence per sub-stage and fire ON_CONVERGE if
+           triggered.
         7. Increment step_count for FusedStage and all sub-stages.
         8. Identify samples that newly graduated during this step.
 
@@ -3016,6 +3051,12 @@ class FusedStage(BaseDynamics):
                 dynamics._masked_post_update(batch, mask)
             dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
 
+        # Snapshot before hook and counter migration so both are reported
+        # in exit_converged.
+        pre_migration_status = batch.status.clone()
+        if pre_migration_status.dim() == 2:
+            pre_migration_status = pre_migration_status.squeeze(-1)
+
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(DynamicsStage.AFTER_STEP, batch)
 
@@ -3052,10 +3093,6 @@ class FusedStage(BaseDynamics):
                 batch.status.view(-1)[migrate] = next_status
                 counter[migrate] = 0  # Reset for next system in this slot
 
-        pre_converge_status = batch.status.clone()
-        if pre_converge_status.dim() == 2:
-            pre_converge_status = pre_converge_status.squeeze(-1)
-
         for active_mask, (_, dynamics) in zip(
             stage_active_masks, self.sub_stages, strict=True
         ):
@@ -3084,7 +3121,7 @@ class FusedStage(BaseDynamics):
         post_status = batch.status
         if post_status.dim() == 2:
             post_status = post_status.squeeze(-1)
-        newly_graduated = (pre_converge_status < self.exit_status) & (
+        newly_graduated = (pre_migration_status < self.exit_status) & (
             post_status >= self.exit_status
         )
         exit_converged: torch.Tensor | None = (
@@ -3413,6 +3450,7 @@ class DistributedPipeline:
         stages: dict[int, BaseDynamics],
         synchronized: bool = False,
         debug_mode: bool = False,
+        mesh: Any = None,
         **dist_kwargs: Any,
     ) -> None:
         """Initialize the pipeline.
@@ -3420,7 +3458,11 @@ class DistributedPipeline:
         Parameters
         ----------
         stages : dict[int, BaseDynamics]
-            Mapping from global rank to pipeline stage.
+            Mapping from **stage key** to pipeline stage. Without ``mesh`` the key
+            is the global rank (one rank per stage — the classic streaming
+            pipeline). With ``mesh`` the key is the **pipeline index** and each
+            rank supplies only its own stage (a :class:`DomainParallel` bound to
+            its domain sub-mesh); see ``mesh``.
         synchronized : bool, optional
             If ``True``, insert a global ``dist.barrier()`` across all
             pipeline ranks after every step, preventing any rank from
@@ -3432,6 +3474,14 @@ class DistributedPipeline:
             When ``True``, emit detailed ``loguru.debug`` diagnostics
             for inter-rank communication and pipeline orchestration.
             Propagated to all stages during ``setup()``. Default ``False``.
+        mesh : DeviceMesh, optional
+            A 2-D ``(pipeline, domain)`` mesh for **2-D-parallel dynamics**: each
+            pipeline index is a *stage-group* — a whole domain sub-mesh row running
+            one :class:`DomainParallel` stage. When given, the pipeline resolves
+            ``local_stage`` by this rank's pipeline index, sizes completion by the
+            number of pipeline stages, and wires each stage's ``prior``/``next`` to
+            the adjacent stage-groups' **lead** ranks (domain-rank 0). ``None``
+            (default) keeps the classic one-rank-per-stage behavior unchanged.
         **dist_kwargs : Any
             Additional keyword arguments for ``torch.distributed.init_process_group``.
         """
@@ -3440,6 +3490,7 @@ class DistributedPipeline:
         )
         self.stages = stages
         self.synchronized = synchronized
+        self.mesh = mesh
         self._dist_initialized: bool = False
         self._dist_kwargs = dist_kwargs
         self._done_tensor: torch.Tensor | None = None
@@ -3534,6 +3585,17 @@ class DistributedPipeline:
         if not dist.is_initialized():
             return
         world_size = dist.get_world_size()
+        if self._grouped:
+            # 2-D: world == n_pipeline × domain_size (the whole mesh).
+            expected = int(self.mesh.mesh.numel())
+            if world_size != expected:
+                raise RuntimeError(
+                    f"DistributedPipeline(mesh=...) expects {expected} ranks "
+                    f"(pipeline={self._n_stages} × domain="
+                    f"{int(self.mesh['domain'].size())}), but torch.distributed "
+                    f"world_size is {world_size}."
+                )
+            return
         expected = len(self.stages)
         if world_size != expected:
             raise RuntimeError(
@@ -3557,6 +3619,10 @@ class DistributedPipeline:
             If the world size does not match the number of configured
             pipeline stages.
         """
+        if self._grouped:
+            self._setup_grouped()
+            return
+
         sorted_ranks = sorted(self.stages.keys())
         if len(sorted_ranks) < 2:
             raise ValueError("Pipeline requires at least 2 stages.")
@@ -3614,6 +3680,58 @@ class DistributedPipeline:
         for stage in self.stages.values():
             stage.debug_mode = self.debug_mode
 
+        local_stage = self.local_stage
+        local_n_steps = getattr(local_stage, "n_steps", None)
+        if local_n_steps is not None and not isinstance(local_stage, FusedStage):
+            warnings.warn(
+                f"{type(local_stage).__name__}(n_steps={local_n_steps}) is a "
+                "plain DistributedPipeline stage. Its n_steps value is used by "
+                "run(), but pipeline execution calls step() and graduates systems "
+                "only through convergence. Wrap fixed-duration stages in a "
+                "FusedStage to apply a per-system step budget.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _setup_grouped(self) -> None:
+        """Wire a 2-D ``(pipeline, domain)`` pipeline: each rank runs the one stage
+        for its pipeline index (a :class:`DomainParallel` over its domain sub-mesh),
+        and its ``prior``/``next`` point at the adjacent stage-groups' **lead** global
+        ranks (domain-rank 0). Only the lead transmits cross-stage; non-lead ranks
+        need the endpoints non-``None``/``None`` merely to select the right branch
+        (``DomainParallel`` gates the actual send/recv on the lead). ``_done_tensor``
+        is sized by the number of pipeline stages and indexed by pipeline index."""
+        if self._n_stages < 2:
+            raise ValueError("Pipeline requires at least 2 stages.")
+        self._validate_world_size()
+
+        from nvalchemi.distributed._core.gather_primitives import mesh_group
+
+        pidx = self._pipeline_index
+        stage = self.local_stage
+        last = self._n_stages - 1
+        if stage.prior_rank == -1:
+            stage.prior_rank = None if pidx == 0 else self._lead_global_rank(pidx - 1)
+        if stage.next_rank == -1:
+            stage.next_rank = None if pidx == last else self._lead_global_rank(pidx + 1)
+        # Cross-stage hand-offs ride the PIPELINE-dim group (the leads' group), never
+        # the world group: under NCCL, ops on a communicator must be issued in the
+        # same order on every member, so a 2-rank lead↔lead P2P on the world group
+        # would interleave inconsistently with the 4-rank done-sync all-reduce and
+        # deadlock. Confining it to the pipeline group also routes it over IB
+        # between paired leads on multi-node (proposal §0). The world group is then
+        # used only by _sync_done_flags (symmetric across all ranks).
+        stage._pipeline_group = mesh_group(self.mesh["pipeline"])
+
+        device = stage.device
+        self._done_tensor = torch.zeros(
+            self._n_stages, dtype=torch.int32, device=device
+        )
+        model = stage.model
+        if callable(getattr(model, "to", None)):
+            stage.model = model.to(device)
+        stage.debug_mode = self.debug_mode
+
     def _share_templates(self) -> None:
         """Compute batch schema templates for all stages via local iteration.
 
@@ -3630,6 +3748,10 @@ class DistributedPipeline:
         if self._templates_shared:
             return
         self._templates_shared = True
+
+        if self._grouped:
+            self._share_templates_grouped()
+            return
 
         for rank in sorted(self.stages.keys()):
             stage = self.stages[rank]
@@ -3661,6 +3783,61 @@ class DistributedPipeline:
                             stage.prior_rank,
                         )
 
+    def _share_templates_grouped(self) -> None:
+        """Establish each stage-group's handoff receive template (2-D mode).
+
+        Grouped stages are not co-located (each rank holds only its own stage), so
+        templates can't be derived locally as in :meth:`_share_templates`. Instead:
+
+        * The first stage partitions its seed **now** (reused as its initial owned
+          batch — not thrown away) and gathers once to derive the exact handoff
+          schema, then builds an empty CPU template (``Batch.irecv`` uses a template
+          only for field names/dtypes/shapes; the receive buffers are allocated on
+          the receiver's device, so a CPU template is correct and cheap to ship).
+        * That empty template is passed **lead → lead** along the pipeline dim
+          (each stage's dynamics preserves the batch schema), so every downstream
+          stage's lead gets its ``_recv_template`` before the first real handoff.
+
+        Only leads (domain-rank 0) participate in the cross-stage object transfer;
+        the domain-group partition/gather of the first stage is collective over its
+        row. Downstream stage-groups do **not** partition at setup (they partition
+        on receipt), so there is no redundant re-partition on a receiver.
+        """
+        from nvalchemi.data import Batch
+        from nvalchemi.distributed._core.gather_primitives import mesh_group
+
+        pidx = self._pipeline_index
+        stage = self.local_stage
+        is_lead = int(self.mesh["domain"].get_local_rank()) == 0
+        last = self._n_stages - 1
+        # Template propagation rides the pipeline-dim (leads') group, same as the
+        # hand-off — never the world group (see _setup_grouped).
+        pipe_group = mesh_group(self.mesh["pipeline"])
+
+        tmpl: Batch | None = None
+        if pidx == 0:
+            seed = getattr(stage, "_pending_input", None)
+            stage.active_batch = stage.partition(seed if is_lead else None)
+            if hasattr(stage, "_first_stage_seeded"):
+                stage._first_stage_seeded = True
+                stage._pending_input = None
+            full = stage.gather(stage.active_batch, dst=0)
+            if is_lead and full is not None:
+                tmpl = Batch.empty_like(full, device="cpu")
+
+        if is_lead:
+            if pidx > 0:
+                box: list[Any] = [None]
+                dist.recv_object_list(
+                    box, src=self._lead_global_rank(pidx - 1), group=pipe_group
+                )
+                tmpl = box[0]
+                stage._recv_template = tmpl
+            if pidx < last:
+                dist.send_object_list(
+                    [tmpl], dst=self._lead_global_rank(pidx + 1), group=pipe_group
+                )
+
     @property
     def local_rank(self) -> int:
         """Get the local rank for this process."""
@@ -3677,10 +3854,42 @@ class DistributedPipeline:
             rank = dist.get_rank()
         return rank
 
+    # ------------------------------------------------------------------
+    # 2-D-parallel (pipeline × domain) resolution. All grouped-mode logic is
+    # gated on ``self.mesh``; without it every property below reduces to the
+    # classic one-rank-per-stage behavior.
+    # ------------------------------------------------------------------
+
+    @property
+    def _grouped(self) -> bool:
+        """Whether this pipeline runs 2-D-parallel (stage = domain sub-mesh)."""
+        return self.mesh is not None
+
+    @property
+    def _pipeline_index(self) -> int:
+        """This rank's pipeline stage index (grouped mode)."""
+        return int(self.mesh["pipeline"].get_local_rank())
+
+    @property
+    def _n_stages(self) -> int:
+        """Number of pipeline stages: pipeline-dim size (grouped) or #stages."""
+        return int(self.mesh["pipeline"].size()) if self._grouped else len(self.stages)
+
+    def _lead_global_rank(self, pipeline_index: int) -> int:
+        """Global rank of a stage-group's lead (domain-rank 0). ``mesh.mesh`` is the
+        ``(n_pipeline, domain_size)`` global-rank layout; column 0 is the leads."""
+        return int(self.mesh.mesh[pipeline_index, 0])
+
+    @property
+    def _stage_slot(self) -> int:
+        """Index into ``_done_tensor`` for this rank: pipeline index (grouped) or
+        global rank (classic)."""
+        return self._pipeline_index if self._grouped else self.global_rank
+
     @property
     def local_stage(self) -> BaseDynamics:
         """Get the stage associated with the rank this is executed on."""
-        return self.stages[self.global_rank]
+        return self.stages[self._pipeline_index if self._grouped else self.global_rank]
 
     def step(self) -> None:
         """Execute one timestep for the local rank's stage.
@@ -3718,10 +3927,14 @@ class DistributedPipeline:
             )
 
         rank = self.global_rank
-        if rank not in self.stages:
-            raise KeyError(f"Rank {rank} is not assigned to any pipeline stage.")
+        slot = self._stage_slot
+        if slot not in self.stages:
+            raise KeyError(
+                f"{'Pipeline index' if self._grouped else 'Rank'} {slot} is not "
+                "assigned to any pipeline stage."
+            )
 
-        stage = self.stages[rank]
+        stage = self.local_stage
         stage_type = type(stage).__name__
 
         if stage.is_first_stage and stage.inflight_mode:
@@ -3814,7 +4027,7 @@ class DistributedPipeline:
                         rank,
                         stage.next_rank,
                     )
-                stage.send_buffer.isend(dst=stage.next_rank).wait()
+                stage._poststep_sync_buffers(None)
         else:
             n_graphs = stage.active_batch.num_graphs if stage.active_batch else 0
             if self.debug_mode:
@@ -3856,10 +4069,18 @@ class DistributedPipeline:
             n_active = (
                 stage.active_batch.num_graphs if stage.active_batch is not None else 0
             )
+            # ``_done_tensor`` is indexed by stage slot (pipeline index in grouped
+            # mode, global rank classically); the upstream slot is the prior
+            # pipeline index (grouped) or the prior global rank (``prior_rank``).
+            upstream_slot = (
+                self._pipeline_index - 1 if self._grouped else stage.prior_rank
+            )
             upstream_done = (
                 self._done_tensor is not None
                 and stage.prior_rank is not None
-                and bool(self._done_tensor[stage.prior_rank])
+                and upstream_slot is not None
+                and upstream_slot >= 0
+                and bool(self._done_tensor[upstream_slot])
             )
             if upstream_done and n_active == 0 and not stage.done:
                 if self.debug_mode:
@@ -3892,7 +4113,11 @@ class DistributedPipeline:
             raise RuntimeError("_done_tensor is not initialized. Call setup() first.")
 
         stage = self.local_stage
-        self._done_tensor[self.global_rank] = int(stage.done)
+        # Slot = pipeline index (grouped) or global rank (classic). In grouped mode
+        # every rank of a stage-group writes the same slot; the group's ``done`` is
+        # kept consistent across its ranks (sentinel broadcast / seed exhaustion),
+        # so the MAX all-reduce yields the correct per-stage completion.
+        self._done_tensor[self._stage_slot] = int(stage.done)
 
         if dist.is_initialized():
             dist.all_reduce(self._done_tensor, op=dist.ReduceOp.MAX)
@@ -3916,6 +4141,9 @@ class DistributedPipeline:
         """
         self.setup()
         self._share_templates()
+        if self._grouped:
+            self._run_grouped()
+            return
         iteration = 0
         while True:
             if self.debug_mode:
@@ -3930,6 +4158,27 @@ class DistributedPipeline:
                     logger.debug("[rank {}] all stages done, exiting", self.global_rank)
                 break
             iteration += 1
+
+    def _run_grouped(self) -> None:
+        """Run a 2-D (pipeline × domain) pipeline until each stage-group is done.
+
+        Unlike the streaming pipeline, a grouped stage does **not** step in global
+        lockstep: a downstream stage blocks in its ``_prestep`` hand-off until the
+        upstream produces a whole system, so a per-iteration world all-reduce
+        (``_sync_done_flags``) would deadlock (the upstream calls it while the
+        downstream is still blocked on the hand-off). Instead each rank loops its
+        own stage until that stage is locally ``done`` — termination flows down the
+        pipeline via the sentinel chain (on the pipeline-dim group), and the only
+        world-group op is a single closing ``barrier`` so no rank tears down the
+        process group while another is mid-collective. Every per-step collective is
+        confined to the stage's domain group or the pipeline-dim hand-off group, so
+        the groups run at independent paces and synchronize only at hand-offs.
+        """
+        stage = self.local_stage
+        while not stage.done:
+            self.step()
+        if dist.is_initialized():
+            dist.barrier()
 
     def init_distributed(self) -> None:
         """Initialize the ``torch.distributed`` process group.

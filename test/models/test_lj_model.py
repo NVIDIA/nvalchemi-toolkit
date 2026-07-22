@@ -112,21 +112,20 @@ class TestLennardJonesModelWrapperInit:
         )
         assert model.half_list is True
 
-    def test_atomic_energies_buf_is_none(self):
-        model = _make_model()
-        assert model._atomic_energies_buf is None
-
-    def test_forces_buf_is_none(self):
-        model = _make_model()
-        assert model._forces_buf is None
-
-    def test_virials_buf_is_none(self):
-        model = _make_model()
-        assert model._virials_buf is None
-
     def test_energies_buf_is_none(self):
+        # Per-atom energy / force / virial outputs are returned by the
+        # functional Warp ops (no pre-allocated per-atom buffers); only the
+        # per-system energy accumulator is retained, lazily allocated.
         model = _make_model()
         assert model._energies_buf is None
+
+    def test_no_per_atom_output_buffers(self):
+        # The Bug-1 in-place buffer pattern was removed in favour of
+        # functional ops + an OpAdapter (Phase 6 / Path 1).
+        model = _make_model()
+        assert not hasattr(model, "_atomic_energies_buf")
+        assert not hasattr(model, "_forces_buf")
+        assert not hasattr(model, "_virials_buf")
 
     def test_model_config_is_model_config_instance(self):
         model = _make_model()
@@ -186,53 +185,46 @@ class TestModelConfig:
 
 
 class TestEnsureComputeBuffers:
-    """Tests for _ensure_compute_buffers()."""
+    """Tests for _ensure_compute_buffers() — only the per-system energy
+    accumulator remains (per-atom outputs come from the functional ops)."""
 
-    def test_allocates_buffers_on_first_call(self):
+    def test_allocates_accumulator_on_first_call(self):
         model = _make_model()
-        assert model._atomic_energies_buf is None
+        assert model._energies_buf is None
         model._ensure_compute_buffers(
-            N=4, B=1, dtype=torch.float32, device=torch.device("cpu")
+            B=1, dtype=torch.float32, device=torch.device("cpu")
         )
-        assert isinstance(model._atomic_energies_buf, torch.Tensor)
-        assert isinstance(model._forces_buf, torch.Tensor)
-        assert isinstance(model._virials_buf, torch.Tensor)
         assert isinstance(model._energies_buf, torch.Tensor)
 
-    def test_buffer_shapes_after_first_call(self):
+    def test_accumulator_shape_after_first_call(self):
         model = _make_model()
         model._ensure_compute_buffers(
-            N=6, B=2, dtype=torch.float32, device=torch.device("cpu")
+            B=2, dtype=torch.float32, device=torch.device("cpu")
         )
-        assert model._atomic_energies_buf.shape == (6,)
-        assert model._forces_buf.shape == (6, 3)
-        assert model._virials_buf.shape == (2, 9)
         assert model._energies_buf.shape == (2,)
 
-    def test_no_realloc_when_shapes_unchanged(self):
+    def test_no_realloc_when_shape_unchanged(self):
         model = _make_model()
         model._ensure_compute_buffers(
-            N=4, B=1, dtype=torch.float32, device=torch.device("cpu")
+            B=1, dtype=torch.float32, device=torch.device("cpu")
         )
-        original_ae = model._atomic_energies_buf
-        original_f = model._forces_buf
+        original = model._energies_buf
         model._ensure_compute_buffers(
-            N=4, B=1, dtype=torch.float32, device=torch.device("cpu")
+            B=1, dtype=torch.float32, device=torch.device("cpu")
         )
-        assert model._atomic_energies_buf is original_ae
-        assert model._forces_buf is original_f
+        assert model._energies_buf is original
 
-    def test_reallocates_when_N_changes(self):
+    def test_reallocates_when_B_changes(self):
         model = _make_model()
         model._ensure_compute_buffers(
-            N=4, B=1, dtype=torch.float32, device=torch.device("cpu")
+            B=1, dtype=torch.float32, device=torch.device("cpu")
         )
-        original_ae = model._atomic_energies_buf
+        original = model._energies_buf
         model._ensure_compute_buffers(
-            N=8, B=1, dtype=torch.float32, device=torch.device("cpu")
+            B=2, dtype=torch.float32, device=torch.device("cpu")
         )
-        assert model._atomic_energies_buf is not original_ae
-        assert model._atomic_energies_buf.shape == (8,)
+        assert model._energies_buf is not original
+        assert model._energies_buf.shape == (2,)
 
 
 # ---------------------------------------------------------------------------

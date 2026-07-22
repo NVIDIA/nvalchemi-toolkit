@@ -253,6 +253,11 @@ updates:
   {py:class}`~nvalchemi.dynamics.base.FusedStage`, a save-and-restore mask is
   applied around `pre_update` and `post_update` so that only systems belonging to
   your stage are modified. You do not need to handle masking yourself.
+- **Running under domain decomposition**: A per-atom integrator works under
+  {py:class}`~nvalchemi.distributed.DomainParallel` unchanged, but any *global*
+  reduction (kinetic energy, temperature, a convergence dot-product) needs
+  cross-rank handling. See {doc}`distributed` → *Distributed dynamics* for the
+  contract and the `HookScope.GLOBAL` recipe.
 
 ## See also
 

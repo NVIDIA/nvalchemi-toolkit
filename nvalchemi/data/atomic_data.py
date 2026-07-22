@@ -80,6 +80,26 @@ class AtomicNumberTable:
         return self.zs.index(atomic_number)
 
 
+_DEFAULT_MASS_TABLE: torch.Tensor | None = None
+
+
+def _default_mass_table() -> torch.Tensor:
+    """Cached ``periodictable`` mass lookup indexed by atomic number ``Z``
+    (0..118; index 0 is the neutron, matching ``pt.elements[0]``).
+
+    Lets :meth:`AtomicData.use_default_masses` fill masses with a single
+    vectorized gather (``table[atomic_numbers]``) instead of a per-atom Python
+    loop that called ``int(n)`` on each element — i.e. one device→host sync per
+    atom on every ``AtomicData`` construction.
+    """
+    global _DEFAULT_MASS_TABLE
+    if _DEFAULT_MASS_TABLE is None:
+        _DEFAULT_MASS_TABLE = torch.tensor(
+            [pt.elements[z].mass for z in range(119)], dtype=torch.float64
+        )
+    return _DEFAULT_MASS_TABLE
+
+
 class AtomicData(BaseModel, DataMixin):
     """Graph-structured container for a single atomic system.
 
@@ -534,13 +554,12 @@ class AtomicData(BaseModel, DataMixin):
             Returns self if validation passes.
         """
         if self.atomic_masses is None:
-            masses_list = [pt.elements[int(n)].mass for n in self.atomic_numbers]
-            # skip re-validation
-            self.__dict__["atomic_masses"] = torch.as_tensor(
-                masses_list,
-                device=self.atomic_numbers.device,
-                dtype=self.positions.dtype,
+            # Vectorized table gather — no per-atom ``int(n)`` device→host sync.
+            table = _default_mass_table().to(
+                device=self.atomic_numbers.device, dtype=self.positions.dtype
             )
+            # skip re-validation
+            self.__dict__["atomic_masses"] = table[self.atomic_numbers.long()]
         return self
 
     @model_validator(mode="after")
@@ -664,7 +683,13 @@ class AtomicData(BaseModel, DataMixin):
         self, key: str, value: torch.Tensor, node_dim: int = 0
     ) -> None:
         """Add a node property to the graph."""
-        setattr(self, key, value)
+        # Bypass ``validate_assignment``: it re-runs every model validator on
+        # each call (a hot-path op in halo exchange + migration), and for an
+        # enum-union field (e.g. ``atom_categories``) Pydantic's failed coercion
+        # attempt repr()s the whole tensor -> one device->host ``.item()`` per
+        # atom. ``value`` is already a valid tensor, so validation is pure
+        # overhead. Mirrors the ``self.__dict__[...] = ...`` bypass used above.
+        object.__setattr__(self, key, value)
         self.__node_keys__.add(key)
 
     def add_edge_property(self, key: str, value: Any) -> None:

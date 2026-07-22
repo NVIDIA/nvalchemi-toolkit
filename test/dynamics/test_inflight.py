@@ -244,6 +244,73 @@ class TestFusedStageInflight:
         # Remaining 1 + replacements 2 = 3 (all slots preserved)
         assert result.num_graphs == 3
 
+    def test_refill_clears_stale_last_converged(self) -> None:
+        """A graduation that shrinks the batch must drop stale ``_last_converged``.
+
+        Otherwise the next ``_build_context`` masks the smaller batch with indices
+        from the larger one and over-indexes (CUDA index-out-of-bounds; IndexError
+        on CPU).
+        """
+        # Exactly enough samples for the initial batch → no replacements, so the
+        # batch shrinks on graduation.
+        dataset = MockDataset([(2, 0)] * 4)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=4
+        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        initialize_batch_for_dynamics(batch)
+        batch["status"] = torch.tensor([[0], [0], [1], [1]])
+        # Stale indices pointing at the graduating (soon-removed) systems.
+        dynamics._last_converged = torch.tensor([2, 3])
+
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None and result.num_graphs == 2
+        assert dynamics._last_converged is None
+        # Must not over-index the shrunk batch.
+        ctx = dynamics._build_context(result)
+        assert ctx.converged_mask is None
+
+    def test_send_path_realigns_state_and_last_converged(self) -> None:
+        """Sending converged graphs trims the active batch, so per-system state
+        and stale converged indices must shrink with it — else the next step
+        over-indexes them (the batch_size=2 crash in example 02).
+        """
+        from nvalchemi.dynamics import FIRE
+        from nvalchemi.dynamics.base import BufferConfig
+
+        dataset = MockDataset([(3, 0)] * 4)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=40, max_edges=20, max_batch_size=4
+        )
+        fire = FIRE(
+            model=self.model,
+            dt=1.0,
+            n_steps=50,
+            sampler=sampler,
+            next_rank=1,
+            buffer_config=BufferConfig(num_systems=4, num_nodes=12, num_edges=0),
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        initialize_batch_for_dynamics(batch)
+        batch, _ = fire.step(batch)  # initializes per-system _state (size 4)
+        assert fire._state.num_graphs == 4
+
+        fire.active_batch = batch
+        fire._ensure_buffers(batch)  # allocate the send buffer
+        fire._last_converged = torch.tensor([0, 3])  # stale; references index 3
+
+        fire._populate_send_buffer(torch.tensor([0, 1]))  # send graphs 0, 1
+
+        assert fire.active_batch.num_graphs == 2
+        assert fire._state.num_graphs == 2
+        assert fire._last_converged is None
+        ctx = fire._build_context(fire.active_batch)
+        assert ctx.converged_mask is None
+
     def test_terminates_on_dataset_exhaustion(self) -> None:
         """refill_check should return None when sampler is exhausted.
 

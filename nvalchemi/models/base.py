@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from __future__ import annotations
 
 import abc
@@ -19,13 +20,17 @@ import warnings
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+
+if TYPE_CHECKING:
+    from nvalchemi.distributed.config import StrategyKind
+    from nvalchemi.distributed.spec import MLIPSpec
 
 warnings.simplefilter("once", UserWarning)
 
@@ -351,6 +356,13 @@ class BaseModelMixin(abc.ABC):
     # to silently affect all others).  __init_subclass__ wraps __init__ to enforce
     # this at construction time — a missing model_config raises TypeError.
 
+    # Per-scope distributed runtime context. ``None`` outside a
+    # ``DistributedModel`` scope; set to the
+    # :class:`DistributedContext` the scope owns by
+    # :meth:`distributed_setup`. Read via ``self._dist_ctx`` from
+    # :meth:`adapt_input` to get live ``halo_meta`` / ``gather_meta``.
+    _dist_ctx: Any = None
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Hook applied to every concrete subclass at class-creation time.
 
@@ -595,7 +607,10 @@ class BaseModelMixin(abc.ABC):
             OrderedDict with expected output keys and their values
             (or ``None`` if not present).  Tensors may be graph-attached.
         """
-        output = OrderedDict((key, None) for key in self.output_data())
+        # ``output_data()`` returns a set, whose iteration order is randomized
+        # per process (str hashing). Sort so every rank seeds the output dict in
+        # an identical key order.
+        output = OrderedDict((key, None) for key in sorted(self.output_data()))
         if isinstance(model_output, dict):
             for key in output:
                 value = model_output.get(key)
@@ -615,6 +630,62 @@ class BaseModelMixin(abc.ABC):
             Prefix for the output head
         """
         raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    # Distributed hooks
+    # ------------------------------------------------------------------
+
+    def distribution_spec(
+        self, strategy: "StrategyKind | None" = None
+    ) -> "MLIPSpec | None":
+        """Return the :class:`MLIPSpec` describing the primitives this model
+        needs under domain parallelism *for the given parallelization strategy*.
+
+        Parameters
+        ----------
+        strategy
+            The :class:`~nvalchemi.distributed.config.StrategyKind` the scope runs
+            under (``HALO`` / ``GRAPH_PARTITION``); ``None``
+            is treated as ``HALO``. The framework passes the config-selected
+            strategy — models must not sniff the environment. The spec content is a
+            joint ``(model × strategy)`` product, so a model that supports graph
+            parallel returns a different ``(policy, adapters, shard_fields,
+            consolidation)`` bundle per strategy.
+
+        Returns
+        -------
+        MLIPSpec | None
+            Default ``None`` = model doesn't declare distributed support.
+            ``DomainParallel`` raises if asked to shard a model whose spec is
+            ``None``. Per-model wrappers override to return a preset
+            (``SPEC_MPNN_HALO`` / ``SPEC_UMA_HALO``) or a custom spec.
+        """
+        return None
+
+    def distributed_setup(self, ctx: Any) -> None:
+        """Called once by :class:`DistributedModel` when entering a
+        distributed scope, after the spec's adapters have been
+        installed. ``ctx`` is the :class:`DistributedContext` that the
+        framework will mutate per-step (``ctx.halo_meta`` /
+        ``ctx.gather_meta``); the wrapper should stash a reference to
+        ``ctx`` (commonly as ``self._dist_ctx``) so its
+        :meth:`adapt_input` can read the live values at forward time.
+
+        Override to also build per-rank closures (e.g. distributed
+        helper replacements that close over ``ctx.gather_meta``) at
+        scope-entry time.
+
+        Default: no-op. Simple halo-mode models (MACE, LJ) don't
+        override beyond stashing the ctx reference, which the default
+        implementation handles for them — see :attr:`_dist_ctx`.
+        """
+        self._dist_ctx = ctx
+
+    def distributed_teardown(self) -> None:
+        """Restore anything :meth:`distributed_setup` mutated. Default
+        clears the ctx reference; override to also restore monkey-patches
+        the framework's adapter registry doesn't manage."""
+        self._dist_ctx = None
 
     def input_data(self) -> set[str]:
         """Return the set of **required** input keys.

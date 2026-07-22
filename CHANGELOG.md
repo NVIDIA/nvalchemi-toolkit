@@ -4,6 +4,7 @@
 
 ### Added
 
+- MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
   default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor
@@ -83,6 +84,11 @@
 
 ### Fixed
 
+- **Distributed dynamics lifecycle** — keep per-system integrator state aligned
+  when pipeline receives and graduates systems, clear reusable communication
+  buffers before every send without shrinking their segmented capacity, and run
+  distributed stages with explicit per-system step budgets and optional early
+  convergence.
 - **Zarr dataloader custom fields** — validated `Dataset` batch paths now
   preserve reader field-level metadata so custom atom-, edge-, and
   system-level tensors survive batching like the `skip_validation` path.
@@ -106,6 +112,10 @@
   backward tape onto `_energies_buf`, causing linear per-step slowdown
   and unbounded GPU memory growth. `detach_()` the buffer after each
   forward.
+- **FusedStage graduation not reported** — `FusedStage.step()` returned
+  `exit_converged=None` for samples graduated via a sub-stage's `n_steps`
+  counter or its `ConvergenceHook`, so consumers of the returned indices
+  (e.g. `DistributedPipeline`) silently dropped such samples.
 
 ### Deprecated
 

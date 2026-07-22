@@ -105,6 +105,13 @@ class NVTNoseHoover(BaseDynamics):
     __needs_keys__: set[str] = {"forces"}
     __provides_keys__: set[str] = {"positions", "velocities"}
 
+    # Domain-parallel intent (read by the dynamics coordinator; inert
+    # single-process). This integrator couples its thermostat to the mesh-global
+    # kinetic energy + DOF; its NHC controller state is replicated and kept
+    # byte-identical across ranks.
+    __dd_thermo_kind__: str = "nhc"
+    __dd_replicated__: tuple[str, ...] = ("nhc_eta", "nhc_eta_dot")
+
     def __init__(
         self,
         model: BaseModelMixin,

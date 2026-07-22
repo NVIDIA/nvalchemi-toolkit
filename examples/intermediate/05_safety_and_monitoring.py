@@ -42,7 +42,7 @@ This example demonstrates four hooks that make simulations more robust:
    bounded values.
 2. ``NaNDetectorHook`` — detect any NaN that slipped through clamping.
 3. ``EnergyDriftMonitorHook`` — monitor cumulative drift (``AFTER_STEP``).
-4. ``StageTimingHook`` — spans all stages, so register last or use ``stages="all"``.
+4. ``StageTimingHook`` — spans all stages, so register last or use ``profiled_stages="all"``.
 """
 
 import logging
@@ -267,7 +267,7 @@ logging.info(
 # StageTimingHook — timing the simulation loop
 # ------------------------------------------
 # :class:`~nvalchemi.dynamics.hooks.StageTimingHook` records wall-clock time at
-# each hook stage.  ``stages="step"`` instruments only ``BEFORE_STEP`` and
+# each hook stage.  ``profiled_stages="step"`` instruments only ``BEFORE_STEP`` and
 # ``AFTER_STEP``, giving a clean per-step elapsed time without the overhead
 # of timing every sub-stage.
 #

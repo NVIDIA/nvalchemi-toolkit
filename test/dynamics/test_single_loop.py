@@ -826,6 +826,34 @@ class TestFusedStage:
         # Should stop after 1 step (convergence), NOT 10000
         assert fused.step_count == 1
 
+    def test_counter_and_hook_graduation_reported_in_exit_converged(self) -> None:
+        """Counter and hook graduations in the same step are both reported."""
+        dynamics = BaseDynamics(
+            model=NonConservativeDemoModel(),
+            n_steps=2,
+            convergence_hook=ConvergenceHook(
+                criteria={"key": "energy_change", "threshold": 0.5}
+            ),
+        )
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        batch.energy_change = torch.ones(2)
+
+        batch, exit_converged = fused.step(batch)
+        assert exit_converged is None
+
+        # Sample 1 converges via the hook; sample 0 hits the n_steps counter.
+        batch.energy_change = torch.tensor([1.0, 0.0])
+        batch, exit_converged = fused.step(batch)
+        assert batch.status.view(-1).tolist() == [fused.exit_status] * 2
+        assert exit_converged is not None
+        assert exit_converged.tolist() == [0, 1]
+        # Sample 0's counter was reset on migration; sample 1 left via the
+        # hook first, so its counter kept step 1's value.
+        assert batch.n_steps_counter_0.view(-1).tolist() == [0, 1]
+
 
 # -----------------------------------------------------------------------------
 # TestFusedStageDeviceValidation
@@ -1251,6 +1279,24 @@ class TestDistributedPipelineComposition:
         assert pipeline.stages[1].next_rank == 2
         assert pipeline.stages[2].prior_rank == 1
         assert pipeline.stages[2].next_rank is None
+
+    def test_plain_stage_n_steps_warns_during_setup(self) -> None:
+        """A plain pipeline stage must not silently imply fixed-step graduation."""
+        cfg = BufferConfig(num_systems=2, num_nodes=10, num_edges=0)
+        first = BaseDynamics(
+            model=self.model,
+            n_steps=2,
+            buffer_config=cfg,
+            device_type="cpu",
+        )
+        second = BaseDynamics(
+            model=self.model,
+            buffer_config=cfg,
+            device_type="cpu",
+        )
+
+        with pytest.warns(UserWarning, match="plain DistributedPipeline stage"):
+            DistributedPipeline(stages={0: first, 1: second}).setup()
 
     def test_fused_in_multi_stage_pipeline(self) -> None:
         """(dyn1 + dyn2) | dyn3 | dyn4 works with FusedStage at rank 0."""
