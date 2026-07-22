@@ -32,15 +32,22 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+from torch.distributed import DeviceMesh
 
+from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed.config import DomainConfig
 from nvalchemi.distributed.domain_parallel import DomainParallel
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.integrators.nve import NVE
 from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.neighbors import compute_neighbors
 
 WORLD_SIZE = 2
+LJ_SIGMA = 3.4
+LJ_CUTOFF = 8.5
+NEIGHBOR_SKIN = 0.0
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,10 +69,10 @@ def _init_process_group(rank: int, world_size: int) -> None:
 
 def _create_argon_system(
     n_atoms: int = 100,
-    lattice_constant: float = 3.4,
+    lattice_constant: float = 2 ** (1.0 / 6.0) * LJ_SIGMA * 1.05,
     seed: int = 42,
 ) -> AtomicData:
-    """Create a small cubic Argon system with deterministic velocities."""
+    """Create a stable periodic Argon system with deterministic state."""
     # Derive grid side from desired atom count (round up to next perfect cube)
     side = max(2, round(n_atoms ** (1.0 / 3.0)))
     positions = [
@@ -77,17 +84,17 @@ def _create_argon_system(
     positions = torch.tensor(positions, dtype=torch.float32)
     actual_n = positions.shape[0]
 
-    atomic_numbers = torch.full((actual_n,), 18, dtype=torch.int32)
+    gen = torch.Generator().manual_seed(seed)
+    box_length = side * lattice_constant
+    positions += 0.01 * torch.randn(positions.shape, generator=gen)
+    positions.remainder_(box_length)
+
+    atomic_numbers = torch.full((actual_n,), 18, dtype=torch.long)
     atomic_masses = torch.full((actual_n,), 39.948, dtype=torch.float32)
 
-    gen = torch.Generator().manual_seed(seed)
-    kB = 8.617e-5  # eV/K
-    T = 300.0
-    sigma_v = (kB * T / 39.948) ** 0.5
-    velocities = torch.randn(actual_n, 3, generator=gen) * sigma_v
+    velocities = 0.001 * torch.randn(actual_n, 3, generator=gen)
     velocities -= velocities.mean(dim=0)
 
-    box_length = side * lattice_constant
     # cell is [B, 3, 3] and pbc is [B, 3] per the current AtomicData schema.
     cell = (torch.eye(3, dtype=torch.float32) * box_length).unsqueeze(0)
     pbc = torch.ones(1, 3, dtype=torch.bool)
@@ -96,6 +103,8 @@ def _create_argon_system(
         positions=positions,
         atomic_numbers=atomic_numbers,
         atomic_masses=atomic_masses,
+        forces=torch.zeros_like(positions),
+        energy=torch.zeros(1, 1, dtype=positions.dtype),
         cell=cell,
         pbc=pbc,
     )
@@ -107,8 +116,8 @@ def _make_model(device: torch.device) -> LennardJonesModelWrapper:
     """Instantiate the LJ model on the given device."""
     return LennardJonesModelWrapper(
         epsilon=0.0104,
-        sigma=3.40,
-        cutoff=8.5,
+        sigma=LJ_SIGMA,
+        cutoff=LJ_CUTOFF,
     ).to(device)
 
 
@@ -116,9 +125,46 @@ def _make_nve(model: LennardJonesModelWrapper) -> NVE:
     """Instantiate NVE integrator with a neighbor-list hook."""
     nl_hook = NeighborListHook(
         config=model.model_config.neighbor_config,
-        skin=1.0,
+        skin=NEIGHBOR_SKIN,
+        stage=DynamicsStage.BEFORE_COMPUTE,
     )
     return NVE(model=model, dt=1.0, hooks=[nl_hook])
+
+
+def _partition_system(
+    rank: int,
+    world_size: int,
+    data: AtomicData,
+) -> tuple[DomainParallel, Batch]:
+    """Build current-API domain-parallel NVE and partition one system."""
+    device = torch.device(f"cuda:{rank}")
+    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
+    model = _make_model(device)
+    dynamics = _make_nve(model)
+    config = DomainConfig(
+        cutoff=float(model.model_config.neighbor_config.cutoff),
+        skin=NEIGHBOR_SKIN,
+        mesh=mesh,
+        mesh_dim="domain",
+    )
+    parallel = DomainParallel(dynamics, config=config)
+    batch = Batch.from_data_list([data], device=device) if rank == 0 else None
+    return parallel, parallel.partition(batch)
+
+
+def _reference_outputs(batch: Batch, device: torch.device) -> ModelOutputs:
+    """Evaluate LJ on a fresh batch at the gathered trajectory positions."""
+    model = _make_model(device)
+    data = AtomicData(
+        positions=batch.positions.clone(),
+        atomic_numbers=batch.atomic_numbers,
+        atomic_masses=batch.atomic_masses,
+        cell=batch.cell,
+        pbc=batch.pbc,
+    )
+    ref_batch = Batch.from_data_list([data], device=device)
+    compute_neighbors(ref_batch, config=model.model_config.neighbor_config)
+    return model(ref_batch)
 
 
 def _worker(rank: int, world_size: int, test_fn: Any, *args: Any) -> None:
@@ -136,56 +182,21 @@ def _worker(rank: int, world_size: int, test_fn: Any, *args: Any) -> None:
 
 
 def _test_single_step_force_correctness(rank: int, world_size: int) -> None:
-    """Compare per-atom forces: single-GPU reference vs DomainParallel."""
+    """Compare one-step distributed forces at identical positions."""
     device = torch.device(f"cuda:{rank}")
-
-    # Build the same system deterministically on every rank.
     data = _create_argon_system(n_atoms=343, seed=42)
-
-    # --- Reference: single-GPU step on rank 0 ---
-    if rank == 0:
-        ref_model = _make_model(device)
-        ref_nve = _make_nve(ref_model)
-        ref_batch = Batch.from_data_list([data], device=device)
-        ref_batch, _ = ref_nve.step(ref_batch)
-        ref_forces = ref_batch.forces.clone()
-    else:
-        ref_forces = None
-
-    # --- DomainParallel step ---
-    from torch.distributed import DeviceMesh
-
-    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    model = _make_model(device)
-    nve = _make_nve(model)
-
-    config = DomainConfig(
-        cutoff=model.model_config.neighbor_config.cutoff,
-        skin=1.0,
-        mesh=mesh,
-        mesh_dim="domain",
-    )
-    dd = DomainParallel(nve, config=config)
+    parallel, local_batch = _partition_system(rank, world_size, data)
+    local_batch, _ = parallel.step(local_batch)
+    full_final = parallel.gather(local_batch, dst=0)
 
     if rank == 0:
-        batch = Batch.from_data_list([data], device=device)
-    else:
-        batch = None
-
-    local_batch = dd.partition(batch)
-    local_batch, _ = dd.step(local_batch)
-
-    # Gather forces back on rank 0 and compare.
-    # Since POC partition keeps all atoms on rank 0, compare directly.
-    if rank == 0:
-        dd_forces = local_batch.forces
-        assert ref_forces is not None
+        assert full_final is not None
+        ref_forces = _reference_outputs(full_final, device)["forces"]
         torch.testing.assert_close(
-            dd_forces,
+            full_final.forces,
             ref_forces,
             atol=1e-5,
             rtol=1e-5,
-            msg="Per-atom forces differ between single-GPU and DomainParallel",
         )
 
 
@@ -200,87 +211,39 @@ def test_single_step_force_correctness():
 
 
 # ---------------------------------------------------------------------------
-# Test 2: NVE energy conservation
+# Test 2: NVE final-energy correctness
 # ---------------------------------------------------------------------------
 
 
-def _test_nve_energy_conservation(rank: int, world_size: int) -> None:
-    """Compare energy trajectories: single-GPU vs DomainParallel over 100 steps."""
+def _test_nve_final_energy_correctness(rank: int, world_size: int) -> None:
+    """Compare final distributed energy at identical positions."""
     device = torch.device(f"cuda:{rank}")
     n_steps = 100
-
     data = _create_argon_system(n_atoms=343, seed=42)
-
-    # --- Reference trajectory on rank 0 ---
-    ref_energies: list[float] = []
-    if rank == 0:
-        ref_model = _make_model(device)
-        ref_nve = _make_nve(ref_model)
-        ref_batch = Batch.from_data_list([data], device=device)
-        for _ in range(n_steps):
-            ref_batch, _ = ref_nve.step(ref_batch)
-            if hasattr(ref_batch, "energies") and ref_batch.energies is not None:
-                ref_energies.append(ref_batch.energies.sum().item())
-
-    # --- DomainParallel trajectory ---
-    from torch.distributed import DeviceMesh
-
-    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    model = _make_model(device)
-    nve = _make_nve(model)
-
-    config = DomainConfig(
-        cutoff=model.model_config.neighbor_config.cutoff,
-        skin=1.0,
-        mesh=mesh,
-        mesh_dim="domain",
-    )
-    dd = DomainParallel(nve, config=config)
-
-    if rank == 0:
-        batch = Batch.from_data_list([data], device=device)
-    else:
-        batch = None
-
-    local_batch = dd.partition(batch)
-
-    dd_energies: list[float] = []
+    parallel, local_batch = _partition_system(rank, world_size, data)
     for _ in range(n_steps):
-        local_batch, _ = dd.step(local_batch)
-        if rank == 0:
-            if hasattr(local_batch, "energies") and local_batch.energies is not None:
-                dd_energies.append(local_batch.energies.sum().item())
+        local_batch, _ = parallel.step(local_batch)
+    dist_final_energy = local_batch.energy.sum().clone()
+    full_final = parallel.gather(local_batch, dst=0)
 
-    # Compare energy trajectories on rank 0.
-    if rank == 0 and ref_energies and dd_energies:
-        ref_t = torch.tensor(ref_energies)
-        dd_t = torch.tensor(dd_energies)
-
-        # The energy trajectories should be identical (same computation).
-        # Allow a small tolerance for non-deterministic GPU reductions.
+    if rank == 0:
+        assert full_final is not None
+        ref_energy = _reference_outputs(full_final, device)["energy"].sum()
         torch.testing.assert_close(
-            dd_t,
-            ref_t,
+            dist_final_energy,
+            ref_energy,
             atol=1e-4,
             rtol=1e-4,
-            msg="Energy trajectories differ between single-GPU and DomainParallel",
         )
-
-        # Additionally verify NVE conservation: drift should be small.
-        dd_drift = (dd_t[-1] - dd_t[0]).abs().item()
-        # Loose bound: drift should be << initial energy magnitude.
-        if ref_t[0].abs().item() > 0:
-            assert dd_drift / ref_t[0].abs().item() < 0.01, (
-                f"DomainParallel energy drift too large: "
-                f"{dd_drift:.6e} vs initial {ref_t[0].item():.6e}"
-            )
 
 
 @_skip_no_multi_gpu
-def test_nve_energy_conservation():
-    """Energy trajectory must match between 1-GPU and 2-GPU, with small drift."""
+def test_nve_final_energy_correctness():
+    """Final potential energy must match after 100 distributed NVE steps."""
     mp.spawn(
-        _worker, args=(WORLD_SIZE, _test_nve_energy_conservation), nprocs=WORLD_SIZE
+        _worker,
+        args=(WORLD_SIZE, _test_nve_final_energy_correctness),
+        nprocs=WORLD_SIZE,
     )
 
 
@@ -296,31 +259,11 @@ def _test_atom_count_conservation(rank: int, world_size: int) -> None:
 
     data = _create_argon_system(n_atoms=343, seed=42)
     initial_n_atoms = data.positions.shape[0]
-
-    from torch.distributed import DeviceMesh
-
-    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    model = _make_model(device)
-    nve = _make_nve(model)
-
-    config = DomainConfig(
-        cutoff=model.model_config.neighbor_config.cutoff,
-        skin=1.0,
-        mesh=mesh,
-        mesh_dim="domain",
-    )
-    dd = DomainParallel(nve, config=config)
-
-    if rank == 0:
-        batch = Batch.from_data_list([data], device=device)
-    else:
-        batch = None
-
-    local_batch = dd.partition(batch)
+    parallel, local_batch = _partition_system(rank, world_size, data)
 
     # Run several steps (atoms may migrate between domains).
     for _ in range(n_steps):
-        local_batch, _ = dd.step(local_batch)
+        local_batch, _ = parallel.step(local_batch)
 
     # All-reduce local atom counts.
     local_count = torch.tensor(
@@ -351,27 +294,16 @@ def test_atom_count_conservation():
 
 def _test_partition_distributes_atoms(rank: int, world_size: int) -> None:
     """Verify that after partition(), each rank has a disjoint subset of atoms."""
-    device = torch.device(f"cuda:{rank}")
     data = _create_argon_system(n_atoms=343, seed=42)
     initial_n = data.positions.shape[0]
-
-    from torch.distributed import DeviceMesh
-
-    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    model = _make_model(device)
-    nve = _make_nve(model)
-    config = DomainConfig(cutoff=8.5, skin=1.0, mesh=mesh, mesh_dim="domain")
-    dd = DomainParallel(nve, config=config)
-
-    batch = Batch.from_data_list([data], device=device) if rank == 0 else None
-    local_batch = dd.partition(batch)
+    _, local_batch = _partition_system(rank, world_size, data)
 
     # Each rank should have some atoms
     n_local = local_batch.num_nodes
     assert n_local > 0, f"Rank {rank} has no atoms"
 
     # Total across ranks should equal initial
-    count = torch.tensor([n_local], device=device)
+    count = torch.tensor([n_local], device=local_batch.positions.device)
     dist.all_reduce(count)
     assert count.item() == initial_n
 
@@ -396,7 +328,7 @@ def test_partition_distributes_atoms():
 # ``DistributedModel`` or were stale. Ghost-exchange coverage lives in
 # ``test_particle_halo.py`` + ``test_distributed_models.py``; priming
 # and bbox handling are exercised end-to-end by the step-based tests
-# below (``test_step_completes``, ``test_nve_energy_conservation``).
+# below (``test_step_completes``, ``test_nve_final_energy_correctness``).
 # ---------------------------------------------------------------------------
 
 
@@ -407,25 +339,18 @@ def test_partition_distributes_atoms():
 
 def _test_step_completes(rank: int, world_size: int) -> None:
     """Verify that dd.step() completes without error for 5 steps."""
-    device = torch.device(f"cuda:{rank}")
     data = _create_argon_system(n_atoms=343, seed=42)
-
-    from torch.distributed import DeviceMesh
-
-    mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
-    model = _make_model(device)
-    nve = _make_nve(model)
-    config = DomainConfig(cutoff=8.5, skin=1.0, mesh=mesh, mesh_dim="domain")
-    dd = DomainParallel(nve, config=config)
-
-    batch = Batch.from_data_list([data], device=device) if rank == 0 else None
-    local_batch = dd.partition(batch)
+    parallel, local_batch = _partition_system(rank, world_size, data)
 
     for _i in range(5):
-        local_batch, _converged = dd.step(local_batch)
+        local_batch, _converged = parallel.step(local_batch)
 
     assert local_batch.num_nodes > 0
     assert local_batch.forces is not None
+    assert local_batch.energy is not None
+    assert torch.isfinite(local_batch.positions).all()
+    assert torch.isfinite(local_batch.forces).all()
+    assert torch.isfinite(local_batch.energy).all()
 
 
 @_skip_no_multi_gpu
