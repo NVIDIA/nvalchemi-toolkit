@@ -129,16 +129,16 @@ observables to a backend. The default scalars are energy (per atom), ``fmax``
 energy when velocities are present), and ``converged_fraction`` (fraction of
 samples that have met the convergence criterion).
 
-``backend`` selects the output destination:
+``backend`` is a required argument that selects the output destination. It must
+be one of ``"csv"``, ``"tensorboard"``, or ``"custom"``:
 
-- ``"loguru"`` (default) — emits a formatted line to the loguru logger. Use
-  for live console monitoring during interactive or short runs.
 - ``"csv"`` — writes one row per step to ``log_path``. Use when you need
   per-step data for post-run analysis in Python or a spreadsheet.
 - ``"tensorboard"`` — writes scalar events to ``log_path`` as a TensorBoard
   event file. Use when comparing scalar trends across experiments.
-- A callable ``fn(scalars: dict) -> None`` — routes each snapshot to a custom
-  backend, such as W&B or MLflow.
+- ``"custom"`` — routes each snapshot to a custom writer callable passed via the
+  separate ``writer_fn`` parameter (signature
+  ``fn(step_count, rows) -> None``), such as a W&B or MLflow sink.
 
 ``frequency`` throttles writes to every N steps. For long runs,
 ``frequency=10`` or higher keeps output manageable without losing trends.
@@ -303,7 +303,7 @@ checking so the detector sees the corrected forces:
        model=model,
        dt=0.5,
        hooks=[
-           MaxForceClampHook(max_force=50.0, log_clamps=True),
+           MaxForceClampHook(max_force=50.0),
            NaNDetectorHook(extra_keys=["stress"]),
        ],
    )

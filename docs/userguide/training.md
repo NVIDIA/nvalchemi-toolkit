@@ -198,7 +198,7 @@ training strategy.
 A `training_fn` is a callable that receives either `(model, batch)` for a
 single-model strategy or `(models, batch)` for a named multi-model strategy, and
 returns a `Mapping` of model outputs. That mapping is passed into
-{py:function}`~nvalchemi.training.losses.composition.compute_supervised_loss`,
+{py:func}`~nvalchemi.training.losses.composition.compute_supervised_loss`,
 which reads targets from the batch by `TrainingStrategy.target_keys` unless a
 `loss_target_assembler` is supplied. A `loss_target_assembler` must satisfy
 {py:class}`~nvalchemi.training.losses.composition.LossTargetAssemblyProtocol`:
@@ -355,6 +355,7 @@ then starts with `BEFORE_EPOCH`. At each epoch boundary, the strategy calls
 `set_epoch(...)` on distributed samplers when available, so each epoch can use a
 deterministic but distinct sample order.
 
+(batches-forward-loss-backward-update)=
 ## Batches: Forward, Loss, Backward, Update
 
 With the counters and epoch loop in view, we can zoom in on what happens to a
@@ -381,12 +382,13 @@ requires the update orchestrator; see [Optimizer Orchestration](#optimizer-orche
 
 The default supervised path calls `training_fn` to produce a prediction mapping,
 then calls
-{py:function}`~nvalchemi.training.losses.composition.compute_supervised_loss` to
+{py:func}`~nvalchemi.training.losses.composition.compute_supervised_loss` to
 retrieve targets and evaluate `loss_fn`. The resulting structured loss contains
 `total_loss` for backpropagation, along with per-component and per-sample
 diagnostics accessible at `AFTER_LOSS`. See {doc}`losses` and
 {doc}`/modules/training/losses` for the loss object contract.
 
+(optimizer-orchestration)=
 ## Optimizer Orchestration
 
 Once the loss has been computed, the `TrainingStrategy` then needs to be able
@@ -410,10 +412,10 @@ strategy owns the default update sequence, which runs on every batch:
 
 1. zero gradients before the forward pass,
 2. call `loss.backward()` after `AFTER_LOSS`,
-3. call {py:function}`~nvalchemi.training.optimizers.step_optimizers` to apply
+3. call {py:func}`~nvalchemi.training.optimizers.step_optimizers` to apply
    the parameter update,
 4. advance step-based learning-rate schedulers with
-   {py:function}`~nvalchemi.training.optimizers.step_lr_schedulers`,
+   {py:func}`~nvalchemi.training.optimizers.step_lr_schedulers`,
 5. advance `step_count`, but only when the optimizer-step path actually executes.
 
 That last point is the one worth internalizing: because `step_count` moves only
@@ -605,6 +607,7 @@ periodically from `AFTER_BATCH` or `AFTER_EPOCH`. Use
 script. See {doc}`/modules/training/checkpoints` for strategy reconstruction,
 hook state, model specs, and distributed checkpoint behavior.
 
+(restart-semantics)=
 ### Restart semantics
 
 There are two distinct restart scenarios, and the right API depends on which

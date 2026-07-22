@@ -418,7 +418,7 @@ the examples given below:
 def shift_positions(
     data: AtomicData, metadata: dict[str, Any]
 ) -> tuple[AtomicData, dict[str, Any]]:
-    return data.replace(positions=data.positions + 1.0), metadata
+    return data.model_copy(update={"positions": data.positions + 1.0}), metadata
 
 dataset = Dataset(reader=reader, device="cuda:0", transforms=[shift_positions])
 
@@ -436,10 +436,10 @@ loader = DataLoader(dataset=dataset, batch_size=32, batch_transforms=[center_bat
 ```{tip}
 Prefer per-batch transforms over per-sample transforms for anything
 compute-heavy. Per-sample transforms run once per graph on whatever device the
-:class:`~nvalchemi.data.datapipes.dataset.Dataset` produces and cannot amortize
+{py:class}`~nvalchemi.data.datapipes.dataset.Dataset` produces and cannot amortize
 launch overhead across graphs. A vectorized per-batch transform that uses
 segmented / scatter-reduce operations on the fully collated
-:class:`~nvalchemi.data.Batch` will be significantly more efficient on GPU. Reserve
+{py:class}`~nvalchemi.data.Batch` will be significantly more efficient on GPU. Reserve
 per-sample transforms for light, sample-specific bookkeeping (e.g. attaching
 metadata, filtering keys) that genuinely cannot be batched.
 ```

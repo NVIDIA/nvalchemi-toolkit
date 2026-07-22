@@ -115,6 +115,7 @@ Communication buffers are configured via
 
    dynamics = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=1.0,
        buffer_config=buffer_config,
    )

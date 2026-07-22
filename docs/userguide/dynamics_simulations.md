@@ -128,7 +128,7 @@ with NPT(
     model=model,
     dt=1.0,
     temperature=300.0,
-    pressure=1.0,            # target pressure (bar)
+    pressure=1.0,            # target pressure (eV/Å³; positive = compression)
     barostat_time=100.0,     # barostat coupling time (fs)
     thermostat_time=100.0,   # thermostat coupling time (fs)
     n_steps=10000,
@@ -214,7 +214,7 @@ class MyVerlet(BaseDynamics):
 ```
 
 ```{important}
-The demo ``VelocityVerlet`` class is intended for debugging and pedagogy
+The demo ``DemoDynamics`` class is intended for debugging and pedagogy
 only. Do not use this class for production runs, and instead, see the
 {py:class}`~nvalchemi.dynamics.integrators.nve.NVE` class instead.
 ```

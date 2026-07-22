@@ -274,7 +274,7 @@ if rows:
 #     pipe = PipelineModelWrapper(groups=[
 #         PipelineGroup(
 #             steps=[
-#                 PipelineStep(aimnet2, wire={"charges": "node_charges"}),
+#                 aimnet2,  # outputs ``charges``; Ewald consumes it (auto-wired)
 #                 ewald,
 #             ],
 #             use_autograd=True,   # shared autograd over summed energy
@@ -284,7 +284,7 @@ if rows:
 #
 # ``make_neighbor_hooks()`` is the right registration point for composed
 # models.  The pipeline decides whether to share one source list or build
-# multiple source lists from the configured adaptation policy:
+# multiple source lists from the configured adaptation policy::
 #
 #     pipe = PipelineModelWrapper(
 #         groups=[PipelineGroup(steps=[short_range_model, long_range_model])],

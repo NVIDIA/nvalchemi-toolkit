@@ -7,7 +7,7 @@
 Spatial domain decomposition partitions per-atom tensors across ranks
 — but without further machinery, every operation on those tensors
 would be a regular per-rank op with no knowledge of the partition.
-:class:`~nvalchemi.distributed._core.shard_tensor.ShardTensor` is the
+{py:class}`~nvalchemi.distributed._core.shard_tensor.ShardTensor` is the
 {py:class}`torch.Tensor` subclass that carries the partition's
 metadata along with the data, and routes select operations through
 distribution-aware handlers via PyTorch's `__torch_function__`
@@ -26,10 +26,10 @@ small bag of metadata describing the partition:
 
 | Field | What it carries | Used by |
 |---|---|---|
-| `_spec` | The :class:`MLIPSpec` governing dispatch behaviour | All op-level handlers |
+| `_spec` | The {py:class}`MLIPSpec` governing dispatch behaviour | All op-level handlers |
 | `_meta` | Halo-storage metadata: `n_owned`, `n_padded`, halo routing index | Halo-exchange, halo-correction |
 | `_gather_meta` | Sharded-storage metadata: per-row global IDs, rank assignments | Sharded `index_select`, `scatter_add` |
-| `_config` | The per-rank :class:`ParticleHaloConfig` (process group, ghost width) | All collective ops |
+| `_config` | The per-rank {py:class}`ParticleHaloConfig` (process group, ghost width) | All collective ops |
 | `_n_systems` | Number of systems on this rank | Per-system reductions |
 
 The wrap is zero-copy: `ShardTensor.wrap(t, spec=...)` calls
@@ -52,7 +52,7 @@ shard = ShardTensor.wrap(
 ```
 
 Most code never constructs `ShardTensor` directly:
-:class:`~nvalchemi.distributed.distributed_model.DistributedModel`
+{py:class}`~nvalchemi.distributed.distributed_model.DistributedModel`
 promotes `data.positions` (and `data.charges` if present) to
 `ShardTensor` in its halo-storage call path before invoking the
 wrapper, so per-atom ops inside the wrapper's forward see a

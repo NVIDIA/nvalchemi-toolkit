@@ -265,7 +265,7 @@ logging.info(
 
 # %%
 # StageTimingHook — timing the simulation loop
-# ------------------------------------------
+# --------------------------------------------
 # :class:`~nvalchemi.dynamics.hooks.StageTimingHook` records wall-clock time at
 # each hook stage.  ``profiled_stages="step"`` instruments only ``BEFORE_STEP`` and
 # ``AFTER_STEP``, giving a clean per-step elapsed time without the overhead

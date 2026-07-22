@@ -6,9 +6,9 @@
 
 The `nvalchemi.distributed` package extends the toolkit's dynamics + model
 machinery to run across multiple GPUs via spatial domain decomposition. A
-single :class:`~nvalchemi.distributed.DomainParallel` wrapper takes any
-:class:`~nvalchemi.dynamics.base.BaseDynamics` integrator or optimizer and
-makes it run on a partitioned :class:`~nvalchemi.distributed.ShardedBatch`,
+single {py:class}`~nvalchemi.distributed.DomainParallel` wrapper takes any
+{py:class}`~nvalchemi.dynamics.base.BaseDynamics` integrator or optimizer and
+makes it run on a partitioned {py:class}`~nvalchemi.distributed.ShardedBatch`,
 with halo exchanges + cross-rank reductions handled automatically.
 
 ```{tip}
@@ -40,7 +40,7 @@ Two companion guides go deeper:
   distribution-aware handlers.
 - {doc}`distributed_byo` — bringing your own model under
   domain decomposition: writing the wrapper, authoring or deriving an
-  :class:`MLIPSpec`, and using `trace_and_validate` to confirm
+  {py:class}`MLIPSpec`, and using `trace_and_validate` to confirm
   correctness.
 
 ## Why partition?
@@ -153,7 +153,7 @@ config selects it.
 ### Choosing
 
 The strategy is declared on the model's
-:class:`~nvalchemi.distributed.spec.MLIPSpec`. The shipped presets are:
+{py:class}`~nvalchemi.distributed.spec.MLIPSpec`. The shipped presets are:
 
 | Preset | Storage | Models |
 |---|---|---|
@@ -203,11 +203,11 @@ The pieces:
   across ranks when they cross domain boundaries. It's built once on
   rank 0 from the full batch and scattered via
   {py:meth}`~nvalchemi.distributed.DomainParallel.partition`.
-- :class:`~nvalchemi.distributed.distributed_model.DistributedModel`
+- {py:class}`~nvalchemi.distributed.distributed_model.DistributedModel`
   is the per-step adapter wrapping a single-process
   {py:class}`~nvalchemi.models.base.BaseModelMixin`. Its `__call__`
-  takes a `ShardedBatch`, runs the appropriate storage path
-  (`_call_halo_storage` or `_call_sharded_storage`), and returns
+  takes a `ShardedBatch` and dispatches to the active parallelization
+  strategy's `run_forward` (halo exchange or graph-partition), returning
   consolidated outputs in the standard
   {py:class}`~nvalchemi._typing.ModelOutputs` format.
 - {py:class}`~nvalchemi.distributed.DomainParallel` is the integrator
@@ -464,7 +464,7 @@ preference:
 - The {doc}`Bring-your-own-model walkthrough <distributed_byo>`
   shows how to declare an
   {py:class}`~nvalchemi.distributed.spec.MLIPSpec` for a new wrapper,
-  validate it via :func:`trace_and_validate`, and persist the
+  validate it via {py:func}`trace_and_validate`, and persist the
   resulting spec for production use.
 - The runnable example in
   `examples/distributed/03_mace_nvt_distributed.py` is the

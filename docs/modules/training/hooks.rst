@@ -1,16 +1,16 @@
 .. SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 .. SPDX-License-Identifier: Apache-2.0
 
-.. _training-hooks-api:
-.. _training-hooks:
-.. _training-update-hooks:
-
 .. seealso::
 
    - **Core framework**: :ref:`hooks-api` — the ``Hook`` protocol,
      context dataclasses, and ``HookRegistryMixin``.
    - **User guide**: :ref:`training_guide` — training lifecycle and
      extension points.
+
+.. _training-hooks-api:
+.. _training-hooks:
+.. _training-update-hooks:
 
 Training update hooks
 =====================
@@ -429,7 +429,6 @@ resuming so its internal state is restored alongside the model and optimizer:
    checkpoint = CheckpointHook(
        "runs/my-model/checkpoints",
        step_interval=500,
-       max_checkpoints=5,
    )
 
    # Resume from step 500
@@ -449,7 +448,7 @@ EMA step count stays in sync with the actual optimizer step count.
 
 .. dataclass-table:: nvalchemi.training.hooks.EMAHook
 
-Access the averaged model weights via ``ema.averaged_model`` after training.
+Access the averaged model wrapper via ``ema.get_averaged_model()`` after training.
 
 .. code-block:: python
 
@@ -460,7 +459,7 @@ Access the averaged model weights via ``ema.averaged_model`` after training.
    strategy = TrainingStrategy(..., hooks=[ema])
    strategy.run(train_loader)
 
-   averaged_model = ema.averaged_model
+   averaged_model = ema.get_averaged_model()
 
 ``AveragedModel`` constructs its module with ``deepcopy``. If a model wrapper
 defines a callable ``modify_ema_methods()`` method, ``EMAHook`` calls it once on

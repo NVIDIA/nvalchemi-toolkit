@@ -667,18 +667,19 @@ strategy = TrainingStrategy(
 
 Both built-in reporters and custom reporters accept a `custom_scalars` mapping
 that adds metrics beyond what automatic collection covers. Each entry maps a
-string key to a callable with signature `(ctx, stage, state) -> float | None`:
+string key to a callable with signature `(ctx, stage) -> float | Mapping | None`:
 
 ```python
 from nvalchemi.hooks import TensorBoardReporter
 
 
-def gradient_norm(ctx, stage, state):
-    if not hasattr(ctx, "model"):
+def gradient_norm(ctx, stage):
+    model = getattr(ctx, "model", None)
+    if model is None:
         return None
     total_sq = sum(
         p.grad.norm().item() ** 2
-        for p in ctx.model.parameters()
+        for p in model.parameters()
         if p.grad is not None
     )
     return total_sq ** 0.5
@@ -706,7 +707,7 @@ reporter = RichReporter(
 
 ## See also
 
-- {doc}`/modules/training/hooks` — `Reporter` protocol, `ScalarSnapshot`,
+- {doc}`/modules/hooks` — `Reporter` protocol, `ScalarSnapshot`,
   `collect_scalars`, and `ScalarCallback` API reference
 - {doc}`hooks` — hook lifecycle and `TrainContext`
 - {doc}`training` — training lifecycle stages and where reporting fits

@@ -34,8 +34,8 @@ operator with a series of dynamics:
        num_systems=64, num_nodes=2000, num_edges=10000,
    )
 
-   optimizer = DemoDynamics(model=model, dt=0.5, buffer_config=buffer_config)
-   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
+   optimizer = DemoDynamics(model=model, n_steps=1000, dt=0.5, buffer_config=buffer_config)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPU ranks
    pipeline = optimizer | md
@@ -235,12 +235,12 @@ of inter-rank communication:
        num_systems=64, num_nodes=2000, num_edges=10000,
    )
    optimizer = DemoDynamics(
-       model=model, dt=0.5,
+       model=model, n_steps=1000, dt=0.5,
        comm_mode="fully_async",
        buffer_config=buffer_config,
    )
    md = DemoDynamics(
-       model=model, dt=1.0,
+       model=model, n_steps=1000, dt=1.0,
        comm_mode="async_recv",
        buffer_config=buffer_config,
    )
@@ -301,13 +301,13 @@ batch from the sampler and replaces graduated samples automatically:
    )
 
    optimizer = DemoDynamics(
-       model=model, dt=0.5,
+       model=model, n_steps=1000, dt=0.5,
        sampler=sampler,
        refill_frequency=1,
        max_batch_size=64,
        buffer_config=buffer_config,
    )
-   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0, buffer_config=buffer_config)
 
    pipeline = optimizer | md
    with pipeline:
@@ -329,6 +329,7 @@ On the final rank, converged samples are written to
 
    md = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=1.0,
        sinks=[
            HostMemory(capacity=10_000),          # primary: CPU memory
@@ -356,7 +357,7 @@ a single GPU and then distribute fused stages across GPUs:
    rank0_stage = relax + anneal
 
    # Rank 1: production MD
-   rank1_stage = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
+   rank1_stage = DemoDynamics(model=model, n_steps=1000, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPUs
    pipeline = rank0_stage | rank1_stage
@@ -446,6 +447,7 @@ Full end-to-end example
    )
    optimizer = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        convergence_hook=ConvergenceHook.from_fmax(0.05),
        hooks=[NaNDetectorHook()],
@@ -457,6 +459,7 @@ Full end-to-end example
    # ── Stage 1: Annealing MD ──
    anneal = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=1.0,
        hooks=[LoggingHook(backend="csv", log_path="anneal_log.csv", frequency=100)],
        comm_mode="async_recv",
@@ -467,6 +470,7 @@ Full end-to-end example
    sink = HostMemory(capacity=100_000)
    production = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=2.0,
        hooks=[
            SnapshotHook(sink=sink, frequency=10),

@@ -24,8 +24,8 @@ The primary way to build a ``FusedStage`` is with the ``+`` operator:
 
    from nvalchemi.dynamics import DemoDynamics
 
-   optimizer = DemoDynamics(model=model, dt=0.5)
-   md = DemoDynamics(model=model, dt=1.0)
+   optimizer = DemoDynamics(model=model, n_steps=1000, dt=0.5)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0)
 
    # Fuse two dynamics → one forward pass per step
    fused = optimizer + md
@@ -34,9 +34,9 @@ Chaining is supported for three or more stages:
 
 .. code-block:: python
 
-   stage_a = DemoDynamics(model=model, dt=0.5)
-   stage_b = DemoDynamics(model=model, dt=1.0)
-   stage_c = DemoDynamics(model=model, dt=2.0)
+   stage_a = DemoDynamics(model=model, n_steps=1000, dt=0.5)
+   stage_b = DemoDynamics(model=model, n_steps=1000, dt=1.0)
+   stage_c = DemoDynamics(model=model, n_steps=1000, dt=2.0)
 
    # (stage_a + stage_b) returns a FusedStage
    # FusedStage + stage_c appends via FusedStage.__add__
@@ -203,11 +203,13 @@ fused step:
 
    optimizer = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100)],
    )
    md = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=1.0,
        hooks=[SnapshotHook(sink=sink, frequency=10)],
    )
@@ -230,6 +232,7 @@ For advanced control, construct ``FusedStage`` directly:
 
    optimizer = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        convergence_hook=ConvergenceHook(
            criteria=[
@@ -240,7 +243,7 @@ For advanced control, construct ``FusedStage`` directly:
            target_status=1,
        ),
    )
-   md = DemoDynamics(model=model, dt=1.0)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0)
 
    fused = FusedStage(
        sub_stages=[(0, optimizer), (1, md)],

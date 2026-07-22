@@ -856,7 +856,7 @@ their own neighbor list inside ``forward``. UMA / eSCN-family models
 take ``positions`` and emit ``edge_index`` via their internal
 ``radius_pbc`` kernel — there's no pre-forward seam to attach a halo
 to. The **graph-partition strategy**
-(:class:`~nvalchemi.distributed.strategy.GraphPartitionStrategy`,
+({py:class}`~nvalchemi.distributed.strategy.GraphPartitionStrategy`,
 selected with ``DomainConfig(strategy=StrategyKind.GRAPH_PARTITION)``)
 answers that: every rank holds the full positions tensor, the model's
 NL builder runs on the global geometry, then a balanced *node
@@ -875,7 +875,7 @@ compiled runs cap edges, not atoms).
 
 We don't reimplement fairchem's message passing. UMA's
 ``distribution_spec(StrategyKind.GRAPH_PARTITION)`` returns a spec whose
-``policy`` is :class:`~nvalchemi.distributed.spec.GraphParallelPolicy`
+``policy`` is {py:class}`~nvalchemi.distributed.spec.GraphParallelPolicy`
 and whose adapters are a handful of ``MethodAdapter`` swaps that make
 the backbone owned-block-aware — leaving
 ``fairchem.core.common.gp_utils`` untouched (an earlier design redirected
@@ -883,7 +883,7 @@ gp_utils via a thread-local metadata object; the node partition owns its
 own gather/reduce, so it no longer needs to):
 
 ```{code-block} python
-:caption: The node-partition adapter set (built lazily inside UMAWrapper.distribution_spec). Each MethodAdapter swaps one eSCN method for a distribution-aware variant.
+:caption: Pseudocode — the node-partition adapter set (built lazily inside UMAWrapper.distribution_spec). eSCNMDBackbone / Edgewise / ElementReferences are the real imported fairchem classes; each MethodAdapter uses the class-form ``MethodAdapter(RealClass, "method_name", replacement)`` (equivalently the keyword form ``MethodAdapter(module_path=..., class_name=..., method_name=..., replacement=...)``) to swap one eSCN method for a distribution-aware variant.
 partition_helpers = (
     # replicate the full geometry, build the graph, keep this rank's owned nodes
     MethodAdapter(eSCNMDBackbone, "_generate_graph", _distributed_partition_graph),
@@ -914,7 +914,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
 What the framework adds on top:
 
-* :class:`~nvalchemi.distributed.strategy.GraphPartitionStrategy` records
+* {py:class}`~nvalchemi.distributed.strategy.GraphPartitionStrategy` records
   the balanced node partition
   (``arange(n_global).tensor_split(W)[rank]``), replicates positions to
   every rank (no halo padding), runs the wrapper on the owned block, and
@@ -1021,7 +1021,9 @@ Composition rules at the seam:
 | Sharded | Sharded | Sharded |
 | Local | anything | the other one |
 
-The merge rule is implemented in `MLIPSpec._merge_strategies` — same
+The merge rule is implemented in the module-level `_merge_policies`
+helper in `nvalchemi/distributed/spec.py` (with `_merge_compile_policies`
+for the compile contract), driven by `MLIPSpec.__or__` — same
 discriminated-union pattern as the Strategy classes themselves.
 
 ---

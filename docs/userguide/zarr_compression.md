@@ -53,7 +53,7 @@ The toolkit organises Zarr arrays into three logical groups:
 |-------|----------|---------------------|
 | `meta` | Pointer arrays (`atoms_ptr`, `edges_ptr`), validity mask | None |
 | `core` | Positions, forces, energy, atomic numbers, cell, pbc | None |
-| `custom` | User-added arrays via `AtomicData.custom` | None |
+| `custom` | User-added arrays via `add_node_property` / `add_edge_property` / `add_system_property` | None |
 
 {py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig` lets you set different
 {py:class}`~nvalchemi.data.datapipes.ZarrArrayConfig` for each group:
@@ -711,7 +711,7 @@ access patterns.
            device -> model
        }
 
-       fuse -> read_many [label="N indices\n(N = pf \u00d7 bs)" lhead=cluster_dataset style=bold]
+       fuse -> read_many [label="N indices\n(N = pf × bs)" lhead=cluster_dataset style=bold]
        batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
        batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
    }

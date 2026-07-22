@@ -109,9 +109,11 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 | `loss` | `torch.Tensor \| None` | Aggregate loss |
 | `losses` | `dict[str, torch.Tensor] \| None` | Named loss components |
 | `models` | `dict[str, BaseModelMixin] \| ModuleDict[str, BaseModelMixin] \| None` | Models in the training step |
-| `optimizers` | `list[torch.optim.Optimizer] \| None` | Optimizers in the training step |
-| `lr_schedulers` | `list[object] \| None` | Learning-rate schedulers |
+| `optimizers` | `list[torch.optim.Optimizer]` | Optimizers in the training step |
+| `lr_schedulers` | `list[LRScheduler \| None]` | Learning-rate schedulers |
 | `gradients` | `dict[str, torch.Tensor] \| None` | Parameter gradients |
+| `grad_scaler` | `torch.amp.GradScaler \| None` | Gradient scaler for mixed-precision training |
+| `validation` | `dict[str, Any] \| None` | Latest validation summary |
 
 The engine builds this context object at each stage via an overridable
 `_build_context(batch)` method. Custom engines should return their own
@@ -158,7 +160,7 @@ The simplest way to create one is with the convenience classmethods:
 ```python
 from nvalchemi.dynamics import ConvergenceHook
 
-# Check whether fmax (pre-computed scalar on the batch) is below a threshold
+# Check whether the max per-atom force norm (from the `forces` tensor) is below a threshold
 hook = ConvergenceHook.from_fmax(threshold=0.05)
 
 # Or check per-atom force norms directly (applies a norm reduction internally)
@@ -187,7 +189,8 @@ hook = ConvergenceHook(criteria=[
 ```
 
 All criteria must be satisfied for a system to converge. If you omit `criteria`
-entirely, the hook defaults to a single `fmax < 0.05` criterion.
+entirely, the hook defaults to a single force-norm criterion computed from the
+`forces` tensor (`key="forces"`, `reduce_op="norm"`, threshold `0.05`).
 
 #### How evaluation works under the hood
 

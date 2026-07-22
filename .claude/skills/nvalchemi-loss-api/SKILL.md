@@ -227,7 +227,7 @@ def _my_helper(self, pred, target, ...):
 | File | Contents |
 |---|---|
 | `nvalchemi/training/losses/composition.py` | `BaseLossFunction`, `ComposedLossFunction`, `ReductionContext` |
-| `nvalchemi/training/losses/terms.py` | All 5 built-in leaf losses |
+| `nvalchemi/training/losses/terms.py` | All 8 built-in leaf losses |
 | `nvalchemi/training/losses/reductions.py` | `per_graph_sum`, `per_graph_mean`, `frobenius_mse` |
 | `nvalchemi/training/losses/schedules.py` | `ConstantWeight`, `LinearWeight`, `CosineWeight`, `PiecewiseWeight` |
 | `nvalchemi/training/losses/base.py` | `LossWeightSchedule` protocol, re-exports |

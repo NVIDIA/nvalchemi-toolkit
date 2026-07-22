@@ -113,9 +113,8 @@ list, which can be configured below:
             "cutoff": 6.0,
             "format": "coo",
             "half_list": false,
-            "skin": 0.0,
-          },
-          "skin": 0.0
+            "skin": 0.0
+          }
         },
         "stages": ["BEFORE_FORWARD"]
       }
@@ -162,7 +161,7 @@ using `jq -s 'add' file1.json file2.json > combined.json`!
               "flush": true
             }
           ],
-          "frequency": 10,
+          "frequency": 10
         },
         "stages": ["AFTER_OPTIMIZER_STEP"]
       }
@@ -752,7 +751,8 @@ strategy = FineTuningStrategy.from_pretrained_checkpoint(
     # original pretraining recipe
     use_original_loss=True,
     use_original_opt_class=True,
-    # set the optimizer_lr to None to use the same original LR
+    # override the reused optimizer LR with a conservative 1e-5;
+    # pass optimizer_lr=None instead to keep the checkpoint's LR
     optimizer_lr=1e-5,
     training_fn=default_training_fn,
     trainable_patterns=("main.model.readout.*",),

@@ -212,7 +212,7 @@ fast = UMAWrapper.from_checkpoint(
 )
 ```
 
-See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
+See {doc}`the UMA NVE/NVT example </examples/advanced/09_uma_nve>` for a
 runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
@@ -378,7 +378,7 @@ will raise ``TypeError`` at instantiation if missing:
 | `adapt_input()` | No (has default) | Override to collect model-specific inputs |
 | `adapt_output()` | No (has default) | Override to map raw outputs |
 | `forward()` | No (inherit from nn.Module) | Implement the three-step pipeline |
-| `export_model()` | No (has default) | Override if needed |
+| `export_model()` | No (base default raises `NotImplementedError`) | Override to enable export |
 
 For classical potentials with no learned embeddings, stub both embedding
 methods:
@@ -510,7 +510,7 @@ The standard output shapes are:
 | `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessians` | `[V, 3, 3]` | Per-atom Hessian |
+| `hessian` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
 
