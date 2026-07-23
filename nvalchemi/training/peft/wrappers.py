@@ -39,6 +39,7 @@ LoRAWrapperRegistrations: TypeAlias = tuple[LoRAWrapperRegistration, ...]
 
 
 __all__ = [
+    "CuEquivariantLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
     "LoRAWrapper",
@@ -77,6 +78,19 @@ def _e3nn_layer_cls(kind: Literal["linear", "fully_connected"]) -> type[nn.Modul
     else:
         raise ValueError(f"Invalid e3nn layer kind: {kind}")
 
+
+def _cueq_linear_cls() -> type[nn.Module]:
+    """Return the cuEquivariance linear layer class."""
+    try:
+        from cuequivariance_torch.operations.linear import Linear
+    except ImportError as exc:
+        raise ImportError(
+            "cuEquivariance LoRA requires cuequivariance-torch. Install the "
+            "CUDA-aligned cuEq dependencies."
+        ) from exc
+    return Linear
+
+
 class EquivariantLoRALinear(nn.Module, LoRALayer):
     """LoRA layer for equivariant linear layers ``e3nn.o3.Linear``.
 
@@ -95,7 +109,10 @@ class EquivariantLoRALinear(nn.Module, LoRALayer):
     dropout : float, optional
         Adapter dropout probability. Defaults to ``0.0``.
     init : _peft.LoRAInit, optional
-        The initialization method for the LoRA adapter.
+        Initialization for the input-side adapter weights (``lora_A``).
+        ``"default"`` uses a small Gaussian (``normal_(std=1e-3)``);
+        pass a callable ``(tensor) -> None`` for a custom in-place scheme.
+        ``lora_B`` always starts at zero.
     **kwargs : Any
         Additional keyword arguments.
 
@@ -124,7 +141,7 @@ class EquivariantLoRALinear(nn.Module, LoRALayer):
         rank: int,
         alpha: float,
         dropout: float = 0.0,
-        init: _peft.LoRAInit = "default",  # noqa: ARG002
+        init: _peft.LoRAInit = "default",
         **kwargs: Any,
     ) -> None:
         nn.Module.__init__(self)
@@ -170,10 +187,17 @@ class EquivariantLoRALinear(nn.Module, LoRALayer):
         self.lora_dropout = (
             dropout_cls(self.irreps_in, p=dropout) if dropout > 0.0 else nn.Identity()
         )
-        # Initialize LoRA weights to small random values while keeping the
-        # initial adapter residual at zero.
+        # Initialize LoRA weights via ``init`` while keeping the adapter
+        # residual at zero (``lora_B`` starts at zero).
         with torch.no_grad():
-            self.lora_A_layer.weight.normal_(mean=0.0, std=1e-3)
+            if callable(init):
+                init(self.lora_A_layer.weight)
+            elif init == "default":
+                self.lora_A_layer.weight.normal_(mean=0.0, std=1e-3)
+            else:
+                raise ValueError(
+                    f"unknown init strategy {init!r}; use 'default' or a callable."
+                )
             self.lora_B_layer.weight.zero_()
 
         # Pre-compute instruction maps for efficient merged weight computation.
@@ -319,6 +343,271 @@ class EquivariantLoRALinear(nn.Module, LoRALayer):
         self.base_layer.weight.copy_(self._merged_weight())
 
 
+class CuEquivariantLoRALinear(nn.Module, LoRALayer):
+    """LoRA layer for cuEquivariance linear layers.
+
+    Models converted to cuEquivariance typically replace ``e3nn.o3.Linear``
+    modules with ``cuequivariance_torch.operations.linear.Linear``. This
+    wrapper keeps the same equivariant LoRA idea as
+    :class:`EquivariantLoRALinear`, but builds the adapter path from cuEq
+    linear layers so the converted module tree stays on the cuEq backend.
+
+    Notes
+    -----
+    cuEq linear modules do not expose e3nn's instruction table. This wrapper
+    reconstructs the equivalent per-irrep packed-weight block map from the cuEq
+    irreps and segmented polynomial path coefficients when merging adapters.
+    """
+
+    mergeable = True
+
+    def __init__(
+        self,
+        base_layer: nn.Module,
+        rank: int,
+        alpha: float,
+        dropout: float = 0.0,
+        init: _peft.LoRAInit = "default",
+        **kwargs: Any,
+    ) -> None:
+        nn.Module.__init__(self)
+        linear_cls = _cueq_linear_cls()
+        if not isinstance(base_layer, linear_cls):
+            raise TypeError(
+                "CuEquivariantLoRALinear can only wrap "
+                "cuequivariance_torch.operations.linear.Linear layers."
+            )
+        if dropout != 0.0:
+            raise ValueError(
+                "CuEquivariantLoRALinear does not support nonzero dropout."
+            )
+        if not getattr(base_layer, "internal_weights", False):
+            raise ValueError(
+                "CuEquivariantLoRALinear requires cuEq Linear layers with "
+                "internal weights."
+            )
+        if not getattr(base_layer, "shared_weights", False):
+            raise ValueError(
+                "CuEquivariantLoRALinear requires shared-weight cuEq Linear layers."
+            )
+        if int(getattr(base_layer, "weight_classes", 1)) != 1:
+            raise ValueError(
+                "CuEquivariantLoRALinear does not support cuEq Linear layers "
+                "with multiple weight classes."
+            )
+
+        self.base_layer = base_layer
+        for param in self.base_layer.parameters():
+            param.requires_grad = False
+        self.enabled = True
+
+        self.rank = int(rank)
+        self.alpha = float(alpha)
+        self.scaling = self.alpha / self.rank
+        self.irreps_in = base_layer.irreps_in
+        self.irreps_out = base_layer.irreps_out
+        self.adapter_irreps = self._build_adapter_irreps(
+            self.irreps_in, self.irreps_out, self.rank
+        )
+
+        ref_weight = base_layer.weight
+        layout_in = getattr(base_layer.transpose_in, "source", None)
+        layout_out = getattr(base_layer.transpose_out, "target", None)
+        adapter_layout = layout_out or layout_in
+        self.lora_A_layer = linear_cls(
+            self.irreps_in,
+            self.adapter_irreps,
+            internal_weights=True,
+            shared_weights=True,
+            layout_in=layout_in,
+            layout_out=adapter_layout,
+            device=ref_weight.device,
+            dtype=ref_weight.dtype,
+        )
+        self.lora_B_layer = linear_cls(
+            self.adapter_irreps,
+            self.irreps_out,
+            internal_weights=True,
+            shared_weights=True,
+            layout_in=adapter_layout,
+            layout_out=layout_out,
+            device=ref_weight.device,
+            dtype=ref_weight.dtype,
+        )
+        self.lora_dropout = nn.Identity()
+
+        with torch.no_grad():
+            if callable(init):
+                init(self.lora_A_layer.weight)
+            elif init == "default":
+                self.lora_A_layer.weight.normal_(mean=0.0, std=1e-3)
+            else:
+                raise ValueError(
+                    f"unknown init strategy {init!r}; use 'default' or a callable."
+                )
+            self.lora_B_layer.weight.zero_()
+
+    @property
+    def lora_A(self) -> nn.Parameter:
+        """Return the input-side cuEq LoRA parameter."""
+        return self.lora_A_layer.weight
+
+    @property
+    def lora_B(self) -> nn.Parameter:
+        """Return the output-side cuEq LoRA parameter."""
+        return self.lora_B_layer.weight
+
+    @classmethod
+    def is_compatible(cls, base_layer: nn.Module) -> bool:
+        """Return whether ``base_layer`` can use a cuEq LoRA residual."""
+        try:
+            cls._build_adapter_irreps(
+                base_layer.irreps_in,
+                base_layer.irreps_out,
+                rank=1,
+            )
+        except (AttributeError, ValueError):
+            return False
+        return (
+            bool(getattr(base_layer, "internal_weights", False))
+            and bool(getattr(base_layer, "shared_weights", False))
+            and int(getattr(base_layer, "weight_classes", 1)) == 1
+        )
+
+    @staticmethod
+    def _build_adapter_irreps(
+        irreps_in: object, irreps_out: object, rank: int
+    ) -> object:
+        """Build cuEq adapter irreps from shared input/output irreps."""
+        try:
+            import cuequivariance as cue
+        except ImportError as exc:
+            raise ImportError("cuEquivariance LoRA requires cuequivariance.") from exc
+
+        irreps_in = cue.Irreps(irreps_in)
+        irreps_out = cue.Irreps(irreps_out)
+        if irreps_in.irrep_class != irreps_out.irrep_class:
+            raise ValueError(
+                "cannot build cuEq LoRA adapter for different irrep classes "
+                f"({irreps_in.irrep_class} vs {irreps_out.irrep_class})."
+            )
+        in_irrep_types = {mul_ir.ir for mul_ir in irreps_in}
+        out_irrep_types = {mul_ir.ir for mul_ir in irreps_out}
+        if len(in_irrep_types) != len(irreps_in):
+            raise ValueError(
+                "cannot build cuEq LoRA adapter: input irreps are not unique."
+            )
+        if len(out_irrep_types) != len(irreps_out):
+            raise ValueError(
+                "cannot build cuEq LoRA adapter: output irreps are not unique."
+            )
+
+        shared_irrep_types = in_irrep_types & out_irrep_types
+        if not shared_irrep_types:
+            raise ValueError(
+                "cannot build cuEq LoRA adapter: input and output irreps share "
+                f"no common irreps ({irreps_in!s} -> {irreps_out!s})."
+            )
+        shared_irrep_types = sorted(
+            shared_irrep_types,
+            key=lambda ir: (getattr(ir, "l", 0), getattr(ir, "p", 0), str(ir)),
+        )
+        return cue.Irreps(
+            irreps_in.irrep_class,
+            [(rank, ir) for ir in shared_irrep_types],
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
+        """Run the frozen cuEq base layer plus the equivariant LoRA residual."""
+        out = self.base_layer(x, *args, **kwargs)
+        if self.enabled:
+            out = out + self.lora_B_layer(self.lora_A_layer(x)) * self.scaling
+        return out
+
+    @staticmethod
+    def _linear_path_coefficient(linear: nn.Module, path_index: int) -> float:
+        """Return the cuEq segmented-polynomial coefficient for a linear path."""
+        try:
+            graph = linear.f.m.graphs[0].graph
+            coefficient = getattr(graph, f"c{path_index}")
+        except (AttributeError, IndexError) as exc:
+            raise RuntimeError(
+                "Cannot inspect cuEq Linear path coefficients for LoRA merge."
+            ) from exc
+        return float(coefficient)
+
+    @classmethod
+    def _weight_blocks_by_irrep(
+        cls, linear: nn.Module
+    ) -> dict[object, tuple[torch.Tensor, int, int, float]]:
+        """Return cuEq linear weight blocks keyed by irrep.
+
+        The cuEq descriptor packs one ``(mul_in, mul_out)`` weight block for
+        each matching input/output irrep pair in descriptor path order.
+        """
+        blocks: dict[object, tuple[torch.Tensor, int, int, float]] = {}
+        offset = 0
+        path_index = 0
+        weight = linear.weight
+        if getattr(weight, "ndim", None) != 2 or int(weight.shape[0]) != 1:
+            raise RuntimeError(
+                "CuEquivariantLoRALinear merge requires a single shared cuEq "
+                "weight class."
+            )
+        for mul_in, ir_in in linear.irreps_in:
+            for mul_out, ir_out in linear.irreps_out:
+                if ir_in != ir_out:
+                    continue
+                if ir_in in blocks:
+                    raise RuntimeError(
+                        "CuEquivariantLoRALinear merge requires unique input "
+                        "and output irreps."
+                    )
+                size = int(mul_in) * int(mul_out)
+                blocks[ir_in] = (
+                    weight[0, offset : offset + size].reshape(
+                        int(mul_in), int(mul_out)
+                    ),
+                    offset,
+                    size,
+                    cls._linear_path_coefficient(linear, path_index),
+                )
+                offset += size
+                path_index += 1
+        if offset != int(weight.shape[1]):
+            raise RuntimeError(
+                "cuEq Linear packed weight layout did not match the expected "
+                "per-irrep block sizes."
+            )
+        return blocks
+
+    def _merged_weight(self) -> torch.Tensor:
+        """Return base plus LoRA delta in cuEq flat packed-weight layout."""
+        merged = self.base_layer.weight.detach().clone()
+        base_blocks = self._weight_blocks_by_irrep(self.base_layer)
+        lora_A_blocks = self._weight_blocks_by_irrep(self.lora_A_layer)
+        lora_B_blocks = self._weight_blocks_by_irrep(self.lora_B_layer)
+
+        for ir, (base_block, offset, size, base_coeff) in base_blocks.items():
+            if ir not in lora_A_blocks or ir not in lora_B_blocks:
+                continue
+            A_block, _A_offset, _A_size, A_coeff = lora_A_blocks[ir]
+            B_block, _B_offset, _B_size, B_coeff = lora_B_blocks[ir]
+            delta = (A_block @ B_block) * (self.scaling * A_coeff * B_coeff / base_coeff)
+            merged[0, offset : offset + size].copy_((base_block + delta).reshape(-1))
+        return merged
+
+    @torch.no_grad()
+    def merge_into_base(self) -> None:
+        """Fold the LoRA delta into the frozen cuEq base layer."""
+        self.base_layer.weight.copy_(self._merged_weight())
+
+
 class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
     """LoRA layer for fully connected scalar MLP layers ``e3nn.nn._fc._Layer``.
 
@@ -337,7 +626,10 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
     dropout : float, optional
         Adapter dropout probability. Defaults to ``0.0``.
     init : _peft.LoRAInit, optional
-        The initialization method for the LoRA adapter.
+        Initialization for the input-side adapter weights (``lora_A``).
+        ``"default"`` uses ``kaiming_uniform_(a=√5)``; pass a callable
+        ``(tensor) -> None`` for a custom in-place scheme. ``lora_B`` is
+        always zero so the adapter residual starts at identity.
     **kwargs : Any
         Additional keyword arguments.
 
@@ -431,6 +723,10 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
 
 
 _BUILTIN_LORA_WRAPPER_FACTORIES = (
+    (
+        _cueq_linear_cls,
+        CuEquivariantLoRALinear,
+    ),
     (
         partial(_e3nn_layer_cls, "linear"),
         EquivariantLoRALinear,

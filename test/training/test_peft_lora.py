@@ -39,6 +39,7 @@ from nvalchemi.training.peft.hooks import (
     LoRATrainableParameterHook,
 )
 from nvalchemi.training.peft.wrappers import (
+    CuEquivariantLoRALinear,
     E3NNFullyConnectedLoRALayer,
     EquivariantLoRALinear,
 )
@@ -140,6 +141,38 @@ def _import_real_e3nn_fc_layer() -> type[nn.Module]:
         torch.serialization.add_safe_globals([slice])
     fc_module = pytest.importorskip("e3nn.nn._fc")
     return fc_module._Layer
+
+
+def _import_real_cueq_linear() -> tuple[Any, type[nn.Module]]:
+    """Import real cuEquivariance objects needed by cuEq LoRA tests."""
+    cue = pytest.importorskip("cuequivariance")
+    linear_module = pytest.importorskip("cuequivariance_torch.operations.linear")
+    return cue, linear_module.Linear
+
+
+def _cueq_irreps(spec: str) -> object:
+    """Return real O(3) cuEquivariance irreps for tests."""
+    cue, _linear_cls = _import_real_cueq_linear()
+    return cue.Irreps("O3", spec)
+
+
+def _make_cueq_linear(
+    irreps_in: object,
+    irreps_out: object,
+    **kwargs: Any,
+) -> nn.Module:
+    """Return a real cuEq Linear layer with deterministic test defaults."""
+    cue, linear_cls = _import_real_cueq_linear()
+    defaults = {
+        "layout": cue.mul_ir,
+        "internal_weights": True,
+        "shared_weights": True,
+        "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        "dtype": torch.float64,
+        "method": "naive",
+    }
+    defaults.update(kwargs)
+    return linear_cls(irreps_in, irreps_out, **defaults)
 
 
 def _install_fake_peft(
@@ -257,7 +290,9 @@ class TestLoRAApplyHook:
             *expected_modules,
             "model.projection",
         ]
-        assert strategy._lora_metadata["modelB"]["lora_module_names"] == expected_modules
+        assert (
+            strategy._lora_metadata["modelB"]["lora_module_names"] == expected_modules
+        )
         assert strategy.to_spec_dict()["lora_target_patterns"] == [
             "*.model.*.0",
             "modelA.model.projection",
@@ -274,6 +309,7 @@ class TestLoRAApplyHook:
                     "lora_target_patterns": ("model.projection",),
                 }
             )
+
 
 class TestLoRATrainableParameterHook:
     def test_lora_trainable_filter_allows_adapters_and_patches_but_not_wrapped_base(
@@ -1083,6 +1119,26 @@ class TestEquivariantLoRALinear:
         assert torch.count_nonzero(wrapper.lora_A) > 0
         assert torch.count_nonzero(wrapper.lora_B) == 0
 
+    def test_o3_linear_lora_honors_custom_init(self) -> None:
+        o3 = _import_real_o3()
+        base_layer = o3.Linear(
+            "2x0e + 1x1o",
+            "1x0e + 2x1o",
+            internal_weights=True,
+            shared_weights=True,
+            biases=False,
+        )
+
+        def fill_ones(tensor: torch.Tensor) -> None:
+            tensor.fill_(1.0)
+
+        wrapper = EquivariantLoRALinear(
+            base_layer, rank=2, alpha=4.0, init=fill_ones
+        )
+
+        assert torch.equal(wrapper.lora_A, torch.ones_like(wrapper.lora_A))
+        assert torch.count_nonzero(wrapper.lora_B) == 0
+
     def test_o3_linear_lora_preserves_initial_inference(self) -> None:
         o3 = _import_real_o3()
         torch.manual_seed(1)
@@ -1170,3 +1226,135 @@ class TestEquivariantLoRALinear:
             tolerance=1e-6,
             ntrials=3,
         )
+
+
+class TestCuEquivariantLoRALinear:
+    @staticmethod
+    def _base_layer() -> nn.Module:
+        return _make_cueq_linear(
+            _cueq_irreps("2x0e + 1x1o"),
+            _cueq_irreps("1x0e + 2x1o"),
+        )
+
+    def test_cueq_linear_lora_creates_trainable_adapter_parameters(
+        self,
+    ) -> None:
+        cue, _linear_cls = _import_real_cueq_linear()
+        base_layer = self._base_layer()
+
+        wrapper = CuEquivariantLoRALinear(base_layer, rank=3, alpha=6.0)
+
+        assert wrapper.adapter_irreps == cue.Irreps("O3", "3x0e + 3x1o")
+        assert wrapper.lora_A.shape == (1, 9)
+        assert wrapper.lora_B.shape == (1, 9)
+        assert wrapper.lora_A.requires_grad is True
+        assert wrapper.lora_B.requires_grad is True
+        assert base_layer.weight.requires_grad is False
+        assert torch.count_nonzero(wrapper.lora_A) > 0
+        assert torch.count_nonzero(wrapper.lora_B) == 0
+
+    def test_cueq_linear_lora_honors_custom_init(self) -> None:
+        base_layer = self._base_layer()
+
+        def fill_ones(tensor: torch.Tensor) -> None:
+            tensor.fill_(1.0)
+
+        wrapper = CuEquivariantLoRALinear(
+            base_layer, rank=2, alpha=4.0, init=fill_ones
+        )
+
+        assert torch.equal(wrapper.lora_A, torch.ones_like(wrapper.lora_A))
+        assert torch.count_nonzero(wrapper.lora_B) == 0
+
+    def test_cueq_linear_lora_adapter_weights_affect_inference(
+        self,
+    ) -> None:
+        if not torch.cuda.is_available():
+            pytest.skip("cuEquivariance forward kernels require CUDA.")
+        torch.manual_seed(12)
+        base_layer = self._base_layer()
+        x = torch.randn(
+            5,
+            base_layer.irreps_in.dim,
+            device=base_layer.weight.device,
+            dtype=torch.float64,
+        )
+        expected = base_layer(x)
+
+        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0)
+        torch.testing.assert_close(wrapper(x), expected)
+
+        with torch.no_grad():
+            wrapper.lora_B.fill_(0.05)
+        after_lora_B = wrapper(x)
+
+        assert not torch.allclose(after_lora_B, expected)
+
+        with torch.no_grad():
+            wrapper.lora_A.add_(0.05)
+
+        assert not torch.allclose(wrapper(x), after_lora_B)
+
+    def test_cueq_linear_lora_merge_preserves_adapter_inference(
+        self,
+    ) -> None:
+        if not torch.cuda.is_available():
+            pytest.skip("cuEquivariance forward kernels require CUDA.")
+        torch.manual_seed(2)
+        base_layer = self._base_layer()
+        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0)
+        with torch.no_grad():
+            wrapper.lora_B.normal_(mean=0.0, std=1e-3)
+        x = torch.randn(
+            5,
+            base_layer.irreps_in.dim,
+            device=base_layer.weight.device,
+            dtype=torch.float64,
+        )
+        expected = wrapper(x)
+
+        wrapper.merge_into_base()
+
+        torch.testing.assert_close(base_layer(x), expected)
+
+    @pytest.mark.parametrize(
+        ("irreps_in", "irreps_out", "kwargs", "expected"),
+        [
+            ("1x0e", "1x0e", {}, True),
+            ("1x0e", "1x0e", {"weight_classes": 2}, False),
+            ("1x0e", "1x0e", {"internal_weights": False}, False),
+        ],
+    )
+    def test_cueq_linear_lora_is_compatible(
+        self,
+        irreps_in: str,
+        irreps_out: str,
+        kwargs: dict[str, Any],
+        expected: bool,
+    ) -> None:
+        base_layer = _make_cueq_linear(
+            _cueq_irreps(irreps_in),
+            _cueq_irreps(irreps_out),
+            **kwargs,
+        )
+
+        assert CuEquivariantLoRALinear.is_compatible(base_layer) is expected
+
+    def test_cueq_linear_lora_rejects_no_shared_irreps(self) -> None:
+        with pytest.raises(ValueError, match="share no common irreps"):
+            CuEquivariantLoRALinear._build_adapter_irreps(
+                _cueq_irreps("1x0e"),
+                _cueq_irreps("1x1o"),
+                rank=1,
+            )
+
+    def test_cueq_linear_lora_rejects_dropout(
+        self,
+    ) -> None:
+        with pytest.raises(ValueError, match="does not support nonzero dropout"):
+            CuEquivariantLoRALinear(
+                self._base_layer(),
+                rank=2,
+                alpha=4.0,
+                dropout=0.1,
+            )

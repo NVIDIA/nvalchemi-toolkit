@@ -23,6 +23,7 @@ from nvalchemi.training.peft.hooks import (
 )
 
 __all__ = [
+    "CuEquivariantLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
     "LoRAApplyHook",
@@ -44,6 +45,7 @@ def __getattr__(name: str) -> object:
         }
         return exports[name]
     if name in {
+        "CuEquivariantLoRALinear",
         "E3NNFullyConnectedLoRALayer",
         "EquivariantLoRALinear",
         "available_lora_wrappers",
