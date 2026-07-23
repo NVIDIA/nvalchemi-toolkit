@@ -387,14 +387,14 @@ to plain torch behaviour with metadata propagation.
 digraph dispatch {
     rankdir=TB; node [shape=box style="rounded,filled" fontname="Helvetica"];
 
-    Op [label="op(shard_tensor, ...)" fillcolor="#dce6f1"];
+    Op [label="op(shard_tensor, ...)" fillcolor="#dce6f1" fontcolor="#111111"];
     Pred [label="any registered handler\npredicate matches?"
-          fillcolor="#fff2cc" shape=diamond];
+          fillcolor="#fff2cc" fontcolor="#111111" shape=diamond];
     Handler [label="handler runs:\n• unwrap inputs\n• run cross-rank logic\n• promote outputs"
-             fillcolor="#cfe2cf"];
+             fillcolor="#cfe2cf" fontcolor="#111111"];
     Fallback [label="super().__torch_function__\n(plain torch.Tensor path)"
-              fillcolor="#f3f3f3"];
-    Done [label="return result\n(metadata propagated)" fillcolor="#82b366"];
+              fillcolor="#f3f3f3" fontcolor="#111111"];
+    Done [label="return result\n(metadata propagated)" fillcolor="#82b366" fontcolor="#111111"];
 
     Op -> Pred;
     Pred -> Handler [label="yes"];

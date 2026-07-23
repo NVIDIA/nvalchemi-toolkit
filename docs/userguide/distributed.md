@@ -183,13 +183,13 @@ digraph distributed_step {
     node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled"]
     edge [fontname="Helvetica" fontsize=10]
 
-    DP [label="DomainParallel.step()" fillcolor="#dce6f1"]
-    Halo [label="halo_exchange\n(populate halo rows)" fillcolor="#f9e2ae"]
-    NL [label="NeighborListHook\n(NL on padded batch)" fillcolor="#f9e2ae"]
-    Wrap [label="DistributedModel\n(spec dispatch)" fillcolor="#dce6f1"]
-    Inner [label="wrapper(padded_batch)" fillcolor="#dce6f1"]
-    Cons [label="output_consolidation\n(slice / halo_reverse / all_reduce)" fillcolor="#f9e2ae"]
-    Integ [label="inner integrator\npost_update + atom migration" fillcolor="#dce6f1"]
+    DP [label="DomainParallel.step()" fillcolor="#dce6f1" fontcolor="#111111"]
+    Halo [label="halo_exchange\n(populate halo rows)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    NL [label="NeighborListHook\n(NL on padded batch)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    Wrap [label="DistributedModel\n(spec dispatch)" fillcolor="#dce6f1" fontcolor="#111111"]
+    Inner [label="wrapper(padded_batch)" fillcolor="#dce6f1" fontcolor="#111111"]
+    Cons [label="output_consolidation\n(slice / halo_reverse / all_reduce)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    Integ [label="inner integrator\npost_update + atom migration" fillcolor="#dce6f1" fontcolor="#111111"]
 
     DP -> Halo -> NL -> Wrap -> Inner -> Cons -> Integ
 }

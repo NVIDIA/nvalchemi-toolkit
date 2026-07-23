@@ -128,7 +128,7 @@ with NPT(
     model=model,
     dt=1.0,
     temperature=300.0,
-    pressure=1.0,            # target pressure (eV/Å³; positive = compression)
+    pressure=1.0,            # target pressure (eV/Å^3; positive = compression)
     barostat_time=100.0,     # barostat coupling time (fs)
     thermostat_time=100.0,   # thermostat coupling time (fs)
     n_steps=10000,

@@ -94,10 +94,10 @@ hook-firing points within a training run:
                BEFORE_LOSS
                AFTER_LOSS
                BEFORE_BACKWARD
-               DO_BACKWARD        [label="DO_BACKWARD\n(replacement slot)" fillcolor="#e8d5f5"]
+               DO_BACKWARD        [label="DO_BACKWARD\n(replacement slot)" fillcolor="#e8d5f5" fontcolor="#111111"]
                AFTER_BACKWARD
                BEFORE_OPTIMIZER_STEP
-               DO_OPTIMIZER_STEP  [label="DO_OPTIMIZER_STEP\n(replacement slot)" fillcolor="#e8d5f5"]
+               DO_OPTIMIZER_STEP  [label="DO_OPTIMIZER_STEP\n(replacement slot)" fillcolor="#e8d5f5" fontcolor="#111111"]
                AFTER_OPTIMIZER_STEP
                AFTER_BATCH
 

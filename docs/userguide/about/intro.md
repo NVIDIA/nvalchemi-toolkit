@@ -154,7 +154,7 @@ ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
 
 ## What's Next?
 
-1. **[Install ALCHEMI Toolkit](install)** --- set up your environment with `uv` or `pip`.
+1. **[Install ALCHEMI Toolkit](install.md)** --- set up your environment with `uv` or `pip`.
 2. **[Data structures](data_guide)** --- learn how `AtomicData` and `Batch` represent
    molecular systems as validated, GPU-resident graphs.
 3. **[Wrap a model](models_guide)** --- connect your MLIP to the framework with

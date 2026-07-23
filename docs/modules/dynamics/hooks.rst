@@ -227,9 +227,9 @@ whose magnitude exceeds ``max_force`` back to the threshold, preserving
 direction. Energy is not modified.
 
 ``max_force`` is in the same units as the model's force output (typically
-eV/Å). Set ``log_clamps=True`` to emit a loguru warning each time clamping
-occurs, including which atoms were affected — useful during model development
-to identify problem configurations.
+eV/Å). Clamping is applied in-place to any per-atom force whose magnitude
+exceeds the threshold. Frequent clamping during model development is a signal to
+identify problem configurations.
 
 Clamping prevents numerical blow-up from large forces in high-energy or
 poorly-sampled configurations. It is a safety net, not a model fix: if

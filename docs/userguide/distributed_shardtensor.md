@@ -77,11 +77,11 @@ digraph dispatch {
     node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled"]
     edge [fontname="Helvetica" fontsize=10]
 
-    Op [label="op(shard_tensor, ...)" fillcolor="#dce6f1"]
-    Pred [label="any registered handler\npredicate matches?" fillcolor="#f9e2ae" shape=diamond]
+    Op [label="op(shard_tensor, ...)" fillcolor="#dce6f1" fontcolor="#111111"]
+    Pred [label="any registered handler\npredicate matches?" fillcolor="#f9e2ae" fontcolor="#111111" shape=diamond]
     Handler [label="handler runs:\n• unwrap inputs\n• run cross-rank logic\n• promote outputs"
-             fillcolor="#82b366"]
-    Fallback [label="super().__torch_function__\n(plain torch.Tensor path)" fillcolor="#dce6f1"]
+             fillcolor="#82b366" fontcolor="#111111"]
+    Fallback [label="super().__torch_function__\n(plain torch.Tensor path)" fillcolor="#dce6f1" fontcolor="#111111"]
 
     Op -> Pred
     Pred -> Handler [label="yes"]
@@ -122,9 +122,9 @@ digraph halo_storage {
     fontname="Helvetica"
     node [fontname="Helvetica" fontsize=10 shape=box style="filled,rounded"]
     rank0 [label="rank 0\\nowned: {0,1,2}\\nhalo: {3, 4}\\n(copies of rank 1's owned)"
-           fillcolor="#dce6f1"]
+           fillcolor="#dce6f1" fontcolor="#111111"]
     rank1 [label="rank 1\\nowned: {3,4,5}\\nhalo: {1, 2}\\n(copies of rank 0's owned)"
-           fillcolor="#dce6f1"]
+           fillcolor="#dce6f1" fontcolor="#111111"]
 }
 ```
 
