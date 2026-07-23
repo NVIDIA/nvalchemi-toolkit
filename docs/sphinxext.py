@@ -24,6 +24,7 @@ from docutils.parsers.rst import Directive
 from docutils.statemachine import StringList
 from sphinx.util.typing import stringify_annotation
 
+
 def _clean_type(annotation) -> str:
     """Stringify a pydantic field annotation without the ``Annotated[...]`` noise.
 
@@ -62,7 +63,8 @@ def is_pydantic_model(module: str, objname: str) -> bool:
         return False
     doc = cls.__doc__
     has_section = bool(
-        _parse_numpy_section(doc, "Parameters") or _parse_numpy_section(doc, "Attributes")
+        _parse_numpy_section(doc, "Parameters")
+        or _parse_numpy_section(doc, "Attributes")
     )
     return not has_section
 

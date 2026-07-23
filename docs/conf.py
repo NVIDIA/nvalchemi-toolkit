@@ -26,7 +26,6 @@ from importlib.metadata import version
 import dotenv
 from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 
-
 # -- Load environment vars -----------------------------------------------------
 # Note: To override, use environment variables (e.g. PLOT_GALLERY=True make html)
 # Defaults will build API docs and execute examples

@@ -407,7 +407,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Field(
             description=(
                 "Named models visible to ``training_fn`` and hooks. Single-model "
-                "inputs are stored under ``\"main\"``; :class:`torch.nn.ModuleDict` "
+                'inputs are stored under ``"main"``; :class:`torch.nn.ModuleDict` '
                 "inputs are accepted and normalized to a plain ``dict``."
             )
         ),
