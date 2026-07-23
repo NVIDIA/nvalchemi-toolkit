@@ -28,13 +28,13 @@ running in parallel across 4 GPUs using
    digraph topology {
        rankdir=LR
        fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
        r0 [label="Rank 0\\nFIRE + sampler_a"]
-       r1 [label="Rank 1\\nNVTLangevin + sink_a" fillcolor="#f9e2ae"]
+       r1 [label="Rank 1\\nNVTLangevin + sink_a" fillcolor="#f9e2ae" fontcolor="#111111"]
        r2 [label="Rank 2\\nFIRE + sampler_b"]
-       r3 [label="Rank 3\\nNVTLangevin + sink_b" fillcolor="#f9e2ae"]
+       r3 [label="Rank 3\\nNVTLangevin + sink_b" fillcolor="#f9e2ae" fontcolor="#111111"]
 
        r0 -> r1 [style=bold color="#c0392b" penwidth=2]
        r2 -> r3 [style=bold color="#c0392b" penwidth=2]

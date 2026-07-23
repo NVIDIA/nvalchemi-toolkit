@@ -30,14 +30,14 @@ The data flow for a full simulation-to-training pipeline is:
    digraph zarr_flow {
        rankdir=TB
        fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
        sim   [label="NVTLangevin\\n+ SnapshotHook"]
-       zarr  [label="ZarrData\\n(DataSink on disk)" shape=cylinder fillcolor="#f9e2ae"]
+       zarr  [label="ZarrData\\n(DataSink on disk)" shape=cylinder fillcolor="#f9e2ae" fontcolor="#111111"]
        reader [label="AtomicDataZarrReader"]
        ds    [label="Dataset"]
-       dl    [label="DataLoader\\n(yields Batch objects)" fillcolor="#eeeeee"]
+       dl    [label="DataLoader\\n(yields Batch objects)" fillcolor="#eeeeee" fontcolor="#111111"]
 
        sim -> zarr [label="writes every\\nN steps" style=bold]
        zarr -> reader [style=bold]
