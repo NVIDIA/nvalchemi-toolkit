@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import gc
 
 import pytest
 import torch
@@ -103,6 +104,43 @@ def _dist_leak_guard():
     if dist.is_available() and dist.is_initialized() and not was_initialized:
         with contextlib.suppress(Exception):
             dist.destroy_process_group()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_torch_compile(request):
+    """Reset ``torch.compile`` / CUDA-graph state around compile smoke tests.
+
+    The ``*Compile`` tests build ``torch.compile(fn, backend="cudagraphs")``
+    functions on CUDA. The cudagraph tree manager retains each graph's output
+    tensors across invocations, so a prior compile test's retained output can
+    still be live in the shared cudagraph memory pool when the next test
+    captures a graph — tripping ``check_memory_pool``'s "Detected N tensor(s) in
+    the cudagraph pool not tracked as outputs" correctness check. A full-suite
+    run happens to order/GC around it; a :mod:`pytest-testmon` selective subset
+    does not, so it fails only there. Resetting dynamo and freeing the cudagraph
+    pool before and after each such test makes any test subset/order hermetic.
+    The cost is paid only by the (few) compile tests."""
+    cls = getattr(request, "cls", None)
+    is_compile = (cls is not None and cls.__name__.endswith("Compile")) or (
+        "compile" in request.node.name
+    )
+
+    def _reset() -> None:
+        reset = getattr(torch.compiler, "reset", None)
+        if reset is not None:
+            with contextlib.suppress(Exception):
+                reset()
+        if torch.cuda.is_available():
+            with contextlib.suppress(Exception):
+                torch.cuda.synchronize()
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    if is_compile:
+        _reset()
+    yield
+    if is_compile:
+        _reset()
 
 
 @pytest.fixture(params=["cpu", "cuda"])
