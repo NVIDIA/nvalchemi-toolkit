@@ -21,6 +21,7 @@ exchange via indexed_all_to_all_v (skipped without multiple GPUs).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -299,7 +300,32 @@ class TestParticleHaloConfig:
 
     def test_computes_pbc_shifts(self):
         config = _make_halo_config(world_size=2)
-        assert isinstance(config.pbc_shifts, dict)
+        shifts = config.pbc_shifts
+        assert isinstance(shifts, Mapping)
+        key = next(iter(shifts))
+        with pytest.raises(TypeError):
+            shifts[key] = ()  # type: ignore[index]
+        with pytest.raises(AttributeError):
+            shifts[key].append(torch.zeros(3))  # type: ignore[attr-defined]
+
+    def test_pbc_shifts_follow_cell_updates(self):
+        config = _make_halo_config(world_size=2)
+        old_shifts = config.pbc_shifts
+
+        new_cell = config.partitioner.cell_matrix * 1.2
+        config.partitioner.update_cell(new_cell)
+        new_shifts = config.pbc_shifts
+
+        expected = _compute_pbc_shift_vectors(config.partitioner)
+        assert new_shifts.keys() == expected.keys()
+        assert any(
+            not torch.equal(old_shift, new_shift)
+            for key, shifts in new_shifts.items()
+            for old_shift, new_shift in zip(old_shifts[key], shifts, strict=True)
+        )
+        for key, shifts in new_shifts.items():
+            for shift, expected_shift in zip(shifts, expected[key], strict=True):
+                torch.testing.assert_close(shift, expected_shift)
 
 
 # Multi-GPU tests live in test/distributed/test_multigpu.py
