@@ -406,7 +406,7 @@ def nph_barostat_half_step(
         Per-system cell velocity matrix :math:`\dot{h}` ``[M, 3, 3]``,
         float32/float64.
     pressure_tensor : torch.Tensor
-        Instantaneous pressure tensor ``[M, 3, 3]``, same dtype.
+        Instantaneous pressure tensor ``[M, 9]`` (vec9 row-major), same dtype.
     target_pressure : torch.Tensor
         Target pressure ``[M]`` (isotropic), ``[M, 3]`` (anisotropic),
         or ``[M, 3, 3]`` (triclinic).
@@ -560,7 +560,7 @@ def npt_barostat_half_step(
     cell_velocity : torch.Tensor
         Per-system cell velocity :math:`\dot{h}` ``[M, 3, 3]``, float32/float64.
     pressure_tensor : torch.Tensor
-        Instantaneous pressure ``[M, 3, 3]``, same dtype.
+        Instantaneous pressure ``[M, 9]`` (vec9 row-major), same dtype.
     target_pressure : torch.Tensor
         Target pressure ``[M]`` (isotropic), ``[M, 3]`` (anisotropic),
         or ``[M, 3, 3]`` (triclinic).

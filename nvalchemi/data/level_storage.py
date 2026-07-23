@@ -227,15 +227,15 @@ class LevelSchema:
 
     Parameters
     ----------
-    group_to_attrs : dict[str, set[str]], optional
+    group_to_attrs : dict[str, set[str]] | None, optional
         Mapping from group names to sets of attribute names.
-        Defaults to ``DEFAULT_ATTRIBUTE_MAP``.
-    segmented_groups : set[str], optional
+        Defaults to ``None`` (uses ``DEFAULT_ATTRIBUTE_MAP``).
+    segmented_groups : set[str] | None, optional
         Group names whose data has variable segment lengths.
-        Defaults to ``DEFAULT_SEGMENTED_GROUPS``.
-    dtypes : dict[str, str], optional
+        Defaults to ``None`` (uses ``DEFAULT_SEGMENTED_GROUPS``).
+    dtypes : dict[str, str] | None, optional
         Per-attribute dtype strings (keys of ``TORCH_DTYPE_MAP``).
-        Defaults to ``DEFAULT_DTYPES``.
+        Defaults to ``None`` (uses ``DEFAULT_DTYPES``).
 
     Raises
     ------
@@ -616,8 +616,8 @@ class BaseLevelStorage(ABC):
     ----------
     data : dict[str, Tensor], optional
         Initial attribute tensors keyed by name.
-    device : DeviceType, optional
-        Target device (defaults to ``"cpu"``).
+    device : DeviceType | None, optional
+        Target device.  Defaults to ``None`` (uses ``"cpu"``).
     attr_map : LevelSchema, optional
         Shared attribute registry.
     validate : bool

@@ -124,6 +124,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     atol : float or None, optional
         Absolute tolerance for cell change detection.
         See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
+    hybrid_forces : bool, optional
+        When ``True`` (default), direct kernel forces (``dE/dR|_q``) are used
+        and ``forces`` is kept in ``autograd_outputs`` only to add the charge
+        chain-rule term; when ``False``, forces come entirely from autograd.
 
     Attributes
     ----------
