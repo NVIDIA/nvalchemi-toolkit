@@ -251,7 +251,7 @@ class ParallelizationStrategy(ABC):
 
         Confined to the domain sub-mesh: when the mesh declares named dims and
         ``config.mesh_dim`` is one of them, resolve that named sub-mesh's group
-        (the correct form for a multi-dim mesh, e.g. DD × data-parallel);
+        (the correct form for a multi-dim mesh, e.g. DD x data-parallel);
         otherwise fall back to the whole mesh (the 1-D case all current scopes
         build, where the two are equivalent).
         """

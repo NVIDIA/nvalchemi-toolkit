@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Ewald summation electrostatics model wrapper.
+r"""Ewald summation electrostatics model wrapper.
 
 Wraps the ``nvalchemiops`` Ewald summation interaction (real-space +
 reciprocal-space) as a :class:`~nvalchemi.models.base.BaseModelMixin`-compatible
@@ -46,7 +46,7 @@ Notes
   ``(dE/dq)(dq/d(strain))``.
 * Periodic boundary conditions are required (``needs_pbc=True``).
 * Charges are read from ``data.charges`` (shape ``[N]``).
-* The Coulomb constant defaults to ``14.3996`` eV·Å/e², giving energies in eV
+* The Coulomb constant defaults to ``14.3996`` :math:`\mathrm{eV}\cdot\mathrm{\AA}/e^2`, giving energies in eV
   for positions in Å and charges in elementary charge units.
 * k-vectors and Ewald parameters are cached per unit cell; call
   :meth:`invalidate_cache` to force recomputation.
@@ -75,7 +75,7 @@ __all__ = ["EwaldModelWrapper"]
 
 
 class EwaldModelWrapper(nn.Module, BaseModelMixin):
-    """Ewald summation electrostatics potential as a model wrapper.
+    r"""Ewald summation electrostatics potential as a model wrapper.
 
     Computes long-range Coulomb interactions via the Ewald method, splitting
     contributions into real-space (erfc-damped, handled by a neighbor matrix)
@@ -89,7 +89,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         Target accuracy for automatic Ewald parameter estimation.
         Defaults to ``1e-6``.
     coulomb_constant : float, optional
-        Coulomb prefactor :math:`k_e` in eV·Å/e².
+        Coulomb prefactor :math:`k_e` in :math:`\mathrm{eV}\cdot\mathrm{\AA}/e^2`.
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
     slab_correction : bool, optional
         Whether to enable the two-dimensional slab correction. Defaults to
@@ -713,7 +713,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the Ewald summation and return a :class:`ModelOutputs` dict.
+        r"""Run the Ewald summation and return a :class:`ModelOutputs` dict.
 
         Parameters
         ----------
@@ -729,7 +729,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — tensile-positive Cauchy
+            ``"stress"`` (shape ``[B, 3, 3]``, :math:`\mathrm{eV}/\mathrm{\AA}^3` — tensile-positive Cauchy
             stress ``-W/V``).
         """
         from nvalchemiops.torch.interactions.electrostatics.ewald import (  # lazy

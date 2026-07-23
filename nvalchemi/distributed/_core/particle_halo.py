@@ -813,7 +813,7 @@ def halo_scatter_correct_op(
         Length of each per-destination slice in ``send_idx_flat`` — splits it
         back into ``world_size`` index tensors.
     send_sizes_flat : list[int]
-        Row-major flattening of the ``world_size × world_size`` send-counts
+        Row-major flattening of the ``world_size x world_size`` send-counts
         matrix; ``send_sizes[i][j]`` = rows rank ``i`` sent to rank ``j``.
     n_owned : int
         Number of owned rows = length of the returned block.
@@ -904,7 +904,7 @@ def halo_forward_op(
     send_idx_lens : list[int]
         Length of each per-destination slice in ``send_idx_flat``.
     send_sizes_flat : list[int]
-        Row-major ``world_size × world_size`` send-counts matrix;
+        Row-major ``world_size x world_size`` send-counts matrix;
         ``send_sizes[i][j]`` = rows rank ``i`` sends to rank ``j``.
     n_padded : int
         Expected total rows of the result (``n_owned + n_halo``); the registered

@@ -121,9 +121,12 @@ def slab_normals_and_axis(
 
     A system is a slab when its ``pbc`` row has exactly one ``False`` entry; the
     non-periodic axis is that index. The unit normal follows the cyclic
-    convention ``axis 0 -> cross(h1, h2)``, ``axis 1 -> cross(h2, h0)``,
-    ``axis 2 -> cross(h0, h1)`` (so axis-aligned right-handed cells give
-    +x/+y/+z). ``L = |h_axis . n|`` is the non-periodic cell-vector projection.
+    convention ``axis 0`` -> :math:`\mathbf{h}_1 \times \mathbf{h}_2`,
+    ``axis 1`` -> :math:`\mathbf{h}_2 \times \mathbf{h}_0`,
+    ``axis 2`` -> :math:`\mathbf{h}_0 \times \mathbf{h}_1` (so axis-aligned
+    right-handed cells give +x/+y/+z).
+    :math:`L = |\mathbf{h}_{axis} \cdot \mathbf{n}|` is the non-periodic
+    cell-vector projection.
 
     Returns
     -------
@@ -181,7 +184,7 @@ def slab_normals_and_axis(
 def _slab_compute_partial_moments(
     z: torch.Tensor, charges: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Internal: single-system partial moments ``(Σ q z, Σ q z², Σ q)``."""
+    r"""Internal: single-system partial moments :math:`(\sum q z, \sum q z^{2}, \sum q)`."""
     q = charges.to(torch.float64)
     z64 = z.to(torch.float64)
     mz = (q * z64).sum().reshape(1)
@@ -211,7 +214,7 @@ def _backward_single(
     z64 = z.to(torch.float64)
     # d(mz)/dz = q ; d(mz2)/dz = 2 q z ; qtot independent of z.
     grad_z = (g_mz * q + g_mz2 * 2.0 * q * z64).to(z.dtype)
-    # d(mz)/dq = z ; d(mz2)/dq = z² ; d(qtot)/dq = 1.
+    # d(mz)/dq = z ; d(mz2)/dq = z^2 ; d(qtot)/dq = 1.
     grad_q = (g_mz * z64 + g_mz2 * z64 * z64 + g_qtot).to(charges.dtype)
     return grad_z, grad_q
 
@@ -366,7 +369,7 @@ def compute_slab_correction_from_moments(
 ) -> torch.Tensor | tuple[torch.Tensor, ...]:
     r"""Per-atom slab correction with the moments computed DD-aware internally.
 
-    Computes the projected coordinates ``z_i``, reduces the three global moments
+    Computes the projected coordinates :math:`z_i`, reduces the three global moments
     via :func:`slab_compute_partial_moments` (owned-only + all-reduced under
     distribution), then evaluates the per-atom energy/force/charge-grad/virial
     in pure Torch — matching the ``nvalchemiops`` slab kernel formulas. The
@@ -422,7 +425,7 @@ def compute_slab_correction_from_moments(
     result: list[torch.Tensor] = [energies]
 
     if compute_forces:
-        # F_i = -(4π/V) q_i (M - Q z_i) n.
+        # F_i = -(4pi/V) q_i (M - Q z_i) n.
         f_mag = -fourpi_invV * q64 * (M - Q * z)  # (N,) float64
         forces = (f_mag.unsqueeze(1) * normal_atom).to(positions.dtype)
         result.append(forces)

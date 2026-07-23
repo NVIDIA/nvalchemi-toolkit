@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Unified tensor-based data containers for ML workflows on atomic simulations.
+r"""Unified tensor-based data containers for ML workflows on atomic simulations.
 
 This module provides efficient, torch-only data management for molecular dynamics
 and quantum chemistry calculations. Data is organized by **level**: per-atom (node),

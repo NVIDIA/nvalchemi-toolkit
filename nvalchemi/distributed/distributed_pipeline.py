@@ -36,9 +36,9 @@ Three group kinds:
   forces / stresses — no cross-model autograd.
 
 * **Shared-autograd** (``use_autograd=True``, e.g. MACE energy → ``-dE/dr``):
-  the group force is ``-d(ΣE_m)/dr`` over the summed energy. With one shared
+  the group force is ``-d(sum E_m)/dr`` over the summed energy. With one shared
   owned partition and no cross-model coupling it decomposes exactly into
-  ``Σ_m (-dE_m/dr_owned)``, so each sub-model runs its own autograd forward
+  ``sum_m (-dE_m/dr_owned)``, so each sub-model runs its own autograd forward
   (forces enabled) and the owned-aligned results are summed — identical to a
   single shared ``positions`` leaf with one ``backward()``, while reusing each
   model's eager / compile paths.
@@ -264,7 +264,7 @@ class DistributedPipelineModel:
         For a **shared-autograd** sub-model the per-model ``active_outputs`` is
         temporarily widened to include the group's derivative keys (``forces`` /
         ``stress``) so the sub-model's own forward emits them via autograd;
-        summing those is exactly the group's ``-d(ΣE_m)/dr``.
+        summing those is exactly the group's ``-d(sum E_m)/dr``.
 
         Parameters
         ----------

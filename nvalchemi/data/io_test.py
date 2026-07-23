@@ -202,7 +202,7 @@ def _estimate_uncompressed_size(
             # system-level: one row per structure
             total += val.nbytes * num_systems
 
-    # Meta overhead: ptrs (2 × 8 × (B+1)) + masks (B + V + E)
+    # Meta overhead: ptrs (2 * 8 * (B+1)) + masks (B + V + E)
     total += 2 * 8 * (num_systems + 1) + num_systems + total_atoms + total_edges
 
     return total

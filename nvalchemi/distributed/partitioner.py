@@ -113,7 +113,7 @@ class SpatialPartitioner:
         cartesian via ``cell_matrix``) and the fractional ghost width scale with
         the updated cell automatically. Without this, the partitioner keeps the
         partition-time box: as the cell grows, wrapped positions fall outside it
-        (fractional coords ≥ 1) and ``assign_atoms_to_ranks`` misroutes atoms.
+        (fractional coords >= 1) and ``assign_atoms_to_ranks`` misroutes atoms.
 
         Note: this handles cell *scaling* (the fix for barostat expansion). Large
         *contraction* additionally needs the cell grid / neighbor-rank set to

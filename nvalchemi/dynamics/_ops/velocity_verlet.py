@@ -58,10 +58,10 @@ def vv_position_update(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
 ) -> None:
-    """Velocity Verlet position update (first half-step).
+    r"""Velocity Verlet position update (first half-step).
 
-    Computes ``r(t+dt) = r(t) + v(t)*dt + 0.5*(F/m)*dt²`` and the
-    half-step velocity ``v(t+dt/2) = v(t) + 0.5*(F/m)*dt``.
+    Computes :math:`r(t+dt) = r(t) + v(t)\,dt + 0.5\,(F/m)\,dt^{2}` and the
+    half-step velocity :math:`v(t+dt/2) = v(t) + 0.5\,(F/m)\,dt`.
     Modifies *positions* and *velocities* in-place.
 
     Parameters
@@ -107,9 +107,9 @@ def vv_velocity_finalize(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
 ) -> None:
-    """Velocity Verlet velocity finalize (second half-step).
+    r"""Velocity Verlet velocity finalize (second half-step).
 
-    Computes ``v(t+dt) = v(t+dt/2) + 0.5*(F_new/m)*dt`` using the
+    Computes :math:`v(t+dt) = v(t+dt/2) + 0.5\,(F_\mathrm{new}/m)\,dt` using the
     forces evaluated at the updated positions.
     Modifies *velocities* in-place.
 

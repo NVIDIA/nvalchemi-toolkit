@@ -79,6 +79,19 @@ class DomainConfig(BaseModel):
     ghost_width : float | None
         Width of the ghost (halo) region. When ``None``, the effective
         width defaults to ``cutoff + skin`` via :meth:`effective_ghost_width`.
+    strategy : StrategyKind
+        Parallelization strategy for this scope: ``StrategyKind.HALO`` (spatial
+        domain decomposition with a ghost halo, the default) or
+        ``StrategyKind.GRAPH_PARTITION`` (node-partition graph parallel).
+    compile : bool
+        Compile intent for the distributed forward. When ``True`` the framework
+        owns the compiled forward and pads per-rank atom/edge counts to stable
+        shapes so the compiled graph is reused across steps; when ``False`` the
+        padder is disabled. Default ``False``.
+    require_nondegenerate : bool
+        When ``True``, a degenerate partition — one where some rank's halo
+        already covers every atom (0 remote atoms) — is a hard error instead of
+        a warning. Default ``False``.
     mesh : DeviceMesh | None
         Optional ``torch.distributed.device_mesh.DeviceMesh`` describing the
         rank topology. ``None`` for single-rank runs.
@@ -100,6 +113,12 @@ class DomainConfig(BaseModel):
         Submodule-name substrings to skip during ``"auto"`` discovery — for a
         scripted op that genuinely needs cross-rank data (where marshalling to
         local would silently give wrong numbers) or is handled via ``custom_ops``.
+    migration_hysteresis : float | None
+        Migration-hysteresis margin in angstrom: an atom keeps its current owner
+        until it is this far past a domain boundary, preventing per-step
+        migration thrashing of boundary atoms. When ``None`` (default), the
+        effective value is ``skin / 2`` (see :meth:`effective_migration_hysteresis`);
+        it must be ``< skin`` so a deferred atom stays within the owner's halo.
     """
 
     model_config = {"arbitrary_types_allowed": True}

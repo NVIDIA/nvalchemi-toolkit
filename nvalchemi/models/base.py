@@ -179,8 +179,8 @@ class ModelConfig(BaseModel):
 
     ``outputs`` and ``required_inputs`` use free-form strings so new
     properties can be added without modifying this class.  Well-known
-    output keys: ``energy``, ``forces``, ``stresses``, ``hessians``,
-    ``dipoles``, ``charges``, ``embeddings``. Declare a neighbor-list
+    output keys: ``energy``, ``forces``, ``stress``, ``hessian``,
+    ``dipole``, ``charges``, ``embeddings``. Declare a neighbor-list
     requirement by attaching a :class:`NeighborConfig` (see
     :attr:`needs_neighborlist`).
 
@@ -638,7 +638,7 @@ class BaseModelMixin(abc.ABC):
     def distribution_spec(
         self, strategy: "StrategyKind | None" = None
     ) -> "MLIPSpec | None":
-        """Return the :class:`MLIPSpec` describing the primitives this model
+        r"""Return the :class:`MLIPSpec` describing the primitives this model
         needs under domain parallelism *for the given parallelization strategy*.
 
         Parameters
@@ -648,7 +648,7 @@ class BaseModelMixin(abc.ABC):
             under (``HALO`` / ``GRAPH_PARTITION``); ``None``
             is treated as ``HALO``. The framework passes the config-selected
             strategy — models must not sniff the environment. The spec content is a
-            joint ``(model × strategy)`` product, so a model that supports graph
+            joint :math:`(\mathrm{model} \times \mathrm{strategy})` product, so a model that supports graph
             parallel returns a different ``(policy, adapters, shard_fields,
             consolidation)`` bundle per strategy.
 

@@ -12,19 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+r"""
 NVE (microcanonical) integrator via velocity Verlet.
 
 The velocity Verlet algorithm is symplectic and time-reversible,
-conserving the total energy (H = KE + PE) over long simulations to
-within integration error.
+conserving the total energy :math:`H = \mathrm{KE} + \mathrm{PE}` over long
+simulations to within integration error.
 
 The step is split around the force evaluation:
 
-* ``pre_update``:   r(t+dt) = r(t) + v(t)·dt + ½·(F/m)·dt²
-                    v(t+dt/2) = v(t) + ½·(F/m)·dt
-* [model evaluates F(r(t+dt))]
-* ``post_update``:  v(t+dt) = v(t+dt/2) + ½·(F_new/m)·dt
+* ``pre_update``:   :math:`\mathbf{r}(t+\Delta t) = \mathbf{r}(t) + \mathbf{v}(t)\,\Delta t + \tfrac{1}{2}\,\frac{\mathbf{F}(t)}{m}\,\Delta t^{2}`
+                    :math:`\mathbf{v}(t+\tfrac{\Delta t}{2}) = \mathbf{v}(t) + \tfrac{1}{2}\,\frac{\mathbf{F}(t)}{m}\,\Delta t`
+* [model evaluates :math:`\mathbf{F}(\mathbf{r}(t+\Delta t))`]
+* ``post_update``:  :math:`\mathbf{v}(t+\Delta t) = \mathbf{v}(t+\tfrac{\Delta t}{2}) + \tfrac{1}{2}\,\frac{\mathbf{F}(t+\Delta t)}{m}\,\Delta t`
 
 Per-system state consists solely of the timestep ``dt``, stored in
 ``self._state`` as a system-level :class:`~nvalchemi.data.Batch`.

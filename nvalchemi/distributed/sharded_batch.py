@@ -340,7 +340,7 @@ class ShardedBatch(ShardedCollection):
             )
         local_rank = mesh.get_local_rank()
         # All scatter broadcasts run on the mesh's own group (the domain sub-mesh's
-        # group when this is a sliced sub-mesh of a larger pipeline × domain mesh),
+        # group when this is a sliced sub-mesh of a larger pipeline x domain mesh),
         # with the group-local ``src`` mapped to its global rank for the collective.
         # 1-D whole-mesh: group is the world group and the map is the identity.
         group = mesh_group(mesh)

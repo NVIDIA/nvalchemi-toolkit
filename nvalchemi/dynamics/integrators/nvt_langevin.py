@@ -51,7 +51,7 @@ __all__ = ["NVTLangevin"]
 
 
 class NVTLangevin(BaseDynamics):
-    """NVT integrator via BAOAB Langevin dynamics.
+    r"""NVT integrator via BAOAB Langevin dynamics.
 
     Samples the canonical ensemble via a stochastic Ornstein-Uhlenbeck
     process that acts as an exact thermostat.
@@ -65,7 +65,7 @@ class NVTLangevin(BaseDynamics):
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     friction : float or torch.Tensor
-        Langevin friction coefficient γ in ``1/fs`` ``[M]`` or scalar.
+        Langevin friction coefficient :math:`\gamma` in ``1/fs`` ``[M]`` or scalar.
         Controls thermostat coupling strength.
     random_seed : int, optional
         Global RNG seed for the stochastic O step.  Default 42.

@@ -129,7 +129,7 @@ def attach_layer_hooks(model: torch.nn.Module, records: list[LayerRecord]) -> li
     get every layer hooked.
 
     Important — hooks must NOT sync the GPU. Big models (UMA: 218
-    submodules × many MP iterations) sync the device per hook call,
+    submodules x many MP iterations) sync the device per hook call,
     turning a 1-second forward into a 5-minute timeout. Hooks instead
     accumulate tiny on-device tensors into ``records``; the caller
     materializes via :func:`finalize_layer_records` at the end of the
@@ -256,7 +256,7 @@ def diff_layer_records(
         # Replicated (e.g. lookup tables, embeddings of replicated
         # inputs, parameter buffers): every rank's sum equals the ref —
         # comparing ``sum(rank_sums)`` vs ``ref_sum`` would falsely
-        # report ``world_size× ref`` as 100% divergence. Use any-rank
+        # report ``world_size x ref`` as 100% divergence. Use any-rank
         # vs ref instead. Tolerance: 1e-6 of the max rank value covers
         # fp32 noise without false negatives.
         biggest = max(abs(s) for s in rank_sums) or 1.0

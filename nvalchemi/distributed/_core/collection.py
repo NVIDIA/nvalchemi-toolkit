@@ -53,7 +53,7 @@ def _mesh_group(mesh: Any) -> Any:
 
     All scatter broadcasts run on *this* group (the domain sub-mesh's group when
     the mesh is a sliced sub-mesh), not the world group — so a scatter confined
-    to one sub-mesh of a larger (e.g. pipeline × domain) mesh doesn't stall the
+    to one sub-mesh of a larger (e.g. pipeline x domain) mesh doesn't stall the
     ranks outside it.
     """
     get_group = getattr(mesh, "get_group", None)

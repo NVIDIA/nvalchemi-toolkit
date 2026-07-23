@@ -58,11 +58,11 @@ def _parse_activity(activity: ProfilerActivity | str) -> ProfilerActivity:
 class TorchProfilerHook(BaseModel):
     """Capture PyTorch profiler traces through PhysicsNeMo's profiler wrapper.
 
-    ``TorchProfilerHook`` drives PhysicsNeMo's :class:`~physicsnemo.utils.
-    profiling.Profiler` (backed by :class:`~physicsnemo.utils.profiling.
-    TorchProfileWrapper`) so that ``torch.profiler`` traces are collected for an
-    nvalchemi workflow without hand-rolling profiler setup, stepping, and
-    finalization. The same hook attaches to both training and dynamics workflows:
+    ``TorchProfilerHook`` drives PhysicsNeMo's
+    :class:`~physicsnemo.utils.profiling.Profiler` (backed by
+    :class:`~physicsnemo.utils.profiling.TorchProfileWrapper`) so that
+    ``torch.profiler`` traces are collected for an nvalchemi workflow without
+    hand-rolling profiler setup, stepping, and finalization. The same hook attaches to both training and dynamics workflows:
     it recognizes :attr:`TrainingStage.BEFORE_TRAINING`,
     :attr:`~TrainingStage.BEFORE_BATCH`, :attr:`~TrainingStage.AFTER_BATCH`, and
     :attr:`~TrainingStage.AFTER_TRAINING`, plus
@@ -82,9 +82,10 @@ class TorchProfilerHook(BaseModel):
     runs, or whenever ``rank_subdirs`` is set, per-process outputs land in
     ``output_dir / rank_<global_rank>``, and the optional
     ``on_trace_ready_path`` TensorBoard handler directory is rank-suffixed the
-    same way. Activity selection accepts either :class:`~torch.profiler.
-    ProfilerActivity` values or the string aliases ``"cpu"`` / ``"cuda"``;
-    ``None`` lets PhysicsNeMo pick CPU and CUDA when available.
+    same way. Activity selection accepts either
+    :class:`~torch.profiler.ProfilerActivity` values or the string aliases
+    ``"cpu"`` / ``"cuda"``; ``None`` lets PhysicsNeMo pick CPU and CUDA when
+    available.
 
     Examples
     --------
@@ -126,8 +127,9 @@ class TorchProfilerHook(BaseModel):
     Notes
     -----
     Only one PhysicsNeMo profiler may be active at a time: ``_start`` raises a
-    :class:`RuntimeError` if the global :class:`~physicsnemo.utils.profiling.
-    Profiler` is already initialized or enabled, so construct and register this
+    :class:`RuntimeError` if the global
+    :class:`~physicsnemo.utils.profiling.Profiler` is already initialized or
+    enabled, so construct and register this
     hook before any other PhysicsNeMo profiler configuration. The hook is
     single-use — once finalized it cannot be restarted, and calling it (or
     re-entering it) after ``close`` raises. Finalization happens at

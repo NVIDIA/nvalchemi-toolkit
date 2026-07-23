@@ -19,17 +19,20 @@ Splits the monolithic ``nvalchemiops`` ``ewald_reciprocal_space`` into two
 stages so distributed callers can insert a cross-rank reduction between them:
 
 - :func:`ewald_compute_partial_structure_factors` — per-rank partial
-  green-weighted structure factors ``S̃(k) = G(k)·Σᵢ qᵢ exp(i k·rᵢ)`` and total
-  charge ``Q = Σᵢ qᵢ`` (runs only the reciprocal ``fill`` warp kernel).
+  green-weighted structure factors
+  :math:`\tilde{S}(k) = G(k)\,\sum_i q_i \exp(i\,\mathbf{k}\cdot\mathbf{r}_i)` and total
+  charge :math:`Q = \sum_i q_i` (runs only the reciprocal ``fill`` warp kernel).
   Registered as a ``torch.library.custom_op`` so the distributed layer can
-  intercept it and run *owned-slice × fill × all-reduce* (each atom is owned by
-  one rank, and ``G(k)`` depends only on globally-replicated ``k², V, α`` so it
+  intercept it and run *owned-slice x fill x all-reduce* (each atom is owned by
+  one rank, and :math:`G(k)` depends only on globally-replicated
+  :math:`k^{2}, V, \alpha` so it
   is identical on every rank — the reduce commutes with the green weight).
 - :func:`ewald_reciprocal_space_from_structure_factors` — per-atom reciprocal
   energy + optional forces / charge gradients / virial from the globally-reduced
-  structure factors. Runs ``fill`` to recover ``cos(k·r)`` / ``sin(k·r)`` of the
+  structure factors. Runs ``fill`` to recover
+  :math:`\cos(\mathbf{k}\cdot\mathbf{r})` / :math:`\sin(\mathbf{k}\cdot\mathbf{r})` of the
   local atoms, then ``compute`` / ``virial`` consuming the externally supplied
-  ``S̃(k)``, plus the public ``ewald_energy_corrections`` (which accepts an
+  :math:`\tilde{S}(k)`, plus the public ``ewald_energy_corrections`` (which accepts an
   explicit ``total_charge``).
 """
 
@@ -122,13 +125,13 @@ def _run_fill(
     alpha: torch.Tensor,
     batch_idx: torch.Tensor | None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Launch the reciprocal ``fill`` kernel over the *local* atoms.
+    r"""Launch the reciprocal ``fill`` kernel over the *local* atoms.
 
     Returns Torch tensors ``(cos_kr, sin_kr, real_sf, imag_sf, total_charge)``
     where ``real_sf`` / ``imag_sf`` are the green-weighted partial structure
-    factors ``S̃(k)`` with shape ``(S, K)``, ``total_charge`` is ``(S,)``, and
+    factors :math:`\tilde{S}(k)` with shape ``(S, K)``, ``total_charge`` is ``(S,)``, and
     ``cos_kr`` / ``sin_kr`` are ``(K, N)``. ``cell`` enters only the Green's
-    ``1/V`` factor (detached); the differentiable cell path is owned by the
+    :math:`1/V` factor (detached); the differentiable cell path is owned by the
     corrections / virial kernels, not the fill.
     """
     num_k = k_vectors_2d.shape[-2]
@@ -213,8 +216,8 @@ def _run_fill(
 # ======================================================================
 #
 # Forward runs the reciprocal ``fill`` kernel; backward is the fill adjoint
-# dL/dS̃(k) -> dL/d{positions, charges}. ``cell`` / ``k_vectors`` / ``alpha``
-# enter S̃(k) only through the detached Green's function, so they are
+# dL/dS~(k) -> dL/d{positions, charges}. ``cell`` / ``k_vectors`` / ``alpha``
+# enter S~(k) only through the detached Green's function, so they are
 # non-differentiable here; the cell first order is handled by the corrections
 # and virial kernels in stage 2.
 
@@ -222,7 +225,7 @@ def _run_fill(
 def _green(
     k_vectors_2d: torch.Tensor, volume: torch.Tensor, alpha: torch.Tensor
 ) -> torch.Tensor:
-    """``G[s,k] = 8π/V_s · exp(-k²/4α_s²) / k²`` (masked ``k² < 1e-10``), shape ``(S, K)``."""
+    r""":math:`G[s,k] = 8\pi/V_s \, \exp(-k^{2}/4\alpha_s^{2}) / k^{2}` (masked :math:`k^{2} < 10^{-10}`), shape ``(S, K)``."""
     ksq = (k_vectors_2d * k_vectors_2d).sum(-1)  # (S, K)
     a = alpha.reshape(-1, 1).to(torch.float64)  # (S, 1)
     g = (
@@ -245,10 +248,10 @@ def _stage1_backward(
     batch_idx: torch.Tensor | None,
     num_systems: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Fill adjoint: gradients on ``(real_sf, imag_sf, total_charge)`` -> ``(positions, charges)``.
+    r"""Fill adjoint: gradients on ``(real_sf, imag_sf, total_charge)`` -> ``(positions, charges)``.
 
-    ``dL/dq_j = Σ_k G_k (g_re_k cos_jk + g_im_k sin_jk) + g_tot[s]``;
-    ``dL/dr_j = q_j Σ_k k_vec_k · G_k (−g_re_k sin_jk + g_im_k cos_jk)``.
+    :math:`\partial L/\partial q_j = \sum_k G_k (g^{re}_k \cos_{jk} + g^{im}_k \sin_{jk}) + g_{tot}[s]`;
+    :math:`\partial L/\partial r_j = q_j \sum_k \mathbf{k}_k \cdot G_k (-g^{re}_k \sin_{jk} + g^{im}_k \cos_{jk})`.
     """
     green = _green(k_vectors_2d, volume, alpha)  # (S, K)
     g_re = g_re.reshape(num_systems, -1).to(torch.float64)
@@ -406,13 +409,13 @@ _batch_ewald_compute_partial_structure_factors.register_autograd(
 
 
 # ======================================================================
-# Stage 2 — per-atom E / F / dE/dq / virial from globally-reduced S̃(k)
+# Stage 2 — per-atom E / F / dE/dq / virial from globally-reduced S~(k)
 # ======================================================================
 #
 # Consumes externally-supplied (already cross-rank reduced) structure factors
 # and total charge instead of re-running the fill's S(k) and re-summing the
 # local charges. The local ``fill`` still runs to recover the per-atom
-# ``cos(k·r)`` / ``sin(k·r)``; its structure-factor outputs are discarded in
+# ``cos(k.r)`` / ``sin(k.r)``; its structure-factor outputs are discarded in
 # favour of the reduced inputs.
 
 
@@ -429,12 +432,12 @@ def _recip_direct_from_sf(
     want_charge_grad: bool,
     want_virial: bool,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-    """Direct k-space ``(e_ksum, forces, charge_grads, virial)`` from external ``S̃(k)``.
+    r"""Direct k-space ``(e_ksum, forces, charge_grads, virial)`` from external :math:`\tilde{S}(k)`.
 
-    ``forces`` are ``-dE/dR`` from the k-sum, ``charge_grads`` is the full
-    reciprocal ``dE/dq`` (k-sum potential minus the self / background
+    ``forces`` are :math:`-\partial E/\partial R` from the k-sum, ``charge_grads`` is the full
+    reciprocal :math:`\partial E/\partial q` (k-sum potential minus the self / background
     derivatives, the latter using the *global* ``total_charge``), and
-    ``virial`` is the k-major virial minus the background ``-E_bg I`` term.
+    ``virial`` is the k-major virial minus the background :math:`-E_{bg}\mathbf{I}` term.
     The energy is the k-sum only; callers apply the self/background energy
     corrections via :func:`ewald_energy_corrections`.
     """
@@ -546,7 +549,7 @@ def _recip_direct_from_sf(
 
     # Charge-gradient self + background corrections (Torch; the global
     # total_charge feeds the background term):
-    #   dE_self/dq_i = 2 α q_i / sqrt(π);  dE_bg/dq_i = π (Q_tot / V) / α².
+    #   dE_self/dq_i = 2 alpha q_i / sqrt(pi);  dE_bg/dq_i = pi (Q_tot / V) / alpha^2.
     if want_charge_grad:
         charges64 = charges.to(torch.float64)
         q_tot = total_charge.to(torch.float64).reshape(-1)
@@ -624,7 +627,7 @@ def ewald_compute_partial_structure_factors(
     alpha: torch.Tensor,
     batch_idx: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    r"""Compute per-rank partial green-weighted ``S̃(k)`` and total charge.
+    r"""Compute per-rank partial green-weighted :math:`\tilde{S}(k)` and total charge.
 
     Runs only the reciprocal ``fill`` warp kernel and returns its per-rank
     partials; distributed callers all-reduce these across ranks before passing
@@ -664,7 +667,7 @@ def ewald_reciprocal_space_from_structure_factors(
     compute_virial: bool = False,
     hybrid_forces: bool = False,
 ) -> torch.Tensor | tuple[torch.Tensor, ...]:
-    r"""Compute per-atom reciprocal-space quantities from pre-reduced ``S̃(k)``.
+    r"""Compute per-atom reciprocal-space quantities from pre-reduced :math:`\tilde{S}(k)`.
 
     Flags and return-tuple layout mirror the monolithic
     ``ewald_reciprocal_space`` — same ``(energies, [forces], [charge_grads],
@@ -673,9 +676,9 @@ def ewald_reciprocal_space_from_structure_factors(
     charge are provided as inputs (from stage 1 or a cross-rank all-reduce).
 
     Forces / charge gradients / virial are computed from the globally-reduced
-    ``S̃(k)``; the energy adds the self / background corrections via the public
+    :math:`\tilde{S}(k)`; the energy adds the self / background corrections via the public
     ``ewald_energy_corrections`` with the external ``total_charge``.
-    ``hybrid_forces=True`` detaches positions / cell and wires ``dE/dq`` into
+    ``hybrid_forces=True`` detaches positions / cell and wires :math:`\partial E/\partial q` into
     the energy via ``_InjectChargeGrad`` (forward-only forces / virial);
     otherwise the direct forces are returned and the energy stays connected to
     charges through the corrections.
@@ -801,10 +804,10 @@ def _reciprocal_torch_dd(
     batch_idx: torch.Tensor | None,
     ctx: Any,
 ) -> torch.Tensor:
-    """Autograd-native reciprocal per-atom energy for the compiled DD path.
+    r"""Autograd-native reciprocal per-atom energy for the compiled DD path.
 
-    Owned-only partial green-weighted ``S̃(k)`` -> cross-rank all-reduce -> per-atom
-    energy from the global ``S̃``. Pure Torch so it is compile-traceable and autograd
+    Owned-only partial green-weighted :math:`\tilde{S}(k)` -> cross-rank all-reduce -> per-atom
+    energy from the global :math:`\tilde{S}`. Pure Torch so it is compile-traceable and autograd
     yields the exact force.
     """
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
@@ -853,17 +856,17 @@ def ewald_reciprocal_contribution(
     compute_virial: bool,
     hybrid_forces: bool,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-    """Per-atom reciprocal energy (+ kernel forces/virial), backend chosen here.
+    r"""Per-atom reciprocal energy (+ kernel forces/virial), backend chosen here.
 
     The warp reciprocal writes its forces directly and is not differentiable, so
     an energy-only forward (forces wanted via autograd) needs a differentiable
     reciprocal instead. Picks, transparently to the caller:
 
-    * energy-only under domain decomposition -> Torch staged ``S̃`` (compile-safe,
+    * energy-only under domain decomposition -> Torch staged :math:`\tilde{S}` (compile-safe,
       cross-rank all-reduced);
     * energy-only single-GPU -> the differentiable monolithic ``ewald_reciprocal_space``;
     * forces/virial requested (eager) -> warp staged structure factors (the spec's
-      halo handlers reduce ``S̃`` across ranks; single-GPU fires nothing).
+      halo handlers reduce :math:`\tilde{S}` across ranks; single-GPU fires nothing).
 
     Returns ``(e_recip, f_recip|None, v_recip|None)``.
     """

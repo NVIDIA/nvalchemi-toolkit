@@ -430,7 +430,7 @@ def _validate_spec(
     # halo storage (owned rows partition the atoms, so the per-rank sums
     # add up to the global sum). Sharded specs gather features to global
     # internally, so each rank's intermediate is global-replicated and
-    # the sum double-counts (a false "divergent module" at rel_diff≈0.5).
+    # the sum double-counts (a false "divergent module" at rel_diff~=0.5).
     # Restrict the diagnostic to halo storage; for sharded the final
     # output diff + helper diagnostics carry the signal instead.
     from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415

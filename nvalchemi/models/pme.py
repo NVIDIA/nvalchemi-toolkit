@@ -50,7 +50,7 @@ Notes
   ``(dE/dq)(dq/d(strain))``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
 * Input charges are read from ``data.charges`` (shape ``[N]``).
-* The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
+* The Coulomb constant defaults to ``14.3996`` :math:`\\mathrm{eV}\\cdot\\mathrm{\\AA}/e^2`, which gives energies
   in eV when positions are in Å and charges are in elementary charge units.
 * PME achieves :math:`O(N \\log N)` scaling via FFT-based reciprocal space
   calculations, making it more efficient than Ewald for large systems.
@@ -109,7 +109,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         Target accuracy for automatic parameter estimation.  Defaults to
         ``1e-6``.
     coulomb_constant : float, optional
-        Coulomb prefactor :math:`k_e` in eV·Å/e².
+        Coulomb prefactor :math:`k_e` in :math:`\\mathrm{eV}\\cdot\\mathrm{\\AA}/e^2`.
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
     slab_correction : bool, optional
         Whether to enable the two-dimensional slab correction. Defaults to
@@ -759,7 +759,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``"stress"`` (shape ``[B, 3, 3]``, :math:`\\mathrm{eV}/\\mathrm{\\AA}^3` — Cauchy stress
             ``-W/V``).
         """
         from nvalchemi.models._ops.electrostatics.pme import (  # lazy, PLC0415

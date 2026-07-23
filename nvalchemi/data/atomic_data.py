@@ -167,7 +167,7 @@ class AtomicData(BaseModel, DataMixin):
     >>> from ase.build import molecule
     >>> from nvalchemi.data import Batch
     >>> water = AtomicData.from_atoms(molecule("H2O"))
-    >>> batch = Batch([data, water])
+    >>> batch = Batch.from_data_list([data, water])
 
     Notes
     -----
@@ -271,7 +271,7 @@ class AtomicData(BaseModel, DataMixin):
 
     energy: Annotated[
         t.Energy | None,
-        Field(description="Total energy [1]"),
+        Field(description="Total energy [1, 1]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -301,7 +301,7 @@ class AtomicData(BaseModel, DataMixin):
 
     charge: Annotated[
         t.GraphCharges | None,
-        Field(description="Total system charge [1]"),
+        Field(description="Total system charge [1, 1]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -987,7 +987,7 @@ class AtomicData(BaseModel, DataMixin):
         consumed into dedicated fields.  Unsupported types raise
         ``TypeError``.
 
-        Stress and virials accept 3×3 matrices, 6-component Voigt vectors,
+        Stress and virials accept 3x3 matrices, 6-component Voigt vectors,
         or 9-component flat vectors (see :func:`voigt_to_matrix`).
 
         Parameters

@@ -1024,11 +1024,15 @@ class StressMSELoss(BaseLossFunction):
         = \frac{1}{B} \sum_{i=1}^{B}
         \frac{\bigl\|\hat{\sigma}_i - \sigma_i\bigr\|_F^2}{9},
 
-    computed via
-    :func:`~nvalchemi.training.losses.reductions.frobenius_mse`. When
-    ``ignore_nonfinite`` drops components the per-graph denominator is the
-    number of valid components rather than 9. A hat denotes the prediction; see
-    the module docstring for the shared notation.
+    where the fraction shown assumes all nine components are valid. Concretely,
+    :meth:`reduce` sums the squared component residuals of each graph and
+    divides by the number of valid components for that graph (clamped to at
+    least 1), giving a per-graph component-mean; these per-graph values are then
+    averaged over graphs. When ``ignore_nonfinite`` drops components the
+    per-graph denominator is the number of remaining valid components rather
+    than 9, and a graph whose entire stress tensor is non-finite contributes
+    ``0.0``. A hat denotes the prediction; see the module docstring for the
+    shared notation.
 
     Tensor Contract
     ---------------

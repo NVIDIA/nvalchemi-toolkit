@@ -181,7 +181,7 @@ class DynamicsStage(Enum):
 
 
 class _ConvergenceCriterion(BaseModel):
-    """A single convergence criterion evaluated against a tensor key on ``Batch``.
+    r"""A single convergence criterion evaluated against a tensor key on ``Batch``.
 
     This is an internal model and should not be instantiated directly by
     users.  Instead, pass ``dict`` mappings to :class:`ConvergenceHook`,
@@ -207,7 +207,7 @@ class _ConvergenceCriterion(BaseModel):
     key : str
         Tensor key to measure convergence against (e.g. ``"forces"``).
     threshold : float
-        Convergence threshold; values ≤ this are considered converged.
+        Convergence threshold; values :math:`\le` this are considered converged.
     reduce_dims : int | list[int]
         Dimension(s) to reduce over when ``reduce_op`` is not ``None``.
         Defaults to ``-1``.
@@ -1769,6 +1769,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Perform the model forward pass to compute forces and energies.
 
         This method:
+
         1. Runs the model forward pass, which should enable gradients
         2. Adapts outputs to the standard format
         3. Validates outputs against dynamics requirements
@@ -4160,7 +4161,7 @@ class DistributedPipeline:
             iteration += 1
 
     def _run_grouped(self) -> None:
-        """Run a 2-D (pipeline × domain) pipeline until each stage-group is done.
+        r"""Run a 2-D (pipeline :math:`\times` domain) pipeline until each stage-group is done.
 
         Unlike the streaming pipeline, a grouped stage does **not** step in global
         lockstep: a downstream stage blocks in its ``_prestep`` hand-off until the

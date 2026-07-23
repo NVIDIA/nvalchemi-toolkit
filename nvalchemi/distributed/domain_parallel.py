@@ -108,7 +108,7 @@ class DomainParallel(BaseDynamics):
         self._n_owned: int = 0
         self._forces_primed: bool = False
 
-        # Pipeline-stage state (2D pipeline × domain). A DomainParallel used as a
+        # Pipeline-stage state (2D pipeline x domain). A DomainParallel used as a
         # DistributedPipeline stage spans a domain sub-mesh; the group lead does
         # the cross-stage isend/irecv while the group scatters/gathers the full
         # system to/from its sub-mesh (see the comm-override section below). Inert

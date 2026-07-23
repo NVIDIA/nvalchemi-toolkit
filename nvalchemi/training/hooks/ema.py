@@ -123,6 +123,11 @@ class EMAHook(BaseModel, TrainingUpdateHook):
     use_buffers : bool, optional
         Forwarded to :class:`AveragedModel`; when ``True`` also averages
         module buffers. Default ``True``.
+    num_updates : int, optional
+        Non-negative count of EMA updates already performed. Settable at
+        construction so a checkpoint can restore the update counter; normally
+        left at its default and advanced internally as updates occur. Default
+        ``0``.
 
     Raises
     ------
