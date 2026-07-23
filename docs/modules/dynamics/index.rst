@@ -15,3 +15,4 @@ Dynamics module
    buffers_and_data_flow
    implementing_dynamics
    api
+   methods
