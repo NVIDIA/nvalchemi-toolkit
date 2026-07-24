@@ -297,6 +297,72 @@ def _worker_halo_forward_reverse_roundtrip(
     )
 
 
+def _worker_crossed_atom_reaches_receiver_before_migration(
+    rank: int, world_size: int
+) -> None:
+    """An atom retained by its old owner must still reach its natural owner.
+
+    DomainParallel defers migration until the next step and applies a small
+    ownership hysteresis. During that interval an atom can be physically inside
+    a neighboring rank's core while the previous rank still owns it. The
+    receiver must see the atom as a ghost until ownership is transferred.
+    """
+    assert world_size == 2
+    dtype = torch.float64
+    cell = torch.eye(3, dtype=dtype) * 10.0
+    pbc = torch.ones(3, dtype=torch.bool)
+    mesh = _MockMesh(rank, world_size)
+    domain_config = DomainConfig(cutoff=2.0, skin=0.5, mesh=mesh)
+    partitioner = SpatialPartitioner(
+        config=domain_config,
+        cell_matrix=cell.unsqueeze(0),
+        pbc=pbc.unsqueeze(0),
+    )
+    halo_config = ParticleHaloConfig(
+        ghost_width=domain_config.effective_ghost_width(),
+        partitioner=partitioner,
+        mesh=mesh,
+    )
+
+    split_dims = [dim for dim, ranks in enumerate(partitioner.rank_grid) if ranks > 1]
+    assert len(split_dims) == 1
+    split_dim = split_dims[0]
+
+    # The atom starts in rank 0, then moves 0.2 Å across the boundary in one
+    # update.
+    previous_frac = torch.full((1, 3), 0.5, dtype=dtype)
+    previous_frac[0, split_dim] = 0.49
+    previous_position = previous_frac @ cell
+    crossed_frac = torch.full((1, 3), 0.5, dtype=dtype)
+    crossed_frac[0, split_dim] = 0.51
+    crossed_position = crossed_frac @ cell
+    if rank == 0:
+        assert partitioner.assign_atoms_to_ranks(previous_position).item() == 0
+        assert partitioner.assign_atoms_to_ranks(crossed_position).item() == 1
+        # It crossed only 0.1 Å into rank 1, so the 0.25 Å migration hysteresis
+        # deliberately leaves ownership with rank 0 for this compute.
+        assert partitioner.keeps_owner(
+            crossed_position,
+            owner_rank=0,
+            hysteresis=domain_config.effective_migration_hysteresis(),
+        ).item()
+        local_positions = crossed_position
+    else:
+        resident_frac = torch.full((1, 3), 0.5, dtype=dtype)
+        resident_frac[0, split_dim] = 0.75
+        local_positions = resident_frac @ cell
+
+    padded_positions, metadata = particle_halo_padding(local_positions, halo_config)
+
+    if rank == 1:
+        assert metadata.n_owned == 1
+        assert metadata.n_padded == 2, (
+            "rank 1 did not receive the rank-0-owned atom after it crossed into "
+            "rank 1's core but before deferred migration transferred ownership"
+        )
+        torch.testing.assert_close(padded_positions[1:], crossed_position)
+
+
 # ======================================================================
 # Tests.
 # ======================================================================
@@ -389,3 +455,8 @@ class TestHaloForwardReverseRoundtrip:
             4,
             True,
         )
+
+
+def test_crossed_atom_reaches_receiver_before_deferred_migration() -> None:
+    """The current owner must ghost an atom that entered a neighbor's core."""
+    _spawn(2, "29850", "_worker_crossed_atom_reaches_receiver_before_migration")
