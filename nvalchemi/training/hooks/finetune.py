@@ -198,14 +198,22 @@ class ModulePatchHook(BaseModel):
 
 
 class TrainableParameterHook(BaseModel):
-    """Select trainable parameters for fine-tuning.
+    """Select which parameters stay trainable during fine-tuning.
 
-    The hook computes a fully-qualified parameter allow-list when registered
-    on a :class:`~nvalchemi.training.strategy.TrainingStrategy`. By default,
-    parameters outside the allow-list are temporarily marked
-    ``requires_grad=False`` during ``run`` and restored afterward. Set
-    ``freeze_mode="optimizer_only"`` to preserve gradients for excluded
-    parameters while keeping them out of optimizer parameter groups.
+    On registration with a :class:`~nvalchemi.training.strategy.TrainingStrategy`,
+    ``freeze_patterns`` and ``trainable_patterns`` (globs over fully-qualified
+    parameter names) resolve to the trainable set. What you set decides the
+    behaviour:
+
+    - ``trainable_patterns`` only — train exactly those; freeze the rest.
+    - ``freeze_patterns`` only — freeze those; train the rest.
+    - both — freeze the ``freeze_patterns`` set, but ``trainable_patterns`` win:
+      a parameter they match stays trainable even if a freeze pattern also
+      matches it.
+
+    Frozen parameters are temporarily marked ``requires_grad=False`` during
+    ``run`` and restored afterward. Set ``freeze_mode="optimizer_only"`` to
+    instead keep them out of the optimizer while preserving their gradients.
 
     Raises
     ------
@@ -232,8 +240,9 @@ class TrainableParameterHook(BaseModel):
         tuple[str, ...],
         Field(
             description=(
-                "Glob patterns to exclude from training. These exclusions are "
-                "overridden by ``trainable_patterns``."
+                "Glob patterns for parameters to freeze. Overridden by "
+                "``trainable_patterns`` — a parameter matching both stays "
+                "trainable."
             )
         ),
     ] = ()
@@ -241,8 +250,8 @@ class TrainableParameterHook(BaseModel):
         tuple[str, ...],
         Field(
             description=(
-                "Glob patterns to include. When supplied without "
-                "``freeze_patterns``, these patterns form an allow-list."
+                "Glob patterns for parameters to keep trainable. On their own "
+                "they define the full trainable set (everything else is frozen)."
             )
         ),
     ] = ()
