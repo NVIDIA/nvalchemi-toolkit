@@ -106,22 +106,23 @@ def _check_halo_region(
 ) -> torch.Tensor:
     """Return ``(N,)`` bool mask for atoms in the halo of a domain box.
 
-    The core check uses strict inequalities so atoms whose (possibly
+    The extent check uses inclusive inequalities so atoms whose (possibly
     PBC-shifted) position sits exactly on the receiver's domain boundary are
     still counted as halo — otherwise lattice atoms at integer multiples of
     the cell (e.g. FCC basis at Z=0 shifted to Z=box) fall through the gap.
+
+    The mask is computed from sender-owned atoms needed by a receiver domain.
+    ``particle_halo_padding`` receives only atoms owned by the sender. During
+    migration hysteresis, one of those atoms may already be geometrically
+    inside the receiver's core while ownership still belongs to the sender.
+    Include the full receiver extent, core plus ghost width, so the receiver
+    gets that atom as a ghost until ownership migrates.
     """
     expanded_lo = frac_lo - gw_frac
     expanded_hi = frac_hi + gw_frac
 
     inside = (frac_pos >= expanded_lo) & (frac_pos <= expanded_hi)
-    mask = inside.all(dim=1)
-
-    core_inside = (frac_pos > frac_lo) & (frac_pos < frac_hi)
-    in_core = core_inside.all(dim=1)
-    mask = mask & ~in_core
-
-    return mask
+    return inside.all(dim=1)
 
 
 def _identify_ghosts_split(
