@@ -26,27 +26,24 @@ import torch
 from torch import nn
 
 from nvalchemi.training import (
+    CheckpointHook,
     LoRAFineTuningStrategy,
     OptimizerConfig,
+    TrainingStrategy,
     create_model_spec,
 )
-from nvalchemi.training.hooks import ModulePatchHook
+from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
 from nvalchemi.training.peft import _peft
 from nvalchemi.training.peft import wrappers as lora_wrappers
-from nvalchemi.training.peft.hooks import (
-    LoRAApplyHook,
-    LoRACheckpointHook,
-    LoRATrainableParameterHook,
-)
+from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
 from nvalchemi.training.peft.wrappers import (
     CuEquivariantLoRALinear,
     E3NNFullyConnectedLoRALayer,
     EquivariantLoRALinear,
 )
 
-_PARTIAL_LORA_CHECKPOINT_WARNING = (
-    "Saving a LoRA checkpoint with include_base_parameters=False stores only "
-    "adapter, module-patch, and extra trainable tensors."
+_PARTIAL_CHECKPOINT_HOOK_WARNING = (
+    "Saving a checkpoint with save_trainable_parameters_only=True stores only trainable tensors."
 )
 
 # ---------------------------------------------------------------------------
@@ -91,7 +88,7 @@ class _Recorder:
     stage = None
 
     def __init__(self) -> None:
-        self.saw_lora_metadata = False
+        self.saw_base_fingerprints = False
         self.saw_aux_projection = False
         self.saw_optimizer_filter = False
 
@@ -99,7 +96,10 @@ class _Recorder:
         return False
 
     def on_register(self, workflow: Any) -> None:
-        self.saw_lora_metadata = hasattr(workflow, "_lora_metadata")
+        self.saw_base_fingerprints = hasattr(
+            workflow,
+            "_base_fingerprints",
+        )
         self.saw_aux_projection = hasattr(
             workflow.models["main"].model, "aux_projection"
         )
@@ -240,11 +240,17 @@ class TestLoRAApplyHook:
         )
 
         projection = strategy.models["main"].model.projection
-        metadata = strategy._lora_metadata["main"]
+        registered_trainable_names = strategy.get_registered_trainable_parameter_names()
+        lora_parameter_names = registered_trainable_names["lora"]
 
         assert _peft.is_lora_layer(projection)
-        assert metadata["lora_module_names"] == ["model.projection"]
-        assert metadata["lora_trainable_names"] == [
+        assert lora_parameter_names == frozenset(
+            {
+                "main.model.projection.lora_A",
+                "main.model.projection.lora_B",
+            }
+        )
+        assert sorted(name.removeprefix("main.") for name in lora_parameter_names) == [
             "model.projection.lora_A",
             "model.projection.lora_B",
         ]
@@ -286,13 +292,21 @@ class TestLoRAApplyHook:
             "model.coord_embedding.0",
             "model.joint_mlp.0",
         ]
-        assert strategy._lora_metadata["modelA"]["lora_module_names"] == [
+        model_a_lora_modules = [
+            name
+            for name, module in strategy.models["modelA"].named_modules()
+            if _peft.is_lora_layer(module)
+        ]
+        model_b_lora_modules = [
+            name
+            for name, module in strategy.models["modelB"].named_modules()
+            if _peft.is_lora_layer(module)
+        ]
+        assert model_a_lora_modules == [
             *expected_modules,
             "model.projection",
         ]
-        assert (
-            strategy._lora_metadata["modelB"]["lora_module_names"] == expected_modules
-        )
+        assert model_b_lora_modules == expected_modules
         assert strategy.to_spec_dict()["lora_target_patterns"] == [
             "*.model.*.0",
             "modelA.model.projection",
@@ -311,7 +325,7 @@ class TestLoRAApplyHook:
             )
 
 
-class TestLoRATrainableParameterHook:
+class TestLoRATrainableParameterRegistration:
     def test_lora_trainable_filter_allows_adapters_and_patches_but_not_wrapped_base(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -420,11 +434,11 @@ class TestLoRAStrategy:
 
         assert isinstance(strategy.hooks[0], LoRAApplyHook)
         assert isinstance(strategy.hooks[1], ModulePatchHook)
-        assert isinstance(strategy.hooks[2], LoRATrainableParameterHook)
+        assert isinstance(strategy.hooks[2], TrainableParameterHook)
         assert strategy.hooks[3] is recorder
         assert calls[0][0] is strategy.models["main"]
         assert calls[0][1].target_modules == ["model.projection"]
-        assert recorder.saw_lora_metadata is True
+        assert recorder.saw_base_fingerprints is True
         assert recorder.saw_aux_projection is True
         assert recorder.saw_optimizer_filter is True
 
@@ -503,9 +517,9 @@ class TestLoRAStrategyMerge:
 
         LoRAFineTuningStrategy.merge_model_inplace(strategy.models["main"])
 
-        with pytest.raises(RuntimeError, match="after adapters were merged"):
+        with pytest.raises(RuntimeError, match="adapters were removed or merged"):
             strategy.save_checkpoint(tmp_path / "checkpoint")
-        with pytest.raises(RuntimeError, match="after adapters were merged"):
+        with pytest.raises(RuntimeError, match="adapters were removed or merged"):
             strategy.save_adapter(tmp_path / "adapter")
 
 
@@ -540,7 +554,7 @@ class TestLoRAStrategySerialization:
         assert "lora_config" not in spec
         assert spec["lora_target_patterns"] == ["modelA.model.projection"]
         assert "freeze_patterns" not in spec
-        assert "freeze_mode" not in spec
+        assert spec["freeze_mode"] == "requires_grad"
         assert spec["base_model_fingerprints"] == {
             "modelA": "fingerprint-ok",
             "modelB": "fingerprint-ok",
@@ -552,10 +566,10 @@ class TestLoRAStrategySerialization:
             "modelA": "fingerprint-ok",
             "modelB": "fingerprint-ok",
         }
-        assert strategy._lora_metadata["modelA"]["lora_module_names"] == [
-            "model.lora_adapter"
-        ]
-        assert strategy._lora_metadata["modelB"]["lora_module_names"] == []
+        assert strategy._base_fingerprints == {
+            "modelA": "fingerprint-ok",
+            "modelB": "fingerprint-ok",
+        }
 
     def test_lora_strategy_from_spec_dict_restores_adapter_metadata(
         self,
@@ -587,7 +601,7 @@ class TestLoRAStrategySerialization:
 
         assert isinstance(restored.hooks[0], LoRAApplyHook)
         assert isinstance(restored.hooks[1], ModulePatchHook)
-        assert isinstance(restored.hooks[2], LoRATrainableParameterHook)
+        assert isinstance(restored.hooks[2], TrainableParameterHook)
         assert restored.lora_rank == 1
         assert restored.lora_alpha == 1.0
         assert restored.lora_target_patterns == ("main.model.projection",)
@@ -624,23 +638,35 @@ class TestLoRAStrategyAdapterSaveAndLoad:
 
         assert adapter_dir == adapter_root / "lora"
         manifest = json.loads((adapter_dir / "manifest.json").read_text())
-        lora_state = torch.load(
-            adapter_dir / "models" / "main" / "lora.pt",
+        adapter_state = torch.load(
+            adapter_dir / "models" / "main" / "adapter.pt",
             weights_only=True,
         )
-        extras_state = torch.load(
-            adapter_dir / "models" / "main" / "extras.pt",
-            weights_only=True,
+        lora_state = adapter_state["lora"]
+        extras_state = adapter_state["extras"]
+        patches_state = adapter_state["patch"]
+        lora_parameter_count = sum(tensor.numel() for tensor in lora_state.values())
+        extra_trainable_parameter_count = sum(
+            tensor.numel() for tensor in extras_state.values()
         )
-        patches_state = torch.load(
-            adapter_dir / "models" / "main" / "patches.pt",
-            weights_only=True,
-        )
+        expected_summary = {
+            "lora_tensor_count": len(lora_state),
+            "lora_parameter_count": lora_parameter_count,
+            "extra_trainable_tensor_count": len(extras_state),
+            "extra_trainable_parameter_count": extra_trainable_parameter_count,
+            "trainable_parameter_count": (
+                lora_parameter_count + extra_trainable_parameter_count
+            ),
+            "total_parameter_count": sum(
+                parameter.numel() for parameter in strategy.models["main"].parameters()
+            ),
+        }
 
-        assert manifest["kind"] == "nvalchemi_lora_adapter"
-        assert manifest["models"]["main"]["lora_state"] == "models/main/lora.pt"
-        assert manifest["models"]["main"]["extras_state"] == "models/main/extras.pt"
-        assert manifest["models"]["main"]["patches_state"] == "models/main/patches.pt"
+        assert manifest["kind"] == "nvalchemi_lora"
+        assert "lora_state" not in manifest["models"]["main"]
+        assert "extras_state" not in manifest["models"]["main"]
+        assert "patches_state" not in manifest["models"]["main"]
+        assert manifest["models"]["main"]["parameter_summary"] == expected_summary
         assert set(lora_state) == {
             "model.lora_adapter.weight",
             "model.lora_adapter.bias",
@@ -649,8 +675,10 @@ class TestLoRAStrategyAdapterSaveAndLoad:
             "model.projection.weight",
             "model.projection.bias",
         }
-        assert set(patches_state) == {"main.model.aux_projection"}
-        assert set(patches_state["main.model.aux_projection"]) == {"weight", "bias"}
+        assert set(patches_state) == {
+            "model.aux_projection.weight",
+            "model.aux_projection.bias",
+        }
         assert set(lora_state).isdisjoint(extras_state)
         assert set(lora_state).isdisjoint(patches_state)
         assert set(extras_state).isdisjoint(patches_state)
@@ -672,10 +700,11 @@ class TestLoRAStrategyAdapterSaveAndLoad:
         strategy.inference_model = ema_model
 
         adapter_dir = strategy.save_adapter(tmp_path / "adapter", use_ema=True)
-        lora_state = torch.load(
-            adapter_dir / "models" / "main" / "lora.pt",
+        adapter_state = torch.load(
+            adapter_dir / "models" / "main" / "adapter.pt",
             weights_only=True,
         )
+        lora_state = adapter_state["lora"]
 
         assert torch.equal(
             lora_state["model.lora_adapter.weight"],
@@ -696,10 +725,11 @@ class TestLoRAStrategyAdapterSaveAndLoad:
         strategy.models["main"] = _FakeDDP(strategy.models["main"])
 
         adapter_dir = strategy.save_adapter(tmp_path / "adapter")
-        lora_state = torch.load(
-            adapter_dir / "models" / "main" / "lora.pt",
+        adapter_state = torch.load(
+            adapter_dir / "models" / "main" / "adapter.pt",
             weights_only=True,
         )
+        lora_state = adapter_state["lora"]
 
         assert lora_state
         assert all(not key.startswith("module.") for key in lora_state)
@@ -870,7 +900,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
         strategy = LoRAFineTuningStrategy(**self._strategy_kwargs())
         self._set_checkpoint_state(strategy)
 
-        with pytest.warns(UserWarning, match=_PARTIAL_LORA_CHECKPOINT_WARNING):
+        with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
             strategy.save_checkpoint(tmp_path)
 
         metadata = json.loads(
@@ -899,7 +929,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
         _install_fake_peft(monkeypatch)
         source = LoRAFineTuningStrategy(**self._strategy_kwargs())
         self._set_checkpoint_state(source)
-        with pytest.warns(UserWarning, match=_PARTIAL_LORA_CHECKPOINT_WARNING):
+        with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
             source.save_checkpoint(tmp_path)
 
         restored = LoRAFineTuningStrategy(**self._strategy_kwargs())
@@ -922,10 +952,11 @@ class TestLoRAStrategyCheckpointsAndLoad:
         tmp_path: Any,
     ) -> None:
         _install_fake_peft(monkeypatch)
-        hook = LoRACheckpointHook(
+        hook = CheckpointHook(
             tmp_path,
             step_interval=1,
             async_save=False,
+            save_trainable_parameters_only=True,
         )
         strategy = LoRAFineTuningStrategy(
             **{
@@ -941,7 +972,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
         )
         self._set_checkpoint_state(strategy, step_count=0)
 
-        with pytest.warns(UserWarning, match=_PARTIAL_LORA_CHECKPOINT_WARNING):
+        with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
             strategy.run([dataset[0]])
 
         metadata = json.loads(
@@ -961,6 +992,41 @@ class TestLoRAStrategyCheckpointsAndLoad:
         assert metadata["base_model_fingerprints"] == {"main": "fingerprint-ok"}
         assert metadata["runtime_state"]["step_count"] == 1
 
+    def test_lora_from_pretrained_checkpoint_starts_fresh_lora_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        baseline_strategy_kwargs: dict[str, Any],
+        tmp_path: Any,
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        source = TrainingStrategy(**baseline_strategy_kwargs)
+        source.save_checkpoint(tmp_path)
+        source_state = {
+            name: parameter.detach().clone()
+            for name, parameter in source.models["main"].named_parameters()
+        }
+
+        strategy = LoRAFineTuningStrategy.from_pretrained_checkpoint(
+            tmp_path,
+            optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.Adam),
+            training_fn=baseline_strategy_kwargs["training_fn"],
+            loss_fn=baseline_strategy_kwargs["loss_fn"],
+            lora_target_patterns=("main.model.projection",),
+            num_steps=1,
+        )
+
+        assert isinstance(strategy, LoRAFineTuningStrategy)
+        assert strategy.step_count == 0
+        assert strategy.batch_count == 0
+        assert strategy.num_epochs is None
+        assert strategy.num_steps == 1
+        assert isinstance(strategy.hooks[0], LoRAApplyHook)
+        assert isinstance(strategy.hooks[1], TrainableParameterHook)
+        assert hasattr(strategy.models["main"].model, "lora_adapter")
+        loaded_state = dict(strategy.models["main"].named_parameters())
+        for name, parameter in source_state.items():
+            assert torch.equal(loaded_state[name], parameter)
+
     def test_lora_strategy_load_checkpoint_rejects_different_base_model(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -968,7 +1034,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
     ) -> None:
         _install_fake_peft(monkeypatch)
         source = LoRAFineTuningStrategy(**self._strategy_kwargs())
-        with pytest.warns(UserWarning, match=_PARTIAL_LORA_CHECKPOINT_WARNING):
+        with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
             source.save_checkpoint(tmp_path)
 
         metadata_path = tmp_path / "strategy" / "checkpoints" / "0.json"
@@ -985,7 +1051,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
             LoRAFineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
 
 
-class TestLoRAWrapperRegistration:
+class TestLoRAWrapperRegistrations:
     def test_register_builtin_lora_wrappers_warns_for_unavailable_optional_dependency(
         self,
         monkeypatch: pytest.MonkeyPatch,

@@ -16,23 +16,25 @@
 
 from __future__ import annotations
 
-from nvalchemi.training.peft.hooks import (
-    LoRAApplyHook,
-    LoRACheckpointHook,
-    LoRATrainableParameterHook,
-)
+from nvalchemi.training.peft import wrappers as _lora_wrappers
+from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
 
 __all__ = [
     "CuEquivariantLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
     "LoRAApplyHook",
-    "LoRACheckpointHook",
     "LoRAFineTuningStrategy",
-    "LoRATrainableParameterHook",
+    "LoRALayer",
+    "LoRALinear",
+    "LoRAWrappableLayer",
+    "LoRAWrapper",
+    "LoRAWrapperRegistrations",
     "available_lora_wrappers",
     "register_builtin_lora_wrappers",
 ]
+if _lora_wrappers._TRANSFORMER_ENGINE_LORA_LINEAR is not None:
+    __all__.append("TransformerEngineLoRALinear")
 
 
 def __getattr__(name: str) -> object:
@@ -48,9 +50,18 @@ def __getattr__(name: str) -> object:
         "CuEquivariantLoRALinear",
         "E3NNFullyConnectedLoRALayer",
         "EquivariantLoRALinear",
+        "LoRALayer",
+        "LoRALinear",
+        "LoRAWrappableLayer",
+        "LoRAWrapper",
+        "LoRAWrapperRegistrations",
         "available_lora_wrappers",
         "register_builtin_lora_wrappers",
     }:
+        from nvalchemi.training.peft import wrappers
+
+        return getattr(wrappers, name)
+    if name == "TransformerEngineLoRALinear":
         from nvalchemi.training.peft import wrappers
 
         return getattr(wrappers, name)

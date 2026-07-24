@@ -26,17 +26,13 @@ from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
-from nvalchemi.training.peft.hooks import (
-    LoRAApplyHook,
-    LoRACheckpointHook,
-)
+from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
 
 __all__ = [
     "CheckpointHook",
     "DDPHook",
     "EMAHook",
     "LoRAApplyHook",
-    "LoRACheckpointHook",
     "MixedPrecisionHook",
     "TorchProfilerHook",
     "ModulePatchHook",

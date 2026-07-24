@@ -28,13 +28,21 @@ Strategy
    FineTuningStrategy
    FineTuningStrategy.from_pretrained_checkpoint
    FineTuningStrategy.load_checkpoint
+   LoRAFineTuningStrategy
+   LoRAFineTuningStrategy.save_checkpoint
+   LoRAFineTuningStrategy.save_adapter
+   LoRAFineTuningStrategy.load_adapter_into_model
+   LoRAFineTuningStrategy.merge_model_inplace
 
 Use ``FineTuningStrategy.load_checkpoint(...)`` to resume an interrupted run
 with saved optimizer state, scheduler state, counters, and serialized
 fine-tuning configuration. Use ``FineTuningStrategy.from_pretrained_checkpoint(...)``
 to start a new fine-tuning run whose model weights are initialized from an
 existing checkpoint; optimizer state, hooks, and counters do not carry over.
-See :ref:`finetuning_guide` for patterns and examples.
+Use ``LoRAFineTuningStrategy`` for adapter-based fine-tuning where the base
+model is frozen by default and only LoRA adapters, module patches, and selected
+extra parameters are trainable. See :ref:`finetuning_guide` for patterns,
+checkpointing, and adapter export examples.
 
 
 Hooks
@@ -52,6 +60,7 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
 
    ModulePatchHook
    TrainableParameterHook
+   LoRAApplyHook
 
 **ModulePatchHook**
 
@@ -60,3 +69,7 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
 **TrainableParameterHook**
 
 .. dataclass-table:: nvalchemi.training.hooks.TrainableParameterHook
+
+**LoRAApplyHook**
+
+.. dataclass-table:: nvalchemi.training.hooks.LoRAApplyHook

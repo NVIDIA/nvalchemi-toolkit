@@ -31,24 +31,43 @@ from torch.func import functional_call
 from nvalchemi.training.peft import _peft
 
 LoRALayer = _peft.LoRALayer
+LoRALinear = _peft.LoRALinear
+_TRANSFORMER_ENGINE_LORA_LINEAR = getattr(
+    _peft._physicsnemo_peft.lora, "LoRA_te_Linear", None
+)
+if _TRANSFORMER_ENGINE_LORA_LINEAR is not None:
+    TransformerEngineLoRALinear = _TRANSFORMER_ENGINE_LORA_LINEAR
 
 LoRAWrappableLayer: TypeAlias = type[nn.Module]
 LoRAWrapper: TypeAlias = type[_peft.LoRALayer]
-LoRAWrapperRegistration: TypeAlias = tuple[LoRAWrappableLayer, LoRAWrapper]
-LoRAWrapperRegistrations: TypeAlias = tuple[LoRAWrapperRegistration, ...]
+LoRAWrapperRegistrations: TypeAlias = tuple[
+    tuple[LoRAWrappableLayer, LoRAWrapper], ...
+]
 
 
 __all__ = [
     "CuEquivariantLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
+    "LoRALayer",
+    "LoRALinear",
     "LoRAWrapper",
-    "LoRAWrapperRegistration",
     "LoRAWrapperRegistrations",
     "LoRAWrappableLayer",
     "available_lora_wrappers",
     "register_builtin_lora_wrappers",
 ]
+if _TRANSFORMER_ENGINE_LORA_LINEAR is not None:
+    __all__.append("TransformerEngineLoRALinear")
+
+
+def __getattr__(name: str) -> object:
+    """Lazily expose optional wrapper classes."""
+    if name == "TransformerEngineLoRALinear":
+        raise ImportError(
+            "TransformerEngineLoRALinear requires transformer_engine to be installed."
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 _BUILTIN_LORA_WRAPPERS_REGISTERED = False
 

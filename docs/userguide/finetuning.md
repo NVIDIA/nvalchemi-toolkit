@@ -659,6 +659,244 @@ different rates: split the student's parameters across two optimizer groups usin
 the {ref}`training_guide` parameter-group API, or run separate strategies in
 sequence via `from_pretrained_checkpoint`.
 
+### LoRA fine-tuning
+
+{py:class}`~nvalchemi.training.LoRAFineTuningStrategy` is a
+parameter-efficient fine-tuning strategy for adapting a large pretrained model
+without updating the full base model. It injects low-rank LoRA adapters into
+selected modules before optimizer construction, freezes the pretrained base by
+default, and trains only the adapter parameters plus any module patches or
+explicit extra parameters you opt in.
+
+This is useful when the pretrained model is large, the target dataset is
+relatively small, or you want to keep the base model reusable while shipping a
+small domain-specific adapter. Full-model fine-tuning gives the optimizer the
+most freedom; LoRA trades some of that flexibility for lower memory use, fewer
+trainable parameters, and smaller checkpoint or adapter artifacts.
+
+```python
+import torch
+
+from nvalchemi.hooks import NeighborListHook
+from nvalchemi.training import (
+    EnergyMSELoss,
+    ForceMSELoss,
+    LoRAFineTuningStrategy,
+    OptimizerConfig,
+    TrainingStage,
+    ValidationConfig,
+    default_training_fn,
+)
+
+pretrained_model = load_my_pretrained_model()
+train_loader = make_my_batch_loader()
+validation_loader = make_my_validation_loader()
+
+loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True)
+loss_fn.dtype_policy = "prediction_to_target"
+
+strategy = LoRAFineTuningStrategy(
+    models=pretrained_model,
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": 3e-4, "weight_decay": 1e-6},
+    ),
+    training_fn=default_training_fn,
+    loss_fn=loss_fn,
+    num_steps=2_000,
+    devices=[torch.device("cuda")],
+    hooks=[
+        NeighborListHook(
+            pretrained_model.model_config.neighbor_config,
+            stage=TrainingStage.BEFORE_FORWARD,
+        ),
+    ],
+    validation_config=ValidationConfig(
+        validation_data=validation_loader,
+        validation_fn=default_training_fn,
+        loss_fn=loss_fn,
+        every_n_steps=250,
+    ),
+    lora_target_patterns=("main.model.interactions.*.linear*",),
+    lora_rank=8,
+    lora_alpha=1.0,
+    lora_dropout=0.0,
+)
+
+strategy.run(train_loader)
+```
+
+LoRA target patterns match module names, not parameter names. They use the same
+shell-style glob syntax as `trainable_patterns`, but they are matched against
+`named_modules()` output with the model key prepended. A single model passed as
+`models=pretrained_model` is stored under `"main"`, so target names start with
+`main.`. For multi-model workflows, use the keys from your model dictionary.
+
+```python
+for name, module in pretrained_model.named_modules():
+    print(f"main.{name}", type(module).__name__)
+```
+
+Use the printed names to choose targets that the current model actually
+contains. Exact names such as `"main.model.projection"` are accepted, and globs
+such as `"main.model.*projection"` can select related modules. Patterns that
+match no modules raise an error before training begins.
+
+#### How LoRA is applied
+
+LoRA injection happens before optimizer construction. `LoRAFineTuningStrategy`
+prepends a {py:class}`~nvalchemi.training.hooks.LoRAApplyHook` before user hooks;
+the hook registers built-in and custom LoRA wrappers, then applies adapters to
+modules whose model-prefixed names match the target patterns. For each match,
+the LoRA registry selects the wrapper registered for that layer class.
+
+Each wrapper replaces the base layer with a module containing the frozen original
+layer and trainable low-rank adapter parameters. The net adapter weights start at zero,
+so the wrapped model initially matches the base model. Training optimizes only
+LoRA parameters, module patches, and explicit `trainable_patterns`. Mergeable
+wrappers can later fold the learned update back into the base layer for inference
+or export.
+
+The public wrapper classes available through `nvalchemi.training.peft` are:
+
+- {py:class}`nvalchemi.training.peft.LoRALinear` for `torch.nn.Linear`
+  layers.
+- `nvalchemi.training.peft.TransformerEngineLoRALinear` for
+  `transformer_engine.pytorch.Linear` layers when Transformer Engine is
+  installed.
+- {py:class}`nvalchemi.training.peft.EquivariantLoRALinear` for
+  `e3nn.o3.Linear` layers.
+- {py:class}`nvalchemi.training.peft.CuEquivariantLoRALinear` for
+  `cuequivariance_torch.operations.linear.Linear` layers.
+- {py:class}`nvalchemi.training.peft.E3NNFullyConnectedLoRALayer` for
+  `e3nn.nn._fc._Layer` scalar fully connected layers.
+
+Inspect the active layer-to-wrapper pairs with
+{py:func}`~nvalchemi.training.available_lora_wrappers`.
+
+```python
+from nvalchemi.training import available_lora_wrappers
+
+for layer_cls, wrapper_cls in available_lora_wrappers():
+    print(layer_cls, "->", wrapper_cls)
+```
+
+To support a custom layer type, implement a wrapper that follows the ALCHEMI
+LoRA wrapper contract and pass the layer-to-wrapper pair through
+`lora_wrapper_registrations`. `LoRAWrappableLayer` is the type alias for the
+base layer class side of the registration, `LoRAWrapper` is the wrapper class
+side, and `LoRAWrapperRegistrations` is the full tuple of
+`(LoRAWrappableLayer, LoRAWrapper)` pairs accepted by the strategy. The strategy
+registers these pairs immediately before adapter injection, so target patterns
+can select the custom layer in the same constructor call.
+
+```python
+import torch
+
+from nvalchemi.training import LoRAFineTuningStrategy, OptimizerConfig
+from nvalchemi.training.peft import LoRALayer, LoRAWrapperRegistrations
+
+
+class MyBlock(torch.nn.Module):
+    ...
+
+
+class MyBlockLoRA(torch.nn.Module, LoRALayer):
+    mergeable = True
+
+    def __init__(
+        self,
+        base_layer: MyBlock,
+        rank: int,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
+        init: str = "default",
+        **kwargs,
+    ) -> None:
+        super().__init__()
+        self.base_layer = base_layer
+        for param in self.base_layer.parameters():
+            param.requires_grad = False
+
+        self.scaling = alpha / rank
+        self.enabled = True
+        # Define trainable LoRA parameters or submodules here. Initialize the
+        # LoRA residual to zero.
+
+    def forward(self, *args, **kwargs):
+        # Return base_layer(...) plus the LoRA residual when enabled.
+        ...
+
+    def merge_into_base(self) -> None:
+        # Fold the LoRA delta into base_layer for merged inference.
+        ...
+
+
+custom_lora_wrappers: LoRAWrapperRegistrations = (
+    (MyBlock, MyBlockLoRA),
+)
+
+strategy = LoRAFineTuningStrategy(
+    models=pretrained_model,
+    lora_target_patterns=("main.model.custom_blocks.*",),
+    lora_wrapper_registrations=custom_lora_wrappers,
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=1_000,
+)
+```
+
+If the strategy must round-trip through `to_spec_dict()` or restart from a
+serialized checkpoint recipe, define custom layer and wrapper classes in
+importable modules rather than in a notebook cell or local function. The recipe
+stores class paths for `lora_wrapper_registrations`, so those paths must be
+importable when the strategy is rebuilt.
+
+Trainability is intentionally more specific than in `FineTuningStrategy`:
+
+- LoRA adapter parameters are trainable automatically.
+- `module_patches` are installed after LoRA injection and their parameters are
+  trainable automatically.
+- `trainable_patterns` is only for extra non-adapter, non-patch base parameters.
+- `freeze_patterns` are rejected because the pretrained base is already frozen
+  by default.
+- The default `freeze_mode="requires_grad"` freezes non-trainable base
+  parameters. Use `freeze_mode="optimizer_only"` only when you need the same
+  gradient-preserving behavior described above for regular fine-tuning; base
+  layers inside LoRA wrappers remain frozen either way.
+
+For example, this strategy trains the LoRA adapters, the patched auxiliary
+projection, and one explicitly selected base projection. The patched module
+does not need to be repeated in `trainable_patterns`.
+
+```python
+from nvalchemi.training import create_model_spec
+
+strategy = LoRAFineTuningStrategy(
+    models=pretrained_model,
+    module_patches={
+        "main.model.aux_projection": create_model_spec(
+            torch.nn.Linear,
+            in_features=128,
+            out_features=1,
+        ),
+    },
+    trainable_patterns=("main.model.projection.*",),
+    lora_target_patterns=("main.model.interactions.*.linear*",),
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=1_000,
+)
+```
+
+The complete intermediate example
+`examples/intermediate/08_lora_finetuning.py` shows a MACE workflow that
+downloads the LPSC dataset, fits reference energies, inspects LoRA target
+candidates, trains adapters, saves a portable adapter, and loads the adapter
+back into a fresh base model.
+
 (checkpoint-workflows)=
 
 ## Checkpoint workflows
@@ -760,6 +998,68 @@ the next stage calls `from_pretrained_checkpoint` on that checkpoint with a
 broader set of `trainable_patterns`, gradually opening up more of the model
 without ever managing weights manually between stages.
 
+### LoRA checkpoints and adapter exports
+
+LoRA workflows use the same checkpoint APIs as regular fine-tuning:
+{py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.from_pretrained_checkpoint`
+starts a fresh LoRA run from saved model weights, while
+{py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.load_checkpoint`,
+{py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.restore_checkpoint`,
+{py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.save_checkpoint`, and
+{py:class}`~nvalchemi.training.hooks.CheckpointHook` handle restartable runs.
+For parameter-efficient saving, especially with large base models or when
+training only a small fraction of parameters, prefer
+`save_trainable_parameters_only=True` in `save_checkpoint` or `CheckpointHook`.
+
+```python
+from nvalchemi.training import CheckpointHook
+
+strategy = LoRAFineTuningStrategy(
+    models=pretrained_model,
+    hooks=[
+        CheckpointHook(
+            "runs/lora-ft/checkpoints",
+            step_interval=500,
+            save_trainable_parameters_only=True,
+        ),
+    ],
+    ...
+)
+```
+
+Pass `save_trainable_parameters_only=False` only when the checkpoint must carry
+the full model state instead of relying on the original base model being
+available. Trainable-only checkpoints are still training checkpoints; they are
+not meant to be standalone deployable model artifacts.
+
+Use {py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.save_adapter` when you
+want a portable adapter export for inference or distribution. The export writes
+the adapter metadata and weights under a `lora/` directory. Apply it to a
+compatible pristine base model with
+{py:meth}`~nvalchemi.training.LoRAFineTuningStrategy.load_adapter_into_model`.
+By default, `load_adapter_into_model(..., merge_lora=True)` folds mergeable
+adapter weights into the base layers, which is usually the right shape for
+inference and export.
+
+```python
+adapter_dir = strategy.save_adapter("runs/lora-ft/adapter")
+
+base_model = load_my_pretrained_model()
+finetuned_model = LoRAFineTuningStrategy.load_adapter_into_model(
+    base_model,
+    adapter_dir,
+    model_name="main",
+    merge_lora=True,
+)
+finetuned_model.eval()
+```
+
+Adapter exports and LoRA restart checkpoints record base-model fingerprints.
+Loading raises when the saved adapter or checkpoint does not match the supplied
+base model. For adapter loading, `strict=False` turns supported compatibility or
+merge failures into warnings, but the safest workflow is to load adapters onto
+the same base checkpoint and model configuration used during fine-tuning.
+
 ## Hooks in fine-tuning
 
 The hook system in `FineTuningStrategy` is the same as in
@@ -813,5 +1113,6 @@ nothing and the strategy will raise an error before the run begins.
 
 See {ref}`training-finetuning-api` for the API reference for
 {py:class}`~nvalchemi.training.FineTuningStrategy`,
+{py:class}`~nvalchemi.training.LoRAFineTuningStrategy`,
 {py:class}`~nvalchemi.training.hooks.ModulePatchHook`, and
 {py:class}`~nvalchemi.training.hooks.TrainableParameterHook`.

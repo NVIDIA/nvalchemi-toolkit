@@ -22,6 +22,7 @@ from physicsnemo.experimental.peft import utils as _physicsnemo_peft_utils
 LoRAConfig = _physicsnemo_peft.LoRAConfig
 LoRAInit = _physicsnemo_peft.config.LoRAInit
 LoRALayer = _physicsnemo_peft.LoRALayer
+LoRALinear = _physicsnemo_peft.LoRALinear
 apply_lora = _physicsnemo_peft.apply_lora
 ApplyResult = _physicsnemo_peft.ApplyResult
 compute_base_fingerprint = _physicsnemo_peft_utils.compute_base_fingerprint

@@ -24,7 +24,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import torch
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, PrivateAttr, model_validator
 from torch import nn
 
 import nvalchemi.training.peft._adapter_checkpoint as adapter_checkpoint
@@ -33,21 +33,21 @@ from nvalchemi.hooks import Hook
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training._checkpoint import (
-    _create_checkpoint_snapshot,
+    _model_local_parameter_names,
+    _selected_state_dict,
     _snapshot_state_dict,
-    _write_checkpoint_snapshot,
 )
 from nvalchemi.training._spec import BaseSpec, create_model_spec_from_json
-from nvalchemi.training.finetune import FineTuningStrategy
-from nvalchemi.training.hooks.finetune import ModulePatchHook
+from nvalchemi.training.finetune import FineTuningStrategy, FreezeMode
+from nvalchemi.training.hooks.finetune import (
+    _MODULE_PATCH_HOOK_IDENTIFIER,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
 from nvalchemi.training.optimizers import iter_qualified_named_parameters
 from nvalchemi.training.peft import _peft
-from nvalchemi.training.peft.hooks import (
-    LoRAApplyHook,
-    LoRATrainableParameterHook,
-)
+from nvalchemi.training.peft.lora_hooks import _LORA_HOOK_IDENTIFIER, LoRAApplyHook
 from nvalchemi.training.peft.wrappers import (
-    LoRAWrapperRegistration,
     LoRAWrapperRegistrations,
     register_builtin_lora_wrappers,
 )
@@ -62,6 +62,32 @@ _DEFAULT_LORA_RANK = 8
 _DEFAULT_LORA_ALPHA = 1.0
 _DEFAULT_LORA_DROPOUT = 0.0
 _DEFAULT_LORA_WRAP_MLP = False
+_ADAPTER_SCHEMA_VERSION = 1
+_ADAPTER_KIND = "nvalchemi_lora"
+_ADAPTER_DIR = "lora"
+_ADAPTER_STATE_FILENAME = "adapter.pt"
+_EXTRA_TRAINABLE_STATE_NAME = "extras"
+
+
+def _adapter_parameter_summary(
+    adapter_state: Mapping[str, Mapping[str, torch.Tensor]],
+    model: nn.Module,
+) -> dict[str, int]:
+    """Return parameter counts for a saved adapter state."""
+    lora_state = adapter_state.get(_LORA_HOOK_IDENTIFIER, {})
+    extra_state = adapter_state[_EXTRA_TRAINABLE_STATE_NAME]
+    lora_parameters = sum(tensor.numel() for tensor in lora_state.values())
+    extra_trainable_parameters = sum(tensor.numel() for tensor in extra_state.values())
+    return {
+        "lora_tensor_count": len(lora_state),
+        "lora_parameter_count": lora_parameters,
+        "extra_trainable_tensor_count": len(extra_state),
+        "extra_trainable_parameter_count": extra_trainable_parameters,
+        "trainable_parameter_count": lora_parameters + extra_trainable_parameters,
+        "total_parameter_count": sum(
+            parameter.numel() for parameter in model.parameters()
+        ),
+    }
 
 
 def _remaining_lora_module_names(model: nn.Module) -> list[str]:
@@ -69,6 +95,42 @@ def _remaining_lora_module_names(model: nn.Module) -> list[str]:
     return [
         name for name, module in model.named_modules() if _peft.is_lora_layer(module)
     ]
+
+
+def _lora_parameter_prefixes(models: Mapping[str, nn.Module]) -> set[str]:
+    """Return qualified parameter prefixes owned by live LoRA modules."""
+    prefixes: set[str] = set()
+    for model_name, model in models.items():
+        for module_name in _remaining_lora_module_names(model):
+            prefixes.add(
+                f"{model_name}." if not module_name else f"{model_name}.{module_name}."
+            )
+    return prefixes
+
+
+def _registered_lora_parameter_names(
+    registered_trainable_names: Mapping[str, frozenset[str]],
+    models: Mapping[str, nn.Module],
+) -> set[str]:
+    """Return registered trainable parameters that belong to live LoRA modules."""
+    prefixes = _lora_parameter_prefixes(models)
+    if not prefixes:
+        return set()
+    return {
+        name
+        for names in registered_trainable_names.values()
+        for name in names
+        if any(name.startswith(prefix) for prefix in prefixes)
+    }
+
+
+def _parameter_names_under_target(
+    parameter_names: set[str],
+    target: str,
+) -> set[str]:
+    """Return parameter names that belong to a qualified module target."""
+    prefix = f"{target}."
+    return {name for name in parameter_names if name.startswith(prefix)}
 
 
 def _validate_base_model_fingerprints(
@@ -124,9 +186,9 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
     """Fine-tuning strategy that applies LoRA adapters to pretrained models.
 
     The strategy injects LoRA adapters before optimizer construction with
-    :class:`~nvalchemi.training.peft.hooks.LoRAApplyHook`, optionally applies serializable module patches with
+    :class:`~nvalchemi.training.peft.lora_hooks.LoRAApplyHook`, optionally applies serializable module patches with
     :class:`~nvalchemi.training.hooks.finetune.ModulePatchHook`, and marks LoRA, patched, and explicitly
-    selected parameters as trainable with :class:`~nvalchemi.training.peft.hooks.LoRATrainableParameterHook`.
+    selected parameters as trainable with :class:`~nvalchemi.training.hooks.finetune.TrainableParameterHook`.
     The pretrained base parameters are frozen by default; use :attr:`trainable_patterns` to opt additional
     non-adapter parameters into training.
 
@@ -158,12 +220,16 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
     trainable_patterns : tuple[str, ...], optional
         Fully qualified parameter-name patterns for extra non-adapter parameters
         to train. Defaults to ``()``.
+    freeze_mode : {"requires_grad", "optimizer_only"}
+        Whether non-trainable base parameters are temporarily frozen via
+        ``requires_grad=False`` or only excluded from optimizers. Defaults to
+        ``"requires_grad"``.
 
     Raises
     ------
     ValueError
         If ``lora_target_patterns`` is not provided, or if ``freeze_patterns``
-        or unsupported ``freeze_mode`` values are provided.
+        are provided.
     """
 
     lora_rank: int = _DEFAULT_LORA_RANK
@@ -174,10 +240,11 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
     lora_wrapper_registrations: LoRAWrapperRegistrations = ()
     module_patches: dict[str, BaseSpec | nn.Module] = Field(default_factory=dict)
     trainable_patterns: tuple[str, ...] = ()
+    freeze_mode: FreezeMode = "requires_grad"
     # The following fields are not used by the class but are present for compatibility with the base class.
     # They are excluded from serialization in Pydantic with the exclude=True flag.
     freeze_patterns: tuple[str, ...] = Field(default=(), exclude=True)
-    freeze_mode: str = Field(default="requires_grad", exclude=True)
+    _base_fingerprints: dict[str, str] = PrivateAttr(default_factory=dict)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -192,11 +259,12 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         """Prepend registration hooks for fine-tuning fields, including
         flat ``lora_*`` fields, ``module_patches``, and ``trainable_patterns``.
 
-        LoRA fields and ``lora_wrapper_registrations`` produce ``LoRAApplyHook``;
-        ``module_patches`` produces an optional ``ModulePatchHook``; and
-        ``trainable_patterns`` produces ``LoRATrainableParameterHook``. Generated
-        hooks are inserted before user-supplied hooks so the models are prepared for
-        fine-tuning before later hooks register.
+        ``LoRAApplyHook`` uses LoRA fields and ``lora_wrapper_registrations`` to
+        generate the LoRA adapters. ``ModulePatchHook`` is used to install module patches
+        after LoRA injection. ``TrainableParameterHook`` is used to mark the parameters
+        that are trainable, including the additional parameters requested through
+        ``trainable_patterns``. These hooks are inserted before user-supplied hooks
+        so the models are prepared for fine-tuning before later hooks register.
         """
         if not isinstance(data, dict):
             return data
@@ -208,12 +276,6 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 "LoRAFineTuningStrategy does not accept freeze_patterns; LoRA "
                 "freezes the pretrained base by default. Use trainable_patterns "
                 "for extra non-adapter parameters."
-            )
-        if "freeze_mode" in normalized and normalized["freeze_mode"] != "requires_grad":
-            raise ValueError(
-                "LoRAFineTuningStrategy does not accept freeze_mode; LoRA "
-                "trainability is controlled by adapter parameters, module_patches, "
-                "and trainable_patterns."
             )
         if not normalized.get("lora_target_patterns"):
             raise ValueError("LoRAFineTuningStrategy requires lora_target_patterns.")
@@ -257,13 +319,15 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         module_patches = normalized.get("module_patches") or {}
         if module_patches:
             # Patched modules are installed after LoRA and trained fully.
-            generated_hooks.append(ModulePatchHook(patches=module_patches))
+            generated_hooks.append(
+                ModulePatchHook(patches=module_patches, register_parameters=True)
+            )
 
         # (3) Trainable parameter hook
         generated_hooks.append(
-            LoRATrainableParameterHook(
+            TrainableParameterHook(
                 trainable_patterns=tuple(normalized.get("trainable_patterns") or ()),
-                patched_module_paths=tuple(module_patches),
+                freeze_mode=normalized.get("freeze_mode", "requires_grad"),
             )
         )
 
@@ -273,9 +337,8 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             *list(normalized.get("hooks") or []),
         ]
 
-        # Add freeze_patterns and freeze_mode for compatibility with the base class.
+        # Add freeze_patterns for compatibility with the base class.
         normalized["freeze_patterns"] = ()
-        normalized["freeze_mode"] = "requires_grad"
         return normalized
 
     def to_spec_dict(self) -> dict[str, Any]:
@@ -292,7 +355,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             A JSON-safe dictionary suitable for :func:`json.dumps`.
         """
         # Bypass FineTuningStrategy.to_spec_dict because LoRA does not serialize
-        # freeze_patterns and freeze_mode. Start from the base training recipe instead
+        # freeze_patterns. Start from the base training recipe instead
         # (e.g., optimizer_configs, num_epochs, etc.).
         spec = TrainingStrategy.to_spec_dict(self)
 
@@ -320,6 +383,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 patch_specs[target] = value.model_dump()
             spec["module_patches"] = patch_specs
         spec["trainable_patterns"] = list(self.trainable_patterns)
+        spec["freeze_mode"] = self.freeze_mode
         spec["base_model_fingerprints"] = adapter_checkpoint.stored_base_fingerprints(
             self
         )
@@ -333,10 +397,8 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         """Restore wrapper registration class pairs from saved spec."""
         raw_registrations = strategy.get("lora_wrapper_registrations", [])
         if not isinstance(raw_registrations, list):
-            raise ValueError(
-                "strategy.json lora_wrapper_registrations must be a list."
-            )
-        registrations: list[LoRAWrapperRegistration] = []
+            raise ValueError("strategy.json lora_wrapper_registrations must be a list.")
+        registrations: list[tuple[type[nn.Module], type[_peft.LoRALayer]]] = []
         for item in raw_registrations:
             if (
                 not isinstance(item, list)
@@ -440,6 +502,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             lora_wrapper_registrations=cls._wrapper_registrations_from_spec(spec),
             module_patches=module_patches,
             trainable_patterns=tuple(spec.get("trainable_patterns", ())),
+            freeze_mode=spec.get("freeze_mode", "requires_grad"),
         )
 
     def to_checkpoint_dict(self) -> dict[str, Any]:
@@ -456,25 +519,70 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         self._validate_lora_adapters_present()
         super().run(dataloader)
 
-    def _validate_lora_adapters_present(self) -> None:
-        """Validate that the live model tree still matches LoRA metadata."""
-        metadata = getattr(self, "_lora_metadata", None)
-        if not isinstance(metadata, dict) or not metadata:
+    def _validate_lora_adapters_present(
+        self,
+        models: Mapping[str, nn.Module] | None = None,
+    ) -> None:
+        """Validate that registered LoRA adapter parameters still exist.
+
+        Parameters
+        ----------
+        models : Mapping[str, torch.nn.Module] | None, optional
+            Model mapping to inspect. Defaults to the live strategy models.
+            Adapter export passes checkpoint-ready models so DDP wrappers are
+            unwrapped before matching registered parameter names.
+        """
+        registered_trainable_names = self.get_registered_trainable_parameter_names()
+        inspected_models = self.models if models is None else models
+        inspected_model_names = set(inspected_models)
+        if not _lora_parameter_prefixes(inspected_models):
+            if _lora_parameter_prefixes(self.models):
+                return
+            raise RuntimeError(
+                "Cannot use LoRA strategy after adapters were removed or merged; "
+                "no LoRA adapter module(s) remain."
+            )
+        lora_parameter_names = _registered_lora_parameter_names(
+            registered_trainable_names,
+            inspected_models,
+        )
+        if not lora_parameter_names:
             raise ValueError(
                 "Cannot use LoRA strategy before adapters have been applied."
             )
-        missing_lora = [
-            model_name
-            for model_name, model_metadata in metadata.items()
-            if model_name in self.models
-            and isinstance(model_metadata, Mapping)
-            and model_metadata.get("lora_module_names")
-            and not _remaining_lora_module_names(self.models[model_name])
-        ]
-        if missing_lora:
+        inspected_lora_parameter_names = {
+            name
+            for name in lora_parameter_names
+            if name.partition(".")[0] in inspected_model_names
+        }
+        if not inspected_lora_parameter_names:
+            return
+        current_parameter_names = {
+            name
+            for name, _parameter in iter_qualified_named_parameters(inspected_models)
+        }
+        missing_lora_parameters = sorted(
+            inspected_lora_parameter_names - current_parameter_names
+        )
+        if missing_lora_parameters:
             raise RuntimeError(
-                "Cannot use LoRA strategy after adapters were merged into "
-                f"model(s) {missing_lora!r}; save a plain exported model instead."
+                "Cannot use LoRA strategy after adapters were removed or merged; "
+                f"missing LoRA parameter(s): {missing_lora_parameters!r}."
+            )
+        lora_module_prefixes = {
+            f"{model_name}.{module_name}."
+            for model_name, model in inspected_models.items()
+            for module_name in _remaining_lora_module_names(model)
+        }
+        stale_lora_parameters = sorted(
+            name
+            for name in inspected_lora_parameter_names
+            if not any(name.startswith(prefix) for prefix in lora_module_prefixes)
+        )
+        if stale_lora_parameters:
+            raise RuntimeError(
+                "Cannot use LoRA strategy after adapters were removed or merged; "
+                f"stale LoRA parameter(s): {stale_lora_parameters!r}."
             )
 
     def save_checkpoint(
@@ -482,7 +590,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         root_folder: Path | str,
         *,
         checkpoint_index: int = -1,
-        include_base_parameters: bool = False,
+        save_trainable_parameters_only: bool = True,
     ) -> int:
         """Save a restartable LoRA checkpoint.
 
@@ -493,10 +601,10 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         checkpoint_index : int, optional
             Checkpoint index to write. ``-1`` auto-increments from the latest
             manifest index, or starts at ``0`` when no manifest exists.
-        include_base_parameters : bool, optional
-            If ``True``, save full model state like :class:`TrainingStrategy`.
-            Defaults to ``False`` and saves only LoRA adapters, module patches,
-            and extra trainable parameters for smaller memory footprint.
+        save_trainable_parameters_only : bool, optional
+            If ``True``, save only optimizer-selected trainable model state.
+            Defaults to ``True`` for smaller memory footprint. If ``False``,
+            save full model state like :class:`TrainingStrategy`.
 
         Returns
         -------
@@ -508,66 +616,16 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         In distributed training, this method writes immediately on the calling
         process. When saving to a shared checkpoint directory, call it from only
         one rank, typically global rank 0, and synchronize other ranks before
-        loading the checkpoint. Use :class:`~nvalchemi.training.LoRACheckpointHook`
-        for periodic LoRA checkpointing with rank-zero guarding.
+        loading the checkpoint. Use :class:`~nvalchemi.training.CheckpointHook`
+        with ``save_trainable_parameters_only=True`` for periodic LoRA
+        checkpointing with rank-zero guarding.
         """
-        if include_base_parameters:
-            return super().save_checkpoint(
-                root_folder,
-                checkpoint_index=checkpoint_index,
-            )
-        snapshot = _create_checkpoint_snapshot(
+        self._validate_lora_adapters_present()
+        return super().save_checkpoint(
             root_folder,
             checkpoint_index=checkpoint_index,
-            strategy=self,
+            save_trainable_parameters_only=save_trainable_parameters_only,
         )
-        # Keep only trainable tensors and mark model state as partial so restore
-        # loads the saved tensors non-strictly into the LoRA-wrapped models.
-        adapter_checkpoint.filter_snapshot_to_trainable_state(snapshot, self)
-        return _write_checkpoint_snapshot(root_folder, snapshot)
-
-    @classmethod
-    def load_checkpoint(
-        cls,
-        root_folder: Path | str,
-        checkpoint_index: int = -1,
-        map_location: str | torch.device | None = None,
-        **kwargs: Any,
-    ) -> LoRAFineTuningStrategy:
-        """Load a restartable LoRA fine-tuning checkpoint.
-
-        Parameters
-        ----------
-        root_folder : Path | str
-            Root directory for native checkpoint manifests and component state files.
-        checkpoint_index : int, optional
-            Checkpoint index to load. ``-1`` auto-increments from the latest
-            manifest index, or starts at ``0`` when no manifest exists.
-        map_location : str | torch.device | None, optional
-            Map location for the checkpoint.
-        **kwargs : Any, optional
-            Additional keyword arguments for :func:`nvalchemi.training._checkpoint.load_checkpoint`.
-
-        Returns
-        -------
-        LoRAFineTuningStrategy
-            A freshly validated LoRA fine-tuning strategy ready to :meth:`run`.
-        """
-        from nvalchemi.training._checkpoint import load_checkpoint
-
-        loaded = load_checkpoint(
-            root_folder,
-            checkpoint_index=checkpoint_index,
-            map_location=map_location,
-            **kwargs,
-        )
-        strategy = loaded.get("strategy")
-        if not isinstance(strategy, cls):
-            raise TypeError(
-                f"Loaded strategy has type {type(strategy).__name__}, expected "
-                f"{cls.__name__}."
-            )
-        return strategy
 
     def restore_checkpoint(
         self,
@@ -600,6 +658,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         )
         # Validate that the saved base model fingerprints match those of the current strategy.
         _validate_restore_base_fingerprints(self, strategy_metadata)
+        self._validate_lora_adapters_present()
         loaded = super().restore_checkpoint(
             root_folder,
             checkpoint_index=checkpoint_index,
@@ -607,7 +666,6 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             validators=validators,
         )
         return loaded
-
 
     @classmethod
     def _lora_config_from_spec(
@@ -636,9 +694,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 rank=int(spec.get("lora_rank", _DEFAULT_LORA_RANK)),
                 alpha=float(spec.get("lora_alpha", _DEFAULT_LORA_ALPHA)),
                 target_modules=target_patterns,
-                lora_dropout=float(
-                    spec.get("lora_dropout", _DEFAULT_LORA_DROPOUT)
-                ),
+                lora_dropout=float(spec.get("lora_dropout", _DEFAULT_LORA_DROPOUT)),
                 extras_trainable=[],
                 wrap_mlp=bool(spec.get("lora_wrap_mlp", _DEFAULT_LORA_WRAP_MLP)),
                 init="default",
@@ -670,9 +726,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                   manifest.json
                   strategy.json
                   models/{model_name}/
-                    lora.pt
-                    extras.pt
-                    patches.pt
+                    adapter.pt
         model_name : str | None, optional
             The name of the specific model to save the adapter for, e.g., "main".
             Defaults to ``None`` so that all the models in the strategy are saved.
@@ -698,23 +752,14 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         one rank, typically global rank 0, and synchronize other ranks before
         loading the adapter.
         """
-        self._validate_lora_adapters_present()
-
         # Create the adapter directory
-        adapter_dir = adapter_checkpoint.adapter_dir(root_folder)
+        adapter_dir = adapter_checkpoint.adapter_dir(root_folder, dirname=_ADAPTER_DIR)
         adapter_checkpoint.create_dir(adapter_dir)
 
-        # Check saved metadata
-        metadata = getattr(self, "_lora_metadata", None)
-        if not isinstance(metadata, dict) or not metadata:
-            raise ValueError(
-                "LoRA adapter metadata is missing. Construct "
-                "LoRAFineTuningStrategy with LoRAApplyHook before save_adapter()."
-            )
         if self._optimizer_parameter_names is None:
             raise ValueError(
                 "LoRA trainable parameter metadata is missing. "
-                "LoRATrainableParameterHook must run before save_adapter()."
+                "TrainableParameterHook must run before save_adapter()."
             )
 
         # Prepare model(s) for saving
@@ -731,17 +776,25 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             model_names,
             use_ema=use_ema,
         )
+        self._validate_lora_adapters_present(checkpoint_models)
 
         # Serialize the strategy and validate the base model fingerprints
+        base_fingerprints = adapter_checkpoint.stored_base_fingerprints(self)
         strategy = self.to_spec_dict()
 
-        # Retrieve trainable parameter names recorded by LoRATrainableParameterHook.
-        named_parameters = dict(iter_qualified_named_parameters(checkpoint_models))
-        lora_parameter_names = set(
-            getattr(self, "_lora_adapter_parameter_names", set())
+        # Retrieve trainable parameter names registered by source. Extra
+        # trainables are optimizer-selected parameters that were not registered
+        # by any source, such as parameters requested through
+        # TrainableParameterHook.
+        registered_trainable_names = self.get_registered_trainable_parameter_names()
+        registered_parameter_names = set(
+            self.get_flattened_registered_trainable_parameter_names()
         )
-        extra_parameter_names = set(
-            getattr(self, "_extra_trainable_parameter_names", set())
+        registered_patch_parameter_names = set(
+            registered_trainable_names.get(_MODULE_PATCH_HOOK_IDENTIFIER, ())
+        )
+        extra_parameter_names = set(self._optimizer_parameter_names) - (
+            registered_parameter_names
         )
         patch_targets = tuple(self.module_patches)
 
@@ -749,53 +802,68 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         for model_name in model_names:
             # Collect this model's patch targets, metadata, and trainable states.
             patch_prefix = f"{model_name}."
+            named_parameters = dict(checkpoint_models[model_name].named_parameters())
             model_patch_targets = tuple(
-                target for target in patch_targets if target.startswith(patch_prefix)
+                target
+                for target in patch_targets
+                if target.startswith(patch_prefix)
+                and _parameter_names_under_target(
+                    registered_patch_parameter_names,
+                    target,
+                )
             )
-            model_metadata = metadata[model_name]
-            lora_state = adapter_checkpoint.model_local_parameter_state(
-                model_name,
-                lora_parameter_names,
-                named_parameters,
+            adapter_state = {
+                source: _snapshot_state_dict(
+                    _selected_state_dict(
+                        named_parameters,
+                        set(_model_local_parameter_names(model_name, parameter_names)),
+                    )
+                )
+                for source, parameter_names in registered_trainable_names.items()
+            }
+            adapter_state[_EXTRA_TRAINABLE_STATE_NAME] = _snapshot_state_dict(
+                _selected_state_dict(
+                    named_parameters,
+                    set(
+                        _model_local_parameter_names(model_name, extra_parameter_names)
+                    ),
+                )
             )
-            extra_state = adapter_checkpoint.model_local_parameter_state(
-                model_name,
-                extra_parameter_names,
-                named_parameters,
-            )
+            lora_module_names = [
+                name
+                for name, module in checkpoint_models[model_name].named_modules()
+                if _peft.is_lora_layer(module)
+            ]
+            model_metadata = {
+                "lora_module_names": sorted(lora_module_names),
+                "lora_trainable_names": sorted(
+                    adapter_state.get(_LORA_HOOK_IDENTIFIER, {})
+                ),
+                "base_model_fingerprint": base_fingerprints[model_name],
+            }
 
             # Create the model directory and save the trainable states and extra metadata
             model_dir = adapter_dir / "models" / model_name
             model_dir.mkdir(parents=True, exist_ok=True)
             model_entry: dict[str, Any] = {
                 "metadata": model_metadata,
-                "lora_parameters": sorted(lora_state),
-                "extra_trainable_parameters": sorted(extra_state),
+                "lora_parameters": sorted(adapter_state.get(_LORA_HOOK_IDENTIFIER, {})),
+                "extra_trainable_parameters": sorted(
+                    adapter_state[_EXTRA_TRAINABLE_STATE_NAME]
+                ),
+                "parameter_summary": _adapter_parameter_summary(
+                    adapter_state,
+                    checkpoint_models[model_name],
+                ),
                 "module_patches": sorted(model_patch_targets),
             }
-            if lora_state:
-                torch.save(_snapshot_state_dict(lora_state), model_dir / "lora.pt")
-                model_entry["lora_state"] = f"models/{model_name}/lora.pt"
-            if extra_state:
-                torch.save(_snapshot_state_dict(extra_state), model_dir / "extras.pt")
-                model_entry["extras_state"] = f"models/{model_name}/extras.pt"
-            patches_state = {
-                target: _snapshot_state_dict(
-                    adapter_checkpoint.resolve_child_module(
-                        checkpoint_models, target
-                    ).state_dict()
-                )
-                for target in model_patch_targets
-            }
-            if patches_state:
-                torch.save(patches_state, model_dir / "patches.pt")
-                model_entry["patches_state"] = f"models/{model_name}/patches.pt"
+            torch.save(adapter_state, model_dir / _ADAPTER_STATE_FILENAME)
             manifest_models[model_name] = model_entry
 
         # Create the manifest and strategy files
         manifest = {
-            "schema_version": adapter_checkpoint.ADAPTER_SCHEMA_VERSION,
-            "kind": adapter_checkpoint.ADAPTER_KIND,
+            "schema_version": _ADAPTER_SCHEMA_VERSION,
+            "kind": _ADAPTER_KIND,
             "models": manifest_models,
             "use_ema": use_ema,
         }
@@ -853,8 +921,13 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         >>> )
         """
         # Read the saved adapter manifest and strategy.
-        adapter_dir = adapter_checkpoint.adapter_dir(root_folder)
-        manifest, strategy = adapter_checkpoint.read_adapter_metadata(adapter_dir)
+        adapter_dir = adapter_checkpoint.adapter_dir(root_folder, dirname=_ADAPTER_DIR)
+        manifest, strategy = adapter_checkpoint.read_adapter_metadata(
+            adapter_dir,
+            adapter_kind=_ADAPTER_KIND,
+            schema_version=_ADAPTER_SCHEMA_VERSION,
+            target_patterns_key="lora_target_patterns",
+        )
         manifest_models = manifest["models"]
         if model_name not in manifest_models:
             raise KeyError(
@@ -896,6 +969,9 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             model,
             cls._lora_config_from_spec(model_strategy, model_name=model_name),
         )
+        adapter_state = adapter_checkpoint.load_adapter_state(
+            adapter_dir, f"models/{model_name}/{_ADAPTER_STATE_FILENAME}"
+        )
 
         # Load module patches and additional trainable parameters.
         adapter_models = {model_name: model}
@@ -910,40 +986,23 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 SimpleNamespace(models=adapter_models)
             )
 
-        patches_state_path = model_entry.get("patches_state")
-        if patch_targets:
-            if not isinstance(patches_state_path, str):
+        # Load LoRA, patch, and extra trainable parameters.
+        combined_state: dict[str, Any] = {}
+        for source in (
+            _LORA_HOOK_IDENTIFIER,
+            _MODULE_PATCH_HOOK_IDENTIFIER,
+            _EXTRA_TRAINABLE_STATE_NAME,
+        ):
+            source_state = adapter_state.get(source, {})
+            if source == _LORA_HOOK_IDENTIFIER and not source_state:
                 raise ValueError(
-                    f"LoRA adapter model {model_name!r} must reference "
-                    "patches_state when module_patches are present."
+                    f"LoRA adapter model {model_name!r} is missing LoRA state."
                 )
-            patches_state = adapter_checkpoint.load_adapter_state(
-                adapter_dir, patches_state_path
-            )
-            for target in patch_targets:
-                if target not in patches_state:
-                    raise ValueError(
-                        f"LoRA adapter patches_state is missing target {target!r}."
-                    )
-                patch_module = adapter_checkpoint.resolve_child_module(
-                    adapter_models, target
+            if not isinstance(source_state, dict):
+                raise ValueError(
+                    f"LoRA adapter model {model_name!r} {source!r} state must be a dict."
                 )
-                patch_module.load_state_dict(patches_state[target], strict=True)
-
-        # Load LoRA weights and extra trainable parameters.
-        lora_state_path = model_entry.get("lora_state")
-        if not isinstance(lora_state_path, str):
-            raise ValueError(
-                f"LoRA adapter model {model_name!r} is missing lora_state."
-            )
-        lora_state = adapter_checkpoint.load_adapter_state(adapter_dir, lora_state_path)
-        extra_state_path = model_entry.get("extras_state")
-        extra_state = (
-            adapter_checkpoint.load_adapter_state(adapter_dir, extra_state_path)
-            if isinstance(extra_state_path, str)
-            else {}
-        )
-        combined_state = {**lora_state, **extra_state}
+            combined_state.update(source_state)
         load_result = model.load_state_dict(combined_state, strict=False)
         if load_result.unexpected_keys:
             raise RuntimeError(
