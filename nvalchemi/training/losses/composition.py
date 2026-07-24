@@ -632,7 +632,7 @@ class ComposedLossFunction(nn.Module):
         (i.e. top-level components — child weights inside nested
         compositions are multiplied element-wise by the parent weight
         during flattening). A ``None`` entry is shorthand for ``1.0``,
-        so ``weights=[None, 2.0, None]`` means "component 1 gets 2×,
+        so ``weights=[None, 2.0, None]`` means "component 1 gets 2x,
         others default". Passing ``weights=None`` defaults every
         component to ``1.0``.
     normalize_weights
@@ -1242,7 +1242,7 @@ def _compose_weights(
 
     If either operand is a schedule, the result is a
     :class:`_ProductWeight` that resolves ``outer(step, epoch) *
-    inner(step, epoch)`` lazily. Pure float × float collapses to a float.
+    inner(step, epoch)`` lazily. Pure float * float collapses to a float.
     """
     outer_is_schedule = isinstance(outer, LossWeightSchedule)
     inner_is_schedule = isinstance(inner, LossWeightSchedule)

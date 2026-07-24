@@ -10,10 +10,11 @@ and supported features in `nvalchemi`.
 
 ## Quick Start
 
-The quickest way to install ALCHEMI Toolkit:
+The quickest way to install ALCHEMI Toolkit, without specifying optional
+dependencies or CUDA version:
 
 ```bash
-$ pip install nvalchemi-toolkit-ops
+$ pip install nvalchemi-toolkit
 ```
 
 Make sure it is importable:
@@ -21,6 +22,8 @@ Make sure it is importable:
 ```bash
 $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 ```
+
+For install options, refer to the install guide below.
 
 ## About
 
@@ -33,9 +36,10 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 - [AtomicData and Batch](data)
 - [Data Loading Pipeline](datapipes)
 - {doc}`Models: Wrapping ML Interatomic Potentials <models>`
-- {doc}`Training: Strategy and Runtime <training>`
-- {doc}`Losses: Composable Training Terms <losses>`
-- {doc}`Fine-Tuning Pretrained Models <finetuning>`
+- {doc}`Training & Fine-tuning <training_finetuning>`
+  - {doc}`Training: Strategy and Runtime <training>`
+  - {doc}`Losses: Composable Training Terms <losses>`
+  - {doc}`Fine-Tuning Pretrained Models <finetuning>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
@@ -74,9 +78,7 @@ about/contributing
 data
 datapipes
 models
-training
-losses
-finetuning
+training_finetuning
 hooks
 reporting
 dynamics

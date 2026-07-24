@@ -14,7 +14,7 @@
 # limitations under the License.
 """
 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed
-==============================================================
+===============================================================
 
 A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where
 **each stage is itself domain-decomposed** across a group of GPUs. This is the
@@ -30,7 +30,7 @@ system, and the two stages form the pipeline dimension.
    digraph topology {
        rankdir=LR
        fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
        subgraph cluster_fire {
@@ -40,8 +40,8 @@ system, and the two stages form the pipeline dimension.
        }
        subgraph cluster_nvt {
            label="Stage 1 — NVT (DomainParallel)"; style=dashed; color="#7f8c8d"
-           r2 [label="Rank 2\\ndomain-lead" fillcolor="#f9e2ae"]
-           r3 [label="Rank 3" fillcolor="#f9e2ae"]
+           r2 [label="Rank 2\\ndomain-lead" fillcolor="#f9e2ae" fontcolor="#111111"]
+           r3 [label="Rank 3" fillcolor="#f9e2ae" fontcolor="#111111"]
        }
 
        r0 -> r1 [dir=both style=dashed label="halo"]

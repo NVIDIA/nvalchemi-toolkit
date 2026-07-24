@@ -157,9 +157,9 @@ def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutp
 | `energy`     | `[B, 1]`   | Per-graph energy (eV)    |
 | `forces`     | `[V, 3]`   | Per-node forces          |
 | `stress`     | `[B, 3, 3]`| Per-graph stress tensor  |
-| `hessians`   | `[V, 3, 3]`| Energy Hessian           |
-| `dipoles`    | `[B, 3]`   | Dipole moment            |
-| `charges`    | `[V, 1]`   | Partial charges          |
+| `hessian`    | `[V, 3, 3]`| Energy Hessian           |
+| `dipole`     | `[B, 3]`   | Dipole moment            |
+| `charges`    | `[V]`      | Partial charges          |
 
 ### 5. Implement `compute_embeddings`
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, TypeAlias
+from typing import Annotated, Any, TypeAlias
 
 import torch
 from pydantic import (
@@ -109,49 +109,134 @@ def _normalize_optimizer_configs(
 
 
 class OptimizerConfig(BaseModel):
-    """Declarative optimizer + optional LR-scheduler bundle.
+    """Declarative optimizer and optional LR-scheduler bundle.
 
-    Kwargs are validated against each class's ``__init__`` at construction
-    time so mistakes surface before training starts. Build the concrete
-    ``(optimizer, scheduler)`` pair via :meth:`build`.
+    ``OptimizerConfig`` captures *how* to build a ``torch`` optimizer (and an
+    optional learning-rate scheduler) without instantiating either until model
+    parameters are available. You supply the optimizer class plus its keyword
+    arguments as data, so the whole training recipe stays serializable and
+    can round-trip through :meth:`to_spec` / :meth:`from_spec`. This is the
+    unit that :class:`~nvalchemi.training.TrainingStrategy` and
+    :class:`~nvalchemi.training.FineTuningStrategy` accept via their
+    ``optimizer_configs`` argument, either as a single config for a
+    single-model strategy or as a ``{model_name: [OptimizerConfig, ...]}``
+    mapping for named/multi-model strategies.
 
-    Attributes
-    ----------
-    optimizer_cls : type[torch.optim.Optimizer]
-        Optimizer class; ``optimizer_kwargs`` must match its signature.
-    optimizer_kwargs : dict[str, Any]
-    scheduler_cls : type | None
-        Optional LR scheduler. Time-based schedulers (``StepLR``,
-        ``CosineAnnealingLR``, etc.) step every optimizer step.
-        Metric-driven schedulers (``ReduceLROnPlateau`` and subclasses)
-        step only at validation checkpoints via
-        :func:`step_metric_schedulers`.
-    scheduler_kwargs : dict[str, Any]
-        Must be empty unless ``scheduler_cls`` is set.
-    scheduler_metric_adapter : Callable[[dict], float] | str | None
-        How a metric-driven scheduler (``ReduceLROnPlateau``) extracts
-        its scalar metric from the validation summary dict. A ``str``
-        is treated as a key lookup into the summary; a callable
-        receives the whole summary dict and returns a ``float``;
-        ``None`` uses the default extractor (see
-        :func:`_extract_scheduler_metric`).
+    Both ``optimizer_kwargs`` and ``scheduler_kwargs`` are validated against
+    the corresponding class ``__init__`` signature at construction time (see
+    ``_validate_kwargs``), so a misspelled or unsupported argument raises a
+    :class:`pydantic.ValidationError` immediately rather than deep inside the
+    training loop. At runtime, :meth:`build` binds the config to a concrete
+    parameter iterable and returns the ``(optimizer, scheduler)`` pair; the
+    strategy calls this for you once trainable parameters are known.
+
+    Schedulers fall into two families that the strategy steps at different
+    times. Time-based schedulers (``StepLR``, ``CosineAnnealingLR``, etc.)
+    advance on every optimizer step via :func:`step_lr_schedulers`.
+    Metric-driven schedulers (``ReduceLROnPlateau`` and subclasses) step only
+    at validation checkpoints via :func:`step_metric_schedulers`, using
+    ``scheduler_metric_adapter`` to pull a scalar out of the validation
+    summary dict.
 
     Examples
     --------
+    A plain Adam optimizer with no scheduler:
+
     >>> import torch
+    >>> cfg = OptimizerConfig(
+    ...     optimizer_cls=torch.optim.Adam,
+    ...     optimizer_kwargs={"lr": 1e-3},
+    ... )
+
+    A time-based ``StepLR`` schedule that decays every 10 optimizer steps:
+
     >>> cfg = OptimizerConfig(
     ...     optimizer_cls=torch.optim.Adam,
     ...     optimizer_kwargs={"lr": 1e-3},
     ...     scheduler_cls=torch.optim.lr_scheduler.StepLR,
     ...     scheduler_kwargs={"step_size": 10, "gamma": 0.1},
     ... )
+
+    A metric-driven ``ReduceLROnPlateau`` schedule keyed off a validation
+    summary entry (stepped only at validation checkpoints):
+
+    >>> cfg = OptimizerConfig(
+    ...     optimizer_cls=torch.optim.AdamW,
+    ...     optimizer_kwargs={"lr": 1e-4},
+    ...     scheduler_cls=torch.optim.lr_scheduler.ReduceLROnPlateau,
+    ...     scheduler_kwargs={"mode": "min", "patience": 5},
+    ...     scheduler_metric_adapter="total_loss",
+    ... )
+
+    Attach configs to a strategy — a bare config for a single model, or a
+    per-model mapping for named models:
+
+    >>> from nvalchemi.training import TrainingStrategy  # doctest: +SKIP
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models=model,
+    ...     optimizer_configs=cfg,
+    ...     num_epochs=10,
+    ...     training_fn=default_training_fn,
+    ...     loss_fn=EnergyMSELoss(),
+    ... )
+
+    Notes
+    -----
+    - ``scheduler_kwargs`` must be empty unless ``scheduler_cls`` is set, and
+      ``scheduler_metric_adapter`` may only be supplied alongside a
+      ``scheduler_cls``; violating either raises at construction time.
+    - ``scheduler_metric_adapter`` is only consulted for metric-driven
+      schedulers. A ``str`` is a key lookup into the validation summary, a
+      callable receives the whole summary and returns a ``float``, and
+      ``None`` falls back to the default ``"total_loss"`` key.
+    - Direct ``torch.nn.Module``/class references are accepted at runtime, but
+      only importable classes serialize cleanly through :meth:`to_spec`.
     """
 
-    optimizer_cls: SerializableClass
-    optimizer_kwargs: dict[str, Any] = Field(default_factory=dict)
-    scheduler_cls: SerializableOptionalClass = None
-    scheduler_kwargs: dict[str, Any] = Field(default_factory=dict)
-    scheduler_metric_adapter: SchedulerMetricAdapter = None
+    optimizer_cls: Annotated[
+        SerializableClass,
+        Field(
+            description=(
+                "Optimizer class; ``optimizer_kwargs`` must match its signature."
+            )
+        ),
+    ]
+    optimizer_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Keyword arguments forwarded to the optimizer constructor; validated "
+            "against its ``__init__`` signature at construction time."
+        ),
+    )
+    scheduler_cls: Annotated[
+        SerializableOptionalClass,
+        Field(
+            description=(
+                "Optional LR scheduler. Time-based schedulers (``StepLR``, "
+                "``CosineAnnealingLR``, etc.) step every optimizer step. "
+                "Metric-driven schedulers (``ReduceLROnPlateau`` and subclasses) "
+                "step only at validation checkpoints via "
+                ":func:`step_metric_schedulers`."
+            )
+        ),
+    ] = None
+    scheduler_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Must be empty unless ``scheduler_cls`` is set.",
+    )
+    scheduler_metric_adapter: Annotated[
+        SchedulerMetricAdapter,
+        Field(
+            description=(
+                "How a metric-driven scheduler (``ReduceLROnPlateau``) extracts "
+                "its scalar metric from the validation summary dict. A ``str`` "
+                "is treated as a key lookup into the summary; a callable "
+                "receives the whole summary dict and returns a ``float``; "
+                "``None`` uses the default extractor (see "
+                ":func:`_extract_scheduler_metric`)."
+            )
+        ),
+    ] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

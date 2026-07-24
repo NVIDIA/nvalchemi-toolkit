@@ -4,52 +4,82 @@
 
 # Installation Guide
 
-## Installation Methods
+There are a number of ways to download and setup a Python environment for `nvalchemi-toolkit`,
+depending on whether you are a user, a developer, what optional dependencies you would like
+to include, what version of CUDA Toolkit is available, and what environment manager you use.
 
-### From PyPI
+## From PyPI
 
-The most straightforward way to install ALCHEMI Toolkit is via PyPI:
+The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
+one accelerator stack, then add any compatible optional extras.
 
-```bash
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu13]'
-```
+<div class="install-matrix" id="install-matrix">
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="package-manager-label">Package manager</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="package-manager-label">
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-pip" value="pip" checked>
+      <label for="package-manager-pip">Pip</label>
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-uv" value="uv">
+      <label for="package-manager-uv">uv</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="accelerator-label">Accelerator</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="accelerator-label">
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-none" value="none" checked>
+      <label for="accelerator-none">No CUDA</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu12" value="cu12">
+      <label for="accelerator-cu12">CUDA 12</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu13" value="cu13">
+      <label for="accelerator-cu13">CUDA 13</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="optional-extras-label">Optional extras</div>
+    <div class="install-matrix-options" role="group" aria-labelledby="optional-extras-label">
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-aimnet" value="aimnet">
+      <label for="extra-aimnet">AIMNet2</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-ase" value="ase">
+      <label for="extra-ase">ASE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-mace" value="mace">
+      <label for="extra-mace">MACE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-pymatgen" value="pymatgen">
+      <label for="extra-pymatgen">pymatgen</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-tensorboard" value="tensorboard">
+      <label for="extra-tensorboard">TensorBoard</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-uma" value="uma">
+      <label for="extra-uma">UMA</label>
+    </div>
+  </div>
+  <div class="install-matrix-output">
+    <div class="install-matrix-heading">Run this command</div>
+    <div class="install-command">
+      <pre><code id="install-command">pip install nvalchemi-toolkit</code></pre>
+      <button type="button" id="copy-install-command" aria-label="Copy install command">Copy</button>
+    </div>
+  </div>
+  <p class="install-matrix-note" id="install-matrix-note" aria-live="polite"></p>
+</div>
 
-For CUDA 12 environments, use the CUDA 12 PyTorch index instead:
+<noscript>
+Choose one accelerator extra and append any compatible optional extras, for
+example: <code>pip install 'nvalchemi-toolkit[cu13,mace]'</code>.
+</noscript>
 
-```bash
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu126 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu12]'
-```
-
-MACE support composes with the CUDA extras. Select exactly one CUDA extra
-alongside `mace`:
-
-```bash
-# MACE support with the CUDA 13 stack
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu13,mace]'
-
-# MACE support with the CUDA 12 stack
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu126 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu12,mace]'
+```{note}
+The CUDA extras are mutually exclusive. The `uma` extra is also mutually
+exclusive with `cu12`, `cu13`, and `mace`; keep UMA in a separate environment.
 ```
 
 ```{note}
 We recommend using `uv` for virtual environment, package management, and
 dependency resolution. `uv` can be obtained through their installation
 page found [here](https://docs.astral.sh/uv/getting-started/installation/).
+Alternative environment managers like `pyenv` can also be used for `pip`
+exclusive commands.
 ```
 
-### From Github Source
+## From Github Source
 
 This approach is useful for obtain nightly builds by installing directly
 from the source repository:
@@ -58,7 +88,7 @@ from the source repository:
 $ pip install git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
 ```
 
-### Installation via `uv`
+## Installation via `uv`
 
 Maintainers generally use `uv`, and is the most reliable (and fastest) way
 to spin up a virtual environment to use ALCHEMI Toolkit. Assuming `uv`
@@ -75,7 +105,6 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 $ uv venv --seed --python 3.12
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13]'
 ```
@@ -86,16 +115,22 @@ For MACE and cuEquivariance support, select the matching variant:
 # CUDA 13 MACE stack
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13,mace]'
 
 # CUDA 12 MACE stack
 $ uv pip install \
     --torch-backend cu126 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu12,mace]'
+```
+
+```{tip}
+The `--torch-backend` option routes `uv` to install the correct
+set of extra libraries more explicitly. For machines without accelerators,
+such as on MacOS development, this option can be omitted. Conversely, on
+machines with a GPU and for whatever reason want to force the installation
+to be CPU only, you can specify `cpu` as a backend.
 ```
 
 </details>
@@ -192,7 +227,6 @@ for production settings!
 $ uv venv --seed --python 3.13
 $ uv pip install \
     --torch-backend cu130 \
-    --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'
 ```
@@ -225,7 +259,6 @@ mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
 pip install \
     --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
 

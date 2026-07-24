@@ -187,8 +187,11 @@ be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
   periodic, neighbor-list, profiling, and timing hooks.
 - `nvalchemi/training/`: CLI, strategy/spec validation, runtime, distributed
   helpers, finetuning, checkpoints, losses, optimizers, and training hooks.
-- `nvalchemi/distributed.py`: distributed utilities used by training and
-  multi-stage workflows.
+- `nvalchemi/distributed/` (package): distributed utilities used by training
+  and multi-stage workflows. The former runtime helpers (`DistributedManager`,
+  `resolve_world_size`, `resolve_global_rank`, `collective_device`) now live in
+  `nvalchemi/distributed/_runtime.py`, re-exported via
+  `nvalchemi/distributed/__init__.py`.
 
 Import from concrete modules when optional exports might pull unavailable extras.
 For example, prefer `from nvalchemi.models.base import BaseModelMixin` in code

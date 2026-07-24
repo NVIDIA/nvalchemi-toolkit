@@ -53,7 +53,7 @@ The toolkit organises Zarr arrays into three logical groups:
 |-------|----------|---------------------|
 | `meta` | Pointer arrays (`atoms_ptr`, `edges_ptr`), validity mask | None |
 | `core` | Positions, forces, energy, atomic numbers, cell, pbc | None |
-| `custom` | User-added arrays via `AtomicData.custom` | None |
+| `custom` | User-added arrays via `add_node_property` / `add_edge_property` / `add_system_property` | None |
 
 {py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig` lets you set different
 {py:class}`~nvalchemi.data.datapipes.ZarrArrayConfig` for each group:
@@ -663,60 +663,58 @@ device-transfer overhead can dominate the end-to-end pipeline. This section
 covers the knobs that matter most for read throughput, especially under shuffled
 access patterns.
 
-```{graphviz}
-:caption: End-to-end read pipeline.
+```{eval-rst}
+.. graphviz::
+   :caption: End-to-end read pipeline.
 
-digraph read_pipeline {
-    rankdir=LR
-    compound=true
-    fontname="Helvetica"
-    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
-    edge [fontname="Helvetica" fontsize=10]
+   digraph read_pipeline {
+       rankdir=LR
+       compound=true
 
-    subgraph cluster_dataloader {
-        label="DataLoader"
-        style=rounded
-        color="#4a90d9"
-        fontcolor="#4a90d9"
+       subgraph cluster_dataloader {
+           label="DataLoader"
+           style=rounded
+           color="#76b900"
+           fontcolor="#eeeeee"
 
-        sampler [label="Sampler\n(indices)" fillcolor="#dce6f1"]
-        fuse [label="Fuse\nprefetch_factor\nbatches" fillcolor="#f9e2ae"]
-        sampler -> fuse [label="batch of\nindices"]
-    }
+           sampler [label="Sampler\n(indices)"]
+           fuse [label="Fuse\nprefetch_factor\nbatches" fillcolor="#4a3315"]
+           sampler -> fuse [label="batch of\nindices"]
+       }
 
-    subgraph cluster_dataset {
-        label="Dataset  (background thread)"
-        style=rounded
-        color="#5bb35b"
-        fontcolor="#5bb35b"
+       subgraph cluster_dataset {
+           label="Dataset  (background thread)"
+           style=rounded
+           color="#76b900"
+           fontcolor="#eeeeee"
 
-        read_many [label="reader.read_many()\ncoalesced backend read" fillcolor="#dce6f1"]
-        validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#fddede"]
-        raw [label="raw tensor\ndicts" fillcolor="#d5f5d5"]
-        batch_val [label="Batch.from_data_list()" fillcolor="#e8daef"]
-        batch_raw [label="Batch.from_raw_dicts()" fillcolor="#e8daef"]
+           read_many [label="reader.read_many()\ncoalesced backend read"]
+           validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#4a2222"]
+           raw [label="raw tensor\ndicts" fillcolor="#26351d"]
+           batch_val [label="Batch.from_data_list()" fillcolor="#2d2740"]
+           batch_raw [label="Batch.from_raw_dicts()" fillcolor="#2d2740"]
 
-        read_many -> validate [label="skip_validation\n= False"]
-        read_many -> raw [label="skip_validation\n= True"]
-        validate -> batch_val
-        raw -> batch_raw
-    }
+           read_many -> validate [label="skip_validation\n= False"]
+           read_many -> raw [label="skip_validation\n= True"]
+           validate -> batch_val
+           raw -> batch_raw
+       }
 
-    subgraph cluster_consumer {
-        label="Consumer"
-        style=rounded
-        color="#c0392b"
-        fontcolor="#c0392b"
+       subgraph cluster_consumer {
+           label="Consumer"
+           style=rounded
+           color="#76b900"
+           fontcolor="#eeeeee"
 
-        device [label=".to(device)" fillcolor="#f9e2ae"]
-        model [label="Model" fillcolor="#dce6f1"]
-        device -> model
-    }
+           device [label=".to(device)" fillcolor="#4a3315"]
+           model [label="Model"]
+           device -> model
+       }
 
-    fuse -> read_many [label="N indices\n(N = pf \u00d7 bs)" lhead=cluster_dataset style=bold]
-    batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
-    batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
-}
+       fuse -> read_many [label="N indices\n(N = pf × bs)" lhead=cluster_dataset style=bold]
+       batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+       batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+   }
 ```
 
 ### The read window: `prefetch_factor`

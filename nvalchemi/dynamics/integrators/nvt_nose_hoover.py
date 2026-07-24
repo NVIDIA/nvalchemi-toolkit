@@ -63,7 +63,7 @@ __all__ = ["NVTNoseHoover"]
 
 
 class NVTNoseHoover(BaseDynamics):
-    """NVT integrator via Nosé-Hoover chain (NHC) thermostat.
+    r"""NVT integrator via Nosé-Hoover chain (NHC) thermostat.
 
     Deterministic extended-Lagrangian thermostat that rigorously samples
     the canonical ensemble for ergodic systems.
@@ -77,9 +77,9 @@ class NVTNoseHoover(BaseDynamics):
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     thermostat_time : float or torch.Tensor
-        Thermostat coupling time τ_T in femtoseconds ``[M]`` or scalar.
+        Thermostat coupling time :math:`\tau_T` in femtoseconds ``[M]`` or scalar.
         Controls how tightly the thermostat couples to the system;
-        typical values are 10–100 × dt.
+        typical values are 10–100 :math:`\times \Delta t`.
     chain_length : int, optional
         Number of links in the Nosé-Hoover chain.  Default 3.
     yoshida_order : int, optional

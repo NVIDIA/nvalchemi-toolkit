@@ -35,14 +35,18 @@ __all__ = ["AlignCellHook"]
 
 
 class AlignCellHook:
-    """Align periodic cells before the first variable-cell FIRE2 step.
+    r"""Align periodic cells before the first variable-cell FIRE2 step.
 
     Transforms each periodic system's cell matrix to the standard
-    upper-triangular (right-handed) form::
+    upper-triangular (right-handed) form:
 
-        H = [[a,         0,    0],
-             [b*cos(γ),  b*sin(γ), 0],
-             [c1,        c2,   c3]]
+    .. math::
+
+       H = \begin{bmatrix}
+       a & 0 & 0 \\
+       b\cos\gamma & b\sin\gamma & 0 \\
+       c_1 & c_2 & c_3
+       \end{bmatrix}
 
     and rotates positions to preserve fractional coordinates.  This
     representation reduces rotational ambiguity (improving optimizer

@@ -28,6 +28,9 @@ your project's skills directory, or your user-level one (e.g.
 | `nvalchemi-data-storage` | How to write, read, compose, and load atomic data using the composable Zarr-backed storage pipeline (Writer, Reader, Dataset, MultiDataset, DataLoader). | {ref}`datapipes_guide` |
 | `nvalchemi-zarr-perf` | How to tune Zarr-backed Reader, Dataset, MultiDataset, and DataLoader throughput with fused reads, validation skipping, pinned memory, and benchmark sweeps. | {ref}`read_performance_tuning` |
 | `nvalchemi-model-wrapping` | How to wrap an arbitrary MLIP using the {py:class}`~nvalchemi.models.base.BaseModelMixin` interface to standardize inputs, outputs, and embeddings. | {ref}`models_guide` |
+| `nvalchemi-training-api` | How to configure, run, extend, and debug {py:class}`~nvalchemi.training.TrainingStrategy` workflows. | {ref}`training_guide` |
+| `nvalchemi-loss-api` | How to use built-in loss terms, compose training objectives, and implement custom loss functions. | {ref}`losses_guide` |
+| `nvalchemi-fine-tuning` | How to configure fine-tuning workflows and adapt pretrained checkpoints through the CLI or API. | {ref}`finetuning_guide` |
 | `nvalchemi-dynamics-api` | How to configure and run dynamics simulations, compose multi-stage pipelines ({py:class}`~nvalchemi.dynamics.FusedStage`, {py:class}`~nvalchemi.dynamics.DistributedPipeline`), use inflight batching, and manage data sinks. | {ref}`dynamics_guide` |
 | `nvalchemi-dynamics-implementation` | How to implement a dynamics integrator by subclassing {py:class}`~nvalchemi.dynamics.base.BaseDynamics` and overriding `pre_update()` and `post_update()`. | {ref}`dynamics_guide` |
 | `nvalchemi-dynamics-hooks` | How to use and write dynamics hooks --- callbacks that observe or modify batch state at specific points during each simulation step. | {ref}`hooks_guide` |

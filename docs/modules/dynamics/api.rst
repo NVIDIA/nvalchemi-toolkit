@@ -42,26 +42,13 @@ Convergence
 Hooks
 -----
 
-.. currentmodule:: nvalchemi.dynamics.hooks
-
-.. autosummary::
-   :toctree: _generated
-   :nosignatures:
-
-   ConvergedSnapshotHook
-   EnergyDriftMonitorHook
-   FreezeAtomsHook
-   LoggingHook
-   MaxForceClampHook
-   NaNDetectorHook
-   TorchProfilerHook
-   SnapshotHook
-   StageTimingHook
-
+Dynamics-specific hooks are documented in :ref:`dynamics-hooks`.
 General-purpose hooks (:class:`~nvalchemi.hooks.NeighborListHook`,
 :class:`~nvalchemi.hooks.BiasedPotentialHook`,
-:class:`~nvalchemi.hooks.WrapPeriodicHook`) and the core hook
-protocol are documented in :ref:`hooks-api`.
+:class:`~nvalchemi.hooks.WrapPeriodicHook`), the shared profiling hooks
+(:class:`~nvalchemi.hooks.StageTimingHook`,
+:class:`~nvalchemi.hooks.TorchProfilerHook`), and the core hook protocol
+are documented in :ref:`hooks-api`.
 
 Data sinks
 ----------

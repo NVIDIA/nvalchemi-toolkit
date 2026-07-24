@@ -108,7 +108,7 @@ def _gloo_safe_gather(stored: Any, mesh: Any, dst: int) -> torch.Tensor:
     # receiver check is group-relative), but ``dist.send``/``recv`` take GLOBAL
     # ranks. Map through ``get_global_rank`` — identity when the group spans all
     # ranks (the 1-D whole-mesh case), and correct for a sub-group (a domain row of
-    # a 2-D pipeline×domain mesh) where group-local ≠ global.
+    # a 2-D pipeline x domain mesh) where group-local != global.
     if local_rank == dst:
         parts: list[torch.Tensor] = []
         for r in range(world_size):

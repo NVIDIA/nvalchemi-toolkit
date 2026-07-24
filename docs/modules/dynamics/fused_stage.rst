@@ -24,8 +24,8 @@ The primary way to build a ``FusedStage`` is with the ``+`` operator:
 
    from nvalchemi.dynamics import DemoDynamics
 
-   optimizer = DemoDynamics(model=model, dt=0.5)
-   md = DemoDynamics(model=model, dt=1.0)
+   optimizer = DemoDynamics(model=model, n_steps=1000, dt=0.5)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0)
 
    # Fuse two dynamics → one forward pass per step
    fused = optimizer + md
@@ -34,9 +34,9 @@ Chaining is supported for three or more stages:
 
 .. code-block:: python
 
-   stage_a = DemoDynamics(model=model, dt=0.5)
-   stage_b = DemoDynamics(model=model, dt=1.0)
-   stage_c = DemoDynamics(model=model, dt=2.0)
+   stage_a = DemoDynamics(model=model, n_steps=1000, dt=0.5)
+   stage_b = DemoDynamics(model=model, n_steps=1000, dt=1.0)
+   stage_c = DemoDynamics(model=model, n_steps=1000, dt=2.0)
 
    # (stage_a + stage_b) returns a FusedStage
    # FusedStage + stage_c appends via FusedStage.__add__
@@ -59,19 +59,17 @@ from 0 when using ``+``). Every sample in the batch carries a
 
    digraph fused_step {
        rankdir=TB
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
        subgraph cluster_step {
            label="FusedStage.step()"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
-           batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#f9e2ae"]
+           batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#4a3315"]
            compute [label="1. compute()\nsingle forward pass for ALL 8 samples"]
            mask0   [label="2. sub_stage[0].masked_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
            mask1   [label="3. sub_stage[1].masked_update\nstatus == 1  →  samples 3, 4, 6"]
@@ -205,11 +203,13 @@ fused step:
 
    optimizer = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100)],
    )
    md = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=1.0,
        hooks=[SnapshotHook(sink=sink, frequency=10)],
    )
@@ -232,6 +232,7 @@ For advanced control, construct ``FusedStage`` directly:
 
    optimizer = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        convergence_hook=ConvergenceHook(
            criteria=[
@@ -242,7 +243,7 @@ For advanced control, construct ``FusedStage`` directly:
            target_status=1,
        ),
    )
-   md = DemoDynamics(model=model, dt=1.0)
+   md = DemoDynamics(model=model, n_steps=1000, dt=1.0)
 
    fused = FusedStage(
        sub_stages=[(0, optimizer), (1, md)],

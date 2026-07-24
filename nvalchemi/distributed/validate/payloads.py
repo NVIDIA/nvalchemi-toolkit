@@ -145,7 +145,7 @@ def _diff_outputs(
        tensors**. Permutation-invariant *and* wrongness-sensitive: a
        systematic per-atom error shifts the sorted distribution, so
        this catches correctness bugs that the previous
-       ``max(net, peak_magnitude)`` aggregate hid (forces sum to ≈0
+       ``max(net, peak_magnitude)`` aggregate hid (forces sum to ~=0
        on both sides by Newton's 3rd regardless of correctness; peak
        magnitude is a single scalar that often agrees by chance).
     """

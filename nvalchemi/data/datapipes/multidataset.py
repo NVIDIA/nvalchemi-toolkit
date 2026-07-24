@@ -85,10 +85,35 @@ PendingFusedBatch = Future[_FusedBatchResult] | _DelegatedFusedBatch
 
 
 class MultiDataset:
-    """Compose multiple batch-loadable datasets behind one index space.
+    """Compose multiple batch-loadable datasets behind one global index space.
 
-    The class provides concatenated indexing and nvalchemi-specific batch APIs
-    used by :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
+    ``MultiDataset`` concatenates several
+    :class:`~nvalchemi.data.datapipes.dataset.Dataset` objects so one run can
+    draw from more than one source (for example several Zarr stores, or datasets
+    with different chemistries or labels). Child order defines a global index
+    space: a global index maps to a ``(child, local_index)`` pair, and
+    :meth:`to_global_index` performs the reverse mapping the samplers rely on.
+    It exposes the same length and batch-read surface as a single ``Dataset``,
+    so a :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` consumes it
+    interchangeably.
+
+    On its own a ``MultiDataset`` behaves like uniform concatenation; the
+    *mixing policy* -- how often each child is drawn -- comes from a
+    multi-dataset sampler passed to the loader.
+    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` mixes at
+    per-sample rates (as ``sampler=``), while
+    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler` fixes
+    each batch's composition (as ``batch_sampler=``); both read child offsets
+    from this wrapper through :meth:`to_global_index`.
+
+    With ``output_strict=True`` (default) every non-empty child must expose
+    identical field names, so collated batches are homogeneous; empty children
+    are skipped. Use ``output_strict=False`` for heterogeneous sources, where
+    only the first child's field names are reported and a custom training loop
+    or collator must handle source-specific fields. ``num_workers`` sizes the
+    thread pool for the mixed-dataset fused prefetch. Compared with
+    :class:`torch.utils.data.ConcatDataset`, ``MultiDataset`` adds this
+    field-name contract, the fused batch API, and ``AtomicData`` semantics.
 
     Parameters
     ----------
@@ -98,6 +123,26 @@ class MultiDataset:
         If True, require all datasets to expose identical field names.
     num_workers : int, default=2
         Thread pool size for mixed-dataset fused prefetches.
+
+    Examples
+    --------
+    Concatenate two datasets and draw each batch as three samples from the
+    first source and one from the second::
+
+        >>> from nvalchemi.data.datapipes import DataLoader  # doctest: +SKIP
+        >>> from nvalchemi.data.datapipes.multidataset import MultiDataset
+        >>> from nvalchemi.data.datapipes.samplers import (  # doctest: +SKIP
+        ...     MultiDatasetBatchSampler,
+        ... )
+        >>> multi = MultiDataset(dataset_a, dataset_b)  # doctest: +SKIP
+        >>> sampler = MultiDatasetBatchSampler(  # doctest: +SKIP
+        ...     multi, batch_size=4, samples_per_dataset=(3, 1)
+        ... )
+        >>> loader = DataLoader(multi, batch_sampler=sampler)  # doctest: +SKIP
+
+    For stochastic per-sample mixing instead, use a
+    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` as the
+    loader's ``sampler=`` argument.
     """
 
     def __init__(

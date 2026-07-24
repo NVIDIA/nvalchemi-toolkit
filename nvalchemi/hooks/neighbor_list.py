@@ -153,8 +153,9 @@ class NeighborListHook:
         ``None`` (default), auto-estimated from the cutoff via
         ``estimate_max_neighbors(cutoff)``.  Ignored for COO format.
     stage : Enum | None, optional
-        The workflow stage at which this hook runs.  Defaults to
-        ``DynamicsStage.BEFORE_COMPUTE``.
+        Explicit workflow stage at which this hook runs.  Defaults to
+        ``None``; when ``None`` the hook fires at
+        ``DynamicsStage.BEFORE_COMPUTE`` (see the class description above).
     method : str | None, optional
         Explicit ``nvalchemiops`` neighbor-list method to use.  When ``None``
         (default), the hook selects an appropriate method from the batch shape

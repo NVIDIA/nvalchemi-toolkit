@@ -8,8 +8,13 @@
 
 .. currentmodule:: {{ module }}
 
+{% if is_pydantic_model(module, objname) %}
+.. autopydantic_model:: {{ objname }}
+    :members:
+{% else %}
 .. autoclass:: {{ objname }}
     :members:
+{% endif %}
 
 .. raw:: html
 

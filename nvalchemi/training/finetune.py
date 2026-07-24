@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import torch
 from pydantic import Field, model_validator
@@ -137,30 +137,6 @@ class FineTuningStrategy(TrainingStrategy):
     afterward. Use ``freeze_mode="optimizer_only"`` when excluded parameters
     should still receive gradients but must not be updated by optimizers.
 
-    Parameters
-    ----------
-    module_patches : dict[str, BaseSpec | torch.nn.Module], optional
-        Ordered module patches applied before optimizer construction.
-    freeze_patterns : tuple[str, ...], optional
-        Glob patterns excluded from training. Exclusions can be re-included by
-        ``trainable_patterns``.
-    trainable_patterns : tuple[str, ...], optional
-        Glob patterns included in the trainable parameter allow-list. When no
-        ``freeze_patterns`` are supplied, this is the complete allow-list.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Whether excluded parameters are temporarily frozen via
-        ``requires_grad=False`` or only excluded from optimizers. Defaults to
-        ``"requires_grad"``.
-    Attributes
-    ----------
-    module_patches : dict[str, BaseSpec | torch.nn.Module]
-        User-declared module patches.
-    freeze_patterns : tuple[str, ...]
-        Parameter exclusion patterns.
-    trainable_patterns : tuple[str, ...]
-        Trainable parameter allow-list patterns.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Parameter-freezing mode.
     Examples
     --------
     Replace a readout head, train only that head, and serialize the workflow
@@ -215,10 +191,39 @@ class FineTuningStrategy(TrainingStrategy):
         )
     """
 
-    module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(default_factory=dict)
-    freeze_patterns: tuple[str, ...] = ()
-    trainable_patterns: tuple[str, ...] = ()
-    freeze_mode: FreezeMode = "requires_grad"
+    module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(
+        default_factory=dict,
+        description="Ordered module patches applied before optimizer construction.",
+    )
+    freeze_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns excluded from training. Exclusions can be "
+                "re-included by ``trainable_patterns``."
+            )
+        ),
+    ] = ()
+    trainable_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns included in the trainable parameter allow-list. "
+                "When no ``freeze_patterns`` are supplied, this is the complete "
+                "allow-list."
+            )
+        ),
+    ] = ()
+    freeze_mode: Annotated[
+        FreezeMode,
+        Field(
+            description=(
+                "Whether excluded parameters are temporarily frozen via "
+                "``requires_grad=False`` or only excluded from optimizers. "
+                'Defaults to ``"requires_grad"``.'
+            )
+        ),
+    ] = "requires_grad"
 
     @model_validator(mode="before")
     @classmethod

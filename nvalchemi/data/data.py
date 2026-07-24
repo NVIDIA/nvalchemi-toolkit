@@ -44,7 +44,7 @@ def _move_obj_to_device(
         The object to move to the device. Can be any type.
     device : torch.device
         The target device to move the object to.
-    fp_dtype : torch.dtype, default torch.float32
+    fp_dtype : torch.dtype, default None
         The floating point dtype to move the object to.
     non_blocking : bool, default False
         Whether to perform the operation asynchronously.
@@ -219,6 +219,9 @@ class DataMixin:
         ----------
         device : torch.device
             The target device to move the data to.
+        dtype : torch.dtype | None, default None
+            The floating point dtype to cast floating point tensors to. When
+            ``None``, tensor dtypes are left unchanged.
         non_blocking : bool, default False
             Whether to perform the operation asynchronously.
 

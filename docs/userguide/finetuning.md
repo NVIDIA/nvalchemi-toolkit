@@ -10,6 +10,12 @@ and provides a few functions that make the fine-tuning experience more
 turn-key for non-experts and experts alike to help make productionizing
 the model products more seamless.
 
+```{tip}
+**AI coding assistant?** Load the ``nvalchemi-fine-tuning``
+{ref}`agent skill <agent_skills>` for concise instructions on configuring
+fine-tuning workflows and adapting pretrained checkpoints.
+```
+
 This documentation is roughly broken up into two parts: an introduction
 to the command-line interface which is designed for a more "on-the-rails"
 experience to fine-tuning and training, and the core fine-tuning API
@@ -107,9 +113,8 @@ list, which can be configured below:
             "cutoff": 6.0,
             "format": "coo",
             "half_list": false,
-            "skin": 0.0,
-          },
-          "skin": 0.0
+            "skin": 0.0
+          }
         },
         "stages": ["BEFORE_FORWARD"]
       }
@@ -156,7 +161,7 @@ using `jq -s 'add' file1.json file2.json > combined.json`!
               "flush": true
             }
           ],
-          "frequency": 10,
+          "frequency": 10
         },
         "stages": ["AFTER_OPTIMIZER_STEP"]
       }
@@ -746,7 +751,8 @@ strategy = FineTuningStrategy.from_pretrained_checkpoint(
     # original pretraining recipe
     use_original_loss=True,
     use_original_opt_class=True,
-    # set the optimizer_lr to None to use the same original LR
+    # override the reused optimizer LR with a conservative 1e-5;
+    # pass optimizer_lr=None instead to keep the checkpoint's LR
     optimizer_lr=1e-5,
     training_fn=default_training_fn,
     trainable_patterns=("main.model.readout.*",),

@@ -168,8 +168,8 @@ def configure_dataloader(
     dataset : Any
     batch_size : int
     shuffle : bool | None, optional
-        Defaults to ``False`` when ``sampler`` is provided and ``True``
-        otherwise. Passing ``True`` with ``sampler`` raises ``ValueError``.
+        Defaults to ``None``, which resolves to ``True`` when no ``sampler``
+        is provided and ``False`` otherwise. Passing ``True`` with ``sampler`` raises ``ValueError``.
     sampler : Any, optional
         Optional sample-ordering object forwarded to ``DataLoader``.
     batch_sampler : Any, optional

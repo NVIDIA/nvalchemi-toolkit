@@ -1,16 +1,16 @@
 .. SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 .. SPDX-License-Identifier: Apache-2.0
 
-.. _training-hooks-api:
-.. _training-hooks:
-.. _training-update-hooks:
-
 .. seealso::
 
    - **Core framework**: :ref:`hooks-api` — the ``Hook`` protocol,
      context dataclasses, and ``HookRegistryMixin``.
    - **User guide**: :ref:`training_guide` — training lifecycle and
      extension points.
+
+.. _training-hooks-api:
+.. _training-hooks:
+.. _training-update-hooks:
 
 Training update hooks
 =====================
@@ -63,21 +63,19 @@ hook-firing points within a training run:
    digraph training_stages {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=10 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=9 style=bold]
+       node [fontsize=10 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=9 style=bold]
 
-       SETUP            [fillcolor="#f9e2ae"]
-       BEFORE_TRAINING  [fillcolor="#f9e2ae"]
-       AFTER_TRAINING   [fillcolor="#f9e2ae"]
-       AFTER_VALIDATION [fillcolor="#f9e2ae" label="AFTER_VALIDATION\n(event-based)"]
+       SETUP            [fillcolor="#4a3315"]
+       BEFORE_TRAINING  [fillcolor="#4a3315"]
+       AFTER_TRAINING   [fillcolor="#4a3315"]
+       AFTER_VALIDATION [fillcolor="#4a3315" label="AFTER_VALIDATION\n(event-based)"]
 
        subgraph cluster_epoch {
            label="epoch loop"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=11
 
            BEFORE_EPOCH
@@ -88,7 +86,6 @@ hook-firing points within a training run:
                style=rounded
                color="#2a6090"
                fontcolor="#2a6090"
-               fontname="Helvetica"
                fontsize=11
 
                BEFORE_BATCH
@@ -97,10 +94,10 @@ hook-firing points within a training run:
                BEFORE_LOSS
                AFTER_LOSS
                BEFORE_BACKWARD
-               DO_BACKWARD        [label="DO_BACKWARD\n(replacement slot)" fillcolor="#e8d5f5"]
+               DO_BACKWARD        [label="DO_BACKWARD\n(replacement slot)" fillcolor="#e8d5f5" fontcolor="#111111"]
                AFTER_BACKWARD
                BEFORE_OPTIMIZER_STEP
-               DO_OPTIMIZER_STEP  [label="DO_OPTIMIZER_STEP\n(replacement slot)" fillcolor="#e8d5f5"]
+               DO_OPTIMIZER_STEP  [label="DO_OPTIMIZER_STEP\n(replacement slot)" fillcolor="#e8d5f5" fontcolor="#111111"]
                AFTER_OPTIMIZER_STEP
                AFTER_BATCH
 
@@ -432,7 +429,6 @@ resuming so its internal state is restored alongside the model and optimizer:
    checkpoint = CheckpointHook(
        "runs/my-model/checkpoints",
        step_interval=500,
-       max_checkpoints=5,
    )
 
    # Resume from step 500
@@ -452,7 +448,7 @@ EMA step count stays in sync with the actual optimizer step count.
 
 .. dataclass-table:: nvalchemi.training.hooks.EMAHook
 
-Access the averaged model weights via ``ema.averaged_model`` after training.
+Access the averaged model wrapper via ``ema.get_averaged_model()`` after training.
 
 .. code-block:: python
 
@@ -463,7 +459,7 @@ Access the averaged model weights via ``ema.averaged_model`` after training.
    strategy = TrainingStrategy(..., hooks=[ema])
    strategy.run(train_loader)
 
-   averaged_model = ema.averaged_model
+   averaged_model = ema.get_averaged_model()
 
 ``AveragedModel`` constructs its module with ``deepcopy``. If a model wrapper
 defines a callable ``modify_ema_methods()`` method, ``EMAHook`` calls it once on
@@ -519,8 +515,12 @@ API reference
 
    DDPHook
    MixedPrecisionHook
-   TorchProfilerHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
    EMAHook
    CheckpointHook
+
+The general-purpose profiling hooks
+:class:`~nvalchemi.hooks.StageTimingHook` and
+:class:`~nvalchemi.hooks.TorchProfilerHook` also work with training and are
+documented in :ref:`hooks-api`.

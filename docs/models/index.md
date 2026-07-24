@@ -111,7 +111,7 @@ functional forms.
   - ✓
   - ✓
   - ✗
-  - node_charges
+  - charges
   - MATRIX
 * - {py:class}`~nvalchemi.models.ewald.EwaldModelWrapper`
   - ✓
@@ -120,7 +120,7 @@ functional forms.
   - ✓
   - ✓
   - ✗
-  - node_charges
+  - charges
   - MATRIX
 ```
 
@@ -148,7 +148,8 @@ from nvalchemi.models.pipeline import PipelineModelWrapper, PipelineGroup, Pipel
 
 pipe = PipelineModelWrapper(groups=[
     PipelineGroup(
-        steps=[PipelineStep(aimnet2, wire={"charges": "node_charges"}), ewald],
+        # AIMNet2 outputs "charges"; Ewald requires "charges" — auto-wired.
+        steps=[aimnet2, ewald],
         use_autograd=True,
     ),
     PipelineGroup(steps=[dftd3]),
@@ -200,7 +201,7 @@ the original publications for the underlying methods.
     [doi:10.1002/andp.19213690304](https://doi.org/10.1002/andp.19213690304)
 * - **Particle Mesh Ewald**
   - Darden, T., York, D. & Pedersen, L. "Particle mesh Ewald: An
-    N*log(N) method for Ewald sums in large systems."
+    `N*log(N)` method for Ewald sums in large systems."
     *J. Chem. Phys.* **98** (12), 10089--10092, 1993.
     [doi:10.1063/1.464397](https://doi.org/10.1063/1.464397)
 ```

@@ -247,19 +247,23 @@ class PipelineStep:
 
     Examples
     --------
-    AIMNet2 produces ``"charges"`` (per-atom partial charges), but the
-    Ewald model expects ``"node_charges"`` as a required input::
+    A ``wire`` mapping is only needed when a producer's output key differs
+    from the consumer's required-input key.  For example, if a charge model
+    emits ``"charges"`` but a downstream model requires them under
+    ``"partial_charges"``::
 
-        PipelineStep(aimnet2, wire={"charges": "node_charges"})
+        PipelineStep(charge_model, wire={"charges": "partial_charges"})
 
-    After AIMNet2 runs, the pipeline writes its ``"charges"`` output
-    onto ``data.node_charges``.  When Ewald runs next, its
-    ``adapt_input()`` finds ``data.node_charges`` and uses it.
+    After the charge model runs, the pipeline writes its ``"charges"``
+    output onto ``data.partial_charges``.  When the downstream model runs
+    next, its ``adapt_input()`` finds ``data.partial_charges`` and uses it.
 
-    If a model's output keys already match downstream input keys, no
-    wire mapping is needed — pass the bare model::
+    When a model's output keys already match downstream input keys, no
+    wire mapping is needed — pass the bare model.  AIMNet2 outputs
+    ``"charges"`` and :class:`~nvalchemi.models.ewald.EwaldModelWrapper`
+    requires ``"charges"``, so the two auto-wire on that key::
 
-        PipelineGroup(steps=[model_a, model_b])  # auto-wired
+        PipelineGroup(steps=[aimnet2, ewald])  # auto-wired on "charges"
     """
 
     model: BaseModelMixin

@@ -63,31 +63,27 @@ is to act with the requested cadence on each provided reporter:
 3. Calls each reporter with `(ctx, stage, state)`.
 4. Applies the configured error policy if a reporter raises.
 
-```{graphviz}
-digraph reporting_orchestrator {
-  graph [rankdir=LR, bgcolor="transparent"];
-  node [
-    shape=box,
-    style="rounded,filled",
-    fillcolor="#F8F9FA",
-    color="#5C677D",
-    fontname="Helvetica"
-  ];
-  edge [color="#5C677D", fontname="Helvetica"];
+```{eval-rst}
+.. graphviz::
+   :caption: Reporting orchestrator flow, from workflow to output.
+   :alt: Reporting orchestrator flow
 
-  workflow [label="Training, dynamics,\nor custom workflow"];
-  context [label="HookContext\n+ stage enum"];
-  orchestrator [label="ReportingOrchestrator"];
-  state [label="ReportingState\nevent metadata"];
-  reporter [label="Reporter\n(TensorBoard, Rich, ...)"];
-  output [label="Output\nfile, run log, dashboard"];
+   digraph reporting_flow {
+       rankdir=TB
 
-  workflow -> context [label="engine hook call"];
-  context -> orchestrator [label="stage and frequency match"];
-  orchestrator -> state [label="mark_event"];
-  orchestrator -> reporter [label="report(ctx, stage, state)"];
-  reporter -> output [label="write or render"];
-}
+       workflow     [label="Workflow\n(training / dynamics / custom)"]
+       context      [label="HookContext\n(context + stage enum)"]
+       orchestrator [label="ReportingOrchestrator\n(cadence + reporter fan-out)"]
+       state        [label="ReportingState\n(event metadata + recent messages)"]
+       reporter     [label="Reporter\n(TensorBoard / Rich / custom)"]
+       output       [label="Output\n(file / run log / dashboard)"]
+
+       workflow -> context     [label="engine hook call"]
+       context -> orchestrator [label="stage match"]
+       orchestrator -> state   [label="mark event"]
+       state -> reporter       [label="report"]
+       reporter -> output      [label="write"]
+   }
 ```
 
 Each reporter calls {py:func}`~nvalchemi.hooks.collect_scalars` to build a
@@ -122,31 +118,29 @@ mean loss, total throughput across all GPUs. Set `rank_zero_only` when
 independence is acceptable and parallel writes to the same destination must be
 avoided.
 
-```{graphviz}
-digraph reporting_reduction {
-  graph [rankdir=LR, bgcolor="transparent"];
-  node [
-    shape=box,
-    style="rounded,filled",
-    fillcolor="#F8F9FA",
-    color="#5C677D",
-    fontname="Helvetica"
-  ];
-  edge [color="#5C677D", fontname="Helvetica"];
+```{eval-rst}
+.. graphviz::
+   :caption: Distributed reporting: per-rank collection, reduction, and rank-zero write.
+   :alt: Distributed reporting reduction flow
 
-  rank0 [label="rank 0\ncollect_scalars"];
-  rank1 [label="rank 1\ncollect_scalars"];
-  rankn [label="rank n\ncollect_scalars"];
-  reduce [label="reduce_scalar_snapshot\nmean, sum, min, or max"];
-  write [label="rank 0\nwrites or renders"];
-  skip [label="nonzero ranks\nreturn after reduction"];
+   digraph distributed_reporting {
+       rankdir=TB
 
-  rank0 -> reduce;
-  rank1 -> reduce;
-  rankn -> reduce;
-  reduce -> write;
-  reduce -> skip;
-}
+       r0 [label="rank 0\ncollect_scalars"]
+       r1 [label="rank 1\ncollect_scalars"]
+       rn [label="rank n\ncollect_scalars"]
+
+       reduce [label="reduce_scalar_snapshot\n(mean / sum / min / max)" fillcolor="#4a3315"]
+
+       w0 [label="rank 0\nwrites or renders"]
+       wn [label="nonzero ranks\nreturn after reduction" style="rounded,filled,dashed"]
+
+       r0 -> reduce
+       r1 -> reduce
+       rn -> reduce
+       reduce -> w0
+       reduce -> wn
+   }
 ```
 
 ## Getting started
@@ -271,6 +265,8 @@ For an animated live-data demo using synthetic metrics:
 ```bash
 uv run python examples/intermediate/07_rich_training_reporting.py --steps 80 --delay 0.05
 ```
+
+(designing-rich-layouts)=
 
 ## Designing Rich layouts
 
@@ -671,18 +667,19 @@ strategy = TrainingStrategy(
 
 Both built-in reporters and custom reporters accept a `custom_scalars` mapping
 that adds metrics beyond what automatic collection covers. Each entry maps a
-string key to a callable with signature `(ctx, stage, state) -> float | None`:
+string key to a callable with signature `(ctx, stage) -> float | Mapping | None`:
 
 ```python
 from nvalchemi.hooks import TensorBoardReporter
 
 
-def gradient_norm(ctx, stage, state):
-    if not hasattr(ctx, "model"):
+def gradient_norm(ctx, stage):
+    model = getattr(ctx, "model", None)
+    if model is None:
         return None
     total_sq = sum(
         p.grad.norm().item() ** 2
-        for p in ctx.model.parameters()
+        for p in model.parameters()
         if p.grad is not None
     )
     return total_sq ** 0.5
@@ -710,7 +707,7 @@ reporter = RichReporter(
 
 ## See also
 
-- {doc}`/modules/training/hooks` — `Reporter` protocol, `ScalarSnapshot`,
+- {doc}`/modules/hooks` — `Reporter` protocol, `ScalarSnapshot`,
   `collect_scalars`, and `ScalarCallback` API reference
 - {doc}`hooks` — hook lifecycle and `TrainContext`
 - {doc}`training` — training lifecycle stages and where reporting fits

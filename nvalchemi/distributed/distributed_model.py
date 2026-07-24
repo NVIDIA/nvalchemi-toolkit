@@ -453,6 +453,19 @@ class DistributedModel:
         Shared simulation config carrying the cutoff, skin, mesh, and
         optional grid_dims. The partitioner and halo config are built
         lazily from the first :class:`ShardedBatch`'s geometry.
+    spec : MLIPSpec, optional, keyword-only
+        Explicit distribution spec (the joint model x strategy product). When
+        ``None`` (default), it is obtained from
+        ``wrapper.distribution_spec(domain_config.strategy)``; a wrapper with
+        ``distribution_spec=None`` requires this argument.
+    compile : bool, optional, keyword-only
+        When ``True``, compile the energy-autograd forward path (fixed-shape
+        padded, per-rank). The spec carries only the compile contract; this
+        switch enables it. Default ``False``.
+    compile_kwargs : dict, optional, keyword-only
+        Extra keyword arguments forwarded to the compile of the distributed
+        forward, merged with the spec's compile contract. Only consulted when
+        ``compile=True``. Default ``None``.
 
     Notes
     -----
@@ -489,7 +502,7 @@ class DistributedModel:
             )
 
         # Explicit ``spec=`` wins, else ask the wrapper for the spec matching the
-        # config-selected strategy (the spec is a joint model×strategy product).
+        # config-selected strategy (the spec is a joint model x strategy product).
         if spec is None:
             _ds = getattr(wrapper, "distribution_spec", None)
             spec = (

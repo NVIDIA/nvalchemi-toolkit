@@ -211,7 +211,7 @@ batch but are not part of the default extraction path. Return plain numbers or
 scalar tensors; keep callbacks cheap because they run at reporting frequency.
 
 ```python
-def grad_norm(ctx):
+def grad_norm(ctx, stage):
     total = 0.0
     for parameter in ctx.model.parameters():
         if parameter.grad is not None:

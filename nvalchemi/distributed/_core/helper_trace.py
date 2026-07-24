@@ -277,7 +277,7 @@ def helper_trace(
         Record the *first* call to each ``(module, function)`` always,
         then every Nth call after that. Default 8 keeps runtime
         overhead bounded for hot helpers (``mol_sum`` is called
-        multiple times per layer × multiple layers per forward) while
+        multiple times per layer x multiple layers per forward) while
         still capturing enough samples for the consistency check.
         Set to 1 for exhaustive recording (debug only).
 

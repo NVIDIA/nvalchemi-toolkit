@@ -119,7 +119,7 @@ def _vec_type(dtype: torch.dtype) -> type:
 
 
 def _mat_type(dtype: torch.dtype) -> type:
-    """Return ``wp.mat33f`` or ``wp.mat33d`` from a torch float dtype.
+    r"""Return ``wp.mat33f`` or ``wp.mat33d`` from a torch float dtype.
 
     Parameters
     ----------
@@ -129,7 +129,7 @@ def _mat_type(dtype: torch.dtype) -> type:
     Returns
     -------
     type
-        The corresponding Warp 3×3 matrix type.
+        The corresponding Warp :math:`3 \times 3` matrix type.
     """
     return wp.mat33d if dtype == torch.float64 else wp.mat33f
 

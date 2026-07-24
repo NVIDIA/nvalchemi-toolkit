@@ -212,7 +212,7 @@ fast = UMAWrapper.from_checkpoint(
 )
 ```
 
-See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
+See {doc}`the UMA NVE/NVT example </examples/advanced/09_uma_nve>` for a
 runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
@@ -221,35 +221,28 @@ A wrapped model uses **multiple inheritance**: your existing {py:class}`~torch.n
 subclass provides the forward pass, while
 {py:class}`~nvalchemi.models.base.BaseModelMixin` adds the standardized interface.
 
-```{graphviz}
-:caption: Multiple-inheritance pattern for model wrapping.
+```{eval-rst}
+.. graphviz::
+   :caption: Multiple-inheritance pattern for model wrapping.
 
-digraph model_inheritance {
-    rankdir=BT
-    compound=true
-    fontname="Helvetica"
-    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
-    edge [fontname="Helvetica" fontsize=10]
+   digraph model_inheritance {
+       rankdir=BT
+       compound=true
 
-    YourModel [
-        label="YourModel(nn.Module)\l- forward()\l- your layers\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
-    ]
-    BaseModelMixin [
-        label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
-    ]
-    YourModelWrapper [
-        label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
-        fillcolor="#D5E8D4"
-        color="#82B366"
-    ]
+       YourModel [
+           label="YourModel(nn.Module)\l- forward()\l- your layers\l"
+       ]
+       BaseModelMixin [
+           label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
+       ]
+       YourModelWrapper [
+           label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
+           fillcolor="#26351d"
+       ]
 
-    YourModelWrapper -> YourModel
-    YourModelWrapper -> BaseModelMixin
-}
+       YourModelWrapper -> YourModel
+       YourModelWrapper -> BaseModelMixin
+   }
 ```
 
 The wrapper's `forward` method follows a three-step pipeline:
@@ -385,7 +378,7 @@ will raise ``TypeError`` at instantiation if missing:
 | `adapt_input()` | No (has default) | Override to collect model-specific inputs |
 | `adapt_output()` | No (has default) | Override to map raw outputs |
 | `forward()` | No (inherit from nn.Module) | Implement the three-step pipeline |
-| `export_model()` | No (has default) | Override if needed |
+| `export_model()` | No (base default raises `NotImplementedError`) | Override to enable export |
 
 For classical potentials with no learned embeddings, stub both embedding
 methods:
@@ -517,7 +510,7 @@ The standard output shapes are:
 | `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessians` | `[V, 3, 3]` | Per-atom Hessian |
+| `hessian` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
 

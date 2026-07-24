@@ -27,7 +27,14 @@ from types import TracebackType
 from typing import Annotated, Any, ClassVar
 
 import torch
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, PrivateAttr
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+)
 
 from nvalchemi._serialization import _dtype_deserialize, _wrap_custom_type
 from nvalchemi.hooks._context import TrainContext
@@ -131,23 +138,6 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
       and skips optimizer steps that would otherwise consume ``inf``/``nan``
       gradients.
 
-    Parameters
-    ----------
-    precision : torch.dtype
-        Autocast dtype and scaler policy. Accepts either a
-        :class:`torch.dtype` (e.g. ``torch.float16``) or the canonical
-        string name (``"float32"``, ``"bfloat16"``, ``"float16"``), or a
-        shorthand alias (``"fp32"``, ``"bf16"``, ``"fp16"``).
-
-    Attributes
-    ----------
-    precision : torch.dtype
-        Active autocast dtype.
-    priority : int
-        Training-update priority. Fixed at ``20`` so loss-scaling runs
-        after gradient accumulation transforms and before gradient
-        clipping / spike-skip hooks.
-
     Raises
     ------
     pydantic.ValidationError
@@ -182,7 +172,17 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
       ``step()`` through the same scaler path.
     """
 
-    precision: Precision
+    precision: Annotated[
+        Precision,
+        Field(
+            description=(
+                "Autocast dtype and scaler policy. Accepts either a "
+                ":class:`torch.dtype` (e.g. ``torch.float16``) or the canonical "
+                'string name (``"float32"``, ``"bfloat16"``, ``"float16"``), or '
+                'a shorthand alias (``"fp32"``, ``"bf16"``, ``"fp16"``).'
+            )
+        ),
+    ]
 
     priority: ClassVar[int] = 20
     _exclusive_update_key: ClassVar[str | None] = "MixedPrecisionHook"

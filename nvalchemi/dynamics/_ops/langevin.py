@@ -67,7 +67,7 @@ def langevin_half_step(
     random_seed: int,
     batch_idx: torch.Tensor,
 ) -> None:
-    """BAOAB Langevin pre-force half-step (B-A-O-A).
+    r"""BAOAB Langevin pre-force half-step (B-A-O-A).
 
     Applies half velocity kick, half-step drift, Ornstein-Uhlenbeck
     thermostat, and another half-step drift. Modifies *positions* and
@@ -89,7 +89,7 @@ def langevin_half_step(
     temperature : torch.Tensor
         Per-system temperature in Kelvin ``[M]``, same dtype.
     friction : torch.Tensor
-        Per-system Langevin friction coefficient γ in 1/time ``[M]``,
+        Per-system Langevin friction coefficient :math:`\gamma` in 1/time ``[M]``,
         same dtype.
     random_seed : int
         Global RNG seed.  The kernel combines this with atom/step indices

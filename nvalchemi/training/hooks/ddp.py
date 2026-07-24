@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from inspect import Parameter, signature
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -112,57 +112,166 @@ def _infer_shuffle(dataloader: Any, configured: bool | None) -> bool:
 class DDPHook(BaseModel):
     """Wrap training models with ``DistributedDataParallel`` at setup time.
 
-    ``DDPHook`` is a standard training hook that runs at
-    :attr:`~nvalchemi.training.TrainingStage.SETUP`. It initializes
-    ``torch.distributed`` from torchrun environment variables when needed,
-    optionally uses ``TrainingStrategy.distributed_manager`` for rank/device
-    metadata, wraps selected models in
-    :class:`torch.nn.parallel.DistributedDataParallel`, and injects the
-    configured distributed sampler into dataloaders with ``dataset`` and
-    ``sampler`` attributes.
+    ``DDPHook`` is the standard way to make a :class:`~nvalchemi.training.
+    TrainingStrategy` run data-parallel across ranks. It is a training hook bound
+    to :attr:`~nvalchemi.training.TrainingStage.SETUP` (via the ``stage``
+    class attribute), so the strategy dispatches it once, before models are moved
+    to their devices and before the training loop begins. In a single call it:
 
-    Parameters
-    ----------
-    model_keys : tuple[str, ...] | None, optional
-        Named models to wrap. ``None`` wraps all models that have optimizer
-        configs.
-    find_unused_parameters : bool | None, optional
-        Forwarded to ``DistributedDataParallel``. ``None`` uses the external
-        manager's setting when present, otherwise ``False``.
-    broadcast_buffers : bool | None, optional
-        Forwarded to ``DistributedDataParallel``. ``None`` uses the external
-        manager's setting when present, otherwise ``False``.
-    static_graph : bool, optional
-        Forwarded to ``DistributedDataParallel``.
-    process_group : Any, optional
-        Explicit process group. Defaults to a process group exposed by the
-        external distributed manager or PyTorch's default group.
-    backend : str | None, optional
-        Backend used when this hook initializes ``torch.distributed``.
-    auto_init : bool, optional
-        If ``True``, initialize ``torch.distributed`` when ``WORLD_SIZE > 1``
-        and no manager/process group has already initialized communication.
-    sampler_cls : Callable[..., Any], optional
-        Sampler class or factory used for supported dataloaders. The callable is
-        invoked as ``sampler_cls(dataset, **sampler_kwargs)``. The default is
-        :class:`torch.utils.data.DistributedSampler`.
-    sampler_kwargs : dict[str, Any], optional
-        Keyword arguments forwarded to ``sampler_cls``. For the default
-        ``DistributedSampler`` and sampler callables that accept PyTorch's
-        distributed sampler keywords, missing ``num_replicas``, ``rank``,
-        ``shuffle``, ``seed``, and ``drop_last`` values are inferred from the
-        manager and dataloader before user-provided kwargs are applied.
+    * initializes ``torch.distributed`` when ``auto_init`` is set, ``WORLD_SIZE
+      > 1``, and no manager or process group has already established
+      communication (typically from ``torchrun`` environment variables);
+    * reads rank/device metadata from ``TrainingStrategy.distributed_manager``
+      when one is supplied, otherwise from the environment;
+    * wraps the selected models (``model_keys``, or all models with optimizer
+      configs when ``model_keys`` is ``None``) in
+      :class:`torch.nn.parallel.DistributedDataParallel`, forwarding
+      ``find_unused_parameters``, ``broadcast_buffers``, ``static_graph``, and
+      ``process_group``; and
+    * injects a distributed sampler (``sampler_cls`` with ``sampler_kwargs``,
+      default :class:`torch.utils.data.DistributedSampler`) into the active
+      dataloader so each rank sees a disjoint shard.
+
+    Register it by adding it to the strategy's ``hooks=[...]`` list. When
+    ``world_size <= 1`` the hook is effectively a no-op: no wrapping and no
+    sampler rewrite occur, so the same script runs unchanged on a single process.
+    On teardown the hook restores the original (unwrapped) models and, if it
+    initialized the process group itself, destroys it.
+
+    Examples
+    --------
+    Enable data-parallel training by dropping the hook into the strategy's
+    hook list; launch the script with ``torchrun``:
+
+    >>> import torch  # doctest: +SKIP
+    >>> from nvalchemi.training import (  # doctest: +SKIP
+    ...     EnergyMSELoss, OptimizerConfig, TrainingStrategy, default_training_fn,
+    ... )
+    >>> from nvalchemi.training.hooks.ddp import DDPHook  # doctest: +SKIP
+    >>> strategy = TrainingStrategy(  # doctest: +SKIP
+    ...     models=model,
+    ...     optimizer_configs=OptimizerConfig(
+    ...         optimizer_cls=torch.optim.Adam, optimizer_kwargs={"lr": 1e-3},
+    ...     ),
+    ...     training_fn=default_training_fn,
+    ...     loss_fn=EnergyMSELoss(),
+    ...     num_epochs=10,
+    ...     devices=[torch.device("cuda")],
+    ...     hooks=[DDPHook()],
+    ... )
+    >>> strategy.run(train_loader)  # doctest: +SKIP
+
+    Wrap only specific models and forward DDP options, for example a CPU
+    ``gloo`` run that must allow unused parameters:
+
+    >>> hook = DDPHook(  # doctest: +SKIP
+    ...     model_keys=("main",),
+    ...     backend="gloo",
+    ...     find_unused_parameters=True,
+    ...     broadcast_buffers=False,
+    ... )
+
+    Notes
+    -----
+    When ``world_size > 1`` but distributed communication has not been
+    initialized, model wrapping raises a :class:`RuntimeError`: either set
+    ``auto_init=True`` (the default) so the hook calls ``init_process_group``
+    itself, launch under ``torchrun``, or pass an already-initialized
+    ``distributed_manager``. ``find_unused_parameters`` and ``broadcast_buffers``
+    left as ``None`` inherit from the external manager when it exposes them,
+    otherwise default to ``False``. For nvalchemi
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` objects using the
+    default sampler class, the hook installs a distributed *batch* sampler
+    (``MultiDatasetBatchSampler`` for a ``MultiDataset``, otherwise a
+    ``DistributedSampler`` wrapped in a ``BatchSampler``) rather than a
+    sample-level sampler; dataloaders that already carry a distributed sampler
+    are left untouched, and a pre-existing non-distributed ``batch_sampler`` is
+    rejected. Missing ``num_replicas``, ``rank``, ``shuffle``, ``seed``, and
+    ``drop_last`` are inferred from the manager and dataloader before user
+    ``sampler_kwargs`` are applied. Only dataloaders exposing a ``sampler``
+    attribute are rewritten; arbitrary iterables are left as caller-managed
+    inputs.
     """
 
-    model_keys: tuple[str, ...] | None = None
-    find_unused_parameters: bool | None = None
-    broadcast_buffers: bool | None = None
-    static_graph: bool = False
-    process_group: Any | None = None
-    backend: str | None = None
-    auto_init: bool = True
-    sampler_cls: Callable[..., Any] = DistributedSampler
-    sampler_kwargs: dict[str, Any] = Field(default_factory=dict)
+    model_keys: Annotated[
+        tuple[str, ...] | None,
+        Field(
+            description=(
+                "Named models to wrap. ``None`` wraps all models that have "
+                "optimizer configs."
+            )
+        ),
+    ] = None
+    find_unused_parameters: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "Forwarded to ``DistributedDataParallel``. ``None`` uses the "
+                "external manager's setting when present, otherwise ``False``."
+            )
+        ),
+    ] = None
+    broadcast_buffers: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "Forwarded to ``DistributedDataParallel``. ``None`` uses the "
+                "external manager's setting when present, otherwise ``False``."
+            )
+        ),
+    ] = None
+    static_graph: Annotated[
+        bool,
+        Field(description="Forwarded to ``DistributedDataParallel``."),
+    ] = False
+    process_group: Annotated[
+        Any | None,
+        Field(
+            description=(
+                "Explicit process group. Defaults to a process group exposed by "
+                "the external distributed manager or PyTorch's default group."
+            )
+        ),
+    ] = None
+    backend: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Backend used when this hook initializes ``torch.distributed``."
+            )
+        ),
+    ] = None
+    auto_init: Annotated[
+        bool,
+        Field(
+            description=(
+                "If ``True``, initialize ``torch.distributed`` when "
+                "``WORLD_SIZE > 1`` and no manager/process group has already "
+                "initialized communication."
+            )
+        ),
+    ] = True
+    sampler_cls: Annotated[
+        Callable[..., Any],
+        Field(
+            description=(
+                "Sampler class or factory used for supported dataloaders. The "
+                "callable is invoked as ``sampler_cls(dataset, "
+                "**sampler_kwargs)``. The default is "
+                ":class:`torch.utils.data.DistributedSampler`."
+            )
+        ),
+    ] = DistributedSampler
+    sampler_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Keyword arguments forwarded to ``sampler_cls``. For the default "
+            "``DistributedSampler`` and sampler callables that accept PyTorch's "
+            "distributed sampler keywords, missing ``num_replicas``, ``rank``, "
+            "``shuffle``, ``seed``, and ``drop_last`` values are inferred from "
+            "the manager and dataloader before user-provided kwargs are applied."
+        ),
+    )
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[TrainingStage] = TrainingStage.SETUP

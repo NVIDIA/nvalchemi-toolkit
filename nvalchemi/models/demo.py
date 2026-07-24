@@ -91,19 +91,21 @@ class DemoModel(nn.Module):
         ----------
         atomic_numbers : AtomicNumbers
             Atomic numbers for each atom in the system.
-        positions : CoordinatesTensor
+        positions : NodePositions
             Cartesian coordinates of atoms.
         batch_indices : BatchIndices, optional
             Batch indices for each atom.
+        compute_forces : bool, optional
+            Whether to compute forces via autograd.  Defaults to ``True``.
 
         Returns
         -------
         dict[str, torch.Tensor]
             Dictionary containing:
 
-            - energy: Predicted energy values. Shape: (batch_size, 1)
+            - energy: Predicted energy values. Shape: (num_graphs, 1)
             - forces: Computed forces via automatic differentiation.
-              Shape: (batch_size, 3)
+              Shape: (num_atoms, 3)
         """
         atom_z = self.embedding(atomic_numbers)
         coord_z = self.coord_embedding(positions)
