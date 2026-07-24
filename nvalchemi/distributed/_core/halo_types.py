@@ -155,23 +155,6 @@ def _compute_pbc_image_vectors(
     return images
 
 
-def _compute_pbc_shift_vectors(
-    partitioner: Any,  # SpatialPartitioner at runtime
-) -> dict[tuple[int, int], list[torch.Tensor]]:
-    """Compute Cartesian PBC shift vectors for all neighbor rank pairs.
-
-    Returns ``{(sender, receiver): [shift_1, shift_2, ...]}`` where
-    each shift is a ``(3,)`` Cartesian vector. For a diagonal neighbor
-    crossing D periodic boundaries there are ``2^D - 1`` independent
-    shifts (all non-empty subsets of crossed dims).
-    """
-    cell_matrix = partitioner.cell_matrix
-    return {
-        key: [image @ cell_matrix for image in images]
-        for key, images in _compute_pbc_image_vectors(partitioner).items()
-    }
-
-
 @dataclass
 class GNNHaloMarkers:
     """Routing metadata for autograd-aware feature exchange on a halo layout.

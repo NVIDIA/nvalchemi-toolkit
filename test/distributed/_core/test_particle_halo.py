@@ -30,7 +30,7 @@ import torch
 from nvalchemi.distributed._core.halo_types import (
     ParticleHaloConfig,
     ParticleHaloMetadata,
-    _compute_pbc_shift_vectors,
+    _compute_pbc_image_vectors,
 )
 from nvalchemi.distributed._core.particle_halo import (
     _check_halo_region,
@@ -88,35 +88,31 @@ def _make_halo_config(
 
 
 # ======================================================================
-# PBC shift vector tests
+# PBC image-vector tests
 # ======================================================================
 
 
-class TestComputePBCShiftVectors:
-    """Test precomputation of PBC shift vectors."""
+class TestComputePBCImageVectors:
+    """Test precomputation of cell-independent PBC image vectors."""
 
-    def test_shifts_exist_for_wrapping_pair(self):
+    def test_images_exist_for_wrapping_pair(self):
         part = _make_partitioner(world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        # With 2 ranks along one dim and PBC, there should be shifts.
-        assert len(shifts) > 0
+        images = _compute_pbc_image_vectors(part)
+        # With 2 ranks along one dim and PBC, there should be images.
+        assert len(images) > 0
 
-    def test_no_shifts_without_pbc(self):
+    def test_no_images_without_pbc(self):
         part = _make_partitioner(pbc=(False, False, False), world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        assert len(shifts) == 0
+        images = _compute_pbc_image_vectors(part)
+        assert len(images) == 0
 
-    def test_shift_magnitude_equals_box_length(self):
-        box = 30.0
-        part = _make_partitioner(box_length=box, world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        for (sender, receiver), shift_list in shifts.items():  # noqa: PERF102
-            for shift in shift_list:
-                # Each shift component should be 0 or ±box_length.
-                for d in range(3):
-                    assert shift[d].abs().item() == pytest.approx(0.0) or shift[
-                        d
-                    ].abs().item() == pytest.approx(box, abs=0.01)
+    def test_image_components_are_integer_lattice_offsets(self):
+        part = _make_partitioner(world_size=2)
+        images = _compute_pbc_image_vectors(part)
+        for image_list in images.values():
+            for image in image_list:
+                assert set(image.tolist()) <= {-1.0, 0.0, 1.0}
+                assert torch.count_nonzero(image) > 0
 
 
 # ======================================================================
@@ -316,16 +312,10 @@ class TestParticleHaloConfig:
         config.partitioner.update_cell(new_cell)
         new_shifts = config.pbc_shifts
 
-        expected = _compute_pbc_shift_vectors(config.partitioner)
-        assert new_shifts.keys() == expected.keys()
-        assert any(
-            not torch.equal(old_shift, new_shift)
-            for key, shifts in new_shifts.items()
-            for old_shift, new_shift in zip(old_shifts[key], shifts, strict=True)
-        )
+        assert new_shifts.keys() == old_shifts.keys()
         for key, shifts in new_shifts.items():
-            for shift, expected_shift in zip(shifts, expected[key], strict=True):
-                torch.testing.assert_close(shift, expected_shift)
+            for old_shift, new_shift in zip(old_shifts[key], shifts, strict=True):
+                torch.testing.assert_close(new_shift, old_shift * 1.2)
 
 
 # Multi-GPU tests live in test/distributed/test_multigpu.py
