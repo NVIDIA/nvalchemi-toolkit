@@ -458,6 +458,56 @@ def _snapshot_components(
     }
 
 
+def _selected_state_dict(
+    state_dict: dict[str, Any],
+    names: set[str],
+) -> dict[str, Any]:
+    """Return selected state entries and fail when metadata names are stale."""
+    missing = sorted(names - set(state_dict))
+    if missing:
+        raise KeyError(f"Cannot checkpoint missing trainable parameter(s): {missing!r}.")
+    return {name: state_dict[name] for name in sorted(names)}
+
+
+def _model_local_parameter_names(model_name: str, names: Iterable[str]) -> list[str]:
+    """Return names local to ``model_name`` from fully qualified parameters."""
+    prefix = f"{model_name}."
+    return [name.removeprefix(prefix) for name in names if name.startswith(prefix)]
+
+
+def _filter_snapshot_to_trainable_state(
+    snapshot: dict[str, Any],
+    workflow: Any,
+    *,
+    error_prefix: str = "CheckpointHook",
+    warning_message: str | None = None,
+) -> None:
+    """Mutate a checkpoint snapshot to keep only optimizer-selected model state.
+
+    Models without selected parameters are kept with empty state so restore can
+    reconstruct them from spec while partial loading skips their weights.
+    """
+    trainable_names = set(getattr(workflow, "_optimizer_parameter_names", set()) or ())
+    if not trainable_names:
+        raise ValueError(
+            f"{error_prefix} selected no trainable parameters. Ensure trainable "
+            "parameter filters have been configured before checkpointing."
+        )
+    if warning_message is not None:
+        warnings.warn(warning_message, UserWarning, stacklevel=3)
+
+    filtered_models = {}
+    for model_name, (state_dict, spec) in snapshot["models"].items():
+        names = set(_model_local_parameter_names(model_name, trainable_names))
+        filtered_models[model_name] = (
+            _snapshot_state_dict(_selected_state_dict(state_dict, names)),
+            spec,
+        )
+    snapshot["models"] = filtered_models
+    # Mark model state as partial so model can be restored non-strictly in load_checkpoint.
+    snapshot["strategy_metadata"]["model_state_load"] = "partial"
+
+
 def _hook_state_key(hook: object, occurrence: int) -> str:
     """Return the stable class-occurrence key used for hook state matching."""
     return f"{type(hook).__module__}.{type(hook).__qualname__}:{occurrence}"
@@ -1486,6 +1536,7 @@ def save_checkpoint(
     associations: _Associations | None = None,
     checkpoint_index: int = -1,
     strategy: Any | None = None,
+    save_trainable_parameters_only: bool = False,
 ) -> int:
     """Save a checkpoint with a manifest.
 
@@ -1517,6 +1568,10 @@ def save_checkpoint(
         from the manifest's last index, or starts at ``0``.
     strategy
         Optional training strategy to save as a restartable checkpoint.
+    save_trainable_parameters_only
+        If ``True``, save only model parameters selected for optimizer setup
+        and mark model state as partial for non-strict restore. Requires
+        ``strategy``.
 
     Returns
     -------
@@ -1545,12 +1600,33 @@ def save_checkpoint(
     if strategy is None and isinstance(models, TrainingStrategy):
         strategy = models
         models = None
+    if save_trainable_parameters_only and strategy is None:
+        raise ValueError(
+            "save_trainable_parameters_only=True requires strategy checkpointing."
+        )
     if strategy is not None:
         if not isinstance(strategy, TrainingStrategy):
             raise TypeError(
                 "strategy must be a TrainingStrategy instance; got "
                 f"{type(strategy).__name__}."
             )
+        if save_trainable_parameters_only:
+            snapshot = _create_checkpoint_snapshot(
+                root,
+                checkpoint_index=checkpoint_index,
+                strategy=strategy,
+            )
+            _filter_snapshot_to_trainable_state(
+                snapshot,
+                strategy,
+                warning_message=(
+                    "Saving a checkpoint with save_trainable_parameters_only=True "
+                    "stores only trainable tensors. Restoring this checkpoint "
+                    "requires the saved model spec to reconstruct the exact "
+                    "base model weights."
+                ),
+            )
+            return _write_checkpoint_snapshot(root, snapshot)
         (
             models,
             optimizers,

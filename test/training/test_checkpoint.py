@@ -1658,3 +1658,75 @@ class TestStrategyCheckpoint:
         assert kwargs["enable_cueq"] is False
         assert kwargs["compile_model"] is False
         assert kwargs["dtype"] is torch.float32
+
+    def test_trainable_only_checkpoint_allows_frozen_teacher_model(
+        self, tmp_path: Path
+    ) -> None:
+        """A frozen named model can be restored from spec with empty partial state."""
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        def training_fn(
+            models: dict[str, BaseModelMixin],
+            batch: Batch,
+        ) -> dict[str, torch.Tensor]:
+            return default_training_fn(models["student"], batch)
+
+        student = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        teacher = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        strategy = TrainingStrategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [
+                    OptimizerConfig(
+                        optimizer_cls=torch.optim.Adam,
+                        optimizer_kwargs={"lr": 1e-3},
+                    ),
+                ],
+            },
+            num_steps=1,
+            training_fn=training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        student_parameter_names = {
+            f"student.{name}" for name, _parameter in student.named_parameters()
+        }
+        strategy.set_optimizer_parameter_filter(student_parameter_names)
+
+        with pytest.warns(
+            UserWarning,
+            match="save_trainable_parameters_only=True stores only trainable tensors",
+        ):
+            idx = save_checkpoint(
+                tmp_path,
+                strategy=strategy,
+                save_trainable_parameters_only=True,
+            )
+
+        assert idx == 0
+        metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
+        )
+        student_state = torch.load(
+            tmp_path / "models" / "student" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        teacher_state = torch.load(
+            tmp_path / "models" / "teacher" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        saved_student_state = {
+            name: value.detach().clone() for name, value in student.state_dict().items()
+        }
+
+        assert metadata["model_state_load"] == "partial"
+        assert set(student_state) == set(saved_student_state)
+        assert teacher_state == {}
+
+        loaded = load_checkpoint(tmp_path, training_fn=training_fn)
+        restored = loaded["strategy"]
+        assert set(restored.models) == {"student", "teacher"}
+        assert isinstance(restored.models["student"], DemoModelWrapper)
+        assert isinstance(restored.models["teacher"], DemoModelWrapper)

@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._checkpoint import (
     _create_checkpoint_snapshot,
+    _filter_snapshot_to_trainable_state,
     _write_checkpoint_snapshot,
 )
 from nvalchemi.training._stages import TrainingStage
@@ -70,6 +71,11 @@ class CheckpointHook(BaseModel):
     rank_zero_only : bool, optional
         If ``True``, only distributed rank 0 writes checkpoints. Default
         ``True``.
+    save_trainable_parameters_only : bool, optional
+        If ``True``, save only optimizer-selected trainable model state and
+        restore model weights non-strictly. Use this only when untrained model
+        weights are reproducible from the saved model specs. Set ``False`` otherwise.
+        Default ``False``.
 
     Attributes
     ----------
@@ -112,6 +118,15 @@ class CheckpointHook(BaseModel):
         bool,
         Field(description="Restrict checkpoint writes to distributed rank 0."),
     ] = True
+    save_trainable_parameters_only: Annotated[
+        bool,
+        Field(
+            description=(
+                "Save only optimizer-selected trainable model parameters instead of "
+                "full model state and track non-strict model state loading behavior."
+            ),
+        ),
+    ] = False
     last_checkpoint_index: Annotated[
         int | None,
         Field(default=None, ge=0, exclude=True),
@@ -228,6 +243,17 @@ class CheckpointHook(BaseModel):
             self.checkpoint_dir,
             strategy=ctx.workflow,
         )
+        if self.save_trainable_parameters_only:
+            _filter_snapshot_to_trainable_state(
+                snapshot,
+                ctx.workflow,
+                warning_message=(
+                    "Saving a checkpoint with save_trainable_parameters_only=True "
+                    "stores only trainable tensors. Restoring this checkpoint "
+                    "requires the saved model spec to reconstruct the exact "
+                    "base model weights."
+                ),
+            )
         if not self.async_save:
             self.last_checkpoint_index = _write_checkpoint_snapshot(
                 self.checkpoint_dir,

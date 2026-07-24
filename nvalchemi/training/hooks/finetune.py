@@ -20,7 +20,7 @@ import fnmatch
 import warnings
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, ClassVar, Literal, TypeAlias
+from typing import Any, ClassVar, Final, Literal, TypeAlias
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -34,6 +34,8 @@ __all__ = ["ModulePatchHook", "TrainableParameterHook"]
 
 PatchValue = BaseSpec | torch.nn.Module
 """Supported replacement value for :class:`ModulePatchHook`."""
+
+_MODULE_PATCH_HOOK_IDENTIFIER: Final = "patch"
 
 FreezeMode: TypeAlias = Literal["requires_grad", "optimizer_only"]
 """Supported parameter-freezing modes for :class:`TrainableParameterHook`."""
@@ -155,8 +157,8 @@ class ModulePatchHook(BaseModel):
         build modules.
     register_parameters : bool
         If ``True``, register the patched module parameters as both trainable
-        and managed under the fixed ``"module_patch"`` source. Registered
-        patch parameters are included in the final trainable allow-list by default 
+        and managed under the fixed ``"patch"`` source. Registered
+        patch parameters are included in the final trainable allow-list by default
         and are protected from being overridden by other sources modifying the models.
         Defaults to ``False`` for backward compatibility.
 
@@ -168,10 +170,6 @@ class ModulePatchHook(BaseModel):
         Required by the hook protocol; always ``1``.
     stage : None
         This hook does not run at training stages.
-    _hook_identifier : str
-        Identifier for the hook used to register trainable and managed parameter names
-        when ``register_parameters=True``.
-
     Warns
     -----
     UserWarning
@@ -194,7 +192,6 @@ class ModulePatchHook(BaseModel):
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None
-    _hook_identifier: ClassVar[str] = "patch"
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -250,7 +247,7 @@ class ModulePatchHook(BaseModel):
             # Check if the patch target overlaps with any other registered managed parameter names.
             overlaps: dict[str, list[str]] = {}
             for source, source_names in registered_managed_names.items():
-                if source == self._hook_identifier:
+                if source == _MODULE_PATCH_HOOK_IDENTIFIER:
                     continue
                 matched_names = _parameter_names_under_prefix(set(source_names), target)
                 if matched_names:
@@ -298,7 +295,7 @@ class ModulePatchHook(BaseModel):
                 )
             register_trainable(
                 tuple(sorted(patch_parameter_names)),
-                source=self._hook_identifier,
+                source=_MODULE_PATCH_HOOK_IDENTIFIER,
             )
             register_managed = getattr(
                 workflow,
@@ -313,7 +310,7 @@ class ModulePatchHook(BaseModel):
                 )
             register_managed(
                 tuple(sorted(patch_parameter_names)),
-                source=self._hook_identifier,
+                source=_MODULE_PATCH_HOOK_IDENTIFIER,
             )
             patched_parameter_names = set(
                 getattr(workflow, "_patched_parameter_names", set())

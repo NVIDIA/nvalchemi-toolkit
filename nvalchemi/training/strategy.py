@@ -1373,6 +1373,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         root_folder: Path | str,
         *,
         checkpoint_index: int = -1,
+        save_trainable_parameters_only: bool = False,
     ) -> int:
         """Save this strategy as a restartable checkpoint.
 
@@ -1383,6 +1384,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         checkpoint_index : int, optional
             Checkpoint index to write. ``-1`` auto-increments from the latest
             manifest index, or starts at ``0`` when no manifest exists.
+        save_trainable_parameters_only : bool, optional
+            If ``True``, save only optimizer-selected trainable model state and
+            restore model weights non-strictly. Use this only when untrained model
+            weights are reproducible from the saved model specs. Set ``False`` otherwise.
+            Default ``False``.
 
         Returns
         -------
@@ -1403,6 +1409,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             root_folder,
             checkpoint_index=checkpoint_index,
             strategy=self,
+            save_trainable_parameters_only=save_trainable_parameters_only,
         )
 
     def restore_checkpoint(
