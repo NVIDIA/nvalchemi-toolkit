@@ -40,9 +40,7 @@ if _TRANSFORMER_ENGINE_LORA_LINEAR is not None:
 
 LoRAWrappableLayer: TypeAlias = type[nn.Module]
 LoRAWrapper: TypeAlias = type[_peft.LoRALayer]
-LoRAWrapperRegistrations: TypeAlias = tuple[
-    tuple[LoRAWrappableLayer, LoRAWrapper], ...
-]
+LoRAWrapperRegistrations: TypeAlias = tuple[tuple[LoRAWrappableLayer, LoRAWrapper], ...]
 
 
 __all__ = [
@@ -68,6 +66,7 @@ def __getattr__(name: str) -> object:
             "TransformerEngineLoRALinear requires transformer_engine to be installed."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _BUILTIN_LORA_WRAPPERS_REGISTERED = False
 
@@ -617,7 +616,9 @@ class CuEquivariantLoRALinear(nn.Module, LoRALayer):
                 continue
             A_block, _A_offset, _A_size, A_coeff = lora_A_blocks[ir]
             B_block, _B_offset, _B_size, B_coeff = lora_B_blocks[ir]
-            delta = (A_block @ B_block) * (self.scaling * A_coeff * B_coeff / base_coeff)
+            delta = (A_block @ B_block) * (
+                self.scaling * A_coeff * B_coeff / base_coeff
+            )
             merged[0, offset : offset + size].copy_((base_block + delta).reshape(-1))
         return merged
 

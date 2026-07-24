@@ -28,7 +28,8 @@ https://creativecommons.org/licenses/by/4.0/.
 
 The workflow is as follows:
 
-#. Prepare the LPSC_600 dataset by downloading ``LPSC_600.extxyz`` and converting the structures into :class:`~nvalchemi.data.AtomicData` objects.
+#. Prepare the LPSC_600 dataset by downloading ``LPSC_600.extxyz`` and
+   converting the structures into :class:`~nvalchemi.data.AtomicData` objects.
 #. Split the data into training and validation subsets.
 #. Prepare the MACE ``medium-mpa-0`` foundation model for fine-tuning by
    fitting residual atomic reference-energy corrections and updating the model
@@ -176,6 +177,7 @@ def download_lpsc_extxyz() -> Path:
 extxyz_path = download_lpsc_extxyz()
 
 
+# %%
 # Once the file is available locally, we read each structure with ASE and convert
 # it into :class:`~nvalchemi.data.AtomicData`. The LPSC file stores the labels as
 # ``ref_energy`` and ``ref_forces``. ASE treats ``stress`` as a calculator
@@ -236,6 +238,7 @@ print(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def make_loader(
     batch: Batch,
     *,
@@ -258,6 +261,7 @@ def make_loader(
         pin_memory=True,
     )
 
+
 train_loader = make_loader(
     train_batch,
     batch_size=BATCH_SIZE,
@@ -271,9 +275,10 @@ validation_loader = make_loader(
 
 
 # %%
-# Setting up the fine-tuning model
-# --------------------------------
-# Before setting up the model for fine-tuning, we need to refit the per-element reference energies.
+# Preparing the fine-tuning model
+# -------------------------------
+# Before loading the fine-tuning model, we need to refit the per-element
+# reference energies.
 # ``fit_atomic_reference_energies`` counts how many atoms of each element appear
 # in every training structure, then solves a least-squares problem to find the
 # per-element energy corrections that best explain the remaining error of
@@ -292,6 +297,7 @@ def baseline_energy_fn(model: MACEWrapper, neighbor_hook: NeighborListHook) -> A
         return model(batch)["energy"]
 
     return baseline
+
 
 def mace_checkpoint_reference_energies(model: MACEWrapper) -> dict[int, float]:
     """Return the per-element reference energies stored in a MACE checkpoint."""
@@ -318,6 +324,7 @@ def mace_checkpoint_reference_energies(model: MACEWrapper) -> dict[int, float]:
         for atomic_number, energy in zip(atomic_numbers, atomic_energies, strict=True)
     }
 
+
 def add_reference_energy_corrections(
     checkpoint_reference_energies: dict[int, float],
     residual_corrections: dict[int, float],
@@ -327,6 +334,7 @@ def add_reference_energy_corrections(
         atomic_number: checkpoint_reference_energies[atomic_number] + correction
         for atomic_number, correction in residual_corrections.items()
     }
+
 
 if REFERENCE_ENERGIES_PATH.exists():
     # Reuse the cached fit when this example has already been run.
@@ -361,9 +369,7 @@ else:
         foundation_model.model_config.neighbor_config,
         stage=TrainingStage.BEFORE_FORWARD,
     )
-    checkpoint_reference_energies = mace_checkpoint_reference_energies(
-        foundation_model
-    )
+    checkpoint_reference_energies = mace_checkpoint_reference_energies(foundation_model)
     reference_loader = make_loader(train_batch, batch_size=BATCH_SIZE, shuffle=False)
     try:
         fit_results = fit_atomic_reference_energies(
@@ -406,9 +412,9 @@ else:
     )
 
 
-# Now we load the model that will be fine-tuned. Passing ``atomic_energies``
-# overrides the checkpoint E0s with the refitted per-element values during model
-# construction.
+# %%
+# The fine-tuning model is then loaded with the refitted reference energies by
+# passing them through ``atomic_energies``.
 
 
 model = MACEWrapper.from_checkpoint(
@@ -424,16 +430,15 @@ model.train()
 
 
 # %%
-# Inspecting LoRA wrapper support
-# -------------------------------
-# The strategy can only attach LoRA adapters to layer types with registered
-# wrappers. Listing the available wrappers makes the target-pattern choices
-# below easier to interpret.
+# Checking supported LoRA layers
+# ------------------------------
+# Registered wrappers define which layer classes can receive LoRA adapters.
 
 
 def class_name(cls: type) -> str:
     """Return a compact import path for a class."""
     return f"{cls.__module__}.{cls.__qualname__}"
+
 
 def print_available_lora_wrappers() -> None:
     """Print currently registered layer-to-LoRA wrapper pairs."""
@@ -445,14 +450,21 @@ def print_available_lora_wrappers() -> None:
             flush=True,
         )
 
+
 print_available_lora_wrappers()
 
 
 # %%
-# Running LoRA with selected target patterns
-# ------------------------------------------
-# ``LORA_TARGET_PATTERNS`` and ``TRAINABLE_PATTERNS`` select the adapted MACE
-# layers and any extra base parameters to train.
+# Configuring and running LoRA fine-tuning
+# ----------------------------------------
+# Similar to :class:`~nvalchemi.training.TrainingStrategy` and
+# :class:`~nvalchemi.training.FineTuningStrategy`,
+# :class:`~nvalchemi.training.LoRAFineTuningStrategy` combines the training
+# objective, validation reporter, neighbor-list hook, and optimizer setup. The
+# LoRA-specific target patterns select the MACE layers that receive adapters,
+# while the trainable patterns keep a small set of base-model parameters
+# trainable. Module patches can also be provided to customize model components,
+# but they are not needed in this example.
 
 seed_everything(SEED)
 
@@ -550,7 +562,10 @@ strategy = LoRAFineTuningStrategy(
 )
 
 
-# We can also inspect the LoRA modules installed in the strategy.
+# %%
+# After the strategy attaches adapters, inspect the inserted LoRA modules before
+# training.
+
 
 def print_lora_adapters(strategy: LoRAFineTuningStrategy) -> None:
     """Print LoRA modules installed in strategy."""
@@ -567,12 +582,13 @@ def print_lora_adapters(strategy: LoRAFineTuningStrategy) -> None:
         for module_name in module_names:
             print(f"  - {model_name}.{module_name}", flush=True)
 
+
 print_lora_adapters(strategy)
 
 
-# Once the strategy is constructed, we can run the fine-tuning loop and save the
-# trained adapter weights. ``RichReporter`` reports validation metrics during
-# training.
+# %%
+# With the strategy configured, run the fine-tuning loop and save the trained
+# adapter weights. ``RichReporter`` reports validation metrics during training.
 
 
 seed_everything(SEED)
@@ -610,7 +626,7 @@ if device.type == "cuda":
 # A saved adapter can be attached to a freshly loaded foundation model for
 # inference with
 # :meth:`~nvalchemi.training.LoRAFineTuningStrategy.load_adapter_into_model`.
-# Here, we validate that reloaded model by running it on a held-out batch.
+# Here, we use a held-out validation batch as a simple inference example.
 
 loaded_model = MACEWrapper.from_checkpoint(
     MACE_CHECKPOINT,
@@ -676,6 +692,7 @@ print(f"Validation MAE for stress: {validation_mae_stress:.6f}")
 
 validation_loader.dataset.close()
 
+# %%
 # Exact values depend on hardware, dependency versions, and training settings.
 # As a rough point of comparison, one reference run on an NVIDIA L4 GPU with
 # ``TRAINING_EPOCHS = 100`` reached:

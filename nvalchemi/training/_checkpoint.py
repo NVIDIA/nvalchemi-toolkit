@@ -465,7 +465,9 @@ def _selected_state_dict(
     """Return selected state entries and fail when metadata names are stale."""
     missing = sorted(names - set(state_dict))
     if missing:
-        raise KeyError(f"Cannot checkpoint missing trainable parameter(s): {missing!r}.")
+        raise KeyError(
+            f"Cannot checkpoint missing trainable parameter(s): {missing!r}."
+        )
     return {name: state_dict[name] for name in sorted(names)}
 
 

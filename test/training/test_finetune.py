@@ -190,6 +190,7 @@ class TestModulePatchHook:
                 }
             )
 
+
 class TestTrainableParameterHook:
     def test_patterns_must_match_parameters(
         self, baseline_strategy_kwargs: dict[str, Any]
@@ -417,6 +418,7 @@ class TestTrainableParameterHook:
                     "hooks": [TrainableParameterHook()],
                 }
             )
+
 
 class TestFineTuningStrategy:
     def test_generated_hooks_register_before_explicit_hooks(

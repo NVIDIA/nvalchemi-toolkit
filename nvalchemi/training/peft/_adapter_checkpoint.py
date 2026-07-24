@@ -153,7 +153,9 @@ def read_adapter_metadata(
 
     kind = manifest.get("kind")
     if kind != adapter_kind:
-        raise ValueError(f"Unsupported adapter kind {kind!r}; expected {adapter_kind!r}.")
+        raise ValueError(
+            f"Unsupported adapter kind {kind!r}; expected {adapter_kind!r}."
+        )
     version = manifest.get("schema_version", 0)
     if not isinstance(version, int):
         raise ValueError("Adapter manifest schema_version must be an integer.")
@@ -245,9 +247,7 @@ def stored_base_fingerprints(workflow: Any) -> dict[str, str]:
     """
     fingerprints = workflow._base_fingerprints
     if not isinstance(fingerprints, dict) or not fingerprints:
-        raise ValueError(
-            "Adapter checkpointing requires base fingerprints generated."
-        )
+        raise ValueError("Adapter checkpointing requires base fingerprints generated.")
     normalized: dict[str, str] = {}
     for model_name in workflow.models:
         fingerprint = fingerprints.get(model_name)

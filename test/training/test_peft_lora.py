@@ -42,9 +42,7 @@ from nvalchemi.training.peft.wrappers import (
     EquivariantLoRALinear,
 )
 
-_PARTIAL_CHECKPOINT_HOOK_WARNING = (
-    "Saving a checkpoint with save_trainable_parameters_only=True stores only trainable tensors."
-)
+_PARTIAL_CHECKPOINT_HOOK_WARNING = "Saving a checkpoint with save_trainable_parameters_only=True stores only trainable tensors."
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1198,9 +1196,7 @@ class TestEquivariantLoRALinear:
         def fill_ones(tensor: torch.Tensor) -> None:
             tensor.fill_(1.0)
 
-        wrapper = EquivariantLoRALinear(
-            base_layer, rank=2, alpha=4.0, init=fill_ones
-        )
+        wrapper = EquivariantLoRALinear(base_layer, rank=2, alpha=4.0, init=fill_ones)
 
         assert torch.equal(wrapper.lora_A, torch.ones_like(wrapper.lora_A))
         assert torch.count_nonzero(wrapper.lora_B) == 0
@@ -1325,9 +1321,7 @@ class TestCuEquivariantLoRALinear:
         def fill_ones(tensor: torch.Tensor) -> None:
             tensor.fill_(1.0)
 
-        wrapper = CuEquivariantLoRALinear(
-            base_layer, rank=2, alpha=4.0, init=fill_ones
-        )
+        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0, init=fill_ones)
 
         assert torch.equal(wrapper.lora_A, torch.ones_like(wrapper.lora_A))
         assert torch.count_nonzero(wrapper.lora_B) == 0
