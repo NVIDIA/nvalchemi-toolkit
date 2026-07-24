@@ -21,7 +21,6 @@ exchange via indexed_all_to_all_v (skipped without multiple GPUs).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -297,12 +296,8 @@ class TestParticleHaloConfig:
     def test_computes_pbc_shifts(self):
         config = _make_halo_config(world_size=2)
         shifts = config.pbc_shifts
-        assert isinstance(shifts, Mapping)
-        key = next(iter(shifts))
-        with pytest.raises(TypeError):
-            shifts[key] = ()  # type: ignore[index]
-        with pytest.raises(AttributeError):
-            shifts[key].append(torch.zeros(3))  # type: ignore[attr-defined]
+        assert isinstance(shifts, dict)
+        assert all(isinstance(values, list) for values in shifts.values())
 
     def test_pbc_shifts_follow_cell_updates(self):
         config = _make_halo_config(world_size=2)

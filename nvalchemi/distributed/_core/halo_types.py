@@ -25,9 +25,7 @@ directly.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import Any
 
 import torch
@@ -83,21 +81,17 @@ class ParticleHaloConfig:
     @property
     def pbc_shifts(
         self,
-    ) -> Mapping[tuple[int, int], tuple[torch.Tensor, ...]]:
-        """Materialize a compatibility snapshot of current Cartesian shifts.
-
-        The returned mapping and its value sequences are immutable.
-        """
+    ) -> dict[tuple[int, int], list[torch.Tensor]]:
+        """Materialize current Cartesian shifts from the cached lattice images."""
         cell_matrix = self.partitioner.cell_matrix
-        shifts = {
-            key: tuple(
+        return {
+            key: [
                 image.to(device=cell_matrix.device, dtype=cell_matrix.dtype)
                 @ cell_matrix
                 for image in images
-            )
+            ]
             for key, images in self._pbc_images.items()
         }
-        return MappingProxyType(shifts)
 
 
 def _compute_pbc_image_vectors(
