@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
@@ -220,6 +220,16 @@ class FineTuningStrategy(TrainingStrategy):
     trainable_patterns: tuple[str, ...] = ()
     freeze_mode: FreezeMode = "requires_grad"
 
+    # Run-time states populated by hooks (e.g., ModulePatchHook and TrainableParameterHook) to keep track
+    # of trainable and managed parameter names so that the individual hook implementations can be kept modular.
+    # PrivateAttr is used to avoid serializing these states to the checkpoint.
+    _registered_trainable_parameter_names: dict[str, frozenset[str]] = PrivateAttr(
+        default_factory=dict
+    )
+    _registered_managed_parameter_names: dict[str, frozenset[str]] = PrivateAttr(
+        default_factory=dict
+    )
+
     @model_validator(mode="before")
     @classmethod
     def _prepend_finetuning_hooks(cls, data: Any) -> Any:
@@ -246,6 +256,154 @@ class FineTuningStrategy(TrainingStrategy):
         if generated:
             normalized["hooks"] = [*generated, *list(normalized.get("hooks") or [])]
         return normalized
+
+    @staticmethod
+    def _normalize_parameter_registration(
+        names: Sequence[str],
+        *,
+        source: str,
+    ) -> tuple[str, frozenset[str]]:
+        """Validate and normalize a parameter registration set."""
+        if not isinstance(source, str) or not source:
+            raise ValueError(
+                "parameter registration source must be a non-empty string."
+            )
+        if not isinstance(names, Sequence) or isinstance(names, (str, bytes)):
+            raise TypeError("parameter names must be a non-string sequence of strings.")
+        normalized_names = frozenset(names)
+        if not all(isinstance(name, str) for name in normalized_names):
+            raise TypeError("parameter names must contain only strings.")
+        return source, normalized_names
+
+    def register_trainable_parameter_names(
+        self,
+        names: Sequence[str],
+        *,
+        source: str,
+    ) -> None:
+        """Register trainable parameter names for a given source.
+
+        Registration-time hooks use this method to add parameter names to the
+        final trainable allow-list computed by :class:`TrainableParameterHook`.
+
+        Parameters
+        ----------
+        names : Sequence[str]
+            Fully-qualified parameter names, for example
+            ``"main.model.projection.weight"``.
+        source : str
+            Identifier for the hook or feature that owns this registration,
+            for example ``"module_patch"``.
+
+        Returns
+        -------
+        None
+            This method mutates ``self._registered_trainable_parameter_names``.
+
+        Raises
+        ------
+        TypeError
+            If ``names`` is not a non-string sequence, or if any entry in
+            ``names`` is not a string.
+        ValueError
+            If ``source`` is not a non-empty string.
+        """
+        source, normalized_names = self._normalize_parameter_registration(
+            names,
+            source=source,
+        )
+        existing_names = self._registered_trainable_parameter_names.get(
+            source,
+            frozenset(),
+        )
+        self._registered_trainable_parameter_names[source] = (
+            existing_names | normalized_names
+        )
+
+    def register_managed_parameter_names(
+        self,
+        names: Sequence[str],
+        *,
+        source: str,
+    ) -> None:
+        """Register managed parameter names for a given source so that a new
+        source can choose to not override them.
+
+        Parameters
+        ----------
+        names : Sequence[str]
+            Fully-qualified parameter names, for example
+            ``"main.model.projection.base_layer.weight"``.
+        source : str
+            Identifier for the hook or feature that owns this registration,
+            for example ``"module_patch"``.
+
+        Returns
+        -------
+        None
+            This method mutates ``self._registered_managed_parameter_names``.
+
+        Raises
+        ------
+        TypeError
+            If ``names`` is not a non-string sequence, or if any entry in
+            ``names`` is not a string.
+        ValueError
+            If ``source`` is not a non-empty string.
+        """
+        source, normalized_names = self._normalize_parameter_registration(
+            names,
+            source=source,
+        )
+        existing_names = self._registered_managed_parameter_names.get(
+            source,
+            frozenset(),
+        )
+        self._registered_managed_parameter_names[source] = (
+            existing_names | normalized_names
+        )
+
+    def get_registered_trainable_parameter_names(self) -> Mapping[str, frozenset[str]]:
+        """Return registered trainable parameter names grouped by source.
+
+        Returns
+        -------
+        Mapping[str, frozenset[str]]
+            A shallow copy of the mapping from source identifier to immutable registered
+            trainable parameter names.
+        """
+        return dict(self._registered_trainable_parameter_names)
+
+    def get_registered_managed_parameter_names(self) -> Mapping[str, frozenset[str]]:
+        """Return registered managed parameter names grouped by source.
+
+        Returns
+        -------
+        Mapping[str, frozenset[str]]
+            A shallow copy of the mapping from source identifier to immutable registered
+            managed parameter names.
+        """
+        return dict(self._registered_managed_parameter_names)
+
+    def get_flattened_registered_trainable_parameter_names(self) -> frozenset[str]:
+        """Return registered trainable parameter names across all sources.
+
+        Returns
+        -------
+        frozenset[str]
+            Immutable union of all registered trainable parameter names.
+        """
+        return frozenset().union(*self._registered_trainable_parameter_names.values())
+
+    def get_flattened_registered_managed_parameter_names(self) -> frozenset[str]:
+        """Return registered managed parameter names across all sources.
+
+        Returns
+        -------
+        frozenset[str]
+            Immutable union of all registered managed parameter names.
+        """
+        return frozenset().union(*self._registered_managed_parameter_names.values())
 
     @classmethod
     def from_pretrained_checkpoint(

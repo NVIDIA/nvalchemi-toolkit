@@ -23,7 +23,7 @@ from enum import Enum
 from typing import Any, ClassVar, Literal, TypeAlias
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.training._spec import BaseSpec
@@ -109,6 +109,35 @@ def _build_patch_module(target: str, value: PatchValue) -> torch.nn.Module:
     return value
 
 
+def _parameter_names_under_prefix(names: set[str], prefix: str) -> set[str]:
+    """Return parameter names directly under a fully-qualified module prefix."""
+    parameter_prefix = f"{prefix}."
+    return {name for name in names if name.startswith(parameter_prefix)}
+
+
+def _registered_parameter_names(workflow: Any, method_name: str) -> frozenset[str]:
+    """Return registered parameter names when the workflow supports a registry."""
+    method = getattr(workflow, method_name, None)
+    if not callable(method):
+        return frozenset()
+    return method()
+
+
+def _validate_registered_parameter_names(
+    names: set[str],
+    registered_names: set[str],
+    *,
+    label: str,
+) -> None:
+    """Raise when registry names no longer exist on the model."""
+    missing = sorted(registered_names - names)
+    if missing:
+        raise RuntimeError(
+            f"Registered {label} parameter(s) are not present on the final "
+            f"model: {missing!r}."
+        )
+
+
 class ModulePatchHook(BaseModel):
     """Patch model submodules at registration time.
 
@@ -124,6 +153,12 @@ class ModulePatchHook(BaseModel):
     patches : dict[str, BaseSpec | torch.nn.Module]
         Ordered mapping of target paths to replacement modules or specs that
         build modules.
+    register_parameters : bool
+        If ``True``, register the patched module parameters as both trainable
+        and managed under the fixed ``"module_patch"`` source. Registered
+        patch parameters are included in the final trainable allow-list by default 
+        and are protected from being overridden by other sources modifying the models.
+        Defaults to ``False`` for backward compatibility.
 
     Attributes
     ----------
@@ -133,6 +168,9 @@ class ModulePatchHook(BaseModel):
         Required by the hook protocol; always ``1``.
     stage : None
         This hook does not run at training stages.
+    _hook_identifier : str
+        Identifier for the hook used to register trainable and managed parameter names
+        when ``register_parameters=True``.
 
     Warns
     -----
@@ -152,8 +190,11 @@ class ModulePatchHook(BaseModel):
 
     patches: dict[str, PatchValue] = Field(default_factory=dict)
 
+    register_parameters: bool = False
+
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None
+    _hook_identifier: ClassVar[str] = "patch"
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -194,8 +235,32 @@ class ModulePatchHook(BaseModel):
                     stacklevel=2,
                 )
 
-        resolved: list[tuple[torch.nn.Module, str, torch.nn.Module]] = []
+        # Get the previously registered managed parameter names on the workflow.
+        registered_managed_names: Mapping[str, frozenset[str]] = {}
+        get_registered_managed = getattr(
+            workflow,
+            "get_registered_managed_parameter_names",
+            None,
+        )
+        if callable(get_registered_managed):
+            registered_managed_names = get_registered_managed()
+
+        resolved: list[tuple[str, torch.nn.Module, str, torch.nn.Module]] = []
         for target, value in self.patches.items():
+            # Check if the patch target overlaps with any other registered managed parameter names.
+            overlaps: dict[str, list[str]] = {}
+            for source, source_names in registered_managed_names.items():
+                if source == self._hook_identifier:
+                    continue
+                matched_names = _parameter_names_under_prefix(set(source_names), target)
+                if matched_names:
+                    overlaps[source] = sorted(matched_names)
+            if overlaps:
+                raise RuntimeError(
+                    f"Module patch target {target!r} overlaps parameter(s) "
+                    f"already managed by another source: {overlaps!r}."
+                )
+
             parent, child_name = _resolve_parent(models, target)
             if hasattr(parent, child_name):
                 existing = getattr(parent, child_name)
@@ -205,10 +270,56 @@ class ModulePatchHook(BaseModel):
                         f"{type(existing).__name__}, expected an existing "
                         "nn.Module or a new child name."
                     )
-            resolved.append((parent, child_name, _build_patch_module(target, value)))
+            resolved.append(
+                (target, parent, child_name, _build_patch_module(target, value))
+            )
 
-        for parent, child_name, module in resolved:
+        for _target, parent, child_name, module in resolved:
             setattr(parent, child_name, module)
+
+        if self.register_parameters:
+            names = {name for name, _ in iter_qualified_named_parameters(models)}
+            patch_parameter_names = set().union(
+                *(
+                    _parameter_names_under_prefix(names, target)
+                    for target, *_rest in resolved
+                )
+            )
+            register_trainable = getattr(
+                workflow,
+                "register_trainable_parameter_names",
+                None,
+            )
+            if not callable(register_trainable):
+                raise TypeError(
+                    "ModulePatchHook requires a workflow with a "
+                    "register_trainable_parameter_names(names, source=...) method "
+                    "when register_parameters=True."
+                )
+            register_trainable(
+                tuple(sorted(patch_parameter_names)),
+                source=self._hook_identifier,
+            )
+            register_managed = getattr(
+                workflow,
+                "register_managed_parameter_names",
+                None,
+            )
+            if not callable(register_managed):
+                raise TypeError(
+                    "ModulePatchHook requires a workflow with a "
+                    "register_managed_parameter_names(names, source=...) method "
+                    "when register_parameters=True."
+                )
+            register_managed(
+                tuple(sorted(patch_parameter_names)),
+                source=self._hook_identifier,
+            )
+            patched_parameter_names = set(
+                getattr(workflow, "_patched_parameter_names", set())
+            )
+            patched_parameter_names.update(patch_parameter_names)
+            workflow._patched_parameter_names = frozenset(patched_parameter_names)
 
 
 class TrainableParameterHook(BaseModel):
@@ -228,7 +339,8 @@ class TrainableParameterHook(BaseModel):
         by ``trainable_patterns``.
     trainable_patterns : tuple[str, ...]
         Glob patterns to include. When supplied without ``freeze_patterns``,
-        these patterns form an allow-list.
+        these patterns form an allow-list, along with the trainable parameters
+        registered by earlier hooks, e.g., ``ModulePatchHook``.
     freeze_mode : {"requires_grad", "optimizer_only"}
         Whether excluded parameters are temporarily frozen via
         ``requires_grad=False`` or only excluded from optimizer construction.
@@ -250,7 +362,8 @@ class TrainableParameterHook(BaseModel):
     Raises
     ------
     ValueError
-        If no patterns are supplied, or if any pattern matches no parameter.
+        If no trainable parameters are selected, or if any pattern matches no
+        parameter.
 
     Warns
     -----
@@ -276,16 +389,6 @@ class TrainableParameterHook(BaseModel):
     stage: ClassVar[None] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    @model_validator(mode="after")
-    def _validate_patterns(self) -> TrainableParameterHook:
-        """Require at least one pattern so registration has a visible effect."""
-        if not self.freeze_patterns and not self.trainable_patterns:
-            raise ValueError(
-                "TrainableParameterHook requires freeze_patterns, "
-                "trainable_patterns, or both."
-            )
-        return self
 
     def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
         """Return ``False`` because optimizer filters run only on registration."""
@@ -314,10 +417,42 @@ class TrainableParameterHook(BaseModel):
             trainable_matches = _matched_names(
                 self.trainable_patterns, names, label="trainable_patterns"
             )
+        registered_trainable_names = set(
+            _registered_parameter_names(
+                workflow,
+                "get_flattened_registered_trainable_parameter_names",
+            )
+        )
+        registered_managed_names = set(
+            _registered_parameter_names(
+                workflow,
+                "get_flattened_registered_managed_parameter_names",
+            )
+        )
+        _validate_registered_parameter_names(
+            names,
+            registered_trainable_names,
+            label="trainable",
+        )
+        _validate_registered_parameter_names(
+            names,
+            registered_managed_names,
+            label="managed",
+        )
+        trainable_matches -= registered_managed_names
         if self.trainable_patterns and not self.freeze_patterns:
             allowed = trainable_matches
+        elif not self.trainable_patterns and not self.freeze_patterns:
+            allowed = set()
         else:
             allowed = (names - freeze_matches) | trainable_matches
+        allowed.update(registered_trainable_names)
+        if not allowed:
+            raise ValueError(
+                "TrainableParameterHook selected no trainable parameters. "
+                "Provide freeze_patterns or trainable_patterns, or register "
+                "trainable parameters before this hook."
+            )
 
         if getattr(workflow, "_optimizers", None) or getattr(
             workflow, "_flat_opts", None
@@ -339,6 +474,9 @@ class TrainableParameterHook(BaseModel):
             )
         set_optimizer_parameter_filter(allowed)
 
+        # For freeze_mode="requires_grad", preserve requires_grad for parameters in the
+        # allowed list and temporarily set all other parameters to requires_grad=False.
+        # For freeze_mode="optimizer_only", do not change requires_grad here
         set_trainable_parameter_filter = getattr(
             workflow, "set_trainable_parameter_filter", None
         )
@@ -352,6 +490,7 @@ class TrainableParameterHook(BaseModel):
         else:
             set_trainable_parameter_filter(None)
 
+        # Force explicitly selected or registered trainable parameters on to be trainable.
         set_force_trainable_parameter_filter = getattr(
             workflow, "set_force_trainable_parameter_filter", None
         )
@@ -361,5 +500,7 @@ class TrainableParameterHook(BaseModel):
                 "set_force_trainable_parameter_filter(names) method."
             )
         set_force_trainable_parameter_filter(
-            trainable_matches if self.trainable_patterns else None
+            (trainable_matches | registered_trainable_names)
+            if self.trainable_patterns or registered_trainable_names
+            else None
         )

@@ -60,6 +60,34 @@ class _OnRegisterRecorder:
         return
 
 
+class _ParameterRegistrationHook:
+    """Register trainable and managed parameter names during hook registration."""
+
+    frequency = 1
+    stage = None
+
+    def __init__(
+        self,
+        *,
+        trainable: dict[str, set[str]] | None = None,
+        managed: dict[str, set[str]] | None = None,
+    ) -> None:
+        self.trainable = trainable or {}
+        self.managed = managed or {}
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def on_register(self, workflow: Any) -> None:
+        for source, names in self.trainable.items():
+            workflow.register_trainable_parameter_names(tuple(names), source=source)
+        for source, names in self.managed.items():
+            workflow.register_managed_parameter_names(tuple(names), source=source)
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
+        return
+
+
 def _optimizer_param_ids(strategy: TrainingStrategy) -> set[int]:
     """Return ids of every parameter present in strategy optimizers."""
     return {
@@ -142,6 +170,25 @@ class TestModulePatchHook:
                 ModulePatchHook(patches={"main.model.projection": nn.Linear(8, 1)})
             )
 
+    def test_rejects_patch_overlapping_existing_managed_parameters(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        managed = {
+            "main.model.projection.weight",
+            "main.model.projection.bias",
+        }
+        with pytest.raises(RuntimeError, match="already managed by another source"):
+            FineTuningStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "hooks": [
+                        _ParameterRegistrationHook(managed={"lora": managed}),
+                        ModulePatchHook(
+                            patches={"main.model.projection": nn.Linear(8, 1)}
+                        ),
+                    ],
+                }
+            )
 
 class TestTrainableParameterHook:
     def test_patterns_must_match_parameters(
@@ -335,6 +382,41 @@ class TestTrainableParameterHook:
                 TrainableParameterHook(freeze_patterns=("main.model.projection.*",))
             )
 
+    def test_trainable_patterns_do_not_enable_registered_managed_parameters(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        managed = {
+            "main.model.projection.weight",
+            "main.model.projection.bias",
+        }
+        trainable = {"main.model.projection.bias"}
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [
+                    _ParameterRegistrationHook(
+                        trainable={"adapter": trainable},
+                        managed={"adapter": managed},
+                    ),
+                    TrainableParameterHook(trainable_patterns=("main.model.*",)),
+                ],
+            }
+        )
+
+        assert "main.model.projection.bias" in strategy._optimizer_parameter_names
+        assert "main.model.projection.weight" not in strategy._optimizer_parameter_names
+        assert "main.model.joint_mlp.0.weight" in strategy._optimizer_parameter_names
+
+    def test_empty_hook_without_registered_trainable_parameters_raises(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        with pytest.raises(ValueError, match="selected no trainable parameters"):
+            FineTuningStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "hooks": [TrainableParameterHook()],
+                }
+            )
 
 class TestFineTuningStrategy:
     def test_generated_hooks_register_before_explicit_hooks(
