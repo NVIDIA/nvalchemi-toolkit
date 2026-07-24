@@ -25,7 +25,9 @@ directly.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 import torch
@@ -63,7 +65,9 @@ class ParticleHaloConfig:
     # Computed in __post_init__
     rank: int = field(init=False)
     neighbor_ranks: list[int] = field(init=False)
-    pbc_shifts: dict[tuple[int, int], list[torch.Tensor]] = field(init=False)
+    _pbc_images: dict[tuple[int, int], list[torch.Tensor]] = field(
+        init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         try:
@@ -74,20 +78,39 @@ class ParticleHaloConfig:
         self.neighbor_ranks = [
             r for r in self.partitioner.get_neighbor_ranks(self.rank) if r != self.rank
         ]
-        self.pbc_shifts = _compute_pbc_shift_vectors(self.partitioner)
+        self._pbc_images = _compute_pbc_image_vectors(self.partitioner)
+
+    @property
+    def pbc_shifts(
+        self,
+    ) -> Mapping[tuple[int, int], tuple[torch.Tensor, ...]]:
+        """Materialize a compatibility snapshot of current Cartesian shifts.
+
+        The returned mapping and its value sequences are immutable.
+        """
+        cell_matrix = self.partitioner.cell_matrix
+        shifts = {
+            key: tuple(
+                image.to(device=cell_matrix.device, dtype=cell_matrix.dtype)
+                @ cell_matrix
+                for image in images
+            )
+            for key, images in self._pbc_images.items()
+        }
+        return MappingProxyType(shifts)
 
 
-def _compute_pbc_shift_vectors(
+def _compute_pbc_image_vectors(
     partitioner: Any,  # SpatialPartitioner at runtime
 ) -> dict[tuple[int, int], list[torch.Tensor]]:
-    """Precompute PBC shift vectors for all neighbor rank pairs.
+    """Precompute cell-independent lattice images for neighbor rank pairs.
 
-    Returns ``{(sender, receiver): [shift_1, shift_2, ...]}`` where
-    each shift is a ``(3,)`` Cartesian vector. For a diagonal neighbor
-    crossing D periodic boundaries there are ``2^D - 1`` independent
-    shifts (all non-empty subsets of crossed dims).
+    Returns ``{(sender, receiver): [image_1, image_2, ...]}`` where each
+    ``(3,)`` image contains integer-valued fractional lattice coefficients.
+    For a diagonal neighbor crossing D periodic boundaries there are
+    ``2^D - 1`` independent images (all non-empty subsets of crossed dims).
     """
-    shifts: dict[tuple[int, int], list[torch.Tensor]] = {}
+    images: dict[tuple[int, int], list[torch.Tensor]] = {}
     cell_matrix = partitioner.cell_matrix
     pbc = partitioner.pbc
     grid = partitioner.rank_grid
@@ -98,38 +121,38 @@ def _compute_pbc_shift_vectors(
         for receiver_rank in partitioner.get_neighbor_ranks(sender_rank):
             receiver_coords = partitioner.rank_to_grid_coords(receiver_rank)
 
-            per_dim_shifts: list[torch.Tensor] = []
+            per_dim_images: list[torch.Tensor] = []
             for dim in range(3):
                 if not pbc[dim] or grid[dim] <= 1:
                     continue
-                dim_shift = torch.zeros(
+                dim_image = torch.zeros(
                     3, device=cell_matrix.device, dtype=cell_matrix.dtype
                 )
                 if sender_coords[dim] == grid[dim] - 1 and receiver_coords[dim] == 0:
-                    dim_shift = dim_shift - cell_matrix[dim, :]
+                    dim_image[dim] = -1
                 elif sender_coords[dim] == 0 and receiver_coords[dim] == grid[dim] - 1:
-                    dim_shift = dim_shift + cell_matrix[dim, :]
+                    dim_image[dim] = 1
                 else:
                     continue
-                per_dim_shifts.append(dim_shift)
+                per_dim_images.append(dim_image)
 
-            if not per_dim_shifts:
+            if not per_dim_images:
                 continue
 
-            n = len(per_dim_shifts)
-            combo_shifts: list[torch.Tensor] = []
+            n = len(per_dim_images)
+            combo_images: list[torch.Tensor] = []
             for mask in range(1, 1 << n):
                 combo = torch.zeros(
                     3, device=cell_matrix.device, dtype=cell_matrix.dtype
                 )
                 for bit in range(n):
                     if mask & (1 << bit):
-                        combo = combo + per_dim_shifts[bit]
-                combo_shifts.append(combo)
+                        combo = combo + per_dim_images[bit]
+                combo_images.append(combo)
 
-            shifts[(sender_rank, receiver_rank)] = combo_shifts
+            images[(sender_rank, receiver_rank)] = combo_images
 
-    return shifts
+    return images
 
 
 @dataclass

@@ -103,6 +103,12 @@ def halo_exchange(
 
     device = padded_pos.device
     n_padded = padded_pos.shape[0]
+    cell = sharded.cell
+    if cell is not None and cell.ndim == 2:
+        cell = cell.unsqueeze(0)
+    pbc = sharded.pbc
+    if pbc is not None and pbc.ndim == 1:
+        pbc = pbc.unsqueeze(0)
 
     # Every per-atom field scattered onto the ShardedBatch rides through.
     # positions has already been padded (autograd-aware); forces is
@@ -131,12 +137,34 @@ def halo_exchange(
     # ``neighbor_matrix`` / ``num_neighbors`` / ``neighbor_list`` etc.)
     # untouched — that's the whole point of the in-place path.
     existing = sharded.padded_batch
+    system = existing._system_group if existing is not None else None
+
+    def _system_field_compatible(name: str, current: torch.Tensor | None) -> bool:
+        if current is None:
+            return system is None or name not in system
+        if system is None or name not in system:
+            return False
+        cached = system[name]
+        return (
+            cached.shape == current.shape
+            and cached.dtype == current.dtype
+            and cached.device == current.device
+        )
+
     if (
         existing is not None
         and sharded.halo_meta is not None
         and sharded.halo_meta.n_owned == meta.n_owned
         and sharded.halo_meta.n_padded == meta.n_padded
+        and _system_field_compatible("cell", cell)
+        and _system_field_compatible("pbc", pbc)
     ):
+        with torch.no_grad():
+            if cell is not None:
+                system["cell"].copy_(cell)
+            if pbc is not None:
+                system["pbc"].copy_(pbc)
+
         atoms = existing._atoms_group
         for name, shard in atom_fields.items():
             if name == "forces" and "forces" in atoms:
@@ -157,14 +185,10 @@ def halo_exchange(
             padded_kwargs[required] = _build_padded_field(
                 required, atom_fields[required]
             )
-    if sharded.cell is not None:
-        padded_kwargs["cell"] = (
-            sharded.cell if sharded.cell.ndim == 3 else sharded.cell.unsqueeze(0)
-        )
-    if sharded.pbc is not None:
-        padded_kwargs["pbc"] = (
-            sharded.pbc if sharded.pbc.ndim == 2 else sharded.pbc.unsqueeze(0)
-        )
+    if cell is not None:
+        padded_kwargs["cell"] = cell
+    if pbc is not None:
+        padded_kwargs["pbc"] = pbc
 
     padded_data = AtomicData(**padded_kwargs)
     for name, shard in atom_fields.items():
