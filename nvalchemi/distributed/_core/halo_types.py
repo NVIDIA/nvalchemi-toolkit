@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+from jaxtyping import Float
 
 __all__ = [
     "ParticleHaloConfig",
@@ -81,7 +82,7 @@ class ParticleHaloConfig:
     @property
     def pbc_shifts(
         self,
-    ) -> dict[tuple[int, int], list[torch.Tensor]]:
+    ) -> dict[tuple[int, int], list[Float[torch.Tensor, "3"]]]:
         """Materialize current Cartesian shifts from the cached lattice images."""
         cell_matrix = self.partitioner.cell_matrix
         return {
@@ -100,7 +101,7 @@ class ParticleHaloConfig:
 
 def _compute_pbc_image_vectors(
     partitioner: Any,  # SpatialPartitioner at runtime
-) -> dict[tuple[int, int], list[torch.Tensor]]:
+) -> dict[tuple[int, int], list[Float[torch.Tensor, "3"]]]:
     """Precompute cell-independent lattice images for neighbor rank pairs.
 
     Returns ``{(sender, receiver): [image_1, image_2, ...]}`` where each
