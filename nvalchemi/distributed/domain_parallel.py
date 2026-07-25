@@ -326,22 +326,30 @@ class DomainParallel(BaseDynamics):
         converged = dyn._check_convergence(batch)
         # Convergence must be a mesh-wide decision: each rank only sees its own
         # atoms, so ranks can disagree and take divergent control flow (one stops
-        # while others continue → collective desync / hang). Reduce to the AND
-        # across the domain — converged only when EVERY rank is converged.
+        # while others continue → collective desync / hang). Every rank reduces
+        # a per-system mask so an index survives only when every rank reports it.
         if (
-            converged is not None
+            dyn.convergence_hook is not None
             and dist.is_initialized()
             and self._config.mesh is not None
         ):
-            flag = torch.tensor(
-                [1 if bool(converged) else 0],
+            convergence_mask = torch.zeros(
+                batch.num_graphs,
                 device=batch.positions.device,
                 dtype=torch.int64,
             )
+            if converged is not None:
+                local_indices = converged.to(
+                    device=convergence_mask.device, dtype=torch.long
+                )
+                convergence_mask[local_indices] = 1
             dist.all_reduce(
-                flag, op=dist.ReduceOp.MIN, group=mesh_group(self._config.mesh)
+                convergence_mask,
+                op=dist.ReduceOp.MIN,
+                group=mesh_group(self._config.mesh),
             )
-            converged = bool(flag.item())
+            global_indices = torch.where(convergence_mask.bool())[0]
+            converged = global_indices if global_indices.numel() > 0 else None
         dyn._last_converged = converged
         if converged is not None:
             dyn._call_hooks(DynamicsStage.ON_CONVERGE, batch)
@@ -678,6 +686,12 @@ class DomainParallel(BaseDynamics):
 
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
+                if (
+                    self.sampler is None
+                    and _converged is not None
+                    and _converged.numel() == batch.num_graphs
+                ):
+                    break
         finally:
             self._close_hooks()
         return batch
@@ -715,7 +729,11 @@ class DomainParallel(BaseDynamics):
     def _system_finished(self, converged: Any) -> bool:
         """A resident system leaves this stage when it converges (FIRE) or spends
         its per-system step budget (``n_steps``, e.g. an NVT leg)."""
-        if converged:
+        if (
+            converged is not None
+            and self.active_batch is not None
+            and converged.numel() == self.active_batch.num_graphs
+        ):
             return True
         return self.n_steps is not None and self._system_step >= self.n_steps
 
@@ -821,7 +839,14 @@ class DomainParallel(BaseDynamics):
         self._system_step += 1
         if not self._system_finished(converged):
             return
-        reason = "converged" if converged else f"reached its {self.n_steps}-step budget"
+        finished_by_convergence = (
+            converged is not None and converged.numel() == self.active_batch.num_graphs
+        )
+        reason = (
+            "converged"
+            if finished_by_convergence
+            else f"reached its {self.n_steps}-step budget"
+        )
         if self.next_rank is not None:
             full = self.gather(self.active_batch, dst=0)
             if self._is_group_lead and full is not None:
