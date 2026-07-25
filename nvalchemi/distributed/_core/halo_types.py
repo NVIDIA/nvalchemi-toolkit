@@ -85,11 +85,15 @@ class ParticleHaloConfig:
         """Materialize current Cartesian shifts from the cached lattice images."""
         cell_matrix = self.partitioner.cell_matrix
         return {
-            key: [
-                image.to(device=cell_matrix.device, dtype=cell_matrix.dtype)
-                @ cell_matrix
-                for image in images
-            ]
+            key: list(
+                (
+                    torch.stack(images).to(
+                        device=cell_matrix.device,
+                        dtype=cell_matrix.dtype,
+                    )
+                    @ cell_matrix
+                ).unbind(0)
+            )
             for key, images in self._pbc_images.items()
         }
 
