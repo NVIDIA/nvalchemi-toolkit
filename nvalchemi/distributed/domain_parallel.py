@@ -320,19 +320,19 @@ class DomainParallel(BaseDynamics):
         # 9. Outer AFTER_STEP hooks.
         self._call_hooks(DynamicsStage.AFTER_STEP, batch)
 
+        convergence_due = (
+            dyn.convergence_hook is not None
+            and dyn.step_count % dyn.convergence_hook.frequency == 0
+        )
         self.step_count += 1
         dyn.step_count += 1
 
-        converged = dyn._check_convergence(batch)
+        converged = dyn._check_convergence(batch) if convergence_due else None
         # Convergence must be a mesh-wide decision: each rank only sees its own
         # atoms, so ranks can disagree and take divergent control flow (one stops
         # while others continue → collective desync / hang). Every rank reduces
         # a per-system mask so an index survives only when every rank reports it.
-        if (
-            dyn.convergence_hook is not None
-            and dist.is_initialized()
-            and self._config.mesh is not None
-        ):
+        if convergence_due and dist.is_initialized() and self._config.mesh is not None:
             convergence_mask = torch.zeros(
                 batch.num_graphs,
                 device=batch.positions.device,
@@ -346,7 +346,7 @@ class DomainParallel(BaseDynamics):
             dist.all_reduce(
                 convergence_mask,
                 op=dist.ReduceOp.MIN,
-                group=mesh_group(self._config.mesh),
+                group=self._strategy.process_group,
             )
             global_indices = torch.where(convergence_mask.bool())[0]
             converged = global_indices if global_indices.numel() > 0 else None
