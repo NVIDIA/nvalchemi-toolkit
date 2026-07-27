@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import pathlib
 
 import pytest
 import torch
@@ -106,33 +107,59 @@ def _dist_leak_guard():
             dist.destroy_process_group()
 
 
+_MODULE_USES_COMPILE: dict[str, bool] = {}
+
+
+def _module_uses_compile(module) -> bool:
+    """``True`` iff a test module builds ``torch.compile``-d callables.
+
+    Cached per file: the source is read once, not once per test."""
+    path = getattr(module, "__file__", None)
+    if path is None:
+        return False
+    cached = _MODULE_USES_COMPILE.get(path)
+    if cached is None:
+        try:
+            src = pathlib.Path(path).read_text()
+        except OSError:  # pragma: no cover — unreadable test module
+            src = ""
+        cached = "torch.compile" in src or "compile=True" in src
+        _MODULE_USES_COMPILE[path] = cached
+    return cached
+
+
 @pytest.fixture(autouse=True)
 def _isolate_torch_compile(request):
-    """Reset ``torch.compile`` / CUDA-graph state around compile smoke tests.
+    """Reset ``torch.compile`` / CUDA-graph state around compiling tests.
 
-    The ``*Compile`` tests build ``torch.compile(fn, backend="cudagraphs")``
-    functions on CUDA. The cudagraph tree manager retains each graph's output
-    tensors across invocations, so a prior compile test's retained output can
-    still be live in the shared cudagraph memory pool when the next test
-    captures a graph — tripping ``check_memory_pool``'s "Detected N tensor(s) in
-    the cudagraph pool not tracked as outputs" correctness check. A full-suite
-    run happens to order/GC around it; a :mod:`pytest-testmon` selective subset
-    does not, so it fails only there. Resetting dynamo and freeing the cudagraph
-    pool before and after each such test makes any test subset/order hermetic.
-    The cost is paid only by the (few) compile tests."""
-    cls = getattr(request, "cls", None)
-    is_compile = (cls is not None and cls.__name__.endswith("Compile")) or (
-        "compile" in request.node.name
-    )
+    Tests that build ``torch.compile(fn, backend="cudagraphs")`` callables on
+    CUDA share one global cudagraph *memory pool*, and the tree manager retains
+    each graph's output tensors across invocations. A tensor left live in that
+    pool by an earlier test makes the next graph capture fail
+    ``check_memory_pool``'s "Detected N tensor(s) in the cudagraph pool not
+    tracked as outputs" correctness check — a cross-test leak, not a defect in
+    the test that reports it. The leak crosses directories (``test/distributed``
+    collects before ``test/dynamics``), so keying off a class or test name is
+    not enough; any module that compiles has to be bracketed.
+
+    Resetting dynamo and freeing the pool before and after each such test makes
+    the suite hermetic under any collection order or :mod:`pytest-testmon`
+    subset. Only modules that actually compile pay the cost."""
+    is_compile = _module_uses_compile(request.module)
 
     def _reset() -> None:
+        # Order matters: drain in-flight work and drop unreferenced tensors
+        # *before* tearing down the cudagraph trees, otherwise a dangling
+        # reference still pins the pool and the teardown cannot free it.
+        if torch.cuda.is_available():
+            with contextlib.suppress(Exception):
+                torch.cuda.synchronize()
+        gc.collect()
         reset = getattr(torch.compiler, "reset", None)
         if reset is not None:
             with contextlib.suppress(Exception):
                 reset()
         if torch.cuda.is_available():
-            with contextlib.suppress(Exception):
-                torch.cuda.synchronize()
             gc.collect()
             torch.cuda.empty_cache()
 
