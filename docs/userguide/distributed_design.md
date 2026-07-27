@@ -15,9 +15,10 @@ where appropriate.
 | 2. ShardTensor | What primitive lets distribution stay invisible to the model? |
 | 3. Specs | How does the framework know *what* to do at each op? |
 | 4. MACE end-to-end | What does "halo MPNN" actually look like? |
-| 5. Composition | How do MACE + Ewald run in the same pipeline? |
-| 6. Warp / Triton kernels | How do opaque kernels participate? |
-| 7. Validation + BYO | How does a new model author go from zero to production? |
+| 5. UMA end-to-end | How do models that rebuild their own neighbour list scale? |
+| 6. Composition | How do MACE + Ewald run in the same pipeline? |
+| 7. Warp / Triton kernels | How do opaque kernels participate? |
+| 8. Validation + BYO | How does a new model author go from zero to production? |
 
 ---
 
@@ -208,7 +209,7 @@ answer to the "where does each rank's per-atom tensor live, and what's
 the row layout?" question.
 
 ```{graphviz}
-:caption: Three ways to lay out a per-atom tensor across two ranks. Solid blocks are owned; dotted blocks are remote rows. **Halo storage** materialises a thin shell of remote owners' rows on each rank (read-only mirrors). **Sharded storage** stores only owned; cross-rank reads route over the wire. **Replicated storage** stores the full tensor on every rank and partitions logically — the layout used by the **graph-partition** strategy (§4b), for models that rebuild their own NL inside ``forward`` and need to see every position.
+:caption: Three ways to lay out a per-atom tensor across two ranks. Solid blocks are owned; dotted blocks are remote rows. **Halo storage** materialises a thin shell of remote owners' rows on each rank (read-only mirrors). **Sharded storage** stores only owned; cross-rank reads route over the wire. **Replicated storage** stores the full tensor on every rank and partitions logically — the layout used by the **graph-partition** strategy (§5), for models that rebuild their own NL inside ``forward`` and need to see every position.
 :align: center
 
 digraph storage_modes {
@@ -456,7 +457,7 @@ section walks through.
 | **gather rule** | `halo_read` / `local` / `distributed` | how an `index_select` call sees data |
 | **per-system reductions** | `on` / `off` | how a per-graph energy `scatter_add` becomes a global sum |
 
-Plus per-op transforms (§6) and per-output classifications (§7).
+Plus per-op transforms (§7) and per-output classifications (§8).
 
 ### 3.1 The scatter rule: where do partial messages go?
 
@@ -632,7 +633,7 @@ wrapper attaches via `distribution_spec`:
 | Field | Purpose |
 |---|---|
 | `distribution.policy` | Storage layout: halo / sharded / local. Each carries its own scatter and gather rules. |
-| `distribution.custom_ops` | Per-op declarations for opaque kernels that bypass `__torch_function__` (Warp, Triton). See §6. |
+| `distribution.custom_ops` | Per-op declarations for opaque kernels that bypass `__torch_function__` (Warp, Triton). See §7. |
 | `output_kinds` | One of `PER_NODE`, `PER_GRAPH`, `GLOBAL`, `UNKNOWN` per output. Drives final consolidation. |
 | `owned_only_outputs` | Per-atom outputs that are already globally correct on each rank (e.g. PME reciprocal forces) — skip the back-exchange. |
 | `all_reduce_outputs` | Per-rank-partial outputs that need a final SUM across ranks (e.g. strain-trick stress). |
@@ -650,20 +651,7 @@ from nvalchemi.distributed.spec import (
 )
 ```
 
-```{code-block} python
-:caption: The shipped presets cover the production model families.
-from nvalchemi.distributed.spec import (
-    SPEC_MPNN_HALO,        # MACE, NequIP, Allegro, ORB (spatial halo)
-    SPEC_MPNN_GP,          # MPNN node-partition graph-parallel
-    SPEC_UMA_HALO,         # UMA / eSCN (spatial halo)
-    SPEC_LJ_HALO,          # Lennard-Jones (Warp pair kernel)
-    SPEC_EWALD_HALO,       # Ewald (real + reciprocal stages)
-    SPEC_PME_HALO,         # PME (charge spread + FFT mesh)
-    SPEC_DFTD3_HALO,       # DFT-D3 dispersion
-)
-```
-
-Authoring a spec for a new model is the topic of §6 + §7. For now,
+Authoring a spec for a new model is the topic of §7 + §8. For now,
 note that **every spec parameterises the same dispatch machinery** —
 the registry, the predicates, the handlers. The spec is the single
 declaration point.
@@ -849,7 +837,7 @@ strain-trick stress (with the inner virial pass routed correctly).
 
 ---
 
-## 4b. UMA end-to-end: node-partition graph parallel for graph-rebuilding models
+## 5. UMA end-to-end: node-partition graph parallel for graph-rebuilding models
 
 Some models can't be handed a halo-padded view because they build
 their own neighbor list inside ``forward``. UMA / eSCN-family models
@@ -932,7 +920,7 @@ because the per-MP-layer ``all_gather`` is in the critical path.
 
 ---
 
-## 5. Composing models: pipelines that mix strategies
+## 6. Composing models: pipelines that mix strategies
 
 Real workflows compose models. Energy = MACE (short-range MPNN) +
 Ewald (long-range electrostatics). Different sub-models can want
@@ -1028,9 +1016,9 @@ discriminated-union pattern as the Strategy classes themselves.
 
 ---
 
-## 6. Wrapping Warp / Triton kernels
+## 7. Wrapping Warp / Triton kernels
 
-### 6.1 The boundary problem
+### 7.1 The boundary problem
 
 `ShardTensor.__torch_function__` only fires on ops PyTorch dispatches
 through the public Python API. Warp / Triton kernels reach into
@@ -1099,7 +1087,7 @@ digraph kernel_boundary {
 }
 ```
 
-### 6.2 The transform vocabulary
+### 7.2 The transform vocabulary
 
 Every input / output transform is a small dataclass marker. The
 framework's `wrap_custom_op` interprets them at call time.
@@ -1113,7 +1101,7 @@ framework's `wrap_custom_op` interprets them at call time.
 | output | `AllReduceSum` | cross-rank SUM (autograd-symmetric) |
 | output | `SliceOutputsOwned` | slice global-shape output back to owned-only |
 
-### 6.3 Worked example
+### 7.3 Worked example
 
 ```{code-block} python
 :caption: A Warp pair-energy kernel wrapped through ``OpAdapter``. (Excerpted from ``examples/distributed/05_byo_graph_transformer.py``.)
@@ -1149,9 +1137,9 @@ cross-rank wrap.
 
 ---
 
-## 7. Validation + Bring-Your-Own-Model
+## 8. Validation + Bring-Your-Own-Model
 
-### 7.1 The flow
+### 8.1 The flow
 
 `trace_and_validate` is the BYO author's only required entry point.
 A single call: build a sample, point at the model factory, get back a
@@ -1222,7 +1210,7 @@ digraph validate {
 }
 ```
 
-### 7.2 What the report carries
+### 8.2 What the report carries
 
 ```{code-block} python
 :caption: The actionable surface. Either ``report.ok`` is True and ``report.spec`` is ready to save, or ``report.next_action`` tells you exactly what's wrong.
@@ -1243,7 +1231,7 @@ else:
     #   (e.g. dropped scatter_add_ return, missing OpAdapter, etc.)
 ```
 
-### 7.3 The intended user path
+### 8.3 The intended user path
 
 ```{graphviz}
 :caption: The BYO arc — the same five steps regardless of whether the model is pure PyTorch (example 04) or has a Warp kernel (example 05). Most users finish at step 5 without ever touching step 4.

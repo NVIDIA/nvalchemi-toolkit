@@ -357,7 +357,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     ...         validation_data=val_batches,
     ...         every_n_steps=1_000,
     ...     ),
-    ...     hooks=[CheckpointHook(root_folder="runs/exp")],
+    ...     hooks=[CheckpointHook(checkpoint_dir="runs/exp")],
     ... )
     >>> strategy.run(train_loader)  # doctest: +SKIP
 
