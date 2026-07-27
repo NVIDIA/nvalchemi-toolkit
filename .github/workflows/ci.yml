@@ -93,7 +93,7 @@ jobs:
 
       # UMA lives in its own (conflicting) environment, so its tests run in a
       # separate CI step. Detect UMA-specific changes to gate that step on PRs.
-      - uses: step-security/changed-files@v46
+      - uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46
         id: uma-changed
         with:
           base_sha: ${{ steps.merge-base.outputs.merge-base }}
