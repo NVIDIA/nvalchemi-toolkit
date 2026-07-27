@@ -29,7 +29,7 @@ import torch
 from nvalchemi.distributed._core.halo_types import (
     ParticleHaloConfig,
     ParticleHaloMetadata,
-    _compute_pbc_shift_vectors,
+    _compute_pbc_image_vectors,
 )
 from nvalchemi.distributed._core.particle_halo import (
     _check_halo_region,
@@ -71,13 +71,14 @@ def _make_halo_config(
     ghost_width: float = 8.5,
     pbc: tuple[bool, bool, bool] = (True, True, True),
     world_size: int = 2,
+    rank: int = 0,
 ) -> ParticleHaloConfig:
     """Create a ParticleHaloConfig for testing."""
     part = _make_partitioner(
         box_length=box_length, cutoff=cutoff, pbc=pbc, world_size=world_size
     )
     mesh = MagicMock()
-    mesh.get_local_rank.return_value = 0
+    mesh.get_local_rank.return_value = rank
     mesh.size.return_value = world_size
     return ParticleHaloConfig(
         ghost_width=ghost_width,
@@ -87,35 +88,31 @@ def _make_halo_config(
 
 
 # ======================================================================
-# PBC shift vector tests
+# PBC image-vector tests
 # ======================================================================
 
 
-class TestComputePBCShiftVectors:
-    """Test precomputation of PBC shift vectors."""
+class TestComputePBCImageVectors:
+    """Test precomputation of cell-independent PBC image vectors."""
 
-    def test_shifts_exist_for_wrapping_pair(self):
+    def test_images_exist_for_wrapping_pair(self):
         part = _make_partitioner(world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        # With 2 ranks along one dim and PBC, there should be shifts.
-        assert len(shifts) > 0
+        images = _compute_pbc_image_vectors(part)
+        # With 2 ranks along one dim and PBC, there should be images.
+        assert len(images) > 0
 
-    def test_no_shifts_without_pbc(self):
+    def test_no_images_without_pbc(self):
         part = _make_partitioner(pbc=(False, False, False), world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        assert len(shifts) == 0
+        images = _compute_pbc_image_vectors(part)
+        assert len(images) == 0
 
-    def test_shift_magnitude_equals_box_length(self):
-        box = 30.0
-        part = _make_partitioner(box_length=box, world_size=2)
-        shifts = _compute_pbc_shift_vectors(part)
-        for (sender, receiver), shift_list in shifts.items():  # noqa: PERF102
-            for shift in shift_list:
-                # Each shift component should be 0 or ±box_length.
-                for d in range(3):
-                    assert shift[d].abs().item() == pytest.approx(0.0) or shift[
-                        d
-                    ].abs().item() == pytest.approx(box, abs=0.01)
+    def test_image_components_are_integer_lattice_offsets(self):
+        part = _make_partitioner(world_size=2)
+        images = _compute_pbc_image_vectors(part)
+        for image_list in images.values():
+            for image in image_list:
+                assert set(image.tolist()) <= {-1.0, 0.0, 1.0}
+                assert torch.count_nonzero(image) > 0
 
 
 # ======================================================================
@@ -134,13 +131,23 @@ class TestCheckHaloRegion:
         mask = _check_halo_region(frac_pos, frac_lo, frac_hi, gw)
         assert mask[0].item() is True
 
-    def test_atom_in_core(self):
+    def test_atom_exactly_on_receiver_boundary(self):
+        frac_pos = torch.tensor([[0.5, 0.5, 0.5]])
+        frac_lo = torch.tensor([0.5, 0.0, 0.0])
+        frac_hi = torch.tensor([1.0, 1.0, 1.0])
+        gw = torch.tensor([0.1, 0.1, 0.1])
+        mask = _check_halo_region(frac_pos, frac_lo, frac_hi, gw)
+        assert mask[0].item() is True
+
+    def test_sender_owned_atom_in_receiver_core(self):
         frac_pos = torch.tensor([[0.75, 0.5, 0.5]])  # deep inside [0.5, 1.0]
         frac_lo = torch.tensor([0.5, 0.0, 0.0])
         frac_hi = torch.tensor([1.0, 1.0, 1.0])
         gw = torch.tensor([0.1, 0.1, 0.1])
         mask = _check_halo_region(frac_pos, frac_lo, frac_hi, gw)
-        assert mask[0].item() is False  # in core, not halo
+        # Halo inputs are sender-owned. If one is inside the receiver's core,
+        # deferred migration has not transferred ownership yet, so send a ghost.
+        assert mask[0].item() is True
 
     def test_atom_outside(self):
         frac_pos = torch.tensor([[0.1, 0.5, 0.5]])  # far from [0.5, 1.0]
@@ -154,7 +161,7 @@ class TestCheckHaloRegion:
         frac_pos = torch.tensor(
             [
                 [0.48, 0.5, 0.5],  # in halo
-                [0.75, 0.5, 0.5],  # in core
+                [0.75, 0.5, 0.5],  # in receiver core, still sender-owned
                 [0.1, 0.5, 0.5],  # outside
             ]
         )
@@ -162,7 +169,7 @@ class TestCheckHaloRegion:
         frac_hi = torch.tensor([1.0, 1.0, 1.0])
         gw = torch.tensor([0.1, 0.1, 0.1])
         mask = _check_halo_region(frac_pos, frac_lo, frac_hi, gw)
-        assert mask.tolist() == [True, False, False]
+        assert mask.tolist() == [True, True, False]
 
 
 class TestIdentifyGhostsSplit:
@@ -175,6 +182,36 @@ class TestIdentifyGhostsSplit:
         direct_mask, pbc_list = _identify_ghosts_split(positions, 1, config)
         # This atom should be a ghost for rank 1.
         assert direct_mask.any().item()
+
+    def test_sender_owned_atom_inside_receiver_core_is_ghost(self):
+        config = _make_halo_config(box_length=30.0, ghost_width=3.0, world_size=2)
+        # Rank 0 still owns this row during migration hysteresis, even though
+        # its current position is inside rank 1's [15, 30) core.
+        positions = torch.tensor([[15.0, 15.0, 16.0]])
+        direct_mask, pbc_list = _identify_ghosts_split(positions, 1, config)
+        assert direct_mask.tolist() == [True]
+        assert pbc_list == []
+
+    def test_sender_owned_atom_wrapped_into_receiver_core_is_pbc_ghost(self):
+        config = _make_halo_config(
+            box_length=30.0,
+            ghost_width=3.0,
+            world_size=2,
+            rank=1,
+        )
+        # Rank 1 retains an atom just beyond the periodic z boundary. Rank 0
+        # needs the -cell image at z=0.1 as a ghost until ownership migrates.
+        positions = torch.tensor([[15.0, 15.0, 30.1]])
+        direct_mask, pbc_list = _identify_ghosts_split(positions, 0, config)
+
+        assert direct_mask.tolist() == [False]
+        assert len(pbc_list) == 1
+        pbc_mask, shift = pbc_list[0]
+        assert pbc_mask.tolist() == [True]
+        torch.testing.assert_close(
+            positions[pbc_mask] + shift,
+            torch.tensor([[15.0, 15.0, 0.1]]),
+        )
 
     def test_center_atom_not_ghost(self):
         config = _make_halo_config(box_length=30.0, ghost_width=3.0, world_size=2)
@@ -299,7 +336,22 @@ class TestParticleHaloConfig:
 
     def test_computes_pbc_shifts(self):
         config = _make_halo_config(world_size=2)
-        assert isinstance(config.pbc_shifts, dict)
+        shifts = config.pbc_shifts
+        assert isinstance(shifts, dict)
+        assert all(isinstance(values, list) for values in shifts.values())
+
+    def test_pbc_shifts_follow_cell_updates(self):
+        config = _make_halo_config(world_size=2)
+        old_shifts = config.pbc_shifts
+
+        new_cell = config.partitioner.cell_matrix * 1.2
+        config.partitioner.update_cell(new_cell)
+        new_shifts = config.pbc_shifts
+
+        assert new_shifts.keys() == old_shifts.keys()
+        for key, shifts in new_shifts.items():
+            for old_shift, new_shift in zip(old_shifts[key], shifts, strict=True):
+                torch.testing.assert_close(new_shift, old_shift * 1.2)
 
 
 # Multi-GPU tests live in test/distributed/test_multigpu.py
