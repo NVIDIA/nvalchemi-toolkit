@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from nvalchemi.distributed.config import DomainConfig, HookScope
 
 
@@ -53,6 +55,16 @@ class TestDomainConfig:
     def test_effective_ghost_width_explicit_overrides(self):
         cfg = DomainConfig(cutoff=5.0, skin=0.5, ghost_width=7.0)
         assert cfg.effective_ghost_width() == 7.0
+
+    def test_explicit_ghost_width_cannot_be_smaller_than_cutoff_plus_skin(self):
+        with pytest.raises(
+            ValueError, match=r"ghost_width \(5.0\) must be >= cutoff \+ skin \(5.5\)"
+        ):
+            DomainConfig(cutoff=5.0, skin=0.5, ghost_width=5.0)
+
+    def test_explicit_ghost_width_can_equal_cutoff_plus_skin(self):
+        cfg = DomainConfig(cutoff=5.0, skin=0.5, ghost_width=5.5)
+        assert cfg.effective_ghost_width() == 5.5
 
 
 class TestHookScope:
