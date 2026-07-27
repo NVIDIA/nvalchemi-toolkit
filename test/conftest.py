@@ -110,10 +110,14 @@ def _dist_leak_guard():
 _MODULE_USES_COMPILE: dict[str, bool] = {}
 
 
-def _module_uses_compile(module) -> bool:
-    """``True`` iff a test module builds ``torch.compile``-d callables.
+def _module_uses_cudagraphs(module) -> bool:
+    """``True`` iff a test module compiles in a way that builds a cudagraph pool.
 
-    Cached per file: the source is read once, not once per test."""
+    Only the ``cudagraphs`` backend and ``mode="reduce-overhead"`` route through
+    :mod:`torch._inductor.cudagraph_trees`; the ``eager`` / ``aot_eager`` /
+    default-inductor compiles used elsewhere in the suite never allocate from
+    the cudagraph pool and so cannot leak into it. Cached per file: the source
+    is read once, not once per test."""
     path = getattr(module, "__file__", None)
     if path is None:
         return False
@@ -123,7 +127,7 @@ def _module_uses_compile(module) -> bool:
             src = pathlib.Path(path).read_text()
         except OSError:  # pragma: no cover — unreadable test module
             src = ""
-        cached = "torch.compile" in src or "compile=True" in src
+        cached = "cudagraphs" in src or "reduce-overhead" in src
         _MODULE_USES_COMPILE[path] = cached
     return cached
 
@@ -140,12 +144,12 @@ def _isolate_torch_compile(request):
     tracked as outputs" correctness check — a cross-test leak, not a defect in
     the test that reports it. The leak crosses directories (``test/distributed``
     collects before ``test/dynamics``), so keying off a class or test name is
-    not enough; any module that compiles has to be bracketed.
+    not enough; every module that can build a cudagraph pool is bracketed.
 
     Resetting dynamo and freeing the pool before and after each such test makes
     the suite hermetic under any collection order or :mod:`pytest-testmon`
     subset. Only modules that actually compile pay the cost."""
-    is_compile = _module_uses_compile(request.module)
+    is_compile = _module_uses_cudagraphs(request.module)
 
     def _reset() -> None:
         # Order matters: drain in-flight work and drop unreferenced tensors
@@ -159,9 +163,7 @@ def _isolate_torch_compile(request):
         if reset is not None:
             with contextlib.suppress(Exception):
                 reset()
-        if torch.cuda.is_available():
-            gc.collect()
-            torch.cuda.empty_cache()
+        gc.collect()
 
     if is_compile:
         _reset()
