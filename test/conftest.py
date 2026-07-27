@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import gc
 import pathlib
+import warnings
 
 import pytest
 import torch
@@ -149,7 +150,11 @@ def _isolate_torch_compile(request):
     Resetting dynamo and freeing the pool before and after each such test makes
     the suite hermetic under any collection order or :mod:`pytest-testmon`
     subset. Only modules that actually compile pay the cost."""
-    is_compile = _module_uses_cudagraphs(request.module)
+    cls = getattr(request, "cls", None)
+    is_compile = _module_uses_cudagraphs(request.module) and (
+        (cls is not None and cls.__name__.endswith("Compile"))
+        or "compile" in request.node.name
+    )
 
     def _reset() -> None:
         # Order matters: drain in-flight work and drop unreferenced tensors
@@ -161,8 +166,17 @@ def _isolate_torch_compile(request):
         gc.collect()
         reset = getattr(torch.compiler, "reset", None)
         if reset is not None:
-            with contextlib.suppress(Exception):
+            try:
                 reset()
+            except Exception as exc:  # pragma: no cover — diagnostic path
+                # A failed reset is exactly what leaves a live tensor in the
+                # cudagraph pool for the next capture; surface it rather than
+                # letting the next test report the confusing downstream error.
+                warnings.warn(
+                    f"cudagraph/dynamo reset failed for {request.node.nodeid}: {exc!r}",
+                    RuntimeWarning,
+                    stacklevel=1,
+                )
         gc.collect()
 
     if is_compile:
