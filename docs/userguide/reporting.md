@@ -63,27 +63,26 @@ is to act with the requested cadence on each provided reporter:
 3. Calls each reporter with `(ctx, stage, state)`.
 4. Applies the configured error policy if a reporter raises.
 
-```{eval-rst}
-.. graphviz::
-   :caption: Reporting orchestrator flow, from workflow to output.
-   :alt: Reporting orchestrator flow
+```{graphviz}
+:caption: Reporting orchestrator flow, from workflow to output.
+:alt: Reporting orchestrator flow
 
-   digraph reporting_flow {
-       rankdir=TB
+digraph reporting_flow {
+    rankdir=TB
 
-       workflow     [label="Workflow\n(training / dynamics / custom)"]
-       context      [label="HookContext\n(context + stage enum)"]
-       orchestrator [label="ReportingOrchestrator\n(cadence + reporter fan-out)"]
-       state        [label="ReportingState\n(event metadata + recent messages)"]
-       reporter     [label="Reporter\n(TensorBoard / Rich / custom)"]
-       output       [label="Output\n(file / run log / dashboard)"]
+    workflow     [label="Workflow\n(training / dynamics / custom)"]
+    context      [label="HookContext\n(context + stage enum)"]
+    orchestrator [label="ReportingOrchestrator\n(cadence + reporter fan-out)"]
+    state        [label="ReportingState\n(event metadata + recent messages)"]
+    reporter     [label="Reporter\n(TensorBoard / Rich / custom)"]
+    output       [label="Output\n(file / run log / dashboard)"]
 
-       workflow -> context     [label="engine hook call"]
-       context -> orchestrator [label="stage match"]
-       orchestrator -> state   [label="mark event"]
-       state -> reporter       [label="report"]
-       reporter -> output      [label="write"]
-   }
+    workflow -> context     [label="engine hook call"]
+    context -> orchestrator [label="stage match"]
+    orchestrator -> state   [label="mark event"]
+    state -> reporter       [label="report"]
+    reporter -> output      [label="write"]
+}
 ```
 
 Each reporter calls {py:func}`~nvalchemi.hooks.collect_scalars` to build a
@@ -118,29 +117,28 @@ mean loss, total throughput across all GPUs. Set `rank_zero_only` when
 independence is acceptable and parallel writes to the same destination must be
 avoided.
 
-```{eval-rst}
-.. graphviz::
-   :caption: Distributed reporting: per-rank collection, reduction, and rank-zero write.
-   :alt: Distributed reporting reduction flow
+```{graphviz}
+:caption: Distributed reporting: per-rank collection, reduction, and rank-zero write.
+:alt: Distributed reporting reduction flow
 
-   digraph distributed_reporting {
-       rankdir=TB
+digraph distributed_reporting {
+    rankdir=TB
 
-       r0 [label="rank 0\ncollect_scalars"]
-       r1 [label="rank 1\ncollect_scalars"]
-       rn [label="rank n\ncollect_scalars"]
+    r0 [label="rank 0\ncollect_scalars"]
+    r1 [label="rank 1\ncollect_scalars"]
+    rn [label="rank n\ncollect_scalars"]
 
-       reduce [label="reduce_scalar_snapshot\n(mean / sum / min / max)" fillcolor="#4a3315"]
+    reduce [label="reduce_scalar_snapshot\n(mean / sum / min / max)" fillcolor="#4a3315"]
 
-       w0 [label="rank 0\nwrites or renders"]
-       wn [label="nonzero ranks\nreturn after reduction" style="rounded,filled,dashed"]
+    w0 [label="rank 0\nwrites or renders"]
+    wn [label="nonzero ranks\nreturn after reduction" style="rounded,filled,dashed"]
 
-       r0 -> reduce
-       r1 -> reduce
-       rn -> reduce
-       reduce -> w0
-       reduce -> wn
-   }
+    r0 -> reduce
+    r1 -> reduce
+    rn -> reduce
+    reduce -> w0
+    reduce -> wn
+}
 ```
 
 ## Getting started
@@ -258,6 +256,28 @@ You can preview any layout without running a workflow:
 ```python
 RichReporter.preview(layout="training", title="training dashboard")
 RichReporter.preview(layout="dynamics", title="dynamics dashboard")
+```
+
+Those two calls render the dashboards below. The `"training"` layout leads with
+the loss breakdown, learning rates, and progress/ETA:
+
+```{figure} /_static/rich_reporter_training.svg
+:alt: RichReporter training layout showing loss curves, learning rate, and progress
+:width: 100%
+
+The built-in `"training"` layout, rendered by
+`RichReporter.preview(layout="training")`.
+```
+
+The `"dynamics"` layout swaps in simulation observables — energy, `fmax`,
+temperature, and convergence/pipeline counters:
+
+```{figure} /_static/rich_reporter_dynamics.svg
+:alt: RichReporter dynamics layout showing energy, fmax, temperature, and convergence
+:width: 100%
+
+The built-in `"dynamics"` layout, rendered by
+`RichReporter.preview(layout="dynamics")`.
 ```
 
 For an animated live-data demo using synthetic metrics:

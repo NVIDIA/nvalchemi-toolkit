@@ -221,28 +221,27 @@ A wrapped model uses **multiple inheritance**: your existing {py:class}`~torch.n
 subclass provides the forward pass, while
 {py:class}`~nvalchemi.models.base.BaseModelMixin` adds the standardized interface.
 
-```{eval-rst}
-.. graphviz::
-   :caption: Multiple-inheritance pattern for model wrapping.
+```{graphviz}
+:caption: Multiple-inheritance pattern for model wrapping.
 
-   digraph model_inheritance {
-       rankdir=BT
-       compound=true
+digraph model_inheritance {
+    rankdir=BT
+    compound=true
 
-       YourModel [
-           label="YourModel(nn.Module)\l- forward()\l- your layers\l"
-       ]
-       BaseModelMixin [
-           label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
-       ]
-       YourModelWrapper [
-           label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
-           fillcolor="#26351d"
-       ]
+    YourModel [
+        label="YourModel(nn.Module)\l- forward()\l- your layers\l"
+    ]
+    BaseModelMixin [
+        label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
+    ]
+    YourModelWrapper [
+        label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
+        fillcolor="#26351d"
+    ]
 
-       YourModelWrapper -> YourModel
-       YourModelWrapper -> BaseModelMixin
-   }
+    YourModelWrapper -> YourModel
+    YourModelWrapper -> BaseModelMixin
+}
 ```
 
 The wrapper's `forward` method follows a three-step pipeline:

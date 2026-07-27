@@ -233,51 +233,50 @@ The diagram below shows how two adjacent ranks exchange data through pre-allocat
 send and receive buffers during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.
 
-```{eval-rst}
-.. graphviz::
-   :caption: Buffer synchronization between two adjacent ranks in a DistributedPipeline.
+```{graphviz}
+:caption: Buffer synchronization between two adjacent ranks in a DistributedPipeline.
 
-   digraph buffer_sync {
-       rankdir=LR
-       compound=true
+digraph buffer_sync {
+    rankdir=LR
+    compound=true
 
-       subgraph cluster_upstream {
-           label="Rank 0  (upstream)"
-           style=rounded
-           color="#76b900"
-           fontcolor="#eeeeee"
+    subgraph cluster_upstream {
+        label="Rank 0  (upstream)"
+        style=rounded
+        color="#76b900"
+        fontcolor="#eeeeee"
 
-           u_batch [label="active_batch"]
-           u_send  [label="send_buffer" fillcolor="#4a3315"]
-           u_sinks [label="sinks\n(overflow)" style=dashed]
+        u_batch [label="active_batch"]
+        u_send  [label="send_buffer" fillcolor="#4a3315"]
+        u_sinks [label="sinks\n(overflow)" style=dashed]
 
-           u_batch -> u_send [label="converged\nsamples" style=bold]
-           u_batch -> u_sinks [label="excess\n(back-pressure)" style=dotted]
-       }
+        u_batch -> u_send [label="converged\nsamples" style=bold]
+        u_batch -> u_sinks [label="excess\n(back-pressure)" style=dotted]
+    }
 
-       subgraph cluster_downstream {
-           label="Rank 1  (downstream)"
-           style=rounded
-           color="#76b900"
-           fontcolor="#eeeeee"
+    subgraph cluster_downstream {
+        label="Rank 1  (downstream)"
+        style=rounded
+        color="#76b900"
+        fontcolor="#eeeeee"
 
-           d_recv  [label="recv_buffer" fillcolor="#4a3315"]
-           d_batch [label="active_batch"]
-           d_sinks [label="sinks\n(results)" style=dashed]
+        d_recv  [label="recv_buffer" fillcolor="#4a3315"]
+        d_batch [label="active_batch"]
+        d_sinks [label="sinks\n(results)" style=dashed]
 
-           d_recv -> d_batch [label="incoming\nsamples" style=bold]
-           d_batch -> d_sinks [label="converged\nresults" style=bold]
-           d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
-       }
+        d_recv -> d_batch [label="incoming\nsamples" style=bold]
+        d_batch -> d_sinks [label="converged\nresults" style=bold]
+        d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
+    }
 
-       u_send -> d_recv [
-           label="isend / irecv\n(NCCL)";
-           style=bold;
-           color="#ee9040";
-           fontcolor="#eeeeee";
-           penwidth=2;
-       ]
-   }
+    u_send -> d_recv [
+        label="isend / irecv\n(NCCL)";
+        style=bold;
+        color="#ee9040";
+        fontcolor="#eeeeee";
+        penwidth=2;
+    ]
+}
 ```
 
 A step proceeds as follows:

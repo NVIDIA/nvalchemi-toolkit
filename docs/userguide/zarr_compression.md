@@ -663,58 +663,57 @@ device-transfer overhead can dominate the end-to-end pipeline. This section
 covers the knobs that matter most for read throughput, especially under shuffled
 access patterns.
 
-```{eval-rst}
-.. graphviz::
-   :caption: End-to-end read pipeline.
+```{graphviz}
+:caption: End-to-end read pipeline.
 
-   digraph read_pipeline {
-       rankdir=LR
-       compound=true
+digraph read_pipeline {
+    rankdir=LR
+    compound=true
 
-       subgraph cluster_dataloader {
-           label="DataLoader"
-           style=rounded
-           color="#76b900"
-           fontcolor="#eeeeee"
+    subgraph cluster_dataloader {
+        label="DataLoader"
+        style=rounded
+        color="#76b900"
+        fontcolor="#eeeeee"
 
-           sampler [label="Sampler\n(indices)"]
-           fuse [label="Fuse\nprefetch_factor\nbatches" fillcolor="#4a3315"]
-           sampler -> fuse [label="batch of\nindices"]
-       }
+        sampler [label="Sampler\n(indices)"]
+        fuse [label="Fuse\nprefetch_factor\nbatches" fillcolor="#4a3315"]
+        sampler -> fuse [label="batch of\nindices"]
+    }
 
-       subgraph cluster_dataset {
-           label="Dataset  (background thread)"
-           style=rounded
-           color="#76b900"
-           fontcolor="#eeeeee"
+    subgraph cluster_dataset {
+        label="Dataset  (background thread)"
+        style=rounded
+        color="#76b900"
+        fontcolor="#eeeeee"
 
-           read_many [label="reader.read_many()\ncoalesced backend read"]
-           validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#4a2222"]
-           raw [label="raw tensor\ndicts" fillcolor="#26351d"]
-           batch_val [label="Batch.from_data_list()" fillcolor="#2d2740"]
-           batch_raw [label="Batch.from_raw_dicts()" fillcolor="#2d2740"]
+        read_many [label="reader.read_many()\ncoalesced backend read"]
+        validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#4a2222"]
+        raw [label="raw tensor\ndicts" fillcolor="#26351d"]
+        batch_val [label="Batch.from_data_list()" fillcolor="#2d2740"]
+        batch_raw [label="Batch.from_raw_dicts()" fillcolor="#2d2740"]
 
-           read_many -> validate [label="skip_validation\n= False"]
-           read_many -> raw [label="skip_validation\n= True"]
-           validate -> batch_val
-           raw -> batch_raw
-       }
+        read_many -> validate [label="skip_validation\n= False"]
+        read_many -> raw [label="skip_validation\n= True"]
+        validate -> batch_val
+        raw -> batch_raw
+    }
 
-       subgraph cluster_consumer {
-           label="Consumer"
-           style=rounded
-           color="#76b900"
-           fontcolor="#eeeeee"
+    subgraph cluster_consumer {
+        label="Consumer"
+        style=rounded
+        color="#76b900"
+        fontcolor="#eeeeee"
 
-           device [label=".to(device)" fillcolor="#4a3315"]
-           model [label="Model"]
-           device -> model
-       }
+        device [label=".to(device)" fillcolor="#4a3315"]
+        model [label="Model"]
+        device -> model
+    }
 
-       fuse -> read_many [label="N indices\n(N = pf × bs)" lhead=cluster_dataset style=bold]
-       batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
-       batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
-   }
+    fuse -> read_many [label="N indices\n(N = pf × bs)" lhead=cluster_dataset style=bold]
+    batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+    batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+}
 ```
 
 ### The read window: `prefetch_factor`

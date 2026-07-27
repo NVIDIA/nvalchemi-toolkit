@@ -22,14 +22,15 @@ only addition at the user layer is one
 
 This guide covers:
 
-1. **Why** spatial domain decomposition and **what** it gets you.
-2. The **two storage strategies** the framework supports — halo storage
-   and sharded storage — and when to pick each.
-3. The **runtime architecture**: how
+1. {ref}`Why <dd-why-partition>` spatial domain decomposition and **what** it
+   gets you.
+2. The {ref}`two storage strategies <dd-strategies>` the framework supports —
+   halo storage and sharded storage — and when to pick each.
+3. The {ref}`runtime architecture <dd-runtime-architecture>`: how
    {py:class}`~nvalchemi.distributed.DomainParallel`,
    {py:class}`~nvalchemi.distributed.ShardedBatch`, and the
    `DistributedModel` adapter cooperate per step.
-4. A **minimal usage example** end-to-end.
+4. A {ref}`minimal usage example <dd-minimal-example>` end-to-end.
 
 Two companion guides go deeper:
 
@@ -42,6 +43,8 @@ Two companion guides go deeper:
   domain decomposition: writing the wrapper, authoring or deriving an
   {py:class}`MLIPSpec`, and using `trace_and_validate` to confirm
   correctness.
+
+(dd-why-partition)=
 
 ## Why partition?
 
@@ -66,6 +69,8 @@ within the model's interaction cutoff so each rank evaluates its
 subdomain independently. Cross-rank communication happens once per
 step (the halo exchange) plus a handful of collectives for
 per-system reductions.
+
+(dd-strategies)=
 
 ## Two parallelization strategies
 
@@ -172,6 +177,8 @@ doesn't, see {doc}`distributed_byo` for the authoring workflow.
 AIMNet2 is supported as well, but its wrapper builds its (halo) spec
 inline rather than exposing a shipped `SPEC_*` preset.
 
+(dd-runtime-architecture)=
+
 ## Runtime architecture
 
 ```{graphviz}
@@ -218,6 +225,8 @@ The pieces:
 The user-facing API is `DomainParallel`; the layers below are
 internal but exposed for advanced users (e.g. running a single
 forward without an integrator).
+
+(dd-minimal-example)=
 
 ## Minimal example
 

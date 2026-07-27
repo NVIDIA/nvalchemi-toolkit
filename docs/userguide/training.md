@@ -80,75 +80,73 @@ single diagram below, which is useful as a reference when you are trying
 to understand the orchestration flow as well as when you are trying to build
 new workflows and components:
 
-```{eval-rst}
-.. graphviz::
+```{graphviz}
+digraph training_lifecycle {
+  graph [rankdir=TB, compound=true, nodesep=0.45, ranksep=0.55];
 
-   digraph training_lifecycle {
-     graph [rankdir=TB, compound=true, nodesep=0.45, ranksep=0.55];
+  setup [label="SETUP\nworkflow and dataloader preparation"];
+  ddp [label="DDPHook\nwrap models, install distributed samplers", fillcolor="#26351d"];
+  before_training [label="BEFORE_TRAINING\nonce, before first batch"];
 
-     setup [label="SETUP\nworkflow and dataloader preparation"];
-     ddp [label="DDPHook\nwrap models, install distributed samplers", fillcolor="#26351d"];
-     before_training [label="BEFORE_TRAINING\nonce, before first batch"];
+  subgraph cluster_epoch {
+    label="epoch loop";
+    color="#76b900";
+    fontcolor="#eeeeee";
+    style="rounded";
 
-     subgraph cluster_epoch {
-       label="epoch loop";
-       color="#76b900";
-       fontcolor="#eeeeee";
-       style="rounded";
+    before_epoch [label="BEFORE_EPOCH\nepoch-level initialization"];
 
-       before_epoch [label="BEFORE_EPOCH\nepoch-level initialization"];
+    subgraph cluster_batch {
+      label="batch/update loop";
+      color="#4d7900";
+      fontcolor="#eeeeee";
+      style="rounded";
 
-       subgraph cluster_batch {
-         label="batch/update loop";
-         color="#4d7900";
-         fontcolor="#eeeeee";
-         style="rounded";
+      before_batch [label="BEFORE_BATCH\nzero-grad policy, accumulation setup"];
+      before_forward [label="BEFORE_FORWARD\nlast chance to prepare batch/model inputs"];
+      forward [label="training_fn(model, batch)\nmodel predictions", fillcolor="#183449"];
+      after_forward [label="AFTER_FORWARD\npredictions are available"];
+      before_loss [label="BEFORE_LOSS"];
+      loss [label="loss_fn(predictions, batch)\nstructured loss output", fillcolor="#183449"];
+      after_loss [label="AFTER_LOSS\nloss diagnostics are available"];
+      before_backward [label="BEFORE_BACKWARD"];
+      do_backward [
+        label="DO_BACKWARD\nTrainingUpdateOrchestrator\nmay transform/own backward",
+        fillcolor="#4a3315"
+      ];
+      after_backward [label="AFTER_BACKWARD\ngradients are available"];
+      before_step [label="BEFORE_OPTIMIZER_STEP\nlast pre-step observation"];
+      do_step [
+        label="DO_OPTIMIZER_STEP\nTrainingUpdateOrchestrator\nmay veto/own step",
+        fillcolor="#4a3315"
+      ];
+      after_step [label="AFTER_OPTIMIZER_STEP\nEMA, step diagnostics, step validation"];
+      after_batch [label="AFTER_BATCH\nbatch logging, cleanup, checkpoint cadence"];
+    }
 
-         before_batch [label="BEFORE_BATCH\nzero-grad policy, accumulation setup"];
-         before_forward [label="BEFORE_FORWARD\nlast chance to prepare batch/model inputs"];
-         forward [label="training_fn(model, batch)\nmodel predictions", fillcolor="#183449"];
-         after_forward [label="AFTER_FORWARD\npredictions are available"];
-         before_loss [label="BEFORE_LOSS"];
-         loss [label="loss_fn(predictions, batch)\nstructured loss output", fillcolor="#183449"];
-         after_loss [label="AFTER_LOSS\nloss diagnostics are available"];
-         before_backward [label="BEFORE_BACKWARD"];
-         do_backward [
-           label="DO_BACKWARD\nTrainingUpdateOrchestrator\nmay transform/own backward",
-           fillcolor="#4a3315"
-         ];
-         after_backward [label="AFTER_BACKWARD\ngradients are available"];
-         before_step [label="BEFORE_OPTIMIZER_STEP\nlast pre-step observation"];
-         do_step [
-           label="DO_OPTIMIZER_STEP\nTrainingUpdateOrchestrator\nmay veto/own step",
-           fillcolor="#4a3315"
-         ];
-         after_step [label="AFTER_OPTIMIZER_STEP\nEMA, step diagnostics, step validation"];
-         after_batch [label="AFTER_BATCH\nbatch logging, cleanup, checkpoint cadence"];
-       }
+    after_epoch [label="AFTER_EPOCH\nepoch logging/checkpoints, epoch validation"];
+  }
 
-       after_epoch [label="AFTER_EPOCH\nepoch logging/checkpoints, epoch validation"];
-     }
+  after_training [label="AFTER_TRAINING\nfinal training cleanup"];
+  final_validation [label="final validation\nif configured", fillcolor="#26351d"];
+  after_validation [label="AFTER_VALIDATION\nvalidation loggers and metric schedulers", fillcolor="#26351d"];
 
-     after_training [label="AFTER_TRAINING\nfinal training cleanup"];
-     final_validation [label="final validation\nif configured", fillcolor="#26351d"];
-     after_validation [label="AFTER_VALIDATION\nvalidation loggers and metric schedulers", fillcolor="#26351d"];
-
-     setup -> ddp [label="setup hooks"];
-     ddp -> before_training;
-     before_training -> before_epoch;
-     before_epoch -> before_batch;
-     before_batch -> before_forward -> forward -> after_forward;
-     after_forward -> before_loss -> loss -> after_loss;
-     after_loss -> before_backward -> do_backward -> after_backward;
-     after_backward -> before_step -> do_step -> after_step -> after_batch;
-     after_batch -> before_batch [label="next batch", style=dashed];
-     after_batch -> after_epoch [label="epoch exhausted"];
-     after_epoch -> before_epoch [label="next epoch", style=dashed];
-     after_step -> after_validation [label="every_n_steps", style=dotted];
-     after_epoch -> after_validation [label="every_n_epochs", style=dotted];
-     after_epoch -> after_training [label="target reached"];
-     after_training -> final_validation -> after_validation;
-   }
+  setup -> ddp [label="setup hooks"];
+  ddp -> before_training;
+  before_training -> before_epoch;
+  before_epoch -> before_batch;
+  before_batch -> before_forward -> forward -> after_forward;
+  after_forward -> before_loss -> loss -> after_loss;
+  after_loss -> before_backward -> do_backward -> after_backward;
+  after_backward -> before_step -> do_step -> after_step -> after_batch;
+  after_batch -> before_batch [label="next batch", style=dashed];
+  after_batch -> after_epoch [label="epoch exhausted"];
+  after_epoch -> before_epoch [label="next epoch", style=dashed];
+  after_step -> after_validation [label="every_n_steps", style=dotted];
+  after_epoch -> after_validation [label="every_n_epochs", style=dotted];
+  after_epoch -> after_training [label="target reached"];
+  after_training -> final_validation -> after_validation;
+}
 ```
 
 The diagram is meant to be read as both execution order and API map. Stages are
