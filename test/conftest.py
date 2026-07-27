@@ -108,6 +108,19 @@ def _dist_leak_guard():
             dist.destroy_process_group()
 
 
+# Diagnostic: when a tensor is left live in the cudagraph memory pool, make
+# ``check_memory_pool`` report *where it was allocated* instead of only its
+# address. Only cudagraph captures allocate from that pool, so this pins the
+# leak on the capture that produced it. The cost is confined to cudagraph
+# record/warmup (``cudagraph_trees.enable_history_recording`` is a context
+# manager entered only there), not to the suite at large.
+if torch.cuda.is_available():  # pragma: no cover — CI GPU runner only
+    with contextlib.suppress(Exception):
+        import torch._inductor.config as _inductor_config
+
+        _inductor_config.triton.cudagraph_trees_history_recording = True
+
+
 _MODULE_USES_COMPILE: dict[str, bool] = {}
 
 
