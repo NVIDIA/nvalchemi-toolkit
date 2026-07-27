@@ -332,6 +332,8 @@ class DomainParallel(BaseDynamics):
         # atoms, so ranks can disagree and take divergent control flow (one stops
         # while others continue → collective desync / hang). Every rank reduces
         # a per-system mask so an index survives only when every rank reports it.
+        # DD currently carries one system, but keep this mask per-system so the
+        # convergence result remains valid if DD later supports batched systems.
         if convergence_due and dist.is_initialized() and self._config.mesh is not None:
             convergence_mask = torch.zeros(
                 batch.num_graphs,
@@ -726,7 +728,7 @@ class DomainParallel(BaseDynamics):
         dist.broadcast(t, src=dist.get_global_rank(group, 0), group=group)
         return bool(t.item())
 
-    def _system_finished(self, converged: Any) -> bool:
+    def _system_finished(self, converged: torch.Tensor | None) -> bool:
         """A resident system leaves this stage when it converges (FIRE) or spends
         its per-system step budget (``n_steps``, e.g. an NVT leg)."""
         if (
@@ -828,7 +830,9 @@ class DomainParallel(BaseDynamics):
         :meth:`_prestep_sync_buffers` (nothing is deferred)."""
         return
 
-    def _poststep_sync_buffers(self, converged: Any = None) -> None:
+    def _poststep_sync_buffers(
+        self, converged_indices: torch.Tensor | None = None
+    ) -> None:
         """Graduate the resident system when it finishes this stage: gather it to
         the group lead, which ``send``s it to the next stage's lead. The stage then
         goes idle so the next system can enter. The last stage (no ``next_rank``)
@@ -837,10 +841,11 @@ class DomainParallel(BaseDynamics):
         if self.active_batch is None:
             return
         self._system_step += 1
-        if not self._system_finished(converged):
+        if not self._system_finished(converged_indices):
             return
         finished_by_convergence = (
-            converged is not None and converged.numel() == self.active_batch.num_graphs
+            converged_indices is not None
+            and converged_indices.numel() == self.active_batch.num_graphs
         )
         reason = (
             "converged"
