@@ -40,6 +40,7 @@ For install options, refer to the install guide below.
   - {doc}`Training: Strategy and Runtime <training>`
   - {doc}`Losses: Composable Training Terms <losses>`
   - {doc}`Fine-Tuning Pretrained Models <finetuning>`
+- {doc}`Serialization & Reproducibility <serialization>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
@@ -79,6 +80,7 @@ data
 datapipes
 models
 training_finetuning
+serialization
 hooks
 reporting
 dynamics

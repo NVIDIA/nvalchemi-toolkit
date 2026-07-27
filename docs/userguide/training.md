@@ -174,6 +174,8 @@ validation pass runs on a step or epoch cadence, and the moment it finishes
 exactly where validation logging and metric-driven schedulers such as
 `ReduceLROnPlateau` do their work.
 
+(configuring-a-training-strategy)=
+
 ## Configuring a training strategy
 
 `TrainingStrategy` is organized around two groups of inputs. The forward path —
@@ -354,6 +356,7 @@ then starts with `BEFORE_EPOCH`. At each epoch boundary, the strategy calls
 deterministic but distinct sample order.
 
 (batches-forward-loss-backward-update)=
+
 ## Batches: Forward, Loss, Backward, Update
 
 With the counters and epoch loop in view, we can zoom in on what happens to a
@@ -387,6 +390,7 @@ diagnostics accessible at `AFTER_LOSS`. See {doc}`losses` and
 {doc}`/modules/training/losses` for the loss object contract.
 
 (optimizer-orchestration)=
+
 ## Optimizer Orchestration
 
 Once the loss has been computed, the `TrainingStrategy` then needs to be able
@@ -447,9 +451,9 @@ with `hook_a + hook_b` when a script wants to make the composition visible.
 
 ```{note}
 Only one object may own `DO_BACKWARD` and only one object may own
-`DO_OPTIMIZER_STEP`. The dividing line is ownership: a hook that only *observes*
+`DO_OPTIMIZER_STEP`. The dividing line is ownership: a hook that only _observes_
 gradients, learning rates, or counters — logging gradient norms at `AFTER_BACKWARD`,
-say — should stay a standard hook, while one that *changes* whether or how
+say — should stay a standard hook, while one that _changes_ whether or how
 gradients are applied belongs in the update orchestrator.
 ```
 
@@ -606,6 +610,7 @@ script. See {doc}`/modules/training/checkpoints` for strategy reconstruction,
 hook state, model specs, and distributed checkpoint behavior.
 
 (restart-semantics)=
+
 ### Restart semantics
 
 There are two distinct restart scenarios, and the right API depends on which
@@ -651,6 +656,61 @@ counters and all. `from_pretrained_checkpoint` gives the model its learned
 weights but otherwise treats the run as new. See {doc}`finetuning` for the
 full fine-tuning API, including parameter freezing and layer-wise learning-rate
 configuration.
+
+(training-reproducibility)=
+
+## Reproducibility
+
+Everything above assumes a checkpoint can actually rebuild the run. That is not
+automatic — it is a property your code either has or lacks, and the failure mode
+is quiet: a run that trains happily for a week and cannot be resumed.
+
+The mechanics are a cross-cutting feature of the toolkit and are documented once
+in {doc}`serialization`: objects are persisted as JSON _recipes_ (an importable
+path plus constructor keyword arguments) rather than pickles, and rebuilt by
+importing the target and calling it again. This section covers what that demands
+of a **training** run specifically.
+
+A training run is reproducible when five things hold:
+
+1. **Every model can produce a spec.** Models built on
+   {py:class}`~nvalchemi.models.base.BaseModelMixin` do this automatically, by
+   matching `__init__` parameters against attributes of the same name. A model
+   that stores a constructor argument under a _different_ attribute name loses
+   it silently, so the safe habit is `self.<name> = <name>`. When the
+   constructor transforms its arguments, implement `checkpoint_spec()` and
+   return the spec explicitly.
+2. **`training_fn` and `loss_target_assembler` are importable.** They are
+   recorded as dotted paths and never as code (see the warning in
+   [Configuring a training strategy](#configuring-a-training-strategy)); lambdas,
+   closures, and locally-defined functions are rejected. Keep them versioned
+   alongside the checkpoints they belong to, and pass them again at load time.
+3. **Custom loss weight schedules implement `to_spec()`.** The built-in
+   schedules already do. A schedule that does not is dropped from the recipe.
+4. **Hooks owning restart-critical state implement**
+   {py:class}`~nvalchemi.hooks.CheckpointableHook`. Hooks are runtime objects
+   supplied at load time; only checkpointable ones have their state restored
+   into the instances you provide. Logging hooks generally need nothing, since
+   their output already lives in an external sink.
+5. **The run emitted no `Omitting model spec` warnings.** When automatic spec
+   derivation fails, the framework warns, saves the weights, and drops the
+   recipe — leaving a checkpoint that cannot reconstruct its own architecture.
+   Treat that warning as a hard error for any run you intend to resume.
+
+```{tip}
+The configuration alone — with no tensors — round-trips through
+`TrainingStrategy.to_spec_dict()` and `from_spec_dict()`. Dumping that JSON
+before a long run gives you a reviewable, diffable, version-controllable record
+of the experiment, and is the same format the {ref}`CLI <training-cli>` reads.
+```
+
+Two caveats worth stating plainly. First, your training script is part of the
+reproducible artifact: the checkpoint stores data and references, and the script
+supplies the code they point at. Second, `nvalchemi` does not seed RNGs for you
+— faithful _recipe_ reproduction is not the same as bitwise-identical results,
+which additionally requires seeding and the usual CUDA determinism caveats.
+
+(training-cli)=
 
 ## Training CLI
 
