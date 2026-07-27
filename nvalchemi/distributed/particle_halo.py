@@ -103,6 +103,8 @@ def halo_exchange(
 
     device = padded_pos.device
     n_padded = padded_pos.shape[0]
+    cell = sharded.cell
+    pbc = sharded.pbc
 
     # Every per-atom field scattered onto the ShardedBatch rides through.
     # positions has already been padded (autograd-aware); forces is
@@ -137,6 +139,11 @@ def halo_exchange(
         and sharded.halo_meta.n_owned == meta.n_owned
         and sharded.halo_meta.n_padded == meta.n_padded
     ):
+        system = existing._system_group
+        with torch.no_grad():
+            system["cell"].copy_(cell)
+            system["pbc"].copy_(pbc)
+
         atoms = existing._atoms_group
         for name, shard in atom_fields.items():
             if name == "forces" and "forces" in atoms:
@@ -157,14 +164,8 @@ def halo_exchange(
             padded_kwargs[required] = _build_padded_field(
                 required, atom_fields[required]
             )
-    if sharded.cell is not None:
-        padded_kwargs["cell"] = (
-            sharded.cell if sharded.cell.ndim == 3 else sharded.cell.unsqueeze(0)
-        )
-    if sharded.pbc is not None:
-        padded_kwargs["pbc"] = (
-            sharded.pbc if sharded.pbc.ndim == 2 else sharded.pbc.unsqueeze(0)
-        )
+    padded_kwargs["cell"] = cell
+    padded_kwargs["pbc"] = pbc
 
     padded_data = AtomicData(**padded_kwargs)
     for name, shard in atom_fields.items():

@@ -297,6 +297,66 @@ def _worker_halo_forward_reverse_roundtrip(
     )
 
 
+def _worker_pbc_halo_tracks_current_cell(rank: int, world_size: int) -> None:
+    """PBC images exchanged after a cell update use the new lattice vectors."""
+    assert world_size == 2
+    dtype = torch.float64
+    mesh = _MockMesh(rank, world_size)
+    pbc = torch.ones(3, dtype=torch.bool)
+    old_cell = torch.eye(3, dtype=dtype) * 10.0
+    domain_config = DomainConfig(cutoff=2.0, mesh=mesh)
+    partitioner = SpatialPartitioner(
+        config=domain_config,
+        cell_matrix=old_cell.unsqueeze(0),
+        pbc=pbc.unsqueeze(0),
+    )
+    halo_config = ParticleHaloConfig(
+        ghost_width=2.0,
+        partitioner=partitioner,
+        mesh=mesh,
+    )
+
+    split_dims = [dim for dim, ranks in enumerate(partitioner.rank_grid) if ranks > 1]
+    assert len(split_dims) == 1
+    split_dim = split_dims[0]
+
+    local_frac = torch.full((1, 3), 0.5, dtype=dtype)
+    local_frac[0, split_dim] = 0.02 if rank == 0 else 0.98
+    remote_frac = torch.full((1, 3), 0.5, dtype=dtype)
+    remote_frac[0, split_dim] = 0.98 if rank == 0 else 0.02
+    image_offset = torch.zeros((1, 3), dtype=dtype)
+    image_offset[0, split_dim] = -1.0 if rank == 0 else 1.0
+
+    # Establish that the original geometry produces the expected one-image
+    # layout before changing the partitioner's cell.
+    old_positions = local_frac @ old_cell
+    old_padded, old_meta = particle_halo_padding(old_positions, halo_config)
+    assert old_meta.n_owned == 1
+    assert old_meta.n_padded == 2
+    torch.testing.assert_close(
+        old_padded[1:],
+        (remote_frac + image_offset) @ old_cell,
+    )
+
+    # Change both the length and direction of the split-axis lattice vector.
+    # A cache of Cartesian shifts from ``old_cell`` maps the periodic image into
+    # the receiver's core and causes it to be omitted.  Deriving the image from
+    # the current cell yields the expected halo row.
+    new_cell = old_cell.clone()
+    new_cell[split_dim, split_dim] = 12.0
+    new_cell[split_dim, (split_dim + 1) % 3] = 1.5
+    partitioner.update_cell(new_cell)
+
+    new_positions = local_frac @ new_cell
+    new_padded, new_meta = particle_halo_padding(new_positions, halo_config)
+    assert new_meta.n_owned == 1
+    assert new_meta.n_padded == 2
+    torch.testing.assert_close(
+        new_padded[1:],
+        (remote_frac + image_offset) @ new_cell,
+    )
+
+
 # ======================================================================
 # Tests.
 # ======================================================================
@@ -389,3 +449,8 @@ class TestHaloForwardReverseRoundtrip:
             4,
             True,
         )
+
+
+def test_pbc_halo_tracks_current_cell_after_update() -> None:
+    """A long-lived halo config must not retain the partition-time PBC shift."""
+    _spawn(2, "29840", "_worker_pbc_halo_tracks_current_cell")

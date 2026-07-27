@@ -131,8 +131,8 @@ def _identify_ghosts_split(
 ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
     """Return ``(direct_mask, [(pbc_mask, cart_shift), ...])`` for one neighbor."""
     partitioner = config.partitioner
-    # Reuse the cached inverse; cell is fixed in NVT/NVE (see
-    # ``_ghost_width_fractional``).
+    # Reuse the inverse that ``SpatialPartitioner.update_cell`` refreshes
+    # whenever an NPT/NPH barostat changes the cell.
     inv_cell = partitioner._inv_cell.to(device=positions.device, dtype=positions.dtype)
 
     # cart = frac @ cell_matrix (rows of cell_matrix = lattice vectors a, b, c),
@@ -158,11 +158,13 @@ def _identify_ghosts_split(
     already_selected = direct_mask.clone()
     pbc_list: list[tuple[torch.Tensor, torch.Tensor]] = []
     shift_key = (config.rank, neighbor_rank)
-    if shift_key in config.pbc_shifts:
-        for cart_shift in config.pbc_shifts[shift_key]:
-            cart_shift = cart_shift.to(device=positions.device, dtype=positions.dtype)
-            # Same transpose fix as above: ``frac = cart @ inv(cell)``.
-            frac_shift = cart_shift @ inv_cell
+    if shift_key in config._pbc_images:
+        cell_matrix = partitioner.cell_matrix.to(
+            device=positions.device, dtype=positions.dtype
+        )
+        for frac_shift in config._pbc_images[shift_key]:
+            frac_shift = frac_shift.to(device=positions.device, dtype=positions.dtype)
+            cart_shift = frac_shift @ cell_matrix
             frac_pos_shifted = frac_pos + frac_shift
             mask = _check_halo_region(frac_pos_shifted, frac_lo, frac_hi, gw_frac)
             mask = mask & ~already_selected
