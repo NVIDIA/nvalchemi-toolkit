@@ -258,8 +258,20 @@ RichReporter.preview(layout="training", title="training dashboard")
 RichReporter.preview(layout="dynamics", title="dynamics dashboard")
 ```
 
-Those two calls render the dashboards below. The `"training"` layout leads with
-the loss breakdown, learning rates, and progress/ETA:
+Those two calls render the dashboards below. Both share the same skeleton — a
+column of at-a-glance value panels on the left, time-series plots on the right,
+and a `Messages` panel for reporter output — and differ in what they choose to
+put in each slot:
+
+| | `"training"` | `"dynamics"` |
+|---|---|---|
+| Value panels | `Latest Metrics`, `Progress` | `Observables`, `Convergence / Pipeline` |
+| Plot panel | `Training Curves` | `Dynamics Traces` |
+| Plotted by default | `loss/total`, `optimizer/lr`, `scheduler/lr`, per-component losses | `energy`, `fmax`, `temperature`, `energy_drift`, `converged_fraction`, `active_fraction` |
+| Question it answers | Is the loss coming down, and how long is left? | Is the simulation healthy, and how much of the batch has converged? |
+
+The `"training"` layout leads with the loss breakdown, learning rates, and
+progress/ETA — the things you watch to decide whether a run is worth continuing:
 
 ```{figure} /_static/rich_reporter_training.svg
 :alt: RichReporter training layout showing loss curves, learning rate, and progress
@@ -269,8 +281,9 @@ The built-in `"training"` layout, rendered by
 `RichReporter.preview(layout="training")`.
 ```
 
-The `"dynamics"` layout swaps in simulation observables — energy, `fmax`,
-temperature, and convergence/pipeline counters:
+The `"dynamics"` layout swaps those for simulation observables and a
+convergence/pipeline panel, since a batched relaxation is judged on how many
+systems have finished rather than on a single scalar going down:
 
 ```{figure} /_static/rich_reporter_dynamics.svg
 :alt: RichReporter dynamics layout showing energy, fmax, temperature, and convergence
@@ -279,6 +292,11 @@ temperature, and convergence/pipeline counters:
 The built-in `"dynamics"` layout, rendered by
 `RichReporter.preview(layout="dynamics")`.
 ```
+
+Neither is fixed: `plot_keys`, `max_plots`, and `plot_height` retune the plot
+panel without writing a layout, and a custom
+{py:class}`~nvalchemi.hooks.RichLayout` replaces the surface entirely (see
+[Designing Rich layouts](#designing-rich-layouts)).
 
 For an animated live-data demo using synthetic metrics:
 
