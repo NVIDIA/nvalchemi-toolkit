@@ -31,6 +31,7 @@ __all__ = [
     "LoRAWrapper",
     "LoRAWrapperRegistrations",
     "available_lora_wrappers",
+    "is_lora_layer",
     "register_builtin_lora_wrappers",
 ]
 if _lora_wrappers._TRANSFORMER_ENGINE_LORA_LINEAR is not None:
@@ -50,6 +51,7 @@ def __getattr__(name: str) -> object:
         "CuEquivariantLoRALinear",
         "E3NNFullyConnectedLoRALayer",
         "EquivariantLoRALinear",
+        "is_lora_layer",
         "LoRALayer",
         "LoRALinear",
         "LoRAWrappableLayer",
@@ -58,6 +60,10 @@ def __getattr__(name: str) -> object:
         "available_lora_wrappers",
         "register_builtin_lora_wrappers",
     }:
+        if name == "is_lora_layer":
+            from nvalchemi.training.peft import _peft
+
+            return _peft.is_lora_layer
         from nvalchemi.training.peft import wrappers
 
         return getattr(wrappers, name)

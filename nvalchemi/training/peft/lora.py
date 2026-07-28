@@ -825,9 +825,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
             adapter_state[_EXTRA_TRAINABLE_STATE_NAME] = _snapshot_state_dict(
                 _selected_state_dict(
                     named_parameters,
-                    set(
-                        _model_local_parameter_names(name, extra_parameter_names)
-                    ),
+                    set(_model_local_parameter_names(name, extra_parameter_names)),
                 )
             )
             lora_module_names = [

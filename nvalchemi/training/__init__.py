@@ -122,6 +122,7 @@ __all__ = [
     "default_training_fn",
     "fit_atomic_reference_energies",
     "freeze_unconfigured_models",
+    "is_lora_layer",
     "loss_component_to_spec",
     "load_checkpoint",
     "move_to_devices",
@@ -140,6 +141,7 @@ def __getattr__(name: str) -> object:
     if name in {
         "LoRAFineTuningStrategy",
         "available_lora_wrappers",
+        "is_lora_layer",
         "register_builtin_lora_wrappers",
     }:
         from nvalchemi.training import peft

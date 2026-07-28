@@ -91,8 +91,8 @@ from nvalchemi.training import (
     available_lora_wrappers,
     default_training_fn,
     fit_atomic_reference_energies,
+    is_lora_layer,
 )
-from nvalchemi.training.peft import _peft
 
 # Data and output paths
 DATA_ROOT = Path("outputs/lpsc_lora")
@@ -572,9 +572,7 @@ def print_lora_adapters(strategy: LoRAFineTuningStrategy) -> None:
     print("LoRA adapters inserted:", flush=True)
     for model_name, model in strategy.models.items():
         module_names = [
-            name
-            for name, module in model.named_modules()
-            if _peft.is_lora_layer(module)
+            name for name, module in model.named_modules() if is_lora_layer(module)
         ]
         if not module_names:
             print(f"  - {model_name}: none", flush=True)

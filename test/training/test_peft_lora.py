@@ -31,9 +31,9 @@ from nvalchemi.training import (
     OptimizerConfig,
     TrainingStrategy,
     create_model_spec,
+    is_lora_layer,
 )
 from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
-from nvalchemi.training.peft import _peft
 from nvalchemi.training.peft import wrappers as lora_wrappers
 from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
 from nvalchemi.training.peft.wrappers import (
@@ -241,7 +241,7 @@ class TestLoRAApplyHook:
         registered_trainable_names = strategy.get_registered_trainable_parameter_names()
         lora_parameter_names = registered_trainable_names["lora"]
 
-        assert _peft.is_lora_layer(projection)
+        assert is_lora_layer(projection)
         assert lora_parameter_names == frozenset(
             {
                 "main.model.projection.lora_A",
@@ -293,12 +293,12 @@ class TestLoRAApplyHook:
         model_a_lora_modules = [
             name
             for name, module in strategy.models["modelA"].named_modules()
-            if _peft.is_lora_layer(module)
+            if is_lora_layer(module)
         ]
         model_b_lora_modules = [
             name
             for name, module in strategy.models["modelB"].named_modules()
-            if _peft.is_lora_layer(module)
+            if is_lora_layer(module)
         ]
         assert model_a_lora_modules == [
             *expected_modules,
@@ -499,7 +499,7 @@ class TestLoRAStrategyMerge:
         LoRAFineTuningStrategy.merge_model_inplace(strategy.models["main"])
 
         merged_projection = strategy.models["main"].model.projection
-        assert not _peft.is_lora_layer(merged_projection)
+        assert not is_lora_layer(merged_projection)
         torch.testing.assert_close(merged_projection(x), adapted_output)
 
     def test_lora_merge_model_inplace_prevents_checkpoint_and_adapter_saves(
