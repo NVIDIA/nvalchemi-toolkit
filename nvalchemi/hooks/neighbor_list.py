@@ -64,7 +64,7 @@ from nvalchemiops.neighbors.base_dispatch import neighbor_list_strategy_run_args
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list, suggest_neighbor_list_method
 from nvalchemiops.torch.neighbors.rebuild_detection import (
-    batch_neighbor_list_needs_rebuild as _batch_nl_needs_rebuild,
+    batch_neighbor_list_needs_rebuild,
 )
 
 try:
@@ -281,7 +281,7 @@ class NeighborListHook:
         # shifts refer to and must therefore trigger a rebuild.
         # ------------------------------------------------------------------
         if self.skin > 0.0 and self._ref_positions is not None:
-            self._rebuild_flags = _batch_nl_needs_rebuild(
+            self._rebuild_flags = batch_neighbor_list_needs_rebuild(
                 reference_positions=self._ref_positions,
                 current_positions=self._buf_positions,
                 batch_idx=self._buf_batch_idx,
