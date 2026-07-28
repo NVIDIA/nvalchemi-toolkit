@@ -25,7 +25,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class StrategyKind(str, Enum):
@@ -79,6 +79,7 @@ class DomainConfig(BaseModel):
     ghost_width : float | None
         Width of the ghost (halo) region. When ``None``, the effective
         width defaults to ``cutoff + skin`` via :meth:`effective_ghost_width`.
+        An explicit value must be at least ``cutoff + skin``.
     mesh : DeviceMesh | None
         Optional ``torch.distributed.device_mesh.DeviceMesh`` describing the
         rank topology. ``None`` for single-rank runs.
@@ -135,6 +136,16 @@ class DomainConfig(BaseModel):
         if v is not None and any(d < 1 for d in v):
             raise ValueError(f"grid_dims entries must be >= 1, got {v}")
         return v
+
+    @model_validator(mode="after")
+    def _ghost_width_covers_cutoff_and_skin(self) -> DomainConfig:
+        required_width = self.cutoff + self.skin
+        if self.ghost_width is not None and self.ghost_width < required_width:
+            raise ValueError(
+                f"ghost_width ({self.ghost_width}) must be >= cutoff + skin "
+                f"({required_width})"
+            )
+        return self
 
     def effective_migration_hysteresis(self) -> float:
         """Migration-hysteresis margin (angstrom). Defaults to ``skin/2``.
