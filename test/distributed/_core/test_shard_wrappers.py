@@ -212,9 +212,6 @@ class TestPassthroughOpsList:
     def test_has_hooks(self):
         assert "nvalchemi_hooks::wrap_positions" in PASSTHROUGH_OPS
 
-    def test_has_nl_rebuild(self):
-        assert "nvalchemi::_batch_neighbor_list_rebuild_inplace" in PASSTHROUGH_OPS
-
     def test_minimum_count(self):
         assert len(PASSTHROUGH_OPS) >= 20
 
