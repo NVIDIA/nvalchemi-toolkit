@@ -33,6 +33,7 @@ from nvalchemi.hooks import Hook
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training._checkpoint import (
+    _load_partial_model_state,
     _model_local_parameter_names,
     _selected_state_dict,
     _snapshot_state_dict,
@@ -799,10 +800,10 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
         patch_targets = tuple(self.module_patches)
 
         manifest_models: dict[str, dict[str, Any]] = {}
-        for model_name in model_names:
+        for name in model_names:
             # Collect this model's patch targets, metadata, and trainable states.
-            patch_prefix = f"{model_name}."
-            named_parameters = dict(checkpoint_models[model_name].named_parameters())
+            patch_prefix = f"{name}."
+            named_parameters = dict(checkpoint_models[name].named_parameters())
             model_patch_targets = tuple(
                 target
                 for target in patch_targets
@@ -816,7 +817,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 source: _snapshot_state_dict(
                     _selected_state_dict(
                         named_parameters,
-                        set(_model_local_parameter_names(model_name, parameter_names)),
+                        set(_model_local_parameter_names(name, parameter_names)),
                     )
                 )
                 for source, parameter_names in registered_trainable_names.items()
@@ -825,13 +826,13 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 _selected_state_dict(
                     named_parameters,
                     set(
-                        _model_local_parameter_names(model_name, extra_parameter_names)
+                        _model_local_parameter_names(name, extra_parameter_names)
                     ),
                 )
             )
             lora_module_names = [
                 name
-                for name, module in checkpoint_models[model_name].named_modules()
+                for name, module in checkpoint_models[name].named_modules()
                 if _peft.is_lora_layer(module)
             ]
             model_metadata = {
@@ -839,11 +840,11 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 "lora_trainable_names": sorted(
                     adapter_state.get(_LORA_HOOK_IDENTIFIER, {})
                 ),
-                "base_model_fingerprint": base_fingerprints[model_name],
+                "base_model_fingerprint": base_fingerprints[name],
             }
 
             # Create the model directory and save the trainable states and extra metadata
-            model_dir = adapter_dir / "models" / model_name
+            model_dir = adapter_dir / "models" / name
             model_dir.mkdir(parents=True, exist_ok=True)
             model_entry: dict[str, Any] = {
                 "metadata": model_metadata,
@@ -853,12 +854,12 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                 ),
                 "parameter_summary": _adapter_parameter_summary(
                     adapter_state,
-                    checkpoint_models[model_name],
+                    checkpoint_models[name],
                 ),
                 "module_patches": sorted(model_patch_targets),
             }
             torch.save(adapter_state, model_dir / _ADAPTER_STATE_FILENAME)
-            manifest_models[model_name] = model_entry
+            manifest_models[name] = model_entry
 
         # Create the manifest and strategy files
         manifest = {
@@ -1003,20 +1004,7 @@ class LoRAFineTuningStrategy(FineTuningStrategy):
                     f"LoRA adapter model {model_name!r} {source!r} state must be a dict."
                 )
             combined_state.update(source_state)
-        load_result = model.load_state_dict(combined_state, strict=False)
-        if load_result.unexpected_keys:
-            raise RuntimeError(
-                "LoRA adapter contains unexpected tensor keys for model "
-                f"{model_name!r}: {sorted(load_result.unexpected_keys)}."
-            )
-
-        # Check if all the saved keys were loaded.
-        missing_saved_keys = set(combined_state) & set(load_result.missing_keys)
-        if missing_saved_keys:
-            raise RuntimeError(
-                "LoRA adapter saved tensor keys were not loaded for model "
-                f"{model_name!r}: {sorted(missing_saved_keys)}."
-            )
+        _load_partial_model_state(model, combined_state, model_name=model_name)
 
         # Merge LoRA weights into the model if requested.
         if merge_lora:
