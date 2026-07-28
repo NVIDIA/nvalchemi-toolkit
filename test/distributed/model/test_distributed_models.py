@@ -1044,6 +1044,8 @@ def test_aimnet2_wrapper_declares_halo_spec() -> None:
     # ghost-refresh (ConvSV / Coulomb heads) + owned-only mol_sum reduce.
     spec = wrapper.distribution_spec()
     assert isinstance(spec.distribution.policy, HaloStoragePolicy)
+    assert "stress" in spec.all_reduce_outputs
+    assert spec.compile is not None and spec.compile.stress_via_strain
     # The halo refresh/reduce adapters ride third_party_helpers (mol_sum +
     # ConvSV + LRCoulomb + SRCoulomb), with no gather custom_ops.
     assert spec.distribution.custom_ops == ()

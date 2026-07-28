@@ -129,6 +129,7 @@ def _aimnet2_halo_spec() -> Any:
     )
     _AIMNET2_HALO_SPEC_CACHE = replace(
         SPEC_MPNN_HALO,
+        all_reduce_outputs=SPEC_MPNN_HALO.all_reduce_outputs | frozenset({"stress"}),
         distribution=replace(
             SPEC_MPNN_HALO.distribution,
             adapters=helpers,
@@ -143,6 +144,7 @@ def _aimnet2_halo_spec() -> Any:
             static_shapes=True,
             force_strategy=ForceStrategy.FRAMEWORK_FROM_GLOBAL_ENERGY,
             graph_padder=DenseBatchPadder(),
+            stress_via_strain=True,
         ),
     )
     return _AIMNET2_HALO_SPEC_CACHE
