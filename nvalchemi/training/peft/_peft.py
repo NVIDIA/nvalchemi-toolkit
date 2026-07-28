@@ -33,3 +33,4 @@ register_lora_wrapper = _physicsnemo_peft.register_lora_wrapper
 resolve_targets = _physicsnemo_peft.resolve_targets
 save_adapter = _physicsnemo_peft.save_adapter
 wrappable_types = _physicsnemo_peft.lora.wrappable_types
+_LORA_WRAPPERS = _physicsnemo_peft.lora._LORA_WRAPPERS

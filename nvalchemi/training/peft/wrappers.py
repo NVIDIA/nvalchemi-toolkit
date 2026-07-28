@@ -780,4 +780,4 @@ def register_builtin_lora_wrappers() -> None:
 def available_lora_wrappers() -> LoRAWrapperRegistrations:
     """Return registered (layer, LoRA-wrapper) pairs."""
     register_builtin_lora_wrappers()
-    return tuple(_peft._physicsnemo_peft.lora._LORA_WRAPPERS.items())
+    return tuple(_peft._LORA_WRAPPERS.items())
