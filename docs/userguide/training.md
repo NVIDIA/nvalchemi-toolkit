@@ -692,10 +692,14 @@ A training run is reproducible when five things hold:
    supplied at load time; only checkpointable ones have their state restored
    into the instances you provide. Logging hooks generally need nothing, since
    their output already lives in an external sink.
-5. **The run emitted no `Omitting model spec` warnings.** When automatic spec
-   derivation fails, the framework warns, saves the weights, and drops the
-   recipe — leaving a checkpoint that cannot reconstruct its own architecture.
-   Treat that warning as a hard error for any run you intend to resume.
+5. **Every model can actually be rebuilt from its spec.** This one is enforced
+   rather than merely encouraged: when automatic spec derivation fails, the
+   framework warns (`Omitting model spec for '<name>'`) and
+   `save_checkpoint()` then refuses to write anything at all, raising
+   `ValueError: Cannot save strategy checkpoint because model spec generation
+   failed`. Since checkpointing usually happens well into a run, it is worth
+   proving the round trip before launching one — see
+   {ref}`serialization_guide`.
 
 ```{tip}
 The configuration alone — with no tensors — round-trips through
