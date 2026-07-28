@@ -89,21 +89,10 @@ except ImportError:
     allocate_cell_list = None
     compute_naive_num_shifts = None
 
-try:
-    from nvalchemiops.torch.neighbors.rebuild_detection import (
-        batch_neighbor_list_needs_rebuild as _batch_nl_needs_rebuild,
-    )
-except ImportError:
-    _batch_nl_needs_rebuild = None
-
-try:
-    from nvalchemi.dynamics._ops.neighbor_list_rebuild import (
-        batch_neighbor_list_rebuild_inplace as _batch_nl_rebuild_inplace,
-    )
-except ImportError:
-    _batch_nl_rebuild_inplace = None
-
 from nvalchemi.data import Batch
+from nvalchemi.dynamics._ops.neighbor_list_rebuild import (
+    batch_neighbor_list_rebuild_inplace as _batch_nl_rebuild_inplace,
+)
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import _write_neighbor_data_to_batch
@@ -115,7 +104,7 @@ class NeighborListHook:
     This hook runs at :attr:`~DynamicsStage.BEFORE_COMPUTE` and writes
     neighbor data into the batch so that the model's ``adapt_input`` can
     read it.  An optional Verlet skin buffer avoids rebuilding the list
-    every step: the list is only recomputed when the maximum atomic
+    every step: the list is only recomputed when the maximum raw Cartesian
     displacement since the last build exceeds ``config.skin / 2``, or when
     the set of active systems changes (detected via ``system_id``).
 
@@ -144,10 +133,10 @@ class NeighborListHook:
         Verlet skin distance in the same length units as positions.
         The neighbor list is searched out to ``cutoff + skin`` so that
         atoms crossing the skin boundary but not the bare cutoff are
-        already included.  The list is only rebuilt when any atom has
-        moved more than ``skin / 2`` since the previous build (requires
-        ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
-        every step.
+        already included.  The list is only rebuilt when any atom's raw
+        Cartesian position has moved more than ``skin / 2`` since the
+        previous build (requires ``nvalchemiops >= 0.4``); set to ``0.0``
+        (default) to rebuild every step.
     max_neighbors : int | None, optional
         Maximum number of neighbors per atom for MATRIX format.  When
         ``None`` (default), auto-estimated from the cutoff via
@@ -217,8 +206,8 @@ class NeighborListHook:
 
         When ``skin > 0`` and ``nvalchemiops`` provides
         :func:`~nvalchemiops.torch.neighbors.rebuild_detection.batch_neighbor_list_needs_rebuild`,
-        the list is only rebuilt when at least one atom has moved more than
-        ``skin / 2`` since the previous build.  The reference positions are
+        the list is only rebuilt when at least one atom's raw Cartesian position
+        has moved more than ``skin / 2`` since the previous build.  The reference positions are
         updated in-place on the GPU (no clone) whenever a rebuild occurs.
         """
         self._rebuild(ctx.batch)
@@ -286,41 +275,22 @@ class NeighborListHook:
 
         # ------------------------------------------------------------------
         # Skin check: decide per-system whether the neighbor list needs
-        # rebuilding based on atomic displacement since the last build.
+        # rebuilding based on raw Cartesian displacement since the last
+        # build.  Minimum-image displacement is not valid here: wrapping an
+        # atom changes the coordinate representation that cached periodic
+        # shifts refer to and must therefore trigger a rebuild.
         # Uses the in-place variant to avoid per-step allocation of the
-        # rebuild_flags tensor.  Falls back to the upstream function if the
-        # in-place op is not available (nvalchemiops < 0.4 or custom op not
-        # loaded).
+        # rebuild_flags tensor.
         # ------------------------------------------------------------------
         if self.skin > 0.0 and self._ref_positions is not None:
-            cell_inv = (
-                torch.linalg.inv_ex(self._buf_cell)[0].contiguous()
-                if self._buf_cell is not None
-                else None
+            _batch_nl_rebuild_inplace(
+                reference_positions=self._ref_positions,
+                current_positions=self._buf_positions,
+                batch_idx=self._buf_batch_idx,
+                rebuild_flags=self._rebuild_flags,
+                skin_distance_threshold=self.skin / 2,
+                update_reference_positions=True,
             )
-            if _batch_nl_rebuild_inplace is not None:
-                _batch_nl_rebuild_inplace(
-                    reference_positions=self._ref_positions,
-                    current_positions=self._buf_positions,
-                    batch_idx=self._buf_batch_idx,
-                    rebuild_flags=self._rebuild_flags,
-                    skin_distance_threshold=self.skin / 2,
-                    update_reference_positions=True,
-                    cell=self._buf_cell,
-                    cell_inv=cell_inv,
-                    pbc=self._buf_pbc,
-                )
-            elif _batch_nl_needs_rebuild is not None:
-                self._rebuild_flags = _batch_nl_needs_rebuild(
-                    reference_positions=self._ref_positions,
-                    current_positions=self._buf_positions,
-                    batch_idx=self._buf_batch_idx,
-                    skin_distance_threshold=self.skin / 2,
-                    update_reference_positions=True,
-                    cell=self._buf_cell,
-                    cell_inv=cell_inv,
-                    pbc=self._buf_pbc,
-                )
 
         # ------------------------------------------------------------------
         # Build the neighbor list using pre-allocated buffers.

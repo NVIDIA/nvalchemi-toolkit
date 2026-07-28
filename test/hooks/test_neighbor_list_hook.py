@@ -33,7 +33,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
@@ -889,6 +889,40 @@ class TestSkinCheck:
         assert _is_neighbor(nm, nn, 1, 2), (
             "moved atom 2 should now be a neighbor of atom 1"
         )
+
+    def test_periodic_fold_rebuilds_cached_shifts(self, device: str):
+        """Wrapping across a cell boundary must refresh periodic image shifts."""
+        hook = NeighborListHook(
+            _cfg(),
+            skin=0.5,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+            method="naive",
+        )
+        data = AtomicData(
+            positions=torch.tensor([[0.1, 0.0, 0.0], [19.9, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1], dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0) * 20.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        ctx = _ctx(batch)
+        hook(ctx, _STAGE)
+
+        # Cross the x boundary by less than skin / 2, then fold back into the cell.
+        # The physical MIC displacement is small, but the cached shifts refer to
+        # the pre-fold coordinate representation and must be rebuilt.
+        batch.positions[1, 0] += 0.15
+        WrapPeriodicHook()(ctx, DynamicsStage.AFTER_POST_UPDATE)
+        hook(ctx, _STAGE)
+
+        assert hook._rebuild_flags.item()
+
+        n = int(batch.num_neighbors[0].item())
+        slot = (batch.neighbor_matrix[0, :n] == 1).nonzero().item()
+        shift = batch.neighbor_matrix_shifts[0, slot]
+        cell = batch.cell.squeeze(0)
+        edge = batch.positions[1] - batch.positions[0] + shift.to(cell.dtype) @ cell
+        assert torch.linalg.vector_norm(edge) < hook.config.cutoff
 
 
 # ===========================================================================
