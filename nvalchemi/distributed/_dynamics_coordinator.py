@@ -256,8 +256,8 @@ class DynamicsDistributionCoordinator:
 
     def broadcast_state(self, batch: Batch) -> None:
         """Broadcast the replicated controller + cell state (the integrator's
-        declared ``__dd_replicated__``) from rank 0 so floating-point divergence
-        cannot accumulate over a long run.
+        declared ``__dd_replicated__``) from group-local rank 0 so floating-point
+        divergence cannot accumulate over a long run.
 
         With global KE/DOF and identical config the controller evolves
         identically on every rank, so this is anti-drift insurance, not a
@@ -266,7 +266,7 @@ class DynamicsDistributionCoordinator:
         if not self.active:
             return
         group = self._strategy.process_group
-        src = 0
+        src = dist.get_global_rank(group, 0) if group is not None else 0
         state = getattr(self._dyn, "_state", None)
         fields = getattr(self._dyn, "__dd_replicated__", ())
         for name in fields:

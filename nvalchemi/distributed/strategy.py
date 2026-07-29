@@ -52,6 +52,7 @@ from nvalchemi.distributed._core.gather_primitives import (
     mesh_group,
     set_halo_neighbor_ranks,
 )
+from nvalchemi.distributed._core.particle_halo import set_halo_process_group
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -307,6 +308,9 @@ class HaloStrategy(ParallelizationStrategy):
         """Run the model forward on this rank's halo-padded (owned + ghost) shard."""
         dist_model._dist_ctx.cap_atoms = self.caps_atoms
         dist_model._dist_ctx.strategy = self
+        # Compiled halo custom ops cannot carry a Python ProcessGroup through
+        # their dispatcher schema, so publish this strategy's exact domain group.
+        set_halo_process_group(self.process_group)
         return _halo_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:

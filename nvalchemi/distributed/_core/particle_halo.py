@@ -55,6 +55,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ``torch.library.custom_op`` schemas cannot carry a Python ``ProcessGroup``.
+# Publish the active halo group immediately before each model forward so the
+# eager custom-op bodies can resolve their collectives to the same domain group
+# as the surrounding DD strategy. ``None`` preserves the default-group behavior
+# for direct/single-mesh callers.
+_HALO_PROCESS_GROUP: Any = None
+
+
+def set_halo_process_group(group: Any) -> None:
+    """Publish the domain process group used by compiled halo custom ops."""
+    global _HALO_PROCESS_GROUP
+    _HALO_PROCESS_GROUP = group
+
 
 # ======================================================================
 # Ghost identification
@@ -725,19 +738,21 @@ def _halo_a2a_v_default_group(
     rank: int,
     world_size: int,
 ) -> torch.Tensor:
-    """:func:`_funcol_indexed_all_to_all_v_rows` over the DEFAULT process group.
+    """:func:`_funcol_indexed_all_to_all_v_rows` over the active halo group.
 
     Used inside the halo-correction custom op, which runs eagerly at runtime and
-    cannot take a ``DeviceMesh`` arg. Valid for single-domain-mesh-dim topology
-    (the domain group IS the world group); ``funcol`` mesh=None resolves the
-    default group.
+    cannot take a ``DeviceMesh`` or ``ProcessGroup`` arg. The surrounding halo
+    strategy publishes its domain group before the model forward; direct callers
+    that publish no group retain the default-world behavior.
     """
     send_rows = torch.cat(
         [tensor.index_select(0, indices[j]) for j in range(world_size)], dim=0
     )
     send_counts = [int(sizes[rank][j]) for j in range(world_size)]
     recv_counts = [int(sizes[i][rank]) for i in range(world_size)]
-    return funcol_all_to_all_v_rows(send_rows, send_counts, recv_counts, None)
+    return funcol_all_to_all_v_rows(
+        send_rows, send_counts, recv_counts, _HALO_PROCESS_GROUP
+    )
 
 
 def _halo_scatter_correct_dense(
@@ -749,7 +764,7 @@ def _halo_scatter_correct_dense(
     world_size: int,
 ) -> torch.Tensor:
     """``halo_forward_exchange(halo_reverse_exchange(padded))`` as pure
-    compute + collective (no autograd.Function, default group)."""
+    compute + collective (no autograd.Function, active halo group)."""
     # reverse: fold borrowed halo rows back into their owners.
     halo = padded[n_owned:].contiguous()
     rev_indices: list[torch.Tensor] = []
@@ -892,10 +907,10 @@ def halo_forward_op(
     this rank's halo (ghost) region.
 
     Compile-safe counterpart of :func:`halo_forward_exchange`; runs eagerly at
-    runtime (default group), while the trace sees only the registered fake. Its
-    adjoint (backward) is :func:`halo_scatter_correct_op`. The marker arrays ride
-    as ``int[]`` (not tensors) so inductor lowering does not see a real-Tensor
-    constant alongside the fake ``owned`` input.
+    runtime on the active halo group, while the trace sees only the registered
+    fake. Its adjoint (backward) is :func:`halo_scatter_correct_op`. The marker
+    arrays ride as ``int[]`` (not tensors) so inductor lowering does not see a
+    real-Tensor constant alongside the fake ``owned`` input.
 
     Parameters
     ----------
@@ -1199,10 +1214,10 @@ def halo_forward_static_op(
     world_size: int,
 ) -> torch.Tensor:
     """Fixed-shape owned->[owned|ghost] refresh. Runs eagerly at runtime
-    (default group); the trace sees only the fake. Owned rows pass through;
+    on the active halo group; the trace sees only the fake. Owned rows pass through;
     ghost rows are gathered from neighbors via a uniform-split all_to_all."""
     send_rows = padded_in.index_select(0, send_index)
-    recv = halo_exchange_fixed(send_rows, world_size, None)
+    recv = halo_exchange_fixed(send_rows, world_size, _HALO_PROCESS_GROUP)
     recv = recv * _row_mask_like(recv_real, recv).to(recv.dtype)
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     rowidx = torch.arange(padded_in.shape[0], device=padded_in.device)
@@ -1232,7 +1247,7 @@ def _hfs_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     grad_recv = grad_ghost.index_select(0, recv_dest) * _row_mask_like(
         recv_real, grad_out
     ).to(grad_out.dtype)
-    grad_send = halo_exchange_fixed(grad_recv, ws, None)
+    grad_send = halo_exchange_fixed(grad_recv, ws, _HALO_PROCESS_GROUP)
     grad_in = grad_out * (~ghostmask).to(grad_out.dtype)
     grad_in = grad_in.index_add(0, send_index, grad_send)
     return grad_in, None, None, None, None, None
@@ -1262,13 +1277,13 @@ def halo_scatter_correct_static_op(
 
     # reverse: ghost rows (recv-slot order) -> owning rank -> index_add into owners.
     ghost_rows = padded_in.index_select(0, recv_dest) * recv_real_f
-    back = halo_exchange_fixed(ghost_rows, world_size, None)
+    back = halo_exchange_fixed(ghost_rows, world_size, _HALO_PROCESS_GROUP)
     owned_only = (padded_in * (~ghostmask).to(padded_in.dtype)).to(acc_dt)
     owned_acc = owned_only.index_add(0, send_index, back.to(acc_dt)).to(padded_in.dtype)
 
     # forward: re-broadcast corrected owners to ghosts.
     send_rows = owned_acc.index_select(0, send_index)
-    recv = halo_exchange_fixed(send_rows, world_size, None) * recv_real_f
+    recv = halo_exchange_fixed(send_rows, world_size, _HALO_PROCESS_GROUP) * recv_real_f
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     return torch.where(ghostmask, ghost_acc, owned_acc)
 
