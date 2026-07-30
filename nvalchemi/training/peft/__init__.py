@@ -16,37 +16,56 @@
 
 from __future__ import annotations
 
-from nvalchemi.training.peft import wrappers as _lora_wrappers
-from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
+from nvalchemi.training.peft import lora_wrappers
+from nvalchemi.training.peft.fingerprints import (
+    BaseFingerprintHook,
+    compute_base_fingerprints,
+    validate_base_fingerprints,
+)
+from nvalchemi.training.peft.lora_hook import LoRAHook
 
 __all__ = [
+    "BaseFingerprintHook",
     "CuEquivariantLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
-    "LoRAApplyHook",
-    "LoRAFineTuningStrategy",
+    "LoRAHook",
+    "LoRAConfig",
     "LoRALayer",
     "LoRALinear",
     "LoRAWrappableLayer",
     "LoRAWrapper",
     "LoRAWrapperRegistrations",
+    "PeftConfig",
     "available_lora_wrappers",
+    "compute_base_fingerprints",
     "is_lora_layer",
+    "load_peft_checkpoint_into_model",
     "register_builtin_lora_wrappers",
+    "validate_base_fingerprints",
 ]
-if _lora_wrappers._TRANSFORMER_ENGINE_LORA_LINEAR is not None:
+if lora_wrappers._TRANSFORMER_ENGINE_LORA_LINEAR is not None:
     __all__.append("TransformerEngineLoRALinear")
 
 
 def __getattr__(name: str) -> object:
     """Lazily expose PEFT helpers with optional dependency boundaries."""
-    if name == "LoRAFineTuningStrategy":
-        from nvalchemi.training.peft.lora import LoRAFineTuningStrategy
+    if name == "LoRAConfig":
+        from nvalchemi.training.peft import lora
 
-        exports = {
-            "LoRAFineTuningStrategy": LoRAFineTuningStrategy,
-        }
-        return exports[name]
+        return getattr(lora, name)
+    if name == "PeftConfig":
+        from nvalchemi.training.peft import config
+
+        return getattr(config, name)
+    if name == "load_peft_checkpoint_into_model":
+        from nvalchemi.training.peft import loading
+
+        return getattr(loading, name)
+    if name == "is_lora_layer":
+        from nvalchemi.training.peft import _peft
+
+        return _peft.is_lora_layer
     if name in {
         "CuEquivariantLoRALinear",
         "E3NNFullyConnectedLoRALayer",
@@ -57,18 +76,11 @@ def __getattr__(name: str) -> object:
         "LoRAWrappableLayer",
         "LoRAWrapper",
         "LoRAWrapperRegistrations",
+        "TransformerEngineLoRALinear",
         "available_lora_wrappers",
         "register_builtin_lora_wrappers",
     }:
-        if name == "is_lora_layer":
-            from nvalchemi.training.peft import _peft
+        from nvalchemi.training.peft import lora_wrappers
 
-            return _peft.is_lora_layer
-        from nvalchemi.training.peft import wrappers
-
-        return getattr(wrappers, name)
-    if name == "TransformerEngineLoRALinear":
-        from nvalchemi.training.peft import wrappers
-
-        return getattr(wrappers, name)
+        return getattr(lora_wrappers, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

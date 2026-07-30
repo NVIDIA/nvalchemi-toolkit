@@ -20,12 +20,13 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import Any, ClassVar, Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.training.hooks.finetune import _matched_names
 from nvalchemi.training.peft import _peft
-from nvalchemi.training.peft.wrappers import (
+from nvalchemi.training.peft.lora import LORA_PEFT_METHOD, LoRAConfig
+from nvalchemi.training.peft.lora_wrappers import (
     LoRAWrappableLayer,
     LoRAWrapper,
     LoRAWrapperRegistrations,
@@ -33,20 +34,20 @@ from nvalchemi.training.peft.wrappers import (
 
 __all__ = [
     "LoRAWrapper",
-    "LoRAApplyHook",
+    "LoRAHook",
     "LoRAWrapperRegistrations",
     "LoRAWrappableLayer",
 ]
 
-_LORA_HOOK_IDENTIFIER: Final = "lora"
+_LORA_PARAMETER_SOURCE: Final = LORA_PEFT_METHOD
 
 
 def _collate_lora_metadata(
     model_name: str,
     model: Any,
     result: _peft.ApplyResult,
-) -> tuple[str, set[str], set[str]]:
-    """Return base fingerprint, trainable names, and managed names for a model."""
+) -> tuple[set[str], set[str]]:
+    """Return trainable and managed names for a model."""
     wrapped_module_names = [
         name for name, module in model.named_modules() if _peft.is_lora_layer(module)
     ]
@@ -82,51 +83,25 @@ def _collate_lora_metadata(
             for name in model_parameter_names
             if name.startswith(prefix)
         )
-    return (
-        getattr(result, "base_fingerprint", ""),
-        qualified_trainable_names,
-        qualified_managed_names,
-    )
+    return qualified_trainable_names, qualified_managed_names
 
 
-class LoRAApplyHook(BaseModel):
+class LoRAHook(BaseModel):
     """Apply LoRA adapters to models.
 
-    This hook is automatically prepended by :class:`~nvalchemi.training.LoRAFineTuningStrategy`.
+    This hook is automatically prepended when
+    :class:`~nvalchemi.training.FineTuningStrategy` receives a
+    :class:`~nvalchemi.training.LoRAConfig`.
 
     Parameters
     ----------
-    lora_target_patterns : tuple[str, ...]
-        Shell-style glob patterns matched against model-prefixed module names,
-        using the same ``*``, ``?``, and ``[...]`` syntax as
-        ``trainable_patterns``. Dots are literal path separators. For example,
-        ``"main.model.projection"`` selects exactly
-        ``"main.model.projection"``, ``"student.model.*projection"`` selects
-        projection-like modules under ``student.model``, and
-        ``"main.model.readout*"`` selects modules whose final path component
-        starts with ``readout``. Patterns without glob characters are exact
-        matches.
-    lora_rank : int
-        Rank of the low-rank adapter factors.
-    lora_alpha : float, optional
-        Scaling numerator for adapter updates. Defaults to ``1.0``.
-    lora_dropout : float, optional
-        Dropout probability on the adapter input path. Defaults to ``0.0``.
-    lora_wrap_mlp : bool, optional
-        Also target supported feed-forward sub-blocks discovered by the adapter
-        implementation. This is only supported for single-model strategies.
-        Defaults to ``False``.
-    wrapper_registrations : LoRAWrapperRegistrations, optional
-        Custom layer-to-wrapper registrations installed before adapter
-        injection. Each pair maps a base layer class to the adapter wrapper
-        class that should handle it. Defaults to ``()``.
-
-    Notes
-    -----
-    ``wrapper_registrations`` is typed broadly on the Pydantic field because it
-    stores runtime class objects. The expected public shape is still
-    ``LoRAWrapperRegistrations``, and ``LoRAFineTuningStrategy`` validates it
-    before creating this hook.
+    lora_config : LoRAConfig
+        LoRA PEFT configuration describing adapter targets, rank, scaling,
+        dropout, MLP wrapping, and custom wrapper registrations.
+    register_parameters : bool, optional
+        If ``True``, register LoRA adapter parameters as trainable and managed
+        on the workflow. Set to ``False`` for standalone model loading where no
+        training workflow registry exists. Defaults to ``True``.
 
     Attributes
     ----------
@@ -134,36 +109,10 @@ class LoRAApplyHook(BaseModel):
         Required by the hook protocol; always ``1``.
     stage : None
         This hook does not run at training stages.
-    Examples
-    --------
-    Exact module names can be written as patterns without glob characters:
-
-    >>> hook = LoRAApplyHook(
-    ...     lora_target_patterns=("main.model.projection",),
-    ... )
-
-    Glob patterns match module names from ``model.named_modules()``, prefixed with
-    the model key such as ``"main"``:
-
-    >>> hook = LoRAApplyHook(
-    ...     lora_target_patterns=("main.model.*projection",),
-    ...     lora_rank=4,
-    ...     lora_alpha=1.0,
-    ... )
-
-    In multi-model workflows, the prefix helps to identify which model receives adapters:
-
-    >>> hook = LoRAApplyHook(
-    ...     lora_target_patterns=("student.model.projection",),
-    ... )
     """
 
-    lora_target_patterns: tuple[str, ...] = Field(min_length=1)
-    lora_rank: int = 8
-    lora_alpha: float = 1.0
-    lora_dropout: float = 0.0
-    lora_wrap_mlp: bool = False
-    wrapper_registrations: tuple[tuple[type[Any], type[Any]], ...] = ()
+    lora_config: LoRAConfig
+    register_parameters: bool = True
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None
@@ -179,10 +128,9 @@ class LoRAApplyHook(BaseModel):
         return
 
     def on_register(self, workflow: Any) -> None:
-        """Register wrappers, inject adapters, and store base fingerprints.
+        """Register wrappers, inject adapters, and register adapter parameters.
 
-        The public configuration is validated by ``LoRAFineTuningStrategy``
-        before creating this hook. During registration, model-prefixed targets
+        The public configuration is validated before creating this hook. During registration, model-prefixed targets
         are converted to model-local targets for each model to be compatible
         with the PhysicsNeMo ``apply_lora`` function. For example,
         ``"student.model.projection"`` becomes the PhysicsNeMo
@@ -191,22 +139,24 @@ class LoRAApplyHook(BaseModel):
         parameter names are registered on the workflow.
         """
 
-        from nvalchemi.training.peft.wrappers import register_builtin_lora_wrappers
+        from nvalchemi.training.peft.lora_wrappers import (
+            register_builtin_lora_wrappers,
+        )
 
         # Validate workflow
         models = getattr(workflow, "models", None)
         if not isinstance(models, Mapping):
-            raise TypeError("LoRAApplyHook requires a workflow with a models mapping.")
+            raise TypeError("LoRAHook requires a workflow with a models mapping.")
         if getattr(workflow, "_optimizers", None) or getattr(
             workflow, "_flat_opts", None
         ):
             raise RuntimeError(
-                "LoRAApplyHook must be registered before optimizers are built."
+                "LoRAHook must be registered before optimizers are built."
             )
 
         # Register built-in and user-defined LoRA wrappers
         register_builtin_lora_wrappers()
-        for layer_cls, wrapper_cls in self.wrapper_registrations:
+        for layer_cls, wrapper_cls in self.lora_config.wrapper_registrations or ():
             _peft.register_lora_wrapper(layer_cls, wrapper_cls)
 
         # Apply LoRA to models and collect registration data.
@@ -214,8 +164,6 @@ class LoRAApplyHook(BaseModel):
         # model-prefixed selectors such as "student.model.projection" to
         # model-local selectors before delegating to the PhysicsNeMo
         # ``apply_lora`` function.
-        base_fingerprints: dict[str, str] = {}
-
         # Get all module names in the models.
         model_names = set(models)
         module_names = {
@@ -229,7 +177,7 @@ class LoRAApplyHook(BaseModel):
         matched_module_names = tuple(
             sorted(
                 _matched_names(
-                    self.lora_target_patterns,
+                    self.lora_config.lora_target_patterns,
                     module_names,
                     label="LoRA target",
                     target_type="module",
@@ -259,25 +207,26 @@ class LoRAApplyHook(BaseModel):
                     local_targets.append(module_name)
 
             # Reconstruct the LoRA configuration for this model.
-            model_lora_config = _peft.LoRAConfig(
-                rank=self.lora_rank,
-                alpha=self.lora_alpha,
+            model_lora_config = _peft.PhysicsNeMoLoRAConfig(
+                rank=self.lora_config.rank,
+                alpha=self.lora_config.alpha,
                 target_modules=local_targets or ["__nvalchemi_no_lora_target__"],
-                lora_dropout=self.lora_dropout,
+                lora_dropout=self.lora_config.lora_dropout,
                 extras_trainable=[],
-                wrap_mlp=self.lora_wrap_mlp,
-                init="default",
+                wrap_mlp=self.lora_config.wrap_mlp,
+                init="default", # hardcode adapter initialization for now
             )
 
-            # If no target modules are found, record only the base fingerprint for this model.
             if not local_targets:
-                base_fingerprints[model_name] = _peft.compute_base_fingerprint(model)
                 continue
 
             # Apply LoRA to the model and collect names to register.
-            result: _peft.ApplyResult = _peft.apply_lora(model, model_lora_config)
+            result: _peft.ApplyResult = _peft.apply_lora(
+                model,
+                model_lora_config,
+                compute_fingerprint=False,
+            )
             (
-                base_fingerprints[model_name],
                 model_trainable_names,
                 model_managed_names,
             ) = _collate_lora_metadata(
@@ -288,8 +237,8 @@ class LoRAApplyHook(BaseModel):
             lora_trainable_names.update(model_trainable_names)
             lora_managed_names.update(model_managed_names)
 
-        # Store only the base fingerprints needed for checkpoint/spec validation.
-        workflow._base_fingerprints = base_fingerprints
+        if not self.register_parameters:
+            return
 
         # Register LoRA trainable and managed parameter names on the workflow.
         # Trainable parameters refer to the trainable adapter parameters.
@@ -302,14 +251,14 @@ class LoRAApplyHook(BaseModel):
             method = getattr(workflow, method_name, None)
             if not callable(method):
                 raise TypeError(
-                    "LoRAApplyHook requires a workflow with a "
+                    "LoRAHook requires a workflow with a "
                     f"{method_name}(names, source=...) method."
                 )
         workflow.register_trainable_parameter_names(
             tuple(sorted(lora_trainable_names)),
-            source=_LORA_HOOK_IDENTIFIER,
+            source=_LORA_PARAMETER_SOURCE,
         )
         workflow.register_managed_parameter_names(
             tuple(sorted(lora_managed_names)),
-            source=_LORA_HOOK_IDENTIFIER,
+            source=_LORA_PARAMETER_SOURCE,
         )
