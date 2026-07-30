@@ -17,9 +17,10 @@ LoRA Fine-Tuning MACE on LPSC dataset
 =====================================
 
 This example illustrates how to fine-tune a model with LoRA adapters using
-:class:`~nvalchemi.training.LoRAFineTuningStrategy`. It fine-tunes the MACE
-``medium-mpa-0`` foundation model on the ``li/data/LPSC_600.extxyz`` subset
-from the public ``ev-tlt/MACE_finetuning_supplementary`` Hugging Face dataset.
+:class:`~nvalchemi.training.FineTuningStrategy` with
+:class:`~nvalchemi.training.LoRAConfig`. It fine-tunes the MACE ``medium-mpa-0``
+foundation model on the ``li/data/LPSC_600.extxyz`` subset from the public
+``ev-tlt/MACE_finetuning_supplementary`` Hugging Face dataset.
 Dataset attribution: ``li/data/LPSC_600.extxyz`` comes from
 ``ev-tlt/MACE_finetuning_supplementary``; the dataset lists ``li/data/`` as
 CC BY 4.0, sourced from Zenodo 15686940 / Kim et al. See
@@ -38,8 +39,8 @@ The workflow is as follows:
    adapters.
 #. Construct the LoRA fine-tuning strategy, attach adapters, and train with
    validation reporting.
-#. Save the trained adapter, reload it into a fresh foundation model, and run
-   validation inference.
+#. Save a trainable-only PEFT checkpoint, reload it into a fresh foundation
+   model, and run validation inference.
 
 It can be run on one GPU with the following command:
 
@@ -49,9 +50,8 @@ It can be run on one GPU with the following command:
        --with huggingface-hub \
        python examples/intermediate/08_lora_finetuning.py
 
-Use the CUDA extra that matches your environment. The command above uses
-``cu12``, use ``--extra cu13`` instead for CUDA 13. The runtime constants below
-keep the example small. Increase ``TRAINING_EPOCHS`` for a longer run.
+Or use ``--extra cu13`` to match your CUDA environment. The runtime constants
+below keep the example small. Increase ``TRAINING_EPOCHS`` for a longer run.
 
 """
 
@@ -82,8 +82,9 @@ from nvalchemi.models.mace import MACEWrapper
 from nvalchemi.training import (
     ComposedLossFunction,
     EnergyHuberLoss,
+    FineTuningStrategy,
     ForceHuberLoss,
-    LoRAFineTuningStrategy,
+    LoRAConfig,
     OptimizerConfig,
     StressHuberLoss,
     TrainingStage,
@@ -92,6 +93,7 @@ from nvalchemi.training import (
     default_training_fn,
     fit_atomic_reference_energies,
     is_lora_layer,
+    load_peft_checkpoint_into_model,
 )
 
 # Data and output paths
@@ -99,7 +101,7 @@ DATA_ROOT = Path("outputs/lpsc_lora")
 LPSC_HF_REPO_ID = "ev-tlt/MACE_finetuning_supplementary"
 LPSC_HF_FILENAME = "li/data/LPSC_600.extxyz"
 REFERENCE_ENERGIES_PATH = DATA_ROOT / "reference_energies" / "medium-mpa-0-lpsc.json"
-ADAPTER_OUTPUT_DIR = DATA_ROOT / "lora_adapter"
+PEFT_CHECKPOINT_DIR = DATA_ROOT / "peft_checkpoints"
 REFERENCE_ENERGY_FIT_KIND = "baseline_residual_added_to_checkpoint_e0"
 
 # Training, loss function, and optimization settings
@@ -107,7 +109,7 @@ SEED = 42
 VALIDATION_FRACTION = 0.1
 BATCH_SIZE = 64
 VALIDATION_BATCH_SIZE = 64
-TRAINING_EPOCHS = 5
+TRAINING_EPOCHS = 100
 VALIDATION_EVERY_STEPS = 50
 LEARNING_RATE = 5.0e-4
 WEIGHT_DECAY = 1.0e-4
@@ -458,13 +460,13 @@ print_available_lora_wrappers()
 # Configuring and running LoRA fine-tuning
 # ----------------------------------------
 # Similar to :class:`~nvalchemi.training.TrainingStrategy` and
-# :class:`~nvalchemi.training.FineTuningStrategy`,
-# :class:`~nvalchemi.training.LoRAFineTuningStrategy` combines the training
-# objective, validation reporter, neighbor-list hook, and optimizer setup. The
-# LoRA-specific target patterns select the MACE layers that receive adapters,
-# while the trainable patterns keep a small set of base-model parameters
-# trainable. Module patches can also be provided to customize model components,
-# but they are not needed in this example.
+# :class:`~nvalchemi.training.FineTuningStrategy`, this workflow combines the
+# training objective, validation reporter, neighbor-list hook, optimizer setup,
+# and a :class:`~nvalchemi.training.LoRAConfig`. The LoRA target patterns select
+# the MACE layers that receive adapters, while the trainable patterns keep a
+# small set of base-model parameters trainable. Module patches can also be
+# provided to customize model components, but they are not needed in this
+# example.
 
 seed_everything(SEED)
 
@@ -523,7 +525,7 @@ rich_reporter = RichReporter(
     transient=False,
 )
 
-strategy = LoRAFineTuningStrategy(
+strategy = FineTuningStrategy(
     models=model,
     optimizer_configs=OptimizerConfig(
         optimizer_cls=torch.optim.AdamW,
@@ -554,10 +556,12 @@ strategy = LoRAFineTuningStrategy(
         use_ema="auto",
         name="validation",
     ),
-    lora_rank=LORA_RANK,
-    lora_alpha=LORA_ALPHA,
-    lora_dropout=LORA_DROPOUT,
-    lora_target_patterns=LORA_TARGET_PATTERNS,
+    peft_config=LoRAConfig(
+        rank=LORA_RANK,
+        alpha=LORA_ALPHA,
+        lora_dropout=LORA_DROPOUT,
+        lora_target_patterns=LORA_TARGET_PATTERNS,
+    ),
     trainable_patterns=TRAINABLE_PATTERNS,
 )
 
@@ -567,7 +571,7 @@ strategy = LoRAFineTuningStrategy(
 # training.
 
 
-def print_lora_adapters(strategy: LoRAFineTuningStrategy) -> None:
+def print_lora_adapters(strategy: FineTuningStrategy) -> None:
     """Print LoRA modules installed in strategy."""
     print("LoRA adapters inserted:", flush=True)
     for model_name, model in strategy.models.items():
@@ -586,30 +590,34 @@ print_lora_adapters(strategy)
 
 # %%
 # With the strategy configured, run the fine-tuning loop and save the trained
-# adapter weights. ``RichReporter`` reports validation metrics during training.
+# PEFT weights. ``RichReporter`` reports validation metrics during training.
 
 
 seed_everything(SEED)
 strategy.run(train_loader)
 
-# Save only the lightweight adapter weights.
-adapter_dir = strategy.save_adapter(ADAPTER_OUTPUT_DIR)
-print(f"Saved LoRA adapter to {adapter_dir}", flush=True)
-adapter_manifest = json.loads((adapter_dir / "manifest.json").read_text())
-adapter_summary = adapter_manifest["models"]["main"]["parameter_summary"]
+# Save only optimizer-selected parameters plus buffers; the checkpoint metadata
+# records how to recreate the LoRA structure on a fresh base model.
+checkpoint_index = strategy.save_checkpoint(
+    PEFT_CHECKPOINT_DIR,
+    save_trainable_state_only=True,
+)
 print(
-    f"LoRA adapter parameters: {adapter_summary['lora_parameter_count']:,}",
+    f"Saved PEFT checkpoint {checkpoint_index} to {PEFT_CHECKPOINT_DIR}",
+    flush=True,
+)
+parameter_summary = strategy.trainable_parameter_summary
+print(
+    f"LoRA adapter parameters: {parameter_summary['lora']['parameter_count']:,}",
     flush=True,
 )
 print(
     "Extra trainable base parameters: "
-    f"{adapter_summary['extra_trainable_parameter_count']:,}",
+    f"{parameter_summary['extra']['parameter_count']:,}",
     flush=True,
 )
 print(
-    "Total trainable parameters: "
-    f"{adapter_summary['trainable_parameter_count']:,} / "
-    f"{adapter_summary['total_parameter_count']:,}",
+    f"Total trainable parameters: {parameter_summary['all']['parameter_count']:,}",
     flush=True,
 )
 
@@ -619,12 +627,17 @@ if device.type == "cuda":
     torch.cuda.empty_cache()
 
 # %%
-# Loading the trained LoRA adapter for inference
-# ----------------------------------------------
-# A saved adapter can be attached to a freshly loaded foundation model for
+# Loading the trained LoRA checkpoint for inference
+# -------------------------------------------------
+# The PEFT checkpoint can be attached to a freshly loaded foundation model for
 # inference with
-# :meth:`~nvalchemi.training.LoRAFineTuningStrategy.load_adapter_into_model`.
-# Here, we use a held-out validation batch as a simple inference example.
+# :func:`~nvalchemi.training.load_peft_checkpoint_into_model`. Here, we use a
+# held-out validation batch as a simple inference example. For inference after
+# training, the LoRA adapters can also be folded directly into the
+# strategy-owned model with
+# :func:`~nvalchemi.training.peft.lora.merge_lora_into_model`, for example
+# ``merge_lora_into_model(strategy.models["main"])``. The code below
+# demonstrates the save-and-load workflow instead.
 
 loaded_model = MACEWrapper.from_checkpoint(
     MACE_CHECKPOINT,
@@ -634,9 +647,9 @@ loaded_model = MACEWrapper.from_checkpoint(
     compile_model=False,
     atomic_energies=reference_energies,
 )
-loaded_model = LoRAFineTuningStrategy.load_adapter_into_model(
+loaded_model = load_peft_checkpoint_into_model(
     loaded_model,
-    ADAPTER_OUTPUT_DIR,
+    PEFT_CHECKPOINT_DIR,
 )
 loaded_model.model_config.active_outputs = {"energy", "forces", "stress"}
 loaded_model.eval()
@@ -697,6 +710,6 @@ validation_loader.dataset.close()
 #
 # .. code-block:: text
 #
-#    Validation MAE for energy per atom: 0.000378
-#    Validation MAE for forces: 0.014719
-#    Validation MAE for stress: 0.000198
+#    Validation MAE for energy per atom: 0.000363
+#    Validation MAE for forces: 0.013591
+#    Validation MAE for stress: 0.000173

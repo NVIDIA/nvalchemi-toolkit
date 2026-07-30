@@ -33,7 +33,11 @@ from nvalchemi.training import (
     OptimizerConfig,
 )
 from nvalchemi.training._spec import create_model_spec
-from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
+from nvalchemi.training.hooks import (
+    FineTuningSummaryHook,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
 from nvalchemi.training.strategy import TrainingStrategy
 
 
@@ -112,7 +116,8 @@ class TestModulePatchHook:
                         patches={
                             "main.model.projection": replacement,
                             "main.model.aux_projection": aux_spec,
-                        }
+                        },
+                        register_parameters=False,
                     )
                 ],
             }
@@ -136,7 +141,8 @@ class TestModulePatchHook:
                             patches={
                                 "main.model.aux_a": shared,
                                 "main.model.aux_b": shared,
-                            }
+                            },
+                            register_parameters=False,
                         )
                     ],
                 }
@@ -151,7 +157,8 @@ class TestModulePatchHook:
                     **baseline_strategy_kwargs,
                     "hooks": [
                         ModulePatchHook(
-                            patches={"main.model.not_real.head": nn.Linear(8, 1)}
+                            patches={"main.model.not_real.head": nn.Linear(8, 1)},
+                            register_parameters=False,
                         )
                     ],
                 }
@@ -437,7 +444,8 @@ class TestFineTuningStrategy:
 
         assert isinstance(strategy.hooks[0], ModulePatchHook)
         assert isinstance(strategy.hooks[1], TrainableParameterHook)
-        assert strategy.hooks[2] is recorder
+        assert isinstance(strategy.hooks[2], FineTuningSummaryHook)
+        assert strategy.hooks[3] is recorder
         assert recorder.saw_aux_projection is True
         assert recorder.saw_optimizer_filter is True
 
@@ -602,6 +610,7 @@ class TestFineTuningStrategy:
         assert set(restored.module_patches) == {"main.model.aux_projection"}
         assert isinstance(restored.hooks[0], ModulePatchHook)
         assert isinstance(restored.hooks[1], TrainableParameterHook)
+        assert isinstance(restored.hooks[2], FineTuningSummaryHook)
         assert restored._optimizer_parameter_names is not None
 
     def test_checkpoint_load_restores_filtered_optimizer_state(

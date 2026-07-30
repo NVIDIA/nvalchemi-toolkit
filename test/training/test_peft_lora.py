@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 from typing import Any
 from unittest.mock import Mock
@@ -27,22 +26,30 @@ from torch import nn
 
 from nvalchemi.training import (
     CheckpointHook,
-    LoRAFineTuningStrategy,
+    FineTuningStrategy,
+    LoRAConfig,
     OptimizerConfig,
     TrainingStrategy,
     create_model_spec,
     is_lora_layer,
+    load_peft_checkpoint_into_model,
 )
-from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
-from nvalchemi.training.peft import wrappers as lora_wrappers
-from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
-from nvalchemi.training.peft.wrappers import (
+from nvalchemi.training.hooks import (
+    BaseFingerprintHook,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
+from nvalchemi.training.peft import lora_wrappers
+from nvalchemi.training.peft.lora import merge_lora_into_model
+from nvalchemi.training.peft.lora_hook import LoRAHook
+from nvalchemi.training.peft.lora_wrappers import (
     CuEquivariantLoRALinear,
     E3NNFullyConnectedLoRALayer,
     EquivariantLoRALinear,
+    LoRALayer,
 )
 
-_PARTIAL_CHECKPOINT_HOOK_WARNING = "Saving a checkpoint with save_trainable_parameters_only=True stores only trainable tensors."
+_PARTIAL_CHECKPOINT_HOOK_WARNING = "Saving a checkpoint with save_trainable_state_only=True stores only optimizer-selected parameters and buffers."
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,16 +57,28 @@ _PARTIAL_CHECKPOINT_HOOK_WARNING = "Saving a checkpoint with save_trainable_para
 
 
 def _lora_strategy_kwargs(**kwargs: Any) -> dict[str, Any]:
-    """Return flat LoRA strategy fields for public strategy tests."""
+    """Return generic fine-tuning kwargs with LoRA PEFT config."""
     defaults: dict[str, Any] = {
         "lora_rank": 1,
         "lora_alpha": 1.0,
         "lora_dropout": 0.0,
         "lora_target_patterns": ("main.model.projection",),
         "lora_wrap_mlp": False,
+        "lora_wrapper_registrations": None,
+        "compute_base_fingerprints": True,
     }
     defaults.update(kwargs)
-    return defaults
+    return {
+        "compute_base_fingerprints": defaults["compute_base_fingerprints"],
+        "peft_config": LoRAConfig(
+            rank=defaults["lora_rank"],
+            alpha=defaults["lora_alpha"],
+            lora_dropout=defaults["lora_dropout"],
+            lora_target_patterns=defaults["lora_target_patterns"],
+            wrap_mlp=defaults["lora_wrap_mlp"],
+            wrapper_registrations=defaults["lora_wrapper_registrations"],
+        ),
+    }
 
 
 class _FakeLoRAResult:
@@ -107,15 +126,21 @@ class _Recorder:
         return
 
 
-class _FakeDDP(nn.Module):
-    """Small DDP stand-in exposing an underlying ``module``."""
+class _CustomCheckpointLoRAWrapper(nn.Module, LoRALayer):
+    """Importable custom LoRA wrapper used by checkpoint trust-policy tests."""
 
-    def __init__(self, module: nn.Module) -> None:
+    def __init__(self, base_layer: nn.Module, **kwargs: Any) -> None:
         super().__init__()
-        self.module = module
+        self.base_layer = base_layer
+        self.enabled = True
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self.module(*args, **kwargs)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluate the wrapped base layer."""
+        return self.base_layer(x)
+
+
+class _CustomCheckpointPatch(nn.Linear):
+    """Importable custom module patch used by checkpoint trust-policy tests."""
 
 
 def _import_real_o3() -> Any:
@@ -185,7 +210,13 @@ def _install_fake_peft(
     class _ConfiguredLoRAResult(_FakeLoRAResult):
         base_fingerprint = current_fingerprint
 
-    def fake_apply_lora(model: nn.Module, config: Any) -> _FakeLoRAResult:
+    def fake_apply_lora(
+        model: nn.Module,
+        config: Any,
+        *,
+        compute_fingerprint: bool = True,
+    ) -> _FakeLoRAResult:
+        assert compute_fingerprint is False
         if apply_lora_calls is not None:
             apply_lora_calls.append((model, config))
         layer = nn.Linear(8, 8)
@@ -209,11 +240,7 @@ def _install_fake_peft(
         lambda model: current_fingerprint,
     )
     monkeypatch.setattr(
-        "nvalchemi.training.peft.wrappers.register_builtin_lora_wrappers",
-        lambda: None,
-    )
-    monkeypatch.setattr(
-        "nvalchemi.training.peft.lora.register_builtin_lora_wrappers",
+        "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
         lambda: None,
     )
 
@@ -223,17 +250,15 @@ def _install_fake_peft(
 # ---------------------------------------------------------------------------
 
 
-class TestLoRAApplyHook:
+class TestLoRAHook:
     def test_lora_strategy_applies_real_physicsnemo_peft(
         self,
         baseline_strategy_kwargs: dict[str, Any],
     ) -> None:
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": ("main.model.projection",),
+                **_lora_strategy_kwargs(),
             }
         )
 
@@ -268,7 +293,7 @@ class TestLoRAApplyHook:
 
         model_a = baseline_strategy_kwargs["models"]
         model_b = _build_baseline_strategy_kwargs()["models"]
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
                 "models": {"modelA": model_a, "modelB": model_b},
@@ -277,11 +302,11 @@ class TestLoRAApplyHook:
                     "modelB": [OptimizerConfig(optimizer_cls=torch.optim.Adam)],
                 },
                 "training_fn": dict_demo_training_fn,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": (
-                    "*.model.*.0",
-                    "modelA.model.projection",
+                **_lora_strategy_kwargs(
+                    lora_target_patterns=(
+                        "*.model.*.0",
+                        "modelA.model.projection",
+                    ),
                 ),
             }
         )
@@ -305,7 +330,7 @@ class TestLoRAApplyHook:
             "model.projection",
         ]
         assert model_b_lora_modules == expected_modules
-        assert strategy.to_spec_dict()["lora_target_patterns"] == [
+        assert strategy.to_spec_dict()["peft_config"]["lora_target_patterns"] == [
             "*.model.*.0",
             "modelA.model.projection",
         ]
@@ -315,10 +340,12 @@ class TestLoRAApplyHook:
         baseline_strategy_kwargs: dict[str, Any],
     ) -> None:
         with pytest.raises(ValueError, match="did not match any module"):
-            LoRAFineTuningStrategy(
+            FineTuningStrategy(
                 **{
                     **baseline_strategy_kwargs,
-                    "lora_target_patterns": ("model.projection",),
+                    **_lora_strategy_kwargs(
+                        lora_target_patterns=("model.projection",),
+                    ),
                 }
             )
 
@@ -346,7 +373,13 @@ class TestLoRATrainableParameterRegistration:
                 "model.projection.lora_up.weight",
             ]
 
-        def fake_apply_lora(model: nn.Module, config: Any) -> _ProjectionLoRAResult:  # noqa: ARG001
+        def fake_apply_lora(
+            model: nn.Module,
+            config: Any,  # noqa: ARG001
+            *,
+            compute_fingerprint: bool = True,
+        ) -> _ProjectionLoRAResult:
+            assert compute_fingerprint is False
             model.model.projection = _FakeLoRAWrapper(model.model.projection)
             return _ProjectionLoRAResult()
 
@@ -356,10 +389,10 @@ class TestLoRATrainableParameterRegistration:
             lambda module: bool(getattr(module, "_fake_lora", False)),
         )
         monkeypatch.setattr(
-            "nvalchemi.training.peft.wrappers.register_builtin_lora_wrappers",
+            "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
             lambda: None,
         )
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
                 **_lora_strategy_kwargs(),
@@ -387,10 +420,19 @@ class TestLoRATrainableParameterRegistration:
         monkeypatch: pytest.MonkeyPatch,
         baseline_strategy_kwargs: dict[str, Any],
     ) -> None:
+        """Reject apply_lora metadata that names parameters absent from the model."""
+
         class _StaleLoRAResult(_FakeLoRAResult):
             trainable_names = ["model.missing_adapter.weight"]
 
-        def fake_apply_lora(model: nn.Module, config: Any) -> _StaleLoRAResult:  # noqa: ARG001
+        def fake_apply_lora(
+            model: nn.Module,
+            config: Any,
+            *,
+            compute_fingerprint: bool = True,
+        ) -> _StaleLoRAResult:
+            # Ensure LoRAHook disables fingerprinting when delegating to apply_lora.
+            assert compute_fingerprint is False
             model.model.lora_adapter = _fake_lora_linear()
             return _StaleLoRAResult()
 
@@ -400,12 +442,12 @@ class TestLoRATrainableParameterRegistration:
             lambda module: bool(getattr(module, "_fake_lora", False)),
         )
         monkeypatch.setattr(
-            "nvalchemi.training.peft.wrappers.register_builtin_lora_wrappers",
+            "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
             lambda: None,
         )
 
         with pytest.raises(RuntimeError, match="not present"):
-            LoRAFineTuningStrategy(
+            FineTuningStrategy(
                 **{**baseline_strategy_kwargs, **_lora_strategy_kwargs()}
             )
 
@@ -419,52 +461,36 @@ class TestLoRAStrategy:
         calls: list[tuple[nn.Module, Any]] = []
         _install_fake_peft(monkeypatch, apply_lora_calls=calls)
         recorder = _Recorder()
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                **_lora_strategy_kwargs(),
-                "lora_target_patterns": ("main.model.projection",),
+                **_lora_strategy_kwargs(
+                    lora_target_patterns=("main.model.projection",),
+                    compute_base_fingerprints=True,
+                ),
                 "module_patches": {"main.model.aux_projection": nn.Linear(8, 1)},
                 "trainable_patterns": ("main.model.projection.*",),
                 "hooks": [recorder],
             }
         )
 
-        assert isinstance(strategy.hooks[0], LoRAApplyHook)
-        assert isinstance(strategy.hooks[1], ModulePatchHook)
-        assert isinstance(strategy.hooks[2], TrainableParameterHook)
-        assert strategy.hooks[3] is recorder
+        assert isinstance(strategy.hooks[0], BaseFingerprintHook)
+        assert isinstance(strategy.hooks[1], LoRAHook)
+        assert isinstance(strategy.hooks[2], ModulePatchHook)
+        assert isinstance(strategy.hooks[3], TrainableParameterHook)
+        assert strategy.hooks[5] is recorder
         assert calls[0][0] is strategy.models["main"]
         assert calls[0][1].target_modules == ["model.projection"]
         assert recorder.saw_base_fingerprints is True
         assert recorder.saw_aux_projection is True
         assert recorder.saw_optimizer_filter is True
 
-    def test_lora_strategy_defaults_rank_and_alpha(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-
-        strategy = LoRAFineTuningStrategy(
-            **{
-                **baseline_strategy_kwargs,
-                "lora_target_patterns": ("main.model.projection",),
-            }
-        )
-
-        assert strategy.lora_rank == 8
-        assert strategy.lora_alpha == 1.0
-        assert strategy.hooks[0].lora_rank == 8
-        assert strategy.hooks[0].lora_alpha == 1.0
-
     def test_lora_strategy_rejects_freeze_patterns(
         self,
         baseline_strategy_kwargs: dict[str, Any],
     ) -> None:
         with pytest.raises(ValueError, match="does not accept freeze_patterns"):
-            LoRAFineTuningStrategy(
+            FineTuningStrategy(
                 **{
                     **baseline_strategy_kwargs,
                     **_lora_strategy_kwargs(),
@@ -478,12 +504,10 @@ class TestLoRAStrategyMerge:
         self,
         baseline_strategy_kwargs: dict[str, Any],
     ) -> None:
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": ("main.model.projection",),
+                **_lora_strategy_kwargs(),
             }
         )
         projection = strategy.models["main"].model.projection
@@ -496,29 +520,11 @@ class TestLoRAStrategyMerge:
 
         assert not torch.allclose(adapted_output, base_output)
 
-        LoRAFineTuningStrategy.merge_model_inplace(strategy.models["main"])
+        merge_lora_into_model(strategy.models["main"])
 
         merged_projection = strategy.models["main"].model.projection
         assert not is_lora_layer(merged_projection)
         torch.testing.assert_close(merged_projection(x), adapted_output)
-
-    def test_lora_merge_model_inplace_prevents_checkpoint_and_adapter_saves(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-        strategy = LoRAFineTuningStrategy(
-            **{**baseline_strategy_kwargs, **_lora_strategy_kwargs()}
-        )
-
-        LoRAFineTuningStrategy.merge_model_inplace(strategy.models["main"])
-
-        with pytest.raises(RuntimeError, match="adapters were removed or merged"):
-            strategy.save_checkpoint(tmp_path / "checkpoint")
-        with pytest.raises(RuntimeError, match="adapters were removed or merged"):
-            strategy.save_adapter(tmp_path / "adapter")
 
 
 class TestLoRAStrategySerialization:
@@ -533,7 +539,7 @@ class TestLoRAStrategySerialization:
         _install_fake_peft(monkeypatch)
         model_a = baseline_strategy_kwargs["models"]
         model_b = _build_baseline_strategy_kwargs()["models"]
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
                 "models": {"modelA": model_a, "modelB": model_b},
@@ -541,24 +547,32 @@ class TestLoRAStrategySerialization:
                     "modelA": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
                 },
                 "training_fn": dict_demo_training_fn,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": ("modelA.model.projection",),
+                **_lora_strategy_kwargs(
+                    lora_target_patterns=("modelA.model.projection",),
+                    compute_base_fingerprints=True,
+                ),
             }
         )
 
         spec = strategy.to_spec_dict()
 
-        assert "lora_config" not in spec
-        assert spec["lora_target_patterns"] == ["modelA.model.projection"]
-        assert "freeze_patterns" not in spec
+        assert spec["peft_method"] == "lora"
+        assert spec["peft_config"]["lora_target_patterns"] == [
+            "modelA.model.projection"
+        ]
+        assert spec["freeze_patterns"] == []
         assert spec["freeze_mode"] == "requires_grad"
         assert spec["base_model_fingerprints"] == {
             "modelA": "fingerprint-ok",
             "modelB": "fingerprint-ok",
         }
+        assert spec["trainable_parameter_summary"]["lora"] == {
+            "tensor_count": 2,
+            "parameter_count": 72,
+        }
+        assert "names" not in spec["trainable_parameter_summary"]["lora"]
         checkpoint = strategy.to_checkpoint_dict()
-        assert checkpoint["strategy_cls"].endswith(".LoRAFineTuningStrategy")
+        assert checkpoint["strategy_cls"].endswith(".FineTuningStrategy")
         assert "runtime_state" in checkpoint
         assert checkpoint["base_model_fingerprints"] == {
             "modelA": "fingerprint-ok",
@@ -577,10 +591,10 @@ class TestLoRAStrategySerialization:
         from test.training.conftest import _build_baseline_strategy_kwargs
 
         _install_fake_peft(monkeypatch)
-        source = LoRAFineTuningStrategy(
+        source = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                **_lora_strategy_kwargs(),
+                **_lora_strategy_kwargs(compute_base_fingerprints=True),
                 "module_patches": {
                     "main.model.aux_projection": create_model_spec(
                         nn.Linear,
@@ -592,221 +606,22 @@ class TestLoRAStrategySerialization:
             }
         )
 
-        restored = LoRAFineTuningStrategy.from_spec_dict(
+        restored = FineTuningStrategy.from_spec_dict(
             source.to_spec_dict(),
             models=_build_baseline_strategy_kwargs()["models"],
         )
 
-        assert isinstance(restored.hooks[0], LoRAApplyHook)
-        assert isinstance(restored.hooks[1], ModulePatchHook)
-        assert isinstance(restored.hooks[2], TrainableParameterHook)
-        assert restored.lora_rank == 1
-        assert restored.lora_alpha == 1.0
-        assert restored.lora_target_patterns == ("main.model.projection",)
+        assert isinstance(restored.hooks[0], BaseFingerprintHook)
+        assert isinstance(restored.hooks[1], LoRAHook)
+        assert isinstance(restored.hooks[2], ModulePatchHook)
+        assert isinstance(restored.hooks[3], TrainableParameterHook)
+        assert isinstance(restored.peft_config, LoRAConfig)
+        assert restored.peft_config.rank == 1
+        assert restored.peft_config.alpha == 1.0
+        assert restored.peft_config.lora_target_patterns == ("main.model.projection",)
         assert set(restored.module_patches) == {"main.model.aux_projection"}
         assert restored.trainable_patterns == ("main.model.projection.*",)
         assert restored._optimizer_parameter_names is not None
-
-
-class TestLoRAStrategyAdapterSaveAndLoad:
-    def test_save_adapter_saves_all_trainable_states(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-        strategy = LoRAFineTuningStrategy(
-            **{
-                **baseline_strategy_kwargs,
-                **_lora_strategy_kwargs(),
-                "module_patches": {
-                    "main.model.aux_projection": create_model_spec(
-                        nn.Linear,
-                        in_features=8,
-                        out_features=1,
-                    )
-                },
-                "trainable_patterns": ("main.model.projection.*",),
-            }
-        )
-
-        adapter_root = tmp_path / "adapter"
-        adapter_dir = strategy.save_adapter(adapter_root)
-
-        assert adapter_dir == adapter_root / "lora"
-        manifest = json.loads((adapter_dir / "manifest.json").read_text())
-        adapter_state = torch.load(
-            adapter_dir / "models" / "main" / "adapter.pt",
-            weights_only=True,
-        )
-        lora_state = adapter_state["lora"]
-        extras_state = adapter_state["extras"]
-        patches_state = adapter_state["patch"]
-        lora_parameter_count = sum(tensor.numel() for tensor in lora_state.values())
-        extra_trainable_parameter_count = sum(
-            tensor.numel() for tensor in extras_state.values()
-        )
-        expected_summary = {
-            "lora_tensor_count": len(lora_state),
-            "lora_parameter_count": lora_parameter_count,
-            "extra_trainable_tensor_count": len(extras_state),
-            "extra_trainable_parameter_count": extra_trainable_parameter_count,
-            "trainable_parameter_count": (
-                lora_parameter_count + extra_trainable_parameter_count
-            ),
-            "total_parameter_count": sum(
-                parameter.numel() for parameter in strategy.models["main"].parameters()
-            ),
-        }
-
-        assert manifest["kind"] == "nvalchemi_lora"
-        assert "lora_state" not in manifest["models"]["main"]
-        assert "extras_state" not in manifest["models"]["main"]
-        assert "patches_state" not in manifest["models"]["main"]
-        assert manifest["models"]["main"]["parameter_summary"] == expected_summary
-        assert set(lora_state) == {
-            "model.lora_adapter.weight",
-            "model.lora_adapter.bias",
-        }
-        assert set(extras_state) == {
-            "model.projection.weight",
-            "model.projection.bias",
-        }
-        assert set(patches_state) == {
-            "model.aux_projection.weight",
-            "model.aux_projection.bias",
-        }
-        assert set(lora_state).isdisjoint(extras_state)
-        assert set(lora_state).isdisjoint(patches_state)
-        assert set(extras_state).isdisjoint(patches_state)
-
-    def test_save_adapter_can_export_ema_inference_model(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-        strategy = LoRAFineTuningStrategy(
-            **{**baseline_strategy_kwargs, **_lora_strategy_kwargs()}
-        )
-        ema_model = copy.deepcopy(strategy.models["main"])
-        with torch.no_grad():
-            strategy.models["main"].model.lora_adapter.weight.fill_(2.0)
-            ema_model.model.lora_adapter.weight.fill_(9.0)
-        strategy.inference_model = ema_model
-
-        adapter_dir = strategy.save_adapter(tmp_path / "adapter", use_ema=True)
-        adapter_state = torch.load(
-            adapter_dir / "models" / "main" / "adapter.pt",
-            weights_only=True,
-        )
-        lora_state = adapter_state["lora"]
-
-        assert torch.equal(
-            lora_state["model.lora_adapter.weight"],
-            torch.full_like(lora_state["model.lora_adapter.weight"], 9.0),
-        )
-
-    def test_save_adapter_unwraps_ddp_model(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
-        strategy = LoRAFineTuningStrategy(
-            **{**baseline_strategy_kwargs, **_lora_strategy_kwargs()}
-        )
-        strategy.models["main"] = _FakeDDP(strategy.models["main"])
-
-        adapter_dir = strategy.save_adapter(tmp_path / "adapter")
-        adapter_state = torch.load(
-            adapter_dir / "models" / "main" / "adapter.pt",
-            weights_only=True,
-        )
-        lora_state = adapter_state["lora"]
-
-        assert lora_state
-        assert all(not key.startswith("module.") for key in lora_state)
-
-    def test_load_adapter_into_model_applies_save_adapter(
-        self,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        from test.training.conftest import _build_baseline_strategy_kwargs
-
-        source = LoRAFineTuningStrategy(
-            **{
-                **baseline_strategy_kwargs,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": ("main.model.projection",),
-            }
-        )
-        with torch.no_grad():
-            source.models["main"].model.projection.lora_B.fill_(0.05)
-        x = torch.randn(4, 8)
-        expected = source.models["main"].model.projection(x)
-        adapter_root = tmp_path / "adapter"
-        source.save_adapter(adapter_root)
-
-        base_model = _build_baseline_strategy_kwargs()["models"]
-        loaded = LoRAFineTuningStrategy.load_adapter_into_model(
-            base_model, adapter_root
-        )
-
-        assert loaded is base_model
-        torch.testing.assert_close(loaded.model.projection(x), expected)
-
-    def test_load_adapter_into_model_detects_base_fingerprint_mismatch(
-        self,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-
-        source = LoRAFineTuningStrategy(
-            **{
-                **baseline_strategy_kwargs,
-                "lora_rank": 1,
-                "lora_alpha": 1.0,
-                "lora_target_patterns": ("main.model.projection",),
-            }
-        )
-        adapter_dir = source.save_adapter(tmp_path / "adapter")
-        different_base = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=16))
-
-        with pytest.raises(ValueError, match="fingerprint mismatch"):
-            LoRAFineTuningStrategy.load_adapter_into_model(
-                different_base,
-                adapter_dir,
-            )
-
-    def test_load_adapter_rejects_newer_schema_version(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        baseline_strategy_kwargs: dict[str, Any],
-        tmp_path: Any,
-    ) -> None:
-        _install_fake_peft(monkeypatch)
-        strategy = LoRAFineTuningStrategy(
-            **{**baseline_strategy_kwargs, **_lora_strategy_kwargs()}
-        )
-        adapter_dir = strategy.save_adapter(tmp_path / "adapter")
-        manifest_path = adapter_dir / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["schema_version"] = 999
-        manifest_path.write_text(json.dumps(manifest))
-
-        with pytest.raises(ValueError, match="schema version"):
-            LoRAFineTuningStrategy.load_adapter_into_model(
-                strategy.models["main"],
-                adapter_dir,
-            )
 
 
 class TestLoRAStrategyCheckpointsAndLoad:
@@ -817,7 +632,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
 
         return {
             **_build_baseline_strategy_kwargs(),
-            **_lora_strategy_kwargs(),
+            **_lora_strategy_kwargs(compute_base_fingerprints=True),
             "module_patches": {
                 "main.model.aux_projection": create_model_spec(
                     nn.Linear,
@@ -830,7 +645,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
 
     @staticmethod
     def _set_checkpoint_state(
-        strategy: LoRAFineTuningStrategy,
+        strategy: FineTuningStrategy,
         *,
         step_count: int = 7,
     ) -> None:
@@ -846,7 +661,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
 
     @staticmethod
     def _assert_checkpoint_state(
-        strategy: LoRAFineTuningStrategy,
+        strategy: FineTuningStrategy,
         *,
         step_count: int = 7,
     ) -> None:
@@ -895,16 +710,16 @@ class TestLoRAStrategyCheckpointsAndLoad:
         tmp_path: Any,
     ) -> None:
         _install_fake_peft(monkeypatch)
-        strategy = LoRAFineTuningStrategy(**self._strategy_kwargs())
+        strategy = FineTuningStrategy(**self._strategy_kwargs())
         self._set_checkpoint_state(strategy)
 
         with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
-            strategy.save_checkpoint(tmp_path)
+            strategy.save_checkpoint(tmp_path, save_trainable_state_only=True)
 
         metadata = json.loads(
             (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
         )
-        restored = LoRAFineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
+        restored = FineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
 
         assert self._checkpoint_weight_keys(tmp_path) == [
             "model.aux_projection.bias",
@@ -916,7 +731,7 @@ class TestLoRAStrategyCheckpointsAndLoad:
         ]
         assert metadata["model_state_load"] == "partial"
         assert metadata["base_model_fingerprints"] == {"main": "fingerprint-ok"}
-        assert isinstance(restored, LoRAFineTuningStrategy)
+        assert isinstance(restored, FineTuningStrategy)
         self._assert_checkpoint_state(restored)
 
     def test_lora_strategy_save_checkpoint_then_restore_checkpoint_restores_partial_state(
@@ -925,12 +740,12 @@ class TestLoRAStrategyCheckpointsAndLoad:
         tmp_path: Any,
     ) -> None:
         _install_fake_peft(monkeypatch)
-        source = LoRAFineTuningStrategy(**self._strategy_kwargs())
+        source = FineTuningStrategy(**self._strategy_kwargs())
         self._set_checkpoint_state(source)
         with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
-            source.save_checkpoint(tmp_path)
+            source.save_checkpoint(tmp_path, save_trainable_state_only=True)
 
-        restored = LoRAFineTuningStrategy(**self._strategy_kwargs())
+        restored = FineTuningStrategy(**self._strategy_kwargs())
         with torch.no_grad():
             restored.models["main"].model.lora_adapter.weight.fill_(-3.0)
             restored.models["main"].model.lora_adapter.bias.fill_(-4.0)
@@ -954,9 +769,9 @@ class TestLoRAStrategyCheckpointsAndLoad:
             tmp_path,
             step_interval=1,
             async_save=False,
-            save_trainable_parameters_only=True,
+            save_trainable_state_only=True,
         )
-        strategy = LoRAFineTuningStrategy(
+        strategy = FineTuningStrategy(
             **{
                 **self._strategy_kwargs(),
                 "hooks": [hook],
@@ -1004,22 +819,28 @@ class TestLoRAStrategyCheckpointsAndLoad:
             for name, parameter in source.models["main"].named_parameters()
         }
 
-        strategy = LoRAFineTuningStrategy.from_pretrained_checkpoint(
+        strategy = FineTuningStrategy.from_pretrained_checkpoint(
             tmp_path,
             optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.Adam),
             training_fn=baseline_strategy_kwargs["training_fn"],
             loss_fn=baseline_strategy_kwargs["loss_fn"],
-            lora_target_patterns=("main.model.projection",),
+            peft_config=LoRAConfig(
+                rank=1,
+                alpha=1.0,
+                lora_target_patterns=("main.model.projection",),
+            ),
+            compute_base_fingerprints=True,
             num_steps=1,
         )
 
-        assert isinstance(strategy, LoRAFineTuningStrategy)
+        assert isinstance(strategy, FineTuningStrategy)
         assert strategy.step_count == 0
         assert strategy.batch_count == 0
         assert strategy.num_epochs is None
         assert strategy.num_steps == 1
-        assert isinstance(strategy.hooks[0], LoRAApplyHook)
-        assert isinstance(strategy.hooks[1], TrainableParameterHook)
+        assert isinstance(strategy.hooks[0], BaseFingerprintHook)
+        assert isinstance(strategy.hooks[1], LoRAHook)
+        assert isinstance(strategy.hooks[2], TrainableParameterHook)
         assert hasattr(strategy.models["main"].model, "lora_adapter")
         loaded_state = dict(strategy.models["main"].named_parameters())
         for name, parameter in source_state.items():
@@ -1031,9 +852,9 @@ class TestLoRAStrategyCheckpointsAndLoad:
         tmp_path: Any,
     ) -> None:
         _install_fake_peft(monkeypatch)
-        source = LoRAFineTuningStrategy(**self._strategy_kwargs())
+        source = FineTuningStrategy(**self._strategy_kwargs())
         with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
-            source.save_checkpoint(tmp_path)
+            source.save_checkpoint(tmp_path, save_trainable_state_only=True)
 
         metadata_path = tmp_path / "strategy" / "checkpoints" / "0.json"
         metadata = json.loads(metadata_path.read_text())
@@ -1046,7 +867,366 @@ class TestLoRAStrategyCheckpointsAndLoad:
         )
 
         with pytest.raises(ValueError, match="base fingerprint mismatch"):
-            LoRAFineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
+            FineTuningStrategy.load_checkpoint(tmp_path, map_location="cpu")
+
+
+class TestLoadPeftCheckpointIntoModel:
+    @staticmethod
+    def _strategy_kwargs() -> dict[str, Any]:
+        """Return generic fine-tuning kwargs with LoRA PEFT config."""
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        return {
+            **_build_baseline_strategy_kwargs(),
+            "compute_base_fingerprints": True,
+            "peft_config": LoRAConfig(
+                rank=1,
+                alpha=1.0,
+                lora_target_patterns=("main.model.projection",),
+            ),
+        }
+
+    @staticmethod
+    def _strategy_metadata_path(root: Any, index: int = 0) -> Any:
+        """Return the saved strategy metadata path for ``index``."""
+        return root / "strategy" / "checkpoints" / f"{index}.json"
+
+    def test_loads_lora_from_full_strategy_checkpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        base_model = _build_baseline_strategy_kwargs()["models"]
+        with torch.no_grad():
+            source.models["main"].model.lora_adapter.weight.fill_(3.0)
+            source.models["main"].model.lora_adapter.bias.fill_(4.0)
+            source.models["main"].model.projection.weight.fill_(7.0)
+        source.save_checkpoint(tmp_path)
+
+        loaded = load_peft_checkpoint_into_model(
+            base_model,
+            tmp_path,
+            merge=False,
+        )
+
+        assert loaded is base_model
+        assert torch.equal(
+            loaded.model.lora_adapter.weight,
+            torch.full_like(loaded.model.lora_adapter.weight, 3.0),
+        )
+        assert torch.equal(
+            loaded.model.lora_adapter.bias,
+            torch.full_like(loaded.model.lora_adapter.bias, 4.0),
+        )
+        assert torch.equal(
+            loaded.model.projection.weight,
+            torch.full_like(loaded.model.projection.weight, 7.0),
+        )
+
+    def test_loads_lora_from_trainable_only_strategy_checkpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        with torch.no_grad():
+            source.models["main"].model.lora_adapter.weight.fill_(5.0)
+            source.models["main"].model.lora_adapter.bias.fill_(6.0)
+        with pytest.warns(UserWarning, match=_PARTIAL_CHECKPOINT_HOOK_WARNING):
+            source.save_checkpoint(tmp_path, save_trainable_state_only=True)
+
+        base_model = _build_baseline_strategy_kwargs()["models"]
+        loaded = load_peft_checkpoint_into_model(
+            base_model,
+            tmp_path,
+            merge=False,
+        )
+
+        assert loaded is base_model
+        assert torch.equal(
+            loaded.model.lora_adapter.weight,
+            torch.full_like(loaded.model.lora_adapter.weight, 5.0),
+        )
+        assert torch.equal(
+            loaded.model.lora_adapter.bias,
+            torch.full_like(loaded.model.lora_adapter.bias, 6.0),
+        )
+
+    def test_rejects_non_peft_checkpoint(
+        self,
+        baseline_strategy_kwargs: dict[str, Any],
+        tmp_path: Any,
+    ) -> None:
+        source = TrainingStrategy(**baseline_strategy_kwargs)
+        source.save_checkpoint(tmp_path)
+
+        with pytest.raises(ValueError, match="peft_method"):
+            load_peft_checkpoint_into_model(source.models["main"], tmp_path)
+
+    def test_rejects_unsupported_peft_method(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        source.save_checkpoint(tmp_path)
+        metadata_path = tmp_path / "strategy" / "checkpoints" / "0.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["peft_method"] = "ia3"
+        metadata_path.write_text(json.dumps(metadata))
+
+        with pytest.raises(ValueError, match="Unsupported PEFT method"):
+            load_peft_checkpoint_into_model(source.models["main"], tmp_path)
+
+    def test_fingerprint_mismatch_can_warn_and_continue(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        source.save_checkpoint(tmp_path)
+        metadata_path = tmp_path / "strategy" / "checkpoints" / "0.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["base_model_fingerprints"] = {"main": "different-fingerprint"}
+        metadata_path.write_text(json.dumps(metadata))
+
+        with pytest.warns(UserWarning, match="fingerprint mismatch"):
+            loaded = load_peft_checkpoint_into_model(
+                source.models["main"],
+                tmp_path,
+                merge=False,
+                strict=False,
+            )
+
+        assert loaded is source.models["main"]
+
+    def test_rejects_custom_lora_wrapper_without_allowed_import_path(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        source.save_checkpoint(tmp_path)
+        metadata_path = self._strategy_metadata_path(tmp_path)
+        metadata = json.loads(metadata_path.read_text())
+        metadata["peft_config"]["wrapper_registrations"] = [
+            [
+                "torch.nn.modules.linear.Linear",
+                (
+                    f"{_CustomCheckpointLoRAWrapper.__module__}."
+                    f"{_CustomCheckpointLoRAWrapper.__qualname__}"
+                ),
+            ]
+        ]
+        metadata_path.write_text(json.dumps(metadata))
+
+        with pytest.raises(ValueError, match="LoRA wrapper class import path"):
+            load_peft_checkpoint_into_model(
+                source.models["main"],
+                tmp_path,
+                merge=False,
+            )
+
+    @pytest.mark.parametrize("allow_namespace", [False, True])
+    def test_loads_custom_lora_wrapper_with_allowed_import_path_or_namespace(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        allow_namespace: bool,
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        registrations: list[tuple[type[nn.Module], type[nn.Module]]] = []
+        monkeypatch.setattr(
+            "nvalchemi.training.peft._peft.register_lora_wrapper",
+            lambda layer_cls, wrapper_cls: registrations.append(
+                (layer_cls, wrapper_cls)
+            ),
+        )
+        source = FineTuningStrategy(**self._strategy_kwargs())
+        source.save_checkpoint(tmp_path)
+        metadata_path = self._strategy_metadata_path(tmp_path)
+        metadata = json.loads(metadata_path.read_text())
+        wrapper_path = (
+            f"{_CustomCheckpointLoRAWrapper.__module__}."
+            f"{_CustomCheckpointLoRAWrapper.__qualname__}"
+        )
+        metadata["peft_config"]["wrapper_registrations"] = [
+            ["torch.nn.modules.linear.Linear", wrapper_path]
+        ]
+        metadata_path.write_text(json.dumps(metadata))
+        if allow_namespace:
+            wrapper_path = f"{_CustomCheckpointLoRAWrapper.__module__}.*"
+
+        loaded = load_peft_checkpoint_into_model(
+            source.models["main"],
+            tmp_path,
+            allowed_import_paths={wrapper_path},
+            merge=False,
+        )
+
+        assert loaded is source.models["main"]
+        assert registrations == [(nn.Linear, _CustomCheckpointLoRAWrapper)]
+
+    def test_rejects_custom_module_patch_without_allowed_import_path(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(
+            **{
+                **self._strategy_kwargs(),
+                "module_patches": {
+                    "main.model.aux_projection": create_model_spec(
+                        _CustomCheckpointPatch,
+                        in_features=8,
+                        out_features=1,
+                    )
+                },
+            }
+        )
+        source.save_checkpoint(tmp_path)
+        base_model = _build_baseline_strategy_kwargs()["models"]
+
+        with pytest.raises(ValueError, match="module patch"):
+            load_peft_checkpoint_into_model(
+                base_model,
+                tmp_path,
+                merge=False,
+            )
+
+    @pytest.mark.parametrize("allow_namespace", [False, True])
+    def test_loads_custom_module_patch_with_allowed_import_path_or_namespace(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        allow_namespace: bool,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(
+            **{
+                **self._strategy_kwargs(),
+                "module_patches": {
+                    "main.model.aux_projection": create_model_spec(
+                        _CustomCheckpointPatch,
+                        in_features=8,
+                        out_features=1,
+                    )
+                },
+            }
+        )
+        source.save_checkpoint(tmp_path)
+        patch_path = (
+            f"{_CustomCheckpointPatch.__module__}.{_CustomCheckpointPatch.__qualname__}"
+        )
+        base_model = _build_baseline_strategy_kwargs()["models"]
+        if allow_namespace:
+            patch_path = f"{_CustomCheckpointPatch.__module__}.*"
+
+        loaded = load_peft_checkpoint_into_model(
+            base_model,
+            tmp_path,
+            allowed_import_paths={patch_path},
+            merge=False,
+        )
+
+        assert loaded is base_model
+        assert isinstance(loaded.model.aux_projection, _CustomCheckpointPatch)
+
+    def test_loads_torch_linear_module_patch_by_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        source = FineTuningStrategy(
+            **{
+                **self._strategy_kwargs(),
+                "module_patches": {
+                    "main.model.aux_projection": create_model_spec(
+                        nn.Linear,
+                        in_features=8,
+                        out_features=1,
+                    )
+                },
+            }
+        )
+        source.save_checkpoint(tmp_path)
+        base_model = _build_baseline_strategy_kwargs()["models"]
+
+        loaded = load_peft_checkpoint_into_model(
+            base_model,
+            tmp_path,
+            merge=False,
+        )
+
+        assert loaded is base_model
+        assert isinstance(loaded.model.aux_projection, nn.Linear)
+
+    def test_loads_custom_imports_with_trust_remote_code(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        from test.training.conftest import _build_baseline_strategy_kwargs
+
+        _install_fake_peft(monkeypatch)
+        monkeypatch.setattr(
+            "nvalchemi.training.peft._peft.register_lora_wrapper",
+            lambda layer_cls, wrapper_cls: None,
+        )
+        source = FineTuningStrategy(
+            **{
+                **self._strategy_kwargs(),
+                "module_patches": {
+                    "main.model.aux_projection": create_model_spec(
+                        _CustomCheckpointPatch,
+                        in_features=8,
+                        out_features=1,
+                    )
+                },
+            }
+        )
+        source.save_checkpoint(tmp_path)
+        metadata_path = self._strategy_metadata_path(tmp_path)
+        metadata = json.loads(metadata_path.read_text())
+        metadata["peft_config"]["wrapper_registrations"] = [
+            [
+                "torch.nn.modules.linear.Linear",
+                (
+                    f"{_CustomCheckpointLoRAWrapper.__module__}."
+                    f"{_CustomCheckpointLoRAWrapper.__qualname__}"
+                ),
+            ]
+        ]
+        metadata_path.write_text(json.dumps(metadata))
+        base_model = _build_baseline_strategy_kwargs()["models"]
+
+        loaded = load_peft_checkpoint_into_model(
+            base_model,
+            tmp_path,
+            merge=False,
+            trust_remote_code=True,
+        )
+
+        assert loaded is base_model
+        assert isinstance(loaded.model.aux_projection, _CustomCheckpointPatch)
 
 
 class TestLoRAWrapperRegistrations:

@@ -168,7 +168,7 @@ dependency-metadata = [
 ]
 
 [tool.uv.sources]
-nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo.git", rev = "0595ae74f246d047b168e6821ce8358783d4bed7" }
+nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo.git", rev = "ae523cb506c85283a2ac2f4089bd187fee1e3ec8" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },

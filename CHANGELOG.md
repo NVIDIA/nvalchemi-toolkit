@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add support for PEFT fine-tuning within `FineTuningStrategy`, including
+  LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
+  and base-model fingerprint checks for PEFT checkpoint loading.
 - MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the

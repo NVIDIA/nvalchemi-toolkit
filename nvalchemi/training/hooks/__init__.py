@@ -20,23 +20,41 @@ from nvalchemi.hooks import TorchProfilerHook
 from nvalchemi.training.hooks.checkpoint import CheckpointHook
 from nvalchemi.training.hooks.ddp import DDPHook
 from nvalchemi.training.hooks.ema import EMAHook
-from nvalchemi.training.hooks.finetune import ModulePatchHook, TrainableParameterHook
+from nvalchemi.training.hooks.finetune import (
+    FineTuningSummaryHook,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
-from nvalchemi.training.peft.lora_hooks import LoRAApplyHook
 
 __all__ = [
     "CheckpointHook",
+    "BaseFingerprintHook",
     "DDPHook",
     "EMAHook",
-    "LoRAApplyHook",
+    "LoRAHook",
     "MixedPrecisionHook",
     "TorchProfilerHook",
+    "FineTuningSummaryHook",
     "ModulePatchHook",
     "TrainableParameterHook",
     "TrainingUpdateHook",
     "TrainingUpdateOrchestrator",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Lazily expose PEFT hooks."""
+    if name == "BaseFingerprintHook":
+        from nvalchemi.training.peft.fingerprints import BaseFingerprintHook
+
+        return BaseFingerprintHook
+    if name == "LoRAHook":
+        from nvalchemi.training.peft.lora_hook import LoRAHook
+
+        return LoRAHook
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

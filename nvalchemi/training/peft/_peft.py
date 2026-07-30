@@ -19,7 +19,7 @@ from __future__ import annotations
 from physicsnemo.experimental import peft as _physicsnemo_peft
 from physicsnemo.experimental.peft import utils as _physicsnemo_peft_utils
 
-LoRAConfig = _physicsnemo_peft.LoRAConfig
+PhysicsNeMoLoRAConfig = _physicsnemo_peft.LoRAConfig
 LoRAInit = _physicsnemo_peft.config.LoRAInit
 LoRALayer = _physicsnemo_peft.LoRALayer
 LoRALinear = _physicsnemo_peft.LoRALinear
