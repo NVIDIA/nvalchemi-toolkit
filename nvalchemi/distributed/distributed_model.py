@@ -1246,6 +1246,21 @@ class DistributedModel:
         if e_handle is not None:
             e_handle.wait()
 
+        # Other spec-declared rank partials (currently UMA stress) follow the
+        # same owned-energy algebra as energy: a raw SUM, with no /world. Mark
+        # them already global so sharded consolidation does not apply its normal
+        # replicated-energy autograd /world correction.
+        already_global_outputs = {"energy", "forces"}
+        for key in sorted(self._spec.all_reduce_outputs - already_global_outputs):
+            value = output.get(key)
+            if not isinstance(value, torch.Tensor):
+                continue
+            value = value.clone()
+            if grp is not None:
+                dist.all_reduce(value, op=dist.ReduceOp.SUM, group=grp)
+            output[key] = value
+            already_global_outputs.add(key)
+
         self._dist_ctx.gather_meta = None
         self._dist_ctx.owned_offset = 0
         _mark("reduce_outputs")
@@ -1254,7 +1269,7 @@ class DistributedModel:
             output,
             model_config=self._wrapper.model_config,
             world_size=self._world_size,
-            owned_only_outputs=frozenset({"energy", "forces"}),
+            owned_only_outputs=frozenset(already_global_outputs),
             all_reduce_outputs=frozenset(),
             halo_config=SimpleNamespace(mesh=mesh),
         )
