@@ -856,6 +856,54 @@ class TestEMAHookCheckpoint:
             torch.testing.assert_close(avg_b.state_dict()[k], avg_a.state_dict()[k])
         assert hook_b._pending_averaged_state is None
 
+    def test_partial_averaged_model_state_loads_non_strictly(self) -> None:
+        _, hook_a, state_a = _initialized_hook_and_state(seed=0, decay=0.5)
+        partial_state = {
+            **state_a,
+            "averaged_model_state": {
+                key: value
+                for key, value in state_a["averaged_model_state"].items()
+                if key == "module.weight"
+            },
+            "averaged_model_state_load": "partial",
+        }
+
+        # Test lazy restoration of pending model state.
+        pending_hook = EMAHook(model_key="main", decay=0.5)
+        pending_hook.load_state_dict(partial_state)
+        assert pending_hook.state_dict()["averaged_model_state_load"] == "partial"
+        pending_source = _make_linear(seed=1)
+        pending_bias = pending_source.bias.detach().clone()
+        pending_ctx = _make_ctx({"main": pending_source}, step_count=0)
+        pending_ctx.workflow = object()
+        pending_hook(pending_ctx, TrainingStage.SETUP)
+        assert pending_hook._pending_averaged_state is None
+        pending_avg_state = pending_hook.get_averaged_model().state_dict()
+        torch.testing.assert_close(
+            pending_avg_state["module.weight"],
+            partial_state["averaged_model_state"]["module.weight"],
+        )
+        torch.testing.assert_close(pending_avg_state["module.bias"], pending_bias)
+
+        # Test restore with already initialized EMA.
+        _, initialized_hook, _ = _initialized_hook_and_state(seed=2, decay=0.5)
+        initialized_bias = (
+            initialized_hook.get_averaged_model()
+            .state_dict()["module.bias"]
+            .detach()
+            .clone()
+        )
+        initialized_hook.load_state_dict(partial_state)
+        assert initialized_hook._pending_averaged_state is None
+        initialized_avg_state = initialized_hook.get_averaged_model().state_dict()
+        torch.testing.assert_close(
+            initialized_avg_state["module.weight"],
+            partial_state["averaged_model_state"]["module.weight"],
+        )
+        torch.testing.assert_close(
+            initialized_avg_state["module.bias"], initialized_bias
+        )
+
 
 # ---------------------------------------------------------------------------
 # Inference-model write via set_inference_model (Phase C)

@@ -100,9 +100,10 @@ __all__ = [
     "EMAHook",
     "FineTuningStrategy",
     "LinearWeight",
-    "LoRAFineTuningStrategy",
+    "LoRAConfig",
     "LossWeightSchedule",
     "OptimizerConfig",
+    "PeftConfig",
     "PiecewiseWeight",
     "ReductionContext",
     "StressHuberLoss",
@@ -123,6 +124,7 @@ __all__ = [
     "fit_atomic_reference_energies",
     "freeze_unconfigured_models",
     "is_lora_layer",
+    "load_peft_checkpoint_into_model",
     "loss_component_to_spec",
     "load_checkpoint",
     "move_to_devices",
@@ -139,9 +141,11 @@ __all__ = [
 def __getattr__(name: str) -> object:
     """Lazily expose PEFT helpers."""
     if name in {
-        "LoRAFineTuningStrategy",
+        "LoRAConfig",
+        "PeftConfig",
         "available_lora_wrappers",
         "is_lora_layer",
+        "load_peft_checkpoint_into_model",
         "register_builtin_lora_wrappers",
     }:
         from nvalchemi.training import peft

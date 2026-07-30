@@ -477,6 +477,59 @@ def _model_local_parameter_names(model_name: str, names: Iterable[str]) -> list[
     return [name.removeprefix(prefix) for name in names if name.startswith(prefix)]
 
 
+def _model_local_buffer_names(
+    workflow: Any,
+    model_name: str,
+    state_dict: Mapping[str, Any],
+) -> set[str]:
+    """Return persistent buffer names for a live workflow model."""
+    live_model = _checkpoint_model(workflow.models[model_name])
+    state_keys = set(state_dict)
+    return {name for name, _buffer in live_model.named_buffers() if name in state_keys}
+
+
+def _filter_ema_hook_states_to_trainable_state(
+    snapshot: dict[str, Any],
+    trainable_names_by_model: Mapping[str, set[str]],
+    buffer_names_by_model: Mapping[str, set[str]],
+) -> None:
+    """Filter EMA averaged model state to trainable parameters plus buffers if EMA is enabled."""
+    hook_states = snapshot.get("hook_states", {})
+    if not isinstance(hook_states, Mapping):
+        return
+
+    for key, state in hook_states.items():
+        if not str(key).startswith("nvalchemi.training.hooks.ema.EMAHook:"):
+            continue
+        if not isinstance(state, dict):
+            continue
+        model_key = state.get("model_key")
+        averaged_state = state.get("averaged_model_state")
+        if not isinstance(model_key, str) or not isinstance(averaged_state, Mapping):
+            continue
+        if model_key not in trainable_names_by_model:
+            continue
+
+        parameter_keys = {
+            f"module.{name}" for name in trainable_names_by_model[model_key]
+        }
+        missing = sorted(parameter_keys - set(averaged_state))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing EMA trainable parameter(s): {missing!r}."
+            )
+        buffer_keys = {
+            f"module.{name}"
+            for name in buffer_names_by_model.get(model_key, set())
+            if f"module.{name}" in averaged_state
+        }
+        keep_keys = parameter_keys | buffer_keys
+        state["averaged_model_state"] = _snapshot_state_dict(
+            {name: averaged_state[name] for name in sorted(keep_keys)}
+        )
+        state["averaged_model_state_load"] = "partial"
+
+
 def _filter_snapshot_to_trainable_state(
     snapshot: dict[str, Any],
     workflow: Any,
@@ -499,13 +552,25 @@ def _filter_snapshot_to_trainable_state(
         warnings.warn(warning_message, UserWarning, stacklevel=3)
 
     filtered_models = {}
+    trainable_names_by_model: dict[str, set[str]] = {}
+    buffer_names_by_model: dict[str, set[str]] = {}
     for model_name, (state_dict, spec) in snapshot["models"].items():
         names = set(_model_local_parameter_names(model_name, trainable_names))
+        buffers = _model_local_buffer_names(workflow, model_name, state_dict)
+        trainable_names_by_model[model_name] = names
+        buffer_names_by_model[model_name] = buffers
+        selected_state = _selected_state_dict(state_dict, names)
+        selected_state.update({name: state_dict[name] for name in sorted(buffers)})
         filtered_models[model_name] = (
-            _snapshot_state_dict(_selected_state_dict(state_dict, names)),
+            _snapshot_state_dict(selected_state),
             spec,
         )
     snapshot["models"] = filtered_models
+    _filter_ema_hook_states_to_trainable_state(
+        snapshot,
+        trainable_names_by_model,
+        buffer_names_by_model,
+    )
     # Mark model state as partial so model can be restored non-strictly in load_checkpoint.
     snapshot["strategy_metadata"]["model_state_load"] = "partial"
 
@@ -1532,7 +1597,7 @@ def save_checkpoint(
     associations: _Associations | None = None,
     checkpoint_index: int = -1,
     strategy: Any | None = None,
-    save_trainable_parameters_only: bool = False,
+    save_trainable_state_only: bool = False,
 ) -> int:
     """Save a checkpoint with a manifest.
 
@@ -1564,8 +1629,8 @@ def save_checkpoint(
         from the manifest's last index, or starts at ``0``.
     strategy
         Optional training strategy to save as a restartable checkpoint.
-    save_trainable_parameters_only
-        If ``True``, save only model parameters selected for optimizer setup
+    save_trainable_state_only
+        If ``True``, save optimizer-selected model parameters plus buffers
         and mark model state as partial for non-strict restore. Requires
         ``strategy``.
 
@@ -1596,9 +1661,9 @@ def save_checkpoint(
     if strategy is None and isinstance(models, TrainingStrategy):
         strategy = models
         models = None
-    if save_trainable_parameters_only and strategy is None:
+    if save_trainable_state_only and strategy is None:
         raise ValueError(
-            "save_trainable_parameters_only=True requires strategy checkpointing."
+            "save_trainable_state_only=True requires strategy checkpointing."
         )
     if strategy is not None:
         if not isinstance(strategy, TrainingStrategy):
@@ -1606,7 +1671,7 @@ def save_checkpoint(
                 "strategy must be a TrainingStrategy instance; got "
                 f"{type(strategy).__name__}."
             )
-        if save_trainable_parameters_only:
+        if save_trainable_state_only:
             snapshot = _create_checkpoint_snapshot(
                 root,
                 checkpoint_index=checkpoint_index,
@@ -1616,10 +1681,10 @@ def save_checkpoint(
                 snapshot,
                 strategy,
                 warning_message=(
-                    "Saving a checkpoint with save_trainable_parameters_only=True "
-                    "stores only trainable tensors. Restoring this checkpoint "
-                    "requires the saved model spec to reconstruct the exact "
-                    "base model weights."
+                    "Saving a checkpoint with save_trainable_state_only=True "
+                    "stores only optimizer-selected parameters and buffers. "
+                    "Restoring this checkpoint requires the saved model spec "
+                    "to reconstruct the exact base model weights."
                 ),
             )
             return _write_checkpoint_snapshot(root, snapshot)

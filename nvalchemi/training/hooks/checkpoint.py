@@ -71,8 +71,8 @@ class CheckpointHook(BaseModel):
     rank_zero_only : bool, optional
         If ``True``, only distributed rank 0 writes checkpoints. Default
         ``True``.
-    save_trainable_parameters_only : bool, optional
-        If ``True``, save only optimizer-selected trainable model state and
+    save_trainable_state_only : bool, optional
+        If ``True``, save optimizer-selected model parameters plus buffers and
         restore model weights non-strictly. Use this only when untrained model
         weights are reproducible from the saved model specs. Set ``False`` otherwise.
         Default ``False``.
@@ -118,12 +118,12 @@ class CheckpointHook(BaseModel):
         bool,
         Field(description="Restrict checkpoint writes to distributed rank 0."),
     ] = True
-    save_trainable_parameters_only: Annotated[
+    save_trainable_state_only: Annotated[
         bool,
         Field(
             description=(
-                "Save only optimizer-selected trainable model parameters instead of "
-                "full model state and track non-strict model state loading behavior."
+                "Save only optimizer-selected model parameters plus buffers instead "
+                "of full model state and track non-strict model state loading behavior."
             ),
         ),
     ] = False
@@ -243,15 +243,15 @@ class CheckpointHook(BaseModel):
             self.checkpoint_dir,
             strategy=ctx.workflow,
         )
-        if self.save_trainable_parameters_only:
+        if self.save_trainable_state_only:
             _filter_snapshot_to_trainable_state(
                 snapshot,
                 ctx.workflow,
                 warning_message=(
-                    "Saving a checkpoint with save_trainable_parameters_only=True "
-                    "stores only trainable tensors. Restoring this checkpoint "
-                    "requires the saved model spec to reconstruct the exact "
-                    "base model weights."
+                    "Saving a checkpoint with save_trainable_state_only=True "
+                    "stores only optimizer-selected parameters and buffers. "
+                    "Restoring this checkpoint requires the saved model spec "
+                    "to reconstruct the exact base model weights."
                 ),
             )
         if not self.async_save:

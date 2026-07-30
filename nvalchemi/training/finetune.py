@@ -27,9 +27,20 @@ from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training._spec import BaseSpec, create_model_spec_from_json
 from nvalchemi.training.hooks.finetune import (
+    FineTuningSummaryHook,
     FreezeMode,
     ModulePatchHook,
     TrainableParameterHook,
+)
+from nvalchemi.training.peft.config import (
+    PeftConfig,
+    peft_config_from_metadata,
+    peft_metadata_from_config,
+    peft_setup_hooks,
+)
+from nvalchemi.training.peft.fingerprints import (
+    BaseFingerprintHook,
+    validate_base_fingerprints,
 )
 from nvalchemi.training.strategy import TrainingStrategy
 
@@ -114,9 +125,18 @@ class FineTuningStrategy(TrainingStrategy):
     registration-time hooks derived from its convenience fields before any
     explicit ``hooks=`` supplied by the user:
 
+    * ``peft_config`` becomes PEFT-specific registration hooks, for example
+      LoRA adapter injection.
     * ``module_patches`` becomes a :class:`ModulePatchHook`.
     * ``freeze_patterns`` / ``trainable_patterns`` become a
       :class:`TrainableParameterHook`.
+
+    PEFT methods are configured with ``peft_config``; for example,
+    :class:`nvalchemi.training.peft.LoRAConfig` injects LoRA adapters into
+    matching linear modules. When ``peft_config`` is provided, ``freeze_patterns``
+    must be empty since the base model is considered frozen by default and PEFT
+    hooks register adapter parameters as trainable. Use ``trainable_patterns``
+    only for extra parameters that should remain trainable.
 
     Module patch targets are fully-qualified paths of the form
     ``"<model_key>.<module_path>.<child>"``, for example
@@ -125,34 +145,52 @@ class FineTuningStrategy(TrainingStrategy):
     added when missing. Use :func:`nvalchemi.training.create_model_spec` for
     module patches that must round-trip through :meth:`to_spec_dict`; direct
     ``torch.nn.Module`` instances are supported at runtime but are rejected by
-    serialization.
+    serialization. Module patches register their parameters as trainable by
+    default, so pattern filters do not need to include them and
+    ``freeze_patterns`` do not exclude them.
 
     Parameter patterns are matched against fully-qualified names such as
     ``"main.model.readouts.1.linear.weight"``. ``trainable_patterns`` alone is
     an allow-list: only matching parameters remain trainable and enter
-    optimizers. When ``freeze_patterns`` is also supplied, matching parameters
-    are excluded first, then ``trainable_patterns`` are re-included. With the
-    default ``freeze_mode="requires_grad"``, excluded parameters are
-    temporarily marked ``requires_grad=False`` during :meth:`run` and restored
+    optimizers. Module patch parameters and PEFT adapter parameters are registered
+    as trainable separately, as described above. When ``freeze_patterns`` is also
+    supplied, matching parameters are excluded first, then ``trainable_patterns`` are
+    re-included. With the default ``freeze_mode="requires_grad"``, excluded parameters
+    are temporarily marked ``requires_grad=False`` during :meth:`run` and restored
     afterward. Use ``freeze_mode="optimizer_only"`` when excluded parameters
     should still receive gradients but must not be updated by optimizers.
 
     Parameters
     ----------
+    peft_config : PeftConfig | None, optional
+        Parameter-efficient fine-tuning configuration. When provided, PEFT
+        registration hooks are prepended before module patches and trainable
+        parameter selection. Defaults to ``None``.
     module_patches : dict[str, BaseSpec | torch.nn.Module], optional
         Ordered module patches applied before optimizer construction.
     freeze_patterns : tuple[str, ...], optional
         Glob patterns excluded from training. Exclusions can be re-included by
-        ``trainable_patterns``.
+        ``trainable_patterns``. Must be empty when ``peft_config`` is provided.
     trainable_patterns : tuple[str, ...], optional
         Glob patterns included in the trainable parameter allow-list. When no
-        ``freeze_patterns`` are supplied, this is the complete allow-list.
+        ``freeze_patterns`` are supplied, this is the complete allow-list for
+        parameters not already registered as trainable, such as module patch
+        parameters. With ``peft_config``, use only for extra parameters beyond
+        adapters and module patches.
     freeze_mode : {"requires_grad", "optimizer_only"}
         Whether excluded parameters are temporarily frozen via
         ``requires_grad=False`` or only excluded from optimizers. Defaults to
         ``"requires_grad"``.
+    compute_base_fingerprints : bool, optional
+        Used only when ``peft_config`` is provided. If ``True``, compute
+        base-model fingerprints and include them in strategy metadata for
+        compatibility checks when loading PEFT checkpoints into a fresh base
+        model. Defaults to ``True``.
+
     Attributes
     ----------
+    peft_config : PeftConfig | None
+        Parameter-efficient fine-tuning configuration.
     module_patches : dict[str, BaseSpec | torch.nn.Module]
         User-declared module patches.
     freeze_patterns : tuple[str, ...]
@@ -161,6 +199,9 @@ class FineTuningStrategy(TrainingStrategy):
         Trainable parameter allow-list patterns.
     freeze_mode : {"requires_grad", "optimizer_only"}
         Parameter-freezing mode.
+    compute_base_fingerprints : bool
+        Whether PEFT base-model fingerprints are computed and serialized.
+
     Examples
     --------
     Replace a readout head, train only that head, and serialize the workflow
@@ -215,10 +256,12 @@ class FineTuningStrategy(TrainingStrategy):
         )
     """
 
+    peft_config: PeftConfig | None = None
     module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(default_factory=dict)
     freeze_patterns: tuple[str, ...] = ()
     trainable_patterns: tuple[str, ...] = ()
     freeze_mode: FreezeMode = "requires_grad"
+    compute_base_fingerprints: bool = True
 
     # Run-time states populated by hooks (e.g., ModulePatchHook and TrainableParameterHook) to keep track
     # of trainable and managed parameter names so that the individual hook implementations can be kept modular.
@@ -229,6 +272,16 @@ class FineTuningStrategy(TrainingStrategy):
     _registered_managed_parameter_names: dict[str, frozenset[str]] = PrivateAttr(
         default_factory=dict
     )
+    _base_fingerprints: dict[str, str] = PrivateAttr(default_factory=dict)
+    _peft_details: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _trainable_parameter_summary: dict[str, dict[str, int]] = PrivateAttr(
+        default_factory=dict
+    )
+
+    @property
+    def trainable_parameter_summary(self) -> Mapping[str, dict[str, int]]:
+        """Return trainable parameter counts grouped by registration source."""
+        return self._trainable_parameter_summary
 
     @model_validator(mode="before")
     @classmethod
@@ -238,13 +291,42 @@ class FineTuningStrategy(TrainingStrategy):
             return data
         normalized = dict(data)
         generated: list[Any] = []
+
+        # (1) PEFT-related hooks are prepended first if peft_config is provided.
+        peft_config = normalized.get("peft_config")
+        if isinstance(peft_config, dict):
+            peft_config = peft_config_from_metadata(peft_config)
+            normalized["peft_config"] = peft_config
+        if peft_config is not None:
+            if not isinstance(peft_config, PeftConfig):
+                raise TypeError(
+                    "FineTuningStrategy peft_config must be a PeftConfig; "
+                    f"got {type(peft_config).__name__}."
+                )
+            if tuple(normalized.get("freeze_patterns") or ()):
+                raise ValueError(
+                    "FineTuningStrategy with peft_config does not accept "
+                    "freeze_patterns; PEFT freezes the base model by default."
+                )
+            if normalized.get("compute_base_fingerprints", True):
+                generated.append(BaseFingerprintHook())
+            generated.extend(peft_setup_hooks(peft_config, normalized))
+
+        # (2) Module patching hook is prepended next.
         module_patches = normalized.get("module_patches") or {}
         if module_patches:
             generated.append(ModulePatchHook(patches=module_patches))
 
+        # (3) Trainable parameter hook is prepended next.
         freeze_patterns = tuple(normalized.get("freeze_patterns") or ())
         trainable_patterns = tuple(normalized.get("trainable_patterns") or ())
-        if freeze_patterns or trainable_patterns:
+        needs_trainable_filter = (
+            peft_config is not None
+            or bool(module_patches)
+            or bool(freeze_patterns)
+            or bool(trainable_patterns)
+        )
+        if needs_trainable_filter:
             generated.append(
                 TrainableParameterHook(
                     freeze_patterns=freeze_patterns,
@@ -252,6 +334,7 @@ class FineTuningStrategy(TrainingStrategy):
                     freeze_mode=normalized.get("freeze_mode", "requires_grad"),
                 )
             )
+            generated.append(FineTuningSummaryHook())
 
         if generated:
             normalized["hooks"] = [*generated, *list(normalized.get("hooks") or [])]
@@ -567,6 +650,18 @@ class FineTuningStrategy(TrainingStrategy):
             module patches.
         """
         spec = super().to_spec_dict()
+        if self.peft_config is not None:
+            spec.update(
+                peft_metadata_from_config(
+                    self.peft_config,
+                    self._peft_details,
+                )
+            )
+            spec["compute_base_fingerprints"] = self.compute_base_fingerprints
+            if self._base_fingerprints:
+                spec["base_model_fingerprints"] = dict(self._base_fingerprints)
+        if self._trainable_parameter_summary:
+            spec["trainable_parameter_summary"] = self._trainable_parameter_summary
         if self.module_patches:
             patch_specs: dict[str, dict[str, Any]] = {}
             for target, value in self.module_patches.items():
@@ -629,6 +724,20 @@ class FineTuningStrategy(TrainingStrategy):
                 spec.get("single_model_input")
             ),
         )
+
+        # Parse PEFT-related configuration and validate base model fingerprints if needed.
+        peft_config = None
+        if "peft_method" in spec:
+            peft_config = peft_config_from_metadata(spec)
+        compute_base_fingerprints = spec.get("compute_base_fingerprints", True)
+        if peft_config is not None and compute_base_fingerprints:
+            if "base_model_fingerprints" not in spec:
+                raise ValueError(
+                    "from_spec_dict: PEFT specs with compute_base_fingerprints=True "
+                    "must include base_model_fingerprints."
+                )
+            validate_base_fingerprints(model_input, spec["base_model_fingerprints"])
+
         return cls(
             models=model_input,
             optimizer_configs=strategy_spec._optimizer_configs_from_spec(
@@ -641,8 +750,10 @@ class FineTuningStrategy(TrainingStrategy):
             training_fn=strategy_spec._training_fn_from_spec(spec, training_fn),
             loss_fn=strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),
             devices=strategy_spec._devices_from_spec(spec["devices"]),
+            peft_config=peft_config,
             module_patches=module_patches,
             freeze_patterns=tuple(spec.get("freeze_patterns", ())),
             trainable_patterns=tuple(spec.get("trainable_patterns", ())),
             freeze_mode=spec.get("freeze_mode", "requires_grad"),
+            compute_base_fingerprints=compute_base_fingerprints,
         )

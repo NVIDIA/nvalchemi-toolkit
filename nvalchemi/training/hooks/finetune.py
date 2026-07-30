@@ -29,7 +29,11 @@ from nvalchemi.hooks._context import HookContext
 from nvalchemi.training._spec import BaseSpec
 from nvalchemi.training.optimizers import iter_qualified_named_parameters
 
-__all__ = ["ModulePatchHook", "TrainableParameterHook"]
+__all__ = [
+    "FineTuningSummaryHook",
+    "ModulePatchHook",
+    "TrainableParameterHook",
+]
 
 
 PatchValue = BaseSpec | torch.nn.Module
@@ -140,6 +144,53 @@ def _validate_registered_parameter_names(
         )
 
 
+def _parameter_summary(
+    names: set[str],
+    parameter_by_name: Mapping[str, torch.nn.Parameter],
+) -> dict[str, int]:
+    """Return tensor and scalar parameter counts."""
+    return {
+        "tensor_count": len(names),
+        "parameter_count": sum(
+            parameter_by_name[name].numel()
+            for name in names
+            if name in parameter_by_name
+        ),
+    }
+
+
+def _trainable_parameter_summary(
+    workflow: Any,
+    models: Mapping[str, torch.nn.Module],
+) -> dict[str, dict[str, int]]:
+    """Return final trainable parameter accounting grouped by registration source."""
+    # Get the final trainable parameters to be used by the optimizer.
+    parameter_by_name = dict(iter_qualified_named_parameters(models))
+    allowed = getattr(workflow, "_optimizer_parameter_names", None)
+    allowed_names = set(parameter_by_name) if allowed is None else set(allowed)
+    summary = {"all": _parameter_summary(allowed_names, parameter_by_name)}
+
+    # Get the trainable parameter counts registered by each source.
+    get_registered_trainable = getattr(
+        workflow,
+        "get_registered_trainable_parameter_names",
+        None,
+    )
+    registered_by_source = (
+        get_registered_trainable() if callable(get_registered_trainable) else {}
+    )
+    registered_names: set[str] = set()
+    for source, source_names in sorted(registered_by_source.items()):
+        selected_source_names = set(source_names) & allowed_names
+        registered_names.update(selected_source_names)
+        summary[source] = _parameter_summary(selected_source_names, parameter_by_name)
+    summary["extra"] = _parameter_summary(
+        allowed_names - registered_names,
+        parameter_by_name,
+    )
+    return summary
+
+
 class ModulePatchHook(BaseModel):
     """Patch model submodules at registration time.
 
@@ -160,7 +211,7 @@ class ModulePatchHook(BaseModel):
         and managed under the fixed ``"patch"`` source. Registered
         patch parameters are included in the final trainable allow-list by default
         and are protected from being overridden by other sources modifying the models.
-        Defaults to ``False`` for backward compatibility.
+        Defaults to ``True``.
 
     Attributes
     ----------
@@ -188,7 +239,7 @@ class ModulePatchHook(BaseModel):
 
     patches: dict[str, PatchValue] = Field(default_factory=dict)
 
-    register_parameters: bool = False
+    register_parameters: bool = True
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None
@@ -317,6 +368,35 @@ class ModulePatchHook(BaseModel):
             )
             patched_parameter_names.update(patch_parameter_names)
             workflow._patched_parameter_names = frozenset(patched_parameter_names)
+
+
+class FineTuningSummaryHook(BaseModel):
+    """Cache fine-tuning parameter counts after registration hooks run."""
+
+    frequency: ClassVar[int] = 1
+    stage: ClassVar[None] = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        """Return ``False`` because summary collection runs on registration."""
+        return False
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
+        """No-op stage hook; summary collection is handled by ``on_register``."""
+        return
+
+    def on_register(self, workflow: Any) -> None:
+        """Store trainable parameter counts on ``workflow``."""
+        models = getattr(workflow, "models", None)
+        if not isinstance(models, Mapping):
+            raise TypeError(
+                "FineTuningSummaryHook requires a workflow with a models mapping."
+            )
+        workflow._trainable_parameter_summary = _trainable_parameter_summary(
+            workflow,
+            models,
+        )
 
 
 class TrainableParameterHook(BaseModel):
