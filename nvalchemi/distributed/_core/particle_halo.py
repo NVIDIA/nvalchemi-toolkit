@@ -142,6 +142,13 @@ def _identify_ghosts_split(
     # fractional coordinates that miss PBC halo atoms at cell boundaries and
     # under-count neighbors on per-rank neighbor lists.
     frac_pos = positions @ inv_cell
+
+    # Use canonical fractional coordinates only when deciding which receiver
+    # needs each atom. Keep the original Cartesian positions for transmission;
+    # the receiver's neighbor list applies the required integer cell image.
+    pbc = partitioner.pbc.to(device=positions.device)
+    frac_pos = torch.where(pbc.unsqueeze(0), frac_pos - torch.floor(frac_pos), frac_pos)
+
     gw_frac = _ghost_width_fractional(partitioner, config.ghost_width).to(
         device=positions.device
     )

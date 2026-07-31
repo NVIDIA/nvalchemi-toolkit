@@ -24,8 +24,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 import torch
 import torch.distributed as dist
+import torch.multiprocessing as mp
+from _dd_harness import nccl_worker
 from _gloo_harness import run_gloo
 from torch.distributed import DeviceMesh
 
@@ -247,6 +250,139 @@ def _crossed_atom_force_matches_same_geometry_reference(
         )
 
 
+def _unwrapped_periodic_migrant_force_matches_reference(
+    rank: int,
+    world_size: int,
+    _queue: Any = None,
+    device_type: str = "cpu",
+) -> None:
+    """An unwrapped migrant must remain visible across an internal boundary."""
+    assert world_size == 4
+    dtype = torch.float64
+    device = (
+        torch.device(f"cuda:{rank}") if device_type == "cuda" else torch.device("cpu")
+    )
+    box = 20.0
+    cell = torch.eye(3, dtype=dtype, device=device) * box
+    pbc = torch.ones(3, dtype=torch.bool, device=device)
+    mesh = DeviceMesh(
+        device_type,
+        list(range(world_size)),
+        mesh_dim_names=("domain",),
+    )
+    domain_config = DomainConfig(
+        cutoff=1.0,
+        skin=0.5,
+        mesh=mesh,
+        grid_dims=(1, 1, 4),
+    )
+    partitioner = SpatialPartitioner(
+        config=domain_config,
+        cell_matrix=cell.unsqueeze(0),
+        pbc=pbc.unsqueeze(0),
+    )
+    assert partitioner.rank_grid == (1, 1, 4)
+
+    # The migrant previously crossed the global periodic boundary. Its raw
+    # coordinate therefore carries a +20 Å box offset, while its physical
+    # position is obtained modulo the cell.
+    positions_before_crossing = torch.tensor(
+        [
+            [10.0, 10.0, 24.9],  # physical z=4.9, owned by rank 0
+            [10.0, 10.0, 5.6],  # rank-1 interaction partner
+            [10.0, 10.0, 12.5],  # rank-2 non-interacting atom
+            [10.0, 10.0, 17.5],  # rank-3 non-interacting atom
+        ],
+        dtype=dtype,
+        device=device,
+    )
+    positions_at_compute = positions_before_crossing.clone()
+    positions_at_compute[0, 2] = 25.1  # physical z=5.1
+    reference_positions = positions_at_compute.clone()
+    reference_positions[0, 2] = 5.1
+
+    assert torch.equal(
+        partitioner.assign_atoms_to_ranks(positions_before_crossing),
+        torch.tensor([0, 1, 2, 3], device=device),
+    )
+
+    def _batch(positions: torch.Tensor) -> Batch:
+        n_atoms = positions.shape[0]
+        return Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=positions.clone(),
+                    atomic_numbers=torch.full(
+                        (n_atoms,), 18, dtype=torch.long, device=device
+                    ),
+                    atomic_masses=torch.full(
+                        (n_atoms,), 39.948, dtype=dtype, device=device
+                    ),
+                    cell=cell.unsqueeze(0),
+                    pbc=pbc.unsqueeze(0),
+                )
+            ]
+        )
+
+    sharded = ShardedBatch.from_batch(
+        _batch(positions_before_crossing) if rank == 0 else None,
+        mesh=mesh,
+        config=domain_config,
+        src=0,
+    )
+    assert sharded.n_owned == 1
+    if rank == 0:
+        owned_positions = sharded.positions.to_local()
+        owned_positions[0].copy_(positions_at_compute[0])
+        assert partitioner.assign_atoms_to_ranks(owned_positions).item() == 1
+        assert partitioner.keeps_owner(
+            owned_positions,
+            owner_rank=0,
+            hysteresis=domain_config.effective_migration_hysteresis(),
+        ).item()
+
+    # Compare against the same physical geometry with the migrant represented
+    # by its canonical z=5.1 image.
+    reference_forces = torch.zeros(4, 3, dtype=dtype, device=device)
+    if rank == 0:
+        reference_model = LennardJonesModelWrapper(
+            epsilon=1.0,
+            sigma=0.5,
+            cutoff=1.0,
+        ).to(device)
+        reference_batch = _batch(reference_positions)
+        compute_neighbors(
+            reference_batch,
+            config=reference_model.model_config.neighbor_config,
+        )
+        reference_forces.copy_(reference_model(reference_batch)["forces"].detach())
+    dist.broadcast(reference_forces, src=0)
+    assert torch.linalg.vector_norm(reference_forces[1]).item() > 1.0
+
+    distributed_model = LennardJonesModelWrapper(
+        epsilon=1.0,
+        sigma=0.5,
+        cutoff=1.0,
+    ).to(device)
+    with DistributedModel(distributed_model, domain_config) as model:
+        distributed_forces = model(sharded)["forces"]
+
+    expected_force = reference_forces[rank]
+    torch.testing.assert_close(
+        distributed_forces[0],
+        expected_force,
+        rtol=1e-12,
+        atol=1e-12,
+        msg=(
+            f"rank {rank} force is wrong at the periodic migrant geometry; "
+            "rank 1 must receive the rank-0-owned raw z=25.1 atom as its "
+            "physical z=5.1 ghost; "
+            f"distributed={distributed_forces[0].tolist()}, "
+            f"same_geometry_reference={expected_force.tolist()}"
+        ),
+    )
+
+
 def test_crossed_atom_reaches_receiver_before_deferred_migration() -> None:
     """The current owner must ghost an atom that entered a neighbor's core."""
     run_gloo(world_size=2, fn=_crossed_atom_reaches_receiver_before_migration)
@@ -255,3 +391,31 @@ def test_crossed_atom_reaches_receiver_before_deferred_migration() -> None:
 def test_crossed_atom_force_matches_same_geometry_reference() -> None:
     """Distributed force must match a reference at the identical geometry."""
     run_gloo(world_size=2, fn=_crossed_atom_force_matches_same_geometry_reference)
+
+
+def test_unwrapped_periodic_migrant_force_matches_same_geometry_reference() -> None:
+    """A multi-box raw coordinate must not disappear from an internal halo."""
+    run_gloo(
+        world_size=4,
+        fn=_unwrapped_periodic_migrant_force_matches_reference,
+    )
+
+
+@pytest.mark.multigpu
+@pytest.mark.skipif(
+    torch.cuda.device_count() < 4,
+    reason="requires >=4 CUDA GPUs",
+)
+def test_unwrapped_periodic_migrant_force_matches_reference_nccl() -> None:
+    """The periodic-migrant force regression also fails over a real NCCL halo."""
+    mp.spawn(
+        nccl_worker,
+        args=(
+            4,
+            "29593",
+            _unwrapped_periodic_migrant_force_matches_reference,
+            None,
+            "cuda",
+        ),
+        nprocs=4,
+    )
