@@ -131,6 +131,17 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
         If any periodic cell is not Minkowski-reduced (eager mode only).
         This check is **skipped under** ``torch.compile``; see module
         docstring for the compiled-mode caller responsibility.
+
+    Notes
+    -----
+    Non-periodic graphs with an explicit cell
+        In **eager mode**, MIC is skipped entirely when ``batch.pbc`` is
+        all-False, so a degenerate cell (e.g. zeros) is safe.  In
+        **compiled mode**, ``bool(pbc.any())`` cannot be evaluated without
+        a graph break, so MIC is entered whenever ``cell`` and ``pbc`` are
+        both present.  Compiled callers must therefore supply a
+        non-degenerate cell (or omit it entirely, ``cell=None``) for
+        non-periodic graphs.
     """
     positions = batch.positions  # [N_total, 3]
     batch_ptr = batch.batch_ptr  # [B+1]
@@ -181,7 +192,23 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
     has_cell = getattr(batch, "cell", None) is not None and batch.cell is not None
     has_pbc = getattr(batch, "pbc", None) is not None and batch.pbc is not None
 
-    if has_cell and has_pbc:
+    # In eager mode, also require at least one True pbc flag before calling
+    # _apply_mic.  Without this guard, a batch with cell=<degenerate> and
+    # pbc=all-False would reach torch.linalg.inv and raise LinAlgError.
+    #
+    # In compiled mode, bool(pbc.any()) would force a data-dependent Python
+    # branch that breaks fullgraph=True.  We skip the guard there and rely
+    # on pbc_mask (all-zeros for all-False pbc) to make the MIC computation
+    # a mathematical identity for non-periodic graphs.  Compiled callers
+    # must therefore supply a non-degenerate cell (or cell=None) for
+    # non-periodic graphs; a degenerate cell still causes LinAlgError.
+    any_periodic = (
+        has_cell
+        and has_pbc
+        and (torch.compiler.is_compiling() or bool(batch.pbc.any()))
+    )
+
+    if any_periodic:
         if not torch.compiler.is_compiling():
             _check_minkowski_reduced(batch.cell, batch.pbc)
         dr = _apply_mic(dr, batch.cell, batch.pbc)

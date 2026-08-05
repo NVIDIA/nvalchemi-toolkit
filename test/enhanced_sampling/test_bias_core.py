@@ -723,6 +723,48 @@ class TestPairDistance:
         with pytest.raises(IndexError, match="out of range"):
             pair_distance(batch, idx)
 
+    # --- nonperiodic with explicit cell (pbc=False) ----------------------
+
+    def test_degenerate_cell_with_pbc_false_does_not_raise(self, device: str) -> None:
+        """cell=zeros + pbc=False must not raise LinAlgError.
+
+        Regression: the old guard ``has_cell and has_pbc`` entered _apply_mic
+        even when all pbc flags were False, hitting torch.linalg.inv on
+        whatever cell was present.  A zero cell causes LinAlgError there.
+        """
+        positions = torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
+        cell = torch.zeros(1, 3, 3)  # degenerate — not invertible
+        pbc = torch.tensor([[False, False, False]])
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        idx = torch.tensor([0, 1], device=device)
+        # Must not raise; MIC must be skipped; Euclidean distance = 3 Å.
+        d = pair_distance(batch, idx)
+        assert torch.allclose(d, torch.tensor([[3.0]], device=device), atol=1e-5)
+
+    def test_valid_cell_with_pbc_false_uses_euclidean(self, device: str) -> None:
+        """Valid non-degenerate cell + pbc=False returns plain Euclidean distance."""
+        positions = torch.tensor([[0.1, 0.0, 0.0], [9.9, 0.0, 0.0]])
+        box = 10.0
+        cell = torch.eye(3).unsqueeze(0) * box
+        pbc = torch.tensor([[False, False, False]])
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        idx = torch.tensor([0, 1], device=device)
+        d = pair_distance(batch, idx)
+        # MIC would fold to 0.2 Å; Euclidean is 9.8 Å.
+        assert torch.allclose(d, torch.tensor([[9.8]], device=device), atol=1e-4)
+
     # --- nonperiodic ---
 
     def test_nonperiodic_known_value(self, device: str) -> None:
@@ -802,23 +844,6 @@ class TestPairDistance:
         idx = torch.tensor([0, 1], device=device)
         d = pair_distance(batch, idx)
         assert torch.allclose(d, torch.tensor([[0.2]], device=device), atol=1e-4)
-
-    def test_nonperiodic_cubic_no_mic(self, device: str) -> None:
-        """pbc=False: long-range distance not folded by MIC."""
-        box = 10.0
-        positions = torch.tensor([[0.1, 0.0, 0.0], [9.9, 0.0, 0.0]])
-        cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
-        pbc = torch.tensor([[False, False, False]])  # [1, 3]
-        data = AtomicData(
-            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
-            positions=positions,
-            cell=cell,
-            pbc=pbc,
-        )
-        batch = Batch.from_data_list([data]).to(device)
-        idx = torch.tensor([0, 1], device=device)
-        d = pair_distance(batch, idx)
-        assert torch.allclose(d, torch.tensor([[9.8]], device=device), atol=1e-4)
 
     # --- triclinic MIC ---
 
