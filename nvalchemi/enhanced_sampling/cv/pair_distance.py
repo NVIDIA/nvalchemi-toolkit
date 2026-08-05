@@ -113,6 +113,29 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
         # [2] → broadcast same pair across all graphs
         atom_indices = atom_indices.unsqueeze(0).expand(B, 2)  # [B, 2]
 
+    # --- Bounds check (eager only; skipped under torch.compile) ----------
+    # Without this, an out-of-range local index silently wraps into the next
+    # graph's atom rows, producing a cross-system CV with no error.
+    if not torch.compiler.is_compiling():
+        atoms_per_graph = batch_ptr[1:] - batch_ptr[:-1]  # [B]
+        for col, label in ((0, "atom_indices[…, 0]"), (1, "atom_indices[…, 1]")):
+            idx = atom_indices[:, col]  # [B]
+            neg = idx < 0
+            if neg.any():
+                bad_graphs = neg.nonzero(as_tuple=False).squeeze(-1).tolist()
+                raise IndexError(
+                    f"pair_distance: {label} has negative values for graph(s) "
+                    f"{bad_graphs}: {idx[neg].tolist()}"
+                )
+            oob = idx >= atoms_per_graph
+            if oob.any():
+                bad_graphs = oob.nonzero(as_tuple=False).squeeze(-1).tolist()
+                raise IndexError(
+                    f"pair_distance: {label} is out of range for graph(s) "
+                    f"{bad_graphs} — index {idx[oob].tolist()} >= "
+                    f"graph size {atoms_per_graph[oob].tolist()}"
+                )
+
     # batch_ptr[b] is the start of graph b; atom_indices[:, k] is local idx
     offsets = batch_ptr[:-1]  # [B]
     global_i = offsets + atom_indices[:, 0]  # [B]

@@ -473,6 +473,82 @@ def result_close(a: BiasResult, b: BiasResult, atol: float = 1e-6) -> bool:
 class TestPairDistance:
     """Tests for the pair_distance collective variable."""
 
+    # --- bounds checking ---
+
+    def test_out_of_range_shared_index_raises(self) -> None:
+        """Shared [2] index that exceeds graph size raises IndexError, not silent wrap."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.zeros(2, 3),
+            ),
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.zeros(2, 3),
+            ),
+        ]
+        batch = Batch.from_data_list(data_list)
+        # Local index 5 is valid for neither 2-atom graph.
+        idx = torch.tensor([0, 5])
+        with pytest.raises(IndexError, match="out of range"):
+            pair_distance(batch, idx)
+
+    def test_out_of_range_per_graph_index_raises(self) -> None:
+        """Per-graph [B, 2] index out of range for one graph raises IndexError."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.long),
+                positions=torch.zeros(3, 3),
+            ),
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.zeros(2, 3),
+            ),
+        ]
+        batch = Batch.from_data_list(data_list)
+        # Graph 1 has only 2 atoms; local index 2 is out of range.
+        idx = torch.tensor([[0, 1], [0, 2]])
+        with pytest.raises(IndexError, match="out of range"):
+            pair_distance(batch, idx)
+
+    def test_negative_index_raises(self) -> None:
+        """Negative atom index raises IndexError."""
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.zeros(2, 3),
+        )
+        batch = Batch.from_data_list([data])
+        idx = torch.tensor([-1, 0])
+        with pytest.raises(IndexError, match="negative"):
+            pair_distance(batch, idx)
+
+    def test_variable_size_batch_no_silent_cross_graph(self) -> None:
+        """Out-of-range index must not silently reference the next graph's atoms.
+
+        Regression for the reported bug: in a variable-size batch, adding
+        batch_ptr[b] to an out-of-range local index wraps into graph b+1's
+        rows without error.  The bounds check must catch this before any
+        indexing occurs.
+        """
+        # Graph 0: 2 atoms, graph 1: 4 atoms.
+        # Without the bounds check, local index 3 on graph 0 would silently
+        # resolve to global row 3, which is atom 1 of graph 1.
+        data0 = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        )
+        data1 = AtomicData(
+            atomic_numbers=torch.tensor([6, 6, 6, 6], dtype=torch.long),
+            positions=torch.tensor(
+                [[10.0, 0.0, 0.0], [11.0, 0.0, 0.0], [12.0, 0.0, 0.0], [13.0, 0.0, 0.0]]
+            ),
+        )
+        batch = Batch.from_data_list([data0, data1])
+        # Local index 3 is valid for graph 1 but out of range for graph 0.
+        idx = torch.tensor([[0, 3], [0, 1]])
+        with pytest.raises(IndexError, match="out of range"):
+            pair_distance(batch, idx)
+
     # --- nonperiodic ---
 
     def test_nonperiodic_known_value(self, device: str) -> None:
