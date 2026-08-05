@@ -570,6 +570,82 @@ def result_close(a: BiasResult, b: BiasResult, atol: float = 1e-6) -> bool:
 class TestPairDistance:
     """Tests for the pair_distance collective variable."""
 
+    # --- atom_indices shape / dtype validation ---
+
+    def test_atom_indices_float_dtype_raises(self) -> None:
+        """Float atom_indices raises ValueError (would silently cast to int)."""
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.zeros(2, 3),
+        )
+        batch = Batch.from_data_list([data])
+        with pytest.raises(ValueError, match="integer dtype"):
+            pair_distance(batch, torch.tensor([0.0, 1.0]))
+
+    def test_atom_indices_1d_wrong_length_raises(self) -> None:
+        """1-D atom_indices with length != 2 raises ValueError.
+
+        torch.tensor([0]) would silently become [[0, 0]] (self-distance).
+        """
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.zeros(2, 3),
+        )
+        batch = Batch.from_data_list([data])
+        with pytest.raises(ValueError, match="exactly 2 elements"):
+            pair_distance(batch, torch.tensor([0]))  # length 1
+
+    def test_atom_indices_2d_extra_column_raises(self) -> None:
+        """[B, 3] atom_indices raises ValueError (extra column would be silently dropped)."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.long),
+                positions=torch.zeros(3, 3),
+            )
+        ] * 2
+        batch = Batch.from_data_list(data_list)
+        with pytest.raises(ValueError, match="second dimension must be exactly 2"):
+            pair_distance(batch, torch.tensor([[0, 1, 2], [0, 1, 2]]))
+
+    def test_atom_indices_2d_wrong_batch_size_raises(self) -> None:
+        """[B', 2] atom_indices where B' != B raises ValueError."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.zeros(2, 3),
+            )
+        ] * 3  # B=3
+        batch = Batch.from_data_list(data_list)
+        # supply [2, 2] instead of [3, 2]
+        with pytest.raises(ValueError, match="first dimension must equal B"):
+            pair_distance(batch, torch.tensor([[0, 1], [0, 1]]))
+
+    def test_atom_indices_3d_raises(self) -> None:
+        """3-D atom_indices raises ValueError."""
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.zeros(2, 3),
+        )
+        batch = Batch.from_data_list([data])
+        with pytest.raises(ValueError, match="1-D.*or.*2-D"):
+            pair_distance(batch, torch.zeros(1, 2, 1, dtype=torch.long))
+
+    def test_atom_indices_valid_shapes_accepted(self) -> None:
+        """Shape [2] and [B, 2] with integer dtype are accepted."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            )
+        ] * 2
+        batch = Batch.from_data_list(data_list)
+        # [2] shared
+        d1 = pair_distance(batch, torch.tensor([0, 1]))
+        assert d1.shape == (2, 1)
+        # [B, 2] per-graph
+        d2 = pair_distance(batch, torch.tensor([[0, 1], [0, 1]]))
+        assert d2.shape == (2, 1)
+
     # --- bounds checking ---
 
     def test_out_of_range_shared_index_raises(self) -> None:

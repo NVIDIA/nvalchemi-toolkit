@@ -121,8 +121,12 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
 
     Raises
     ------
+    ValueError
+        If ``atom_indices`` is not shape ``[2]`` or ``[B, 2]``, or is not
+        an integer dtype (eager mode only).
     IndexError
-        If any local atom index is negative or >= the graph's atom count.
+        If any local atom index is negative or >= the graph's atom count
+        (eager mode only).
     ValueError
         If any periodic cell is not Minkowski-reduced (eager mode only).
         This check is **skipped under** ``torch.compile``; see module
@@ -132,11 +136,18 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
     batch_ptr = batch.batch_ptr  # [B+1]
     B = batch.num_graphs
 
+    # --- Eager-only shape / dtype check on atom_indices ------------------
+    # Must come BEFORE the dim()==1 broadcast so wrong shapes are caught,
+    # not silently coerced.  E.g. [1] would expand to [[0,0]] (self-pair)
+    # and [B,3] would silently drop the third column.
+    if not torch.compiler.is_compiling():
+        _validate_atom_indices(atom_indices, B)
+
     # --- Resolve atom_indices to global row indices -----------------------
     if atom_indices.dim() == 1:
         atom_indices = atom_indices.unsqueeze(0).expand(B, 2)  # [B, 2]
 
-    # --- Eager-only input validation -------------------------------------
+    # --- Eager-only bounds validation ------------------------------------
     if not torch.compiler.is_compiling():
         # Bounds check: catch silent cross-graph wrapping before any indexing.
         atoms_per_graph = batch_ptr[1:] - batch_ptr[:-1]  # [B]
@@ -176,6 +187,85 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
         dr = _apply_mic(dr, batch.cell, batch.pbc)
 
     return torch.linalg.vector_norm(dr, dim=-1, keepdim=True)  # [B, 1]
+
+
+# ---------------------------------------------------------------------------
+# atom_indices validation
+# ---------------------------------------------------------------------------
+
+_INTEGER_DTYPES = frozenset(
+    {
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+        torch.uint8,
+    }
+)
+
+
+def _validate_atom_indices(atom_indices: Tensor, B: int) -> None:
+    """Raise ``ValueError`` for malformed ``atom_indices`` (eager mode only).
+
+    Accepted shapes
+    ---------------
+    * ``[2]``    — shared pair; broadcast to every graph.
+    * ``[B, 2]`` — one pair per graph.
+
+    Rejected (with clear error messages)
+    -------------------------------------
+    * Wrong number of dimensions (not 1-D or 2-D).
+    * 1-D tensor whose length is not exactly 2.  A length-1 tensor such as
+      ``torch.tensor([0])`` would otherwise silently expand to ``[[0, 0]]``
+      (a self-distance), not raise.
+    * 2-D tensor whose second dimension is not exactly 2.  A ``[B, 3]``
+      tensor would otherwise silently drop the third column.
+    * 2-D tensor whose first dimension does not match the batch size ``B``.
+    * Non-integer dtype.  Float indices would silently be used as memory
+      offsets after casting by the indexing operation.
+
+    Parameters
+    ----------
+    atom_indices:
+        The tensor to validate.
+    B:
+        Number of graphs in the current batch.
+    """
+    # dtype check
+    if atom_indices.dtype not in _INTEGER_DTYPES:
+        raise ValueError(
+            f"pair_distance: atom_indices must have an integer dtype, "
+            f"got {atom_indices.dtype}.  Use e.g. torch.tensor([i, j]) "
+            f"(default int64) or pass dtype=torch.long explicitly."
+        )
+
+    ndim = atom_indices.dim()
+    shape = tuple(atom_indices.shape)
+
+    if ndim == 1:
+        if shape[0] != 2:
+            raise ValueError(
+                f"pair_distance: 1-D atom_indices must have exactly 2 elements "
+                f"(shape [2] for a shared pair), got shape {shape}.  "
+                f"A length-1 tensor would silently produce a self-distance."
+            )
+    elif ndim == 2:
+        if shape[1] != 2:
+            raise ValueError(
+                f"pair_distance: 2-D atom_indices must have shape [B, 2], "
+                f"got {shape}.  The second dimension must be exactly 2 "
+                f"(atom i and atom j); extra columns are not allowed."
+            )
+        if shape[0] != B:
+            raise ValueError(
+                f"pair_distance: 2-D atom_indices has shape {shape} but the "
+                f"batch has B={B} graphs.  The first dimension must equal B."
+            )
+    else:
+        raise ValueError(
+            f"pair_distance: atom_indices must be 1-D (shape [2]) or "
+            f"2-D (shape [B, 2]), got {ndim}-D tensor with shape {shape}."
+        )
 
 
 # ---------------------------------------------------------------------------
