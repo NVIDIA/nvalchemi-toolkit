@@ -406,13 +406,15 @@ def test_unwrapped_periodic_migrant_force_matches_same_geometry_reference() -> N
     torch.cuda.device_count() < 4,
     reason="requires >=4 CUDA GPUs",
 )
-def test_unwrapped_periodic_migrant_force_matches_reference_nccl() -> None:
+def test_unwrapped_periodic_migrant_force_matches_reference_nccl(
+    unused_tcp_port: int,
+) -> None:
     """The periodic-migrant force regression also fails over a real NCCL halo."""
     mp.spawn(
         nccl_worker,
         args=(
             4,
-            "29593",
+            str(unused_tcp_port),
             _unwrapped_periodic_migrant_force_matches_reference,
             None,
             "cuda",
