@@ -25,9 +25,10 @@ Covers:
   ``requires_grad`` escape into live batch or result; no memory growth
   across 10 repeated evaluations.
 * :func:`~nvalchemi.enhanced_sampling.pair_distance` — nonperiodic and
-  general triclinic MIC; shared and per-graph atom indices; gradients
-  via ``torch.autograd.gradcheck``; compile-stability under
-  ``torch.compile`` (fullgraph=True on CPU).
+  Minkowski-reduced triclinic MIC; shared and per-graph atom indices;
+  gradients via ``torch.autograd.gradcheck``; compile-stability under
+  ``torch.compile`` (fullgraph=True on CPU); unreduced-cell rejection in
+  eager mode (check skipped under compile — caller responsibility).
 * :func:`~nvalchemi.enhanced_sampling.aggregate_bias_results` — summing,
   None handling, duplicate-key rejection.
 * ``torch.compile`` tests: ``pair_distance`` and ``aggregate_bias_results``
@@ -766,27 +767,52 @@ class TestPairDistance:
         # Naive: 3.5; MIC: |3.5 - 4| = 0.5 (nearest image in a-direction)
         assert torch.allclose(d, torch.tensor([[0.5]], device=device), atol=1e-4)
 
-    def test_triclinic_mic_skewed_cell_componentwise_rounding_fails(
+    def test_unreduced_cell_raises(self, device: str) -> None:
+        """Unreduced cell raises ValueError with a clear message.
+
+        Regression for the reported bug: cell ``[[1,0,0],[10,0.1,0],[0,0,10]]``
+        with fractional displacement ``[0,0.49,0]`` requires offset ``[−5,0,0]``,
+        which lies outside the 27-image search range.  The old code returned
+        ≈ 3.9 Å silently; the new code detects the non-reduced cell and raises.
+        """
+        # Minkowski check: |a1·a2| = 10 > 0.5*min(|a1|²,|a2|²) = 0.5 — fails.
+        cell = torch.tensor([[[1.0, 0.0, 0.0], [10.0, 0.1, 0.0], [0.0, 0.0, 10.0]]])
+        pbc = torch.tensor([[True, True, True]])
+        positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 4.9, 0.049]])
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        idx = torch.tensor([0, 1], device=device)
+        with pytest.raises(ValueError, match="Minkowski"):
+            pair_distance(batch, idx)
+
+    def test_triclinic_mic_reduced_skewed_cell_27image_correct(
         self, device: str
     ) -> None:
-        """Regression: skewed cell where componentwise fractional rounding is wrong.
+        """27-image search returns the correct MIC for a Minkowski-reduced skewed cell.
 
-        Cell rows: [[1,0,0],[0.9,0.1,0],[0,0,10]].
-        Fractional displacement [0.49, 0.49, 0]:
-          - Componentwise rounding keeps [0.49, 0.49, 0] → Cartesian ≈ 0.932 Å.
-          - True MIC (offset [0,−1,0])  → [0.49,−0.51,0] → Cartesian ≈ 0.060 Å.
-        Componentwise rounding would return the wrong (longer) image.
-        The 27-image exhaustive search returns the correct shortest vector.
+        Cell: ``[[2,0,0],[0.8,2,0],[0,0,10]]`` — satisfies Minkowski conditions
+        (``|a0·a1| = 1.6 ≤ 0.5·min(4, 4.64) = 2.0``).
+
+        Fractional displacement ``[0.49, 0.49, 0]``:
+          - Componentwise rounding keeps ``[0.49, 0.49, 0]`` → Cartesian ≈ 1.69 Å.
+          - Correct MIC (offset ``[−1, 0, 0]``) → Cartesian ≈ 1.16 Å.
+
+        Componentwise rounding alone would return the wrong (longer) image;
+        the 27-image search returns the correct one.
         """
-        cell = torch.tensor(
-            [[[1.0, 0.0, 0.0], [0.9, 0.1, 0.0], [0.0, 0.0, 10.0]]]
-        )  # [1, 3, 3]
-        pbc = torch.tensor([[True, True, True]])  # [1, 3]
+        # Verify Minkowski condition holds: |a0·a1| = 1.6 <= 0.5*min(4,4.64) = 2.0 ✓
+        cell = torch.tensor([[[2.0, 0.0, 0.0], [0.8, 2.0, 0.0], [0.0, 0.0, 10.0]]])
+        pbc = torch.tensor([[True, True, True]])
 
-        # pos_j chosen so that fractional displacement = [0.49, 0.49, 0]
-        # Cartesian pos_j = 0.49*[1,0,0] + 0.49*[0.9,0.1,0] = [0.931, 0.049, 0]
+        # pos_j: fractional [0.49, 0.49, 0]
+        # Cartesian = 0.49*[2,0,0] + 0.49*[0.8,2,0] = [1.372, 0.98, 0]
         pos_i = torch.tensor([[0.0, 0.0, 0.0]])
-        pos_j = torch.tensor([[0.931, 0.049, 0.0]])
+        pos_j = torch.tensor([[1.372, 0.98, 0.0]])
         positions = torch.cat([pos_i, pos_j], dim=0)
 
         data = AtomicData(
@@ -799,15 +825,14 @@ class TestPairDistance:
         idx = torch.tensor([0, 1], device=device)
         d = pair_distance(batch, idx)
 
-        # Componentwise rounding would give ≈ 0.932 Å; correct MIC is ≈ 0.060 Å.
-        # We assert the result is well below the naive distance.
+        # Componentwise rounding gives ≈ 1.687 Å; correct MIC is ≈ 1.164 Å.
         naive_dist = torch.linalg.vector_norm(pos_j - pos_i).item()
-        assert d.item() < naive_dist * 0.2, (
-            f"MIC distance {d.item():.4f} Å is not significantly shorter than "
-            f"naive distance {naive_dist:.4f} Å — 27-image search may not be working."
+        assert d.item() < naive_dist * 0.8, (
+            f"MIC distance {d.item():.4f} Å should be shorter than the naive "
+            f"distance {naive_dist:.4f} Å — 27-image search may not be working."
         )
-        assert d.item() < 0.12, (
-            f"Expected MIC distance ≈ 0.060 Å, got {d.item():.4f} Å."
+        assert d.item() < 1.20, (
+            f"Expected MIC distance ≈ 1.164 Å, got {d.item():.4f} Å."
         )
 
     # --- gradients ---

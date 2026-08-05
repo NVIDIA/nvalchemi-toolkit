@@ -18,41 +18,68 @@
 
 * Non-periodic systems (``batch.cell`` is ``None`` or ``batch.pbc`` is all
   ``False``).
-* Fully periodic and mixed-periodic systems via the minimum-image
-  convention (MIC) for general triclinic cells.
+* Periodic and mixed-periodic systems via the minimum-image convention (MIC)
+  for **Minkowski-reduced** triclinic cells (see requirement below).
+
+Scope: Minkowski-reduced MIC, not general triclinic MIC
+--------------------------------------------------------
+This is a **reduced-cell MIC implementation**.  It is *not* a general
+triclinic MIC implementation.  The 27-image exhaustive search (offsets in
+``{−1, 0, +1}³``) is correct only when the cell satisfies the Minkowski
+reduction conditions.  For unreduced cells the minimum-image offset can
+exceed ±1 in one or more fractional components, and the search silently
+returns a longer-than-minimum image.
+
+The original proposal named this "general triclinic MIC"; that description
+is overstated.  True general triclinic MIC (arbitrary unreduced cells,
+implemented via LLL lattice reduction or an extended image search with a
+data-dependent radius) is **deferred** — its interaction with the
+strain-based virial computation in :class:`ConservativeBias` adds
+non-trivial complexity that is out of scope for this release.
+
+Minkowski reduction condition
+-----------------------------
+For every pair of periodic lattice vectors ``(aᵢ, aⱼ)`` with ``i ≠ j``:
+
+.. math::
+
+    |\\mathbf{a}_i \\cdot \\mathbf{a}_j| \\le
+    \\tfrac{1}{2}\\,\\min(|\\mathbf{a}_i|^2,\\,|\\mathbf{a}_j|^2)
+
+When this fails, the search returns the wrong image.  Counter-example:
+cell ``[[1,0,0],[10,0.1,0],[0,0,10]]``, fractional displacement
+``[0,0.49,0]`` — the 27-image search returns ≈ 3.9 Å, but the true image
+(offset ``[−5,0,0]``) is ≈ 0.11 Å.
+
+:func:`pair_distance` checks this condition at call time **in eager mode
+only** and raises ``ValueError`` for non-reduced cells.
+
+.. warning::
+
+    Under ``torch.compile`` the check is skipped (guarded by
+    ``torch.compiler.is_compiling()``).  In compiled mode the caller is
+    **solely responsible** for supplying Minkowski-reduced cells.  Passing
+    an unreduced cell in compiled mode produces wrong distances with no
+    error.  Pre-reduce cells with a Niggli or LLL algorithm (e.g.
+    ``ASE: atoms.get_cell().niggli_reduce()``) before simulation.
 
 Triclinic MIC algorithm
 -----------------------
-For a triclinic cell with lattice matrix ``A`` (rows = lattice vectors,
-ASE convention), the fractional displacement is::
+For a reduced cell with lattice matrix ``A`` (rows = lattice vectors,
+ASE convention)::
 
-    df = (r_j - r_i) @ A^{-1}
-
-We then apply the standard half-cell rounding::
-
-    df -= torch.round(df)   # map to (−0.5, 0.5]
-
-and convert back to Cartesian::
-
-    dr_mic = df @ A
-
-The distance is ``||dr_mic||``.
-
-**Boundary note:** The half-cell tie (``|df_k| == 0.5`` exactly) maps
-to ``+0.5`` or ``−0.5`` depending on floating-point rounding, producing
-a discontinuity in the distance function exactly at the Wigner–Seitz
-cell boundary.  This is the standard MIC behaviour and is shared by ASE,
-LAMMPS, and PLUMED.  Tests are placed away from the half-cell tie; the
-boundary behaviour is documented but not worked around.
+    df          = (r_j − r_i) @ A⁻¹          # fractional displacement
+    df_rounded  = df − round(df) × pbc_mask   # map to (−0.5, 0.5]
+    candidates  = df_rounded + n,  n ∈ {−1,0,+1}³ × pbc_mask
+    dr_mic      = argmin_n |candidates @ A|   # shortest image
 
 torch.compile compatibility
 ---------------------------
-This function is a compile target (``compile_biases=True``).  It uses
-only standard PyTorch ops; there are no Python-level branches on tensor
-values (the periodicity branch is on the *shape* / *bool* of ``pbc``,
-which is resolved at trace time for fixed-pbc batches).  Gradient flow
-through ``pair_distance`` for use inside :class:`ConservativeBias` is
-fully supported.
+Shape-based branches (periodicity, cell presence) resolve at trace time.
+Gradient flow through ``pair_distance`` for use inside
+:class:`ConservativeBias` is fully supported.  The Minkowski check and
+bounds check are guarded by ``torch.compiler.is_compiling()`` and do not
+appear in the compiled graph.
 """
 
 from __future__ import annotations
@@ -75,34 +102,31 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
     ----------
     batch:
         Current ``Batch`` containing atomic positions and (optionally)
-        cell and PBC flags.
+        cell and PBC flags.  When a periodic cell is present it must be
+        **Minkowski-reduced** — see module docstring for details.
     atom_indices:
         * Shape ``[2]`` — selects the same atom pair ``(i, j)`` in every
           graph of the batch.
         * Shape ``[B, 2]`` — selects a different pair per graph.
 
-        Atom indices are **local to each graph** (0-based within the
-        graph, not global row indices in the batched position tensor).
+        Indices are **local to each graph** (0-based within the graph, not
+        global row indices in the batched position tensor).
 
     Returns
     -------
     Tensor
-        Shape ``[B, 1]`` — pair distance in the same length units as
+        Shape ``[B, 1]`` — pair distance in the same length unit as
         ``batch.positions`` (Å).  Fully differentiable w.r.t.
         ``batch.positions`` and ``batch.cell``.
 
-    Notes
-    -----
-    * MIC is applied independently per graph, using that graph's cell.
-    * PBC flags (``batch.pbc``) are used to determine whether MIC is
-      applied.  If **all** PBC flags for a graph are ``False``, or if
-      ``batch.cell`` is ``None``, the straight Cartesian distance is
-      used.
-    * For graphs with mixed periodicity (e.g. ``pbc = [True, True, False]``),
-      the MIC rounding is still applied in fractional coordinates; the
-      non-periodic fractional components will map outside (−0.5, 0.5] in
-      the direction(s) with ``pbc=False``, but the ``round()`` is only
-      applied along periodic dimensions.
+    Raises
+    ------
+    IndexError
+        If any local atom index is negative or >= the graph's atom count.
+    ValueError
+        If any periodic cell is not Minkowski-reduced (eager mode only).
+        This check is **skipped under** ``torch.compile``; see module
+        docstring for the compiled-mode caller responsibility.
     """
     positions = batch.positions  # [N_total, 3]
     batch_ptr = batch.batch_ptr  # [B+1]
@@ -110,60 +134,121 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
 
     # --- Resolve atom_indices to global row indices -----------------------
     if atom_indices.dim() == 1:
-        # [2] → broadcast same pair across all graphs
         atom_indices = atom_indices.unsqueeze(0).expand(B, 2)  # [B, 2]
 
-    # --- Bounds check (eager only; skipped under torch.compile) ----------
-    # Without this, an out-of-range local index silently wraps into the next
-    # graph's atom rows, producing a cross-system CV with no error.
+    # --- Eager-only input validation -------------------------------------
     if not torch.compiler.is_compiling():
+        # Bounds check: catch silent cross-graph wrapping before any indexing.
         atoms_per_graph = batch_ptr[1:] - batch_ptr[:-1]  # [B]
         for col, label in ((0, "atom_indices[…, 0]"), (1, "atom_indices[…, 1]")):
-            idx = atom_indices[:, col]  # [B]
+            idx = atom_indices[:, col]
             neg = idx < 0
             if neg.any():
-                bad_graphs = neg.nonzero(as_tuple=False).squeeze(-1).tolist()
+                bad = neg.nonzero(as_tuple=False).squeeze(-1).tolist()
                 raise IndexError(
                     f"pair_distance: {label} has negative values for graph(s) "
-                    f"{bad_graphs}: {idx[neg].tolist()}"
+                    f"{bad}: {idx[neg].tolist()}"
                 )
             oob = idx >= atoms_per_graph
             if oob.any():
-                bad_graphs = oob.nonzero(as_tuple=False).squeeze(-1).tolist()
+                bad = oob.nonzero(as_tuple=False).squeeze(-1).tolist()
                 raise IndexError(
                     f"pair_distance: {label} is out of range for graph(s) "
-                    f"{bad_graphs} — index {idx[oob].tolist()} >= "
+                    f"{bad} — index {idx[oob].tolist()} >= "
                     f"graph size {atoms_per_graph[oob].tolist()}"
                 )
 
-    # batch_ptr[b] is the start of graph b; atom_indices[:, k] is local idx
     offsets = batch_ptr[:-1]  # [B]
     global_i = offsets + atom_indices[:, 0]  # [B]
     global_j = offsets + atom_indices[:, 1]  # [B]
 
     pos_i = positions[global_i]  # [B, 3]
     pos_j = positions[global_j]  # [B, 3]
-
     dr = pos_j - pos_i  # [B, 3], raw Cartesian displacement
 
-    # --- Apply MIC for periodic systems -----------------------------------
+    # --- Apply MIC for periodic systems ----------------------------------
     has_cell = getattr(batch, "cell", None) is not None and batch.cell is not None
     has_pbc = getattr(batch, "pbc", None) is not None and batch.pbc is not None
 
     if has_cell and has_pbc:
+        if not torch.compiler.is_compiling():
+            _check_minkowski_reduced(batch.cell, batch.pbc)
         dr = _apply_mic(dr, batch.cell, batch.pbc)
 
-    dist = torch.linalg.vector_norm(dr, dim=-1, keepdim=True)  # [B, 1]
-    return dist
+    return torch.linalg.vector_norm(dr, dim=-1, keepdim=True)  # [B, 1]
 
 
 # ---------------------------------------------------------------------------
-# Internal MIC helper
+# Minkowski-reduction check
+# ---------------------------------------------------------------------------
+
+
+def _check_minkowski_reduced(cell: Tensor, pbc: Tensor) -> None:
+    """Raise ``ValueError`` if any periodic cell pair violates the Minkowski condition.
+
+    This check is an **eager-mode guard only**.  It is never called under
+    ``torch.compile`` (guarded by ``torch.compiler.is_compiling()`` in the
+    caller).  Compiled callers are responsible for supplying reduced cells;
+    no error is raised if a non-reduced cell is used in compiled mode.
+
+    The 27-image MIC search returns the true minimum-image vector only for
+    Minkowski-reduced cells.  For every pair of periodic lattice vectors
+    ``(aᵢ, aⱼ)`` with ``i ≠ j``:
+
+    .. math::
+
+        |\\mathbf{a}_i \\cdot \\mathbf{a}_j|
+        \\le \\tfrac{1}{2}\\,\\min(|\\mathbf{a}_i|^2,\\,|\\mathbf{a}_j|^2)
+
+    When this fails, the minimum-image offset can exceed ±1 in some
+    fractional component and the search silently returns the wrong image.
+
+    Parameters
+    ----------
+    cell:
+        Lattice matrices, shape ``[B, 3, 3]`` or ``[B, 1, 3, 3]``.
+    pbc:
+        Periodicity flags, shape ``[B, 3]`` or ``[B, 1, 3]``.
+    """
+    if cell.dim() == 4:
+        cell = cell.squeeze(1)
+    if pbc.dim() == 3:
+        pbc = pbc.squeeze(1)
+
+    for i in range(3):
+        for j in range(i + 1, 3):
+            # Only enforce for pairs of dimensions that are BOTH periodic.
+            both_periodic = pbc[:, i] & pbc[:, j]  # [B] bool
+            if not both_periodic.any():
+                continue
+
+            ai = cell[:, i, :]  # [B, 3]
+            aj = cell[:, j, :]  # [B, 3]
+            dot_abs = (ai * aj).sum(-1).abs()  # [B]
+            norm_sq_i = (ai * ai).sum(-1)  # [B]
+            norm_sq_j = (aj * aj).sum(-1)  # [B]
+            threshold = 0.5 * torch.minimum(norm_sq_i, norm_sq_j)  # [B]
+
+            violated = both_periodic & (dot_abs > threshold)
+            if violated.any():
+                bad = violated.nonzero(as_tuple=False).squeeze(-1).tolist()
+                raise ValueError(
+                    f"pair_distance: the cell for graph(s) {bad} is not "
+                    f"Minkowski-reduced: lattice vectors a[{i}] and a[{j}] satisfy "
+                    f"|a[{i}]·a[{j}]| > 0.5·min(|a[{i}]|², |a[{j}]|²).  "
+                    f"The 27-image MIC search is only guaranteed correct for "
+                    f"Minkowski-reduced cells.  Pre-reduce the cell using a Niggli "
+                    f"or LLL algorithm (e.g. ASE niggli_reduce) before simulation."
+                )
+
+
+# ---------------------------------------------------------------------------
+# MIC implementation
 # ---------------------------------------------------------------------------
 
 
 def _apply_mic(dr: Tensor, cell: Tensor, pbc: Tensor) -> Tensor:
-    """Apply the minimum-image convention for general triclinic cells.
+    """Apply the minimum-image convention via an exhaustive 27-image search.
 
     Parameters
     ----------
@@ -182,53 +267,35 @@ def _apply_mic(dr: Tensor, cell: Tensor, pbc: Tensor) -> Tensor:
 
     Notes
     -----
-    Componentwise fractional rounding (``df -= round(df)``) is only exact for
-    orthogonal cells.  For skewed triclinic cells the Wigner–Seitz cell does
-    not align with the fractional-coordinate axes, so the shortest image may
-    require adding or subtracting a lattice vector even after rounding each
-    component to (−0.5, 0.5].  Example: cell rows ``[[1,0,0],[0.9,0.1,0],
-    [0,0,10]]``, fractional displacement ``[0.49,0.49,0]`` — rounding gives
-    ≈ 0.932 Å but the true MIC vector (offset ``[0,−1,0]``) is ≈ 0.060 Å.
-
-    This implementation performs an exhaustive search over all 27 lattice
-    images (offsets in ``{−1, 0, +1}^3`` restricted to periodic dims) and
-    returns the Cartesian vector with minimum norm.  The search is fully
-    vectorised and passes ``torch.compile(fullgraph=True)``.
+    The cell must be Minkowski-reduced; see :func:`_check_minkowski_reduced`.
+    That check is performed in :func:`pair_distance` before this function is
+    called, so it is not repeated here.
     """
-    # Normalise shapes
     if cell.dim() == 4:
-        cell = cell.squeeze(1)  # [B, 3, 3]
+        cell = cell.squeeze(1)
     if pbc.dim() == 3:
-        pbc = pbc.squeeze(1)  # [B, 3]
+        pbc = pbc.squeeze(1)
 
     pbc_mask = pbc.to(dtype=cell.dtype)  # [B, 3]
 
-    # Fractional displacement: df[b] = dr[b] @ cell[b]^{-1}
+    # Fractional displacement
     cell_inv = torch.linalg.inv(cell)  # [B, 3, 3]
     df = torch.bmm(dr.unsqueeze(1), cell_inv).squeeze(1)  # [B, 3]
 
-    # Initial rounding: map each periodic component to (−0.5, 0.5].
-    # For non-periodic dims the component is unchanged.
+    # Initial half-cell rounding (periodic dims only)
     df_rounded = df - torch.round(df) * pbc_mask  # [B, 3]
 
-    # --- Exhaustive 27-image search -----------------------------------------
-    # Build all 27 offset vectors {-1, 0, 1}^3 and mask non-periodic dims.
+    # Exhaustive 27-image search over offsets in {-1, 0, +1}³
     coords = torch.tensor([-1.0, 0.0, 1.0], device=dr.device, dtype=dr.dtype)
     gi, gj, gk = torch.meshgrid(coords, coords, coords, indexing="ij")
     all_offsets = torch.stack(
         [gi.flatten(), gj.flatten(), gk.flatten()], dim=-1
     )  # [27, 3]
 
-    # [B, 27, 3]: apply pbc_mask so non-periodic dims are never shifted
-    offsets_masked = all_offsets[None] * pbc_mask[:, None, :]
-
-    # Candidate fractional displacements and their Cartesian counterparts
+    offsets_masked = all_offsets[None] * pbc_mask[:, None, :]  # [B, 27, 3]
     df_cands = df_rounded[:, None, :] + offsets_masked  # [B, 27, 3]
     dr_cands = torch.einsum("bki,bij->bkj", df_cands, cell)  # [B, 27, 3]
 
-    # Select the image with minimum squared Cartesian distance (avoid sqrt)
     dist_sq = (dr_cands * dr_cands).sum(dim=-1)  # [B, 27]
     best = dist_sq.argmin(dim=-1)[:, None, None].expand(-1, 1, 3)  # [B, 1, 3]
-    dr_mic = dr_cands.gather(1, best).squeeze(1)  # [B, 3]
-
-    return dr_mic
+    return dr_cands.gather(1, best).squeeze(1)  # [B, 3]

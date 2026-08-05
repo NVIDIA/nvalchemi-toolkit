@@ -23,7 +23,8 @@ Public surface
   :meth:`~ConservativeBias.energy` to get forces and virial for free.
 * :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
 * :func:`pair_distance` — differentiable pair-distance CV; supports
-  nonperiodic and general triclinic MIC.
+  nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC
+  (unreduced cells via LLL) is deferred.
 
 Deferred to later milestones
 -----------------------------
@@ -31,6 +32,7 @@ Deferred to later milestones
 * :class:`ThermodynamicState`, :class:`ReplicaExchange`
 * Built-in biases (umbrella, metadynamics, walls, ABF)
 * Zarr checkpoint support
+* General triclinic MIC for unreduced cells
 """
 
 from nvalchemi.enhanced_sampling._bias import (
