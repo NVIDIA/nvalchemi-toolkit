@@ -156,6 +156,21 @@ def _apply_mic(dr: Tensor, cell: Tensor, pbc: Tensor) -> Tensor:
     -------
     Tensor
         MIC-corrected displacement vectors, shape ``[B, 3]``.
+
+    Notes
+    -----
+    Componentwise fractional rounding (``df -= round(df)``) is only exact for
+    orthogonal cells.  For skewed triclinic cells the Wigner–Seitz cell does
+    not align with the fractional-coordinate axes, so the shortest image may
+    require adding or subtracting a lattice vector even after rounding each
+    component to (−0.5, 0.5].  Example: cell rows ``[[1,0,0],[0.9,0.1,0],
+    [0,0,10]]``, fractional displacement ``[0.49,0.49,0]`` — rounding gives
+    ≈ 0.932 Å but the true MIC vector (offset ``[0,−1,0]``) is ≈ 0.060 Å.
+
+    This implementation performs an exhaustive search over all 27 lattice
+    images (offsets in ``{−1, 0, +1}^3`` restricted to periodic dims) and
+    returns the Cartesian vector with minimum norm.  The search is fully
+    vectorised and passes ``torch.compile(fullgraph=True)``.
     """
     # Normalise shapes
     if cell.dim() == 4:
@@ -163,22 +178,34 @@ def _apply_mic(dr: Tensor, cell: Tensor, pbc: Tensor) -> Tensor:
     if pbc.dim() == 3:
         pbc = pbc.squeeze(1)  # [B, 3]
 
-    # Convert pbc to float mask on the correct device/dtype
     pbc_mask = pbc.to(dtype=cell.dtype)  # [B, 3]
 
-    # Fractional displacement: dr @ A^{-1}
-    # cell[b] has shape [3, 3]; A^{-1} = cell^{-T} when rows=lattice vecs.
-    # torch.linalg.solve(A.T, dr.T) gives x s.t. A.T x = dr.T
-    # Equivalently: df = dr @ A^{-1} = (A^{-T} dr^T)^T
-    cell_inv = torch.linalg.inv(cell)  # [B, 3, 3]  (A^{-1})
-    # df[b] = dr[b] @ cell_inv[b];  batched matmul: [B, 1, 3] @ [B, 3, 3]
+    # Fractional displacement: df[b] = dr[b] @ cell[b]^{-1}
+    cell_inv = torch.linalg.inv(cell)  # [B, 3, 3]
     df = torch.bmm(dr.unsqueeze(1), cell_inv).squeeze(1)  # [B, 3]
 
-    # Apply half-cell rounding only along periodic dimensions.
-    # For periodic dims (pbc_mask=1): df_mic = df - round(df)  → maps to (−0.5, 0.5]
-    # For non-periodic dims (pbc_mask=0): df_mic = df          → unchanged
-    df_mic = df - torch.round(df) * pbc_mask  # [B, 3]
+    # Initial rounding: map each periodic component to (−0.5, 0.5].
+    # For non-periodic dims the component is unchanged.
+    df_rounded = df - torch.round(df) * pbc_mask  # [B, 3]
 
-    # Back to Cartesian: dr_mic[b] = df_mic[b] @ cell[b]
-    dr_mic = torch.bmm(df_mic.unsqueeze(1), cell).squeeze(1)  # [B, 3]
+    # --- Exhaustive 27-image search -----------------------------------------
+    # Build all 27 offset vectors {-1, 0, 1}^3 and mask non-periodic dims.
+    coords = torch.tensor([-1.0, 0.0, 1.0], device=dr.device, dtype=dr.dtype)
+    gi, gj, gk = torch.meshgrid(coords, coords, coords, indexing="ij")
+    all_offsets = torch.stack(
+        [gi.flatten(), gj.flatten(), gk.flatten()], dim=-1
+    )  # [27, 3]
+
+    # [B, 27, 3]: apply pbc_mask so non-periodic dims are never shifted
+    offsets_masked = all_offsets[None] * pbc_mask[:, None, :]
+
+    # Candidate fractional displacements and their Cartesian counterparts
+    df_cands = df_rounded[:, None, :] + offsets_masked  # [B, 27, 3]
+    dr_cands = torch.einsum("bki,bij->bkj", df_cands, cell)  # [B, 27, 3]
+
+    # Select the image with minimum squared Cartesian distance (avoid sqrt)
+    dist_sq = (dr_cands * dr_cands).sum(dim=-1)  # [B, 27]
+    best = dist_sq.argmin(dim=-1)[:, None, None].expand(-1, 1, 3)  # [B, 1, 3]
+    dr_mic = dr_cands.gather(1, best).squeeze(1)  # [B, 3]
+
     return dr_mic

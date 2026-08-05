@@ -547,6 +547,50 @@ class TestPairDistance:
         # Naive: 3.5; MIC: |3.5 - 4| = 0.5 (nearest image in a-direction)
         assert torch.allclose(d, torch.tensor([[0.5]], device=device), atol=1e-4)
 
+    def test_triclinic_mic_skewed_cell_componentwise_rounding_fails(
+        self, device: str
+    ) -> None:
+        """Regression: skewed cell where componentwise fractional rounding is wrong.
+
+        Cell rows: [[1,0,0],[0.9,0.1,0],[0,0,10]].
+        Fractional displacement [0.49, 0.49, 0]:
+          - Componentwise rounding keeps [0.49, 0.49, 0] → Cartesian ≈ 0.932 Å.
+          - True MIC (offset [0,−1,0])  → [0.49,−0.51,0] → Cartesian ≈ 0.060 Å.
+        Componentwise rounding would return the wrong (longer) image.
+        The 27-image exhaustive search returns the correct shortest vector.
+        """
+        cell = torch.tensor(
+            [[[1.0, 0.0, 0.0], [0.9, 0.1, 0.0], [0.0, 0.0, 10.0]]]
+        )  # [1, 3, 3]
+        pbc = torch.tensor([[True, True, True]])  # [1, 3]
+
+        # pos_j chosen so that fractional displacement = [0.49, 0.49, 0]
+        # Cartesian pos_j = 0.49*[1,0,0] + 0.49*[0.9,0.1,0] = [0.931, 0.049, 0]
+        pos_i = torch.tensor([[0.0, 0.0, 0.0]])
+        pos_j = torch.tensor([[0.931, 0.049, 0.0]])
+        positions = torch.cat([pos_i, pos_j], dim=0)
+
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        idx = torch.tensor([0, 1], device=device)
+        d = pair_distance(batch, idx)
+
+        # Componentwise rounding would give ≈ 0.932 Å; correct MIC is ≈ 0.060 Å.
+        # We assert the result is well below the naive distance.
+        naive_dist = torch.linalg.vector_norm(pos_j - pos_i).item()
+        assert d.item() < naive_dist * 0.2, (
+            f"MIC distance {d.item():.4f} Å is not significantly shorter than "
+            f"naive distance {naive_dist:.4f} Å — 27-image search may not be working."
+        )
+        assert d.item() < 0.12, (
+            f"Expected MIC distance ≈ 0.060 Å, got {d.item():.4f} Å."
+        )
+
     # --- gradients ---
 
     def test_gradient_nonperiodic(self, device: str) -> None:
