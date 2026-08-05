@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PR 1 compile-spike tests.
+"""Unit tests for core enhanced-sampling abstractions.
 
 Covers:
 
@@ -30,9 +30,10 @@ Covers:
   ``torch.compile`` (fullgraph=True on CPU).
 * :func:`~nvalchemi.enhanced_sampling.aggregate_bias_results` — summing,
   None handling, duplicate-key rejection.
-* ``torch.compile`` fullgraph test on CPU: conservative autograd path,
-  pair_distance, and aggregation produce no graph breaks and agree
-  numerically with eager on 10 consecutive calls.
+* ``torch.compile`` tests: ``pair_distance`` and ``aggregate_bias_results``
+  compile with ``fullgraph=True``; ``ConservativeBias.energy()`` compiles
+  with ``fullgraph=True``; ``ConservativeBias.evaluate()`` runs under
+  ``fullgraph=False`` (graph break at ``requires_grad_()`` is documented).
 
 GPU integration tests are marked ``@pytest.mark.slow`` and are run only
 when a CUDA device is available (the ``device`` fixture handles skip).
@@ -48,8 +49,8 @@ from torch import Tensor
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.enhanced_sampling import (
-    BiasResult,
     BiasPotential,
+    BiasResult,
     ConservativeBias,
     aggregate_bias_results,
     pair_distance,
@@ -238,7 +239,7 @@ class _QuadraticBias(ConservativeBias):
         energies = []
         for b in range(B):
             pos_b = current.positions[ptr[b] : ptr[b + 1]]
-            energies.append(0.5 * self.k * (pos_b ** 2).sum())
+            energies.append(0.5 * self.k * (pos_b**2).sum())
         return torch.stack(energies).unsqueeze(-1)  # [B, 1]
 
 
@@ -252,7 +253,7 @@ class _PairDistanceBias(ConservativeBias):
 
     def energy(self, current: Batch) -> Tensor:
         d = pair_distance(current, self.atom_indices)  # [B, 1]
-        return 0.5 * self.k * d ** 2  # [B, 1]
+        return 0.5 * self.k * d**2  # [B, 1]
 
 
 class TestConservativeBias:
@@ -447,8 +448,12 @@ class TestPairDistance:
         d1_ref = 2.0
 
         data_list = [
-            AtomicData(atomic_numbers=torch.tensor([6, 6], dtype=torch.long), positions=pos0),
-            AtomicData(atomic_numbers=torch.tensor([6, 6], dtype=torch.long), positions=pos1),
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long), positions=pos0
+            ),
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long), positions=pos1
+            ),
         ]
         batch = Batch.from_data_list(data_list).to(device)
         idx = torch.tensor([0, 1], device=device)
@@ -462,11 +467,15 @@ class TestPairDistance:
         data_list = [
             AtomicData(
                 atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.long),
-                positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 3.0, 0.0]]),
+                positions=torch.tensor(
+                    [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 3.0, 0.0]]
+                ),
             ),
             AtomicData(
                 atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.long),
-                positions=torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 5.0], [2.0, 0.0, 0.0]]),
+                positions=torch.tensor(
+                    [[0.0, 0.0, 0.0], [0.0, 0.0, 5.0], [2.0, 0.0, 0.0]]
+                ),
             ),
         ]
         batch = Batch.from_data_list(data_list).to(device)
@@ -484,7 +493,7 @@ class TestPairDistance:
         box = 10.0
         # Atom 0 at 0.1, atom 1 at 9.9 → naive dist = 9.8, MIC dist = 0.2
         positions = torch.tensor([[0.1, 0.0, 0.0], [9.9, 0.0, 0.0]])
-        cell = torch.eye(3).unsqueeze(0) * box   # [1, 3, 3]
+        cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
         pbc = torch.tensor([[True, True, True]])  # [1, 3]
         data = AtomicData(
             atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
@@ -501,8 +510,8 @@ class TestPairDistance:
         """pbc=False: long-range distance not folded by MIC."""
         box = 10.0
         positions = torch.tensor([[0.1, 0.0, 0.0], [9.9, 0.0, 0.0]])
-        cell = torch.eye(3).unsqueeze(0) * box     # [1, 3, 3]
-        pbc = torch.tensor([[False, False, False]]) # [1, 3]
+        cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
+        pbc = torch.tensor([[False, False, False]])  # [1, 3]
         data = AtomicData(
             atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
             positions=positions,
@@ -544,15 +553,6 @@ class TestPairDistance:
         """pair_distance gradient w.r.t. positions is correct (finite diff)."""
         torch.manual_seed(7)
         positions = torch.randn(3, 3, device=device, dtype=torch.float64)
-        positions.requires_grad_(True)
-        cell = None
-        pbc_tensor = None
-
-        data = AtomicData(
-            atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.long),
-            positions=positions.detach(),
-        )
-        batch = Batch.from_data_list([data]).to(device)
         idx = torch.tensor([0, 2], device=device)
 
         # Use gradcheck with a wrapper that creates a fresh batch
@@ -576,7 +576,7 @@ class TestPairDistance:
         box = 8.0
         positions = torch.tensor([[1.0, 0.0, 0.0], [6.0, 0.0, 0.0]], device=device)
         cell = torch.eye(3).unsqueeze(0).to(device) * box  # [1, 3, 3]
-        pbc = torch.tensor([[True, True, True]])            # [1, 3]
+        pbc = torch.tensor([[True, True, True]])  # [1, 3]
         data = AtomicData(
             atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
             positions=positions.cpu(),
@@ -600,7 +600,7 @@ class TestPairDistance:
         box = 10.0
         # Position atom j at 3.0 from atom i (clearly not near 5.0 = box/2)
         positions = torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
-        cell = torch.eye(3).unsqueeze(0) * box   # [1, 3, 3]
+        cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
         pbc = torch.tensor([[True, True, True]])  # [1, 3]
         data = AtomicData(
             atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
@@ -686,14 +686,14 @@ class TestAggregateBiasResults:
 
 
 # ===========================================================================
-# 6. torch.compile spike — CPU fullgraph tests
+# 6. torch.compile — fullgraph and graph-break tests
 # ===========================================================================
 
 
 class TestCompileSpike:
-    """PR 1 compile spike: verifies what can and cannot be compiled.
+    """Verifies what can and cannot be compiled with ``torch.compile``.
 
-    **Spike finding (documented per proposal section 6):**
+    **Findings (documented per proposal section 6):**
 
     * :func:`pair_distance` — compiles with ``fullgraph=True``.  This is the
       primary CV hot path and is the go/no-go gate for ``compile_biases=True``.

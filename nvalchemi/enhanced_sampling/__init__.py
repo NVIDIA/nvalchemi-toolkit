@@ -14,28 +14,28 @@
 # limitations under the License.
 """Enhanced-sampling subpackage for nvalchemi-toolkit.
 
-PR 1 (compile spike) public surface
-------------------------------------
+Public surface
+--------------
 * :class:`BiasResult` — frozen dataclass; fully-detached bias outputs.
 * :class:`BiasPotential` — ``@runtime_checkable`` Protocol; structural
   interface every bias must satisfy.
 * :class:`ConservativeBias` — autograd helper; subclass and override
   :meth:`~ConservativeBias.energy` to get forces and virial for free.
 * :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
-* :func:`pair_distance` — P0 differentiable pair-distance CV; supports
+* :func:`pair_distance` — differentiable pair-distance CV; supports
   nonperiodic and general triclinic MIC.
 
-Deferred to later PRs
----------------------
-* :class:`EnhancedSampling` runner — PR 2
-* :class:`ThermodynamicState`, :class:`ReplicaExchange` — PR 5
-* Built-in biases (umbrella, metadynamics, walls, ABF) — PR 2–6
-* Zarr checkpoint support — PR 4
+Deferred to later milestones
+-----------------------------
+* :class:`EnhancedSampling` runner
+* :class:`ThermodynamicState`, :class:`ReplicaExchange`
+* Built-in biases (umbrella, metadynamics, walls, ABF)
+* Zarr checkpoint support
 """
 
 from nvalchemi.enhanced_sampling._bias import (
-    BiasResult,
     BiasPotential,
+    BiasResult,
     ConservativeBias,
     aggregate_bias_results,
 )

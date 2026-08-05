@@ -15,8 +15,8 @@
 """Core bias abstractions: ``BiasPotential`` protocol, ``BiasResult``, and
 ``ConservativeBias`` autograd helper.
 
-This module is the foundation of PR 1 (compile spike).  Every downstream
-built-in bias depends on these three objects.
+This module is the foundation of the enhanced-sampling subpackage.  Every
+downstream built-in bias depends on these three objects.
 
 Design guarantees
 -----------------
@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -101,9 +101,7 @@ class BiasResult:
 def _validate_bias_result(result: BiasResult) -> None:
     """Eager-only validation of a ``BiasResult`` (skipped under compile)."""
     if result.stress is not None and result.virial is not None:
-        raise ValueError(
-            "BiasResult: provide either 'stress' or 'virial', not both."
-        )
+        raise ValueError("BiasResult: provide either 'stress' or 'virial', not both.")
     tensor_fields: dict[str, Tensor | None] = {
         "energy": result.energy,
         "forces": result.forces,
@@ -132,8 +130,7 @@ def _validate_bias_result(result: BiasResult) -> None:
             )
         if t.grad_fn is not None:
             raise ValueError(
-                f"BiasResult.observables[{key!r}] must be detached "
-                f"(grad_fn is None)."
+                f"BiasResult.observables[{key!r}] must be detached (grad_fn is None)."
             )
 
 
@@ -233,20 +230,14 @@ class ConservativeBias:
     Notes
     -----
     torch.compile compatibility
-        :meth:`evaluate` is the hot path targeted by ``compile_biases=True``.
-        The ``torch.enable_grad()`` context manager does **not** cause a
-        graph break when called inside a compiled region — PyTorch 2.x
-        supports it natively via ``torch.set_grad_enabled`` in the
-        functional IR.  The ``autograd.grad`` call is lowered to a single
-        fused gradient computation.  Both are compile-stable as of
-        PyTorch 2.4.
-
-        If a future PyTorch version introduces a graph break here, the
-        fallback is to move the gradient computation out of the compiled
-        region into an eager wrapper that calls the compiled energy
-        function and then differentiates it eagerly.  This fallback is
-        documented in proposal section 6 and selected by setting
-        ``compile_biases=False`` in ``EnhancedSampling``.
+        :meth:`evaluate` runs in eager mode.  It uses
+        ``pos_leaf = positions.detach().requires_grad_(True)``, which is
+        not supported by ``torch.compile`` (``Unsupported
+        Tensor.requires_grad_() call``).  The documented fallback is:
+        compile :meth:`energy` independently (the user's hot path);
+        keep :meth:`evaluate` as the eager orchestration wrapper.
+        ``EnhancedSampling(compile_biases=True)`` applies
+        ``torch.compile`` to each bias's ``energy()`` override only.
     """
 
     # Subclasses may set this to False to skip virial computation even when
@@ -274,22 +265,8 @@ class ConservativeBias:
     def evaluate(self, current: Batch) -> BiasResult:
         """Compute energy, forces, and (optionally) virial via autograd.
 
-        This method runs in eager mode.  ``torch.compile`` cannot trace it
-        directly because it uses ``requires_grad_()`` (see compile note in
-        class docstring).  The compiled hot path is :meth:`energy` — subclass
-        authors compile their ``energy()`` override; ``evaluate()`` remains the
-        eager orchestration wrapper.
-
-        Compile boundary note (PR 1 spike finding)
-        -------------------------------------------
-        ``pos_leaf = positions.detach().requires_grad_(True)`` is not
-        supported by ``torch.compile`` (``Unsupported Tensor.requires_grad_()
-        call``).  The documented fallback from the proposal (section 6) is:
-        compile the :meth:`energy` method independently; keep ``evaluate()``
-        in eager mode.  This is the chosen design going forward.  The
-        ``EnhancedSampling`` runner will apply ``torch.compile`` to each
-        bias's ``energy()`` method only.  ``evaluate()`` itself is never
-        compiled.
+        This method runs in eager mode.  See class docstring for the
+        compile boundary note and the chosen fallback.
         """
         has_cell = (
             self._supports_virial
@@ -298,17 +275,15 @@ class ConservativeBias:
         )
 
         with torch.enable_grad():
-            # --- Create isolated autograd leaves ----------------------------
-            # detach() + requires_grad_(True) gives a fresh grad-leaf.
-            # This pair cannot be lowered into a torch.compile graph — that
-            # is expected; see the compile boundary note above.
+            # Create isolated autograd leaves.
+            # requires_grad_() is not supported by torch.compile — this method
+            # is intentionally kept eager (see class docstring).
             pos_leaf = current.positions.detach().requires_grad_(True)
 
             cell_leaf: Tensor | None = None
             if has_cell:
                 cell_leaf = current.cell.detach().requires_grad_(True)
 
-            # --- Build read-only batch view --------------------------------
             # Temporarily replace positions (and cell) on the live batch with
             # the fresh leaves so that self.energy() can access other batch
             # fields (atomic_numbers, batch_idx, etc.) normally.
@@ -323,7 +298,6 @@ class ConservativeBias:
 
                 bias_energy: Tensor = self.energy(current)  # [B, 1]
 
-                # --- Differentiate -----------------------------------------
                 grad_outputs = (torch.ones_like(bias_energy),)
                 inputs: tuple[Tensor, ...] = (
                     (pos_leaf,) if cell_leaf is None else (pos_leaf, cell_leaf)
@@ -339,7 +313,6 @@ class ConservativeBias:
                 )
 
             finally:
-                # Restore live batch to its original tensors unconditionally.
                 current["positions"] = original_positions
                 if has_cell and original_cell is not None:
                     current["cell"] = original_cell
@@ -349,11 +322,9 @@ class ConservativeBias:
 
         virial: Tensor | None = None
         if has_cell and len(grads) > 1 and grads[1] is not None:
-            # Canonical virial W = −dE/d(strain); cell derivative gives
-            # dE/d(cell).  For the row-vector convention (ASE):
-            # W = −(dE/d(cell)) @ cell.T
+            # Canonical virial W = −dE/d(strain); for the row-vector
+            # convention (ASE): W = −(dE/d(cell)) @ cell.T
             dcell = grads[1].detach()
-            # Squeeze any singleton dim introduced by AtomicData storage.
             if dcell.dim() == 4:
                 dcell = dcell.squeeze(1)
             cell = original_cell
@@ -362,10 +333,8 @@ class ConservativeBias:
             if cell is not None:
                 virial = -(dcell @ cell.transpose(-1, -2))  # [B, 3, 3]
 
-        energy_out = bias_energy.detach()
-
         return BiasResult(
-            energy=energy_out,
+            energy=bias_energy.detach(),
             forces=forces,
             virial=virial,
         )
@@ -387,11 +356,7 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
     Rules
     -----
     * ``None`` fields are skipped (treated as zero contribution).
-    * ``stress`` and ``virial`` are not mixed within a single result but
-      can coexist across different results; they are accumulated
-      separately.  If both ``stress`` and ``virial`` are present after
-      aggregation the caller (runner) is responsible for converting one
-      to the other.
+    * ``stress`` and ``virial`` are accumulated separately.
     * ``observables`` dicts are merged; duplicate keys raise ``ValueError``
       so that namespacing (``bias/<name>/<key>``) must be applied before
       calling this function.
