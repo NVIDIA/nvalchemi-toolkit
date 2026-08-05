@@ -528,8 +528,9 @@ class TestConservativeBias:
         assert result.virial is not None, "virial should be non-None for periodic batch"
         assert result.virial.shape == (1, 3, 3)
 
-        # Analytical: W = -k * outer(dr_mic, dr_mic) = -1 * [[-1],[-1,-0,-0]] ...
-        # dr_mic = [-1, 0, 0]  →  W[0,0] = -1,  all other elements = 0
+        # Analytical: W = −k · outer(dr_mic, dr_mic)
+        # dr_mic = [−1, 0, 0]  →  W = [[-1,0,0],[0,0,0],[0,0,0]]
+        # W[0,0] = -1,  all other elements = 0
         W = result.virial[0]  # [3, 3]
         assert torch.allclose(W[0, 0], torch.tensor(-k, device=device), atol=1e-4), (
             f"W[0,0] = {W[0, 0].item():.6f}, expected {-k:.6f}. "

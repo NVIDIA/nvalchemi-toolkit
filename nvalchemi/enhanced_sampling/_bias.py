@@ -290,12 +290,17 @@ class ConservativeBias:
 
     1. Enters a local ``torch.enable_grad()`` region (safe inside
        ``torch.no_grad()`` outer contexts).
-    2. Creates fresh detached autograd leaves for positions (and cell when
-       ``compute_virial=True``).
-    3. Evaluates :meth:`energy` on an isolated read-only view of the batch
-       that replaces positions (and cell) with the fresh leaves.
-    4. Derives forces and (optionally) virial in one ``autograd.grad`` call
-       with ``create_graph=False, retain_graph=False``.
+    2. Creates a detached positions leaf ``pos_leaf`` (for forces) and,
+       when a cell is present and ``_supports_virial=True``, a per-graph
+       strain leaf ``F_b`` of shape ``[B, 3, 3]`` initialised to the
+       identity (for the canonical cell virial).
+    3. Right-multiplies both positions and cell by ``F_b`` so that a single
+       ``autograd.grad`` call on the strained batch yields forces from
+       ``dE/d(pos_leaf)`` and the canonical virial ``W = −dE/dF_b``.
+       The batch is restored to its original tensors unconditionally in a
+       ``finally`` block.
+    4. Derives forces and virial in one ``autograd.grad`` call with
+       ``create_graph=False, retain_graph=False``.
     5. Constructs a ``BiasResult`` from fully detached output tensors.
     6. Drops all references to the autograd subgraph before returning, so
        that no ``grad_fn`` ever escapes into the live batch or result.
@@ -304,16 +309,14 @@ class ConservativeBias:
     a non-null ``grad_fn`` into the live ``Batch``, ``BiasResult``,
     retained history, bias state, observables, or a checkpoint.
 
-    Parameters
-    ----------
-    compute_virial:
-        When ``True`` (default when a valid cell exists at evaluation
-        time), derive the canonical virial
-        ``W = −dE/d(strain)`` via ``autograd.grad`` w.r.t. the cell
-        leaf.  The virial is shaped ``[B, 3, 3]``.
-
     Notes
     -----
+    Virial computation
+        Virial is controlled by the class attribute ``_supports_virial``
+        (default ``True``).  Subclasses that never need virial may set
+        ``_supports_virial = False`` to skip the strain-leaf construction.
+        There is no ``compute_virial`` constructor parameter.
+
     torch.compile compatibility
         :meth:`evaluate` runs in eager mode.  It uses
         ``pos_leaf = positions.detach().requires_grad_(True)``, which is
@@ -339,9 +342,10 @@ class ConservativeBias:
         Parameters
         ----------
         current:
-            A *read-only view* of the live batch where ``positions`` (and
-            optionally ``cell``) have been replaced by fresh autograd
-            leaves.  Do not assign to any batch field inside this method.
+            A *read-only view* of the live batch where ``positions`` has
+            been replaced by ``pos_leaf @ strain_per_atom`` and ``cell``
+            (when present) by ``cell.detach() @ strain_leaf``.  Do not
+            assign to any batch field inside this method.
         """
         raise NotImplementedError(
             f"{type(self).__name__} must implement energy(self, current: Batch) -> Tensor"
