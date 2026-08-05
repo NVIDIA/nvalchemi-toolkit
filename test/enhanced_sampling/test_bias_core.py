@@ -378,23 +378,70 @@ class TestConservativeBias:
                 f"GPU memory grew by {mem_end - mem_start} bytes across 10 evaluate() calls"
             )
 
-    def test_virial_with_periodic_cell(self, device: str) -> None:
-        """ConservativeBias should populate virial for periodic batches."""
+    def test_virial_canonical_analytical(self, device: str) -> None:
+        """Canonical virial W = −dE/dstrain is correct for a pair bias across an image.
+
+        Setup
+        -----
+        Box: 10 Å cubic. Atom 0 at [0.5, 0, 0], atom 1 at [9.5, 0, 0].
+        MIC distance = 1 Å (image at x − 10, so dr_mic = [−1, 0, 0]).
+        Bias: E = 0.5 · k · d²  (k = 1 eV/Å²).
+
+        Analytical derivation
+        ---------------------
+        Under a homogeneous strain F both positions and cell right-multiply:
+            r_n → r_n @ F,  cell → cell @ F
+            dr_mic → dr_mic @ F   (image index n = [−1,0,0] is fixed)
+            d = |dr_mic @ F|
+
+        dE/d(F_{kl})|_{F=I} = k · dr_mic[k] · dr_mic[l]
+        W_{kl} = −k · dr_mic[k] · dr_mic[l]
+
+        For dr_mic = [−1, 0, 0]:  W[0,0] = −1 eV,  all other elements = 0.
+
+        This is only correct when positions and cell are strained together.
+        Using an independent cell leaf (the prior implementation) misses the
+        atomic position contribution and returns the wrong virial.
+        """
         if device == "cuda":
             pytest.skip(
-                "Virial via autograd.grad on CUDA triggers a cudagraph_trees "
-                "assertion in this environment (PyTorch internal assertion at "
-                "cudagraph_trees.py:2608).  CPU correctness is verified; CUDA "
-                "virial correctness will be covered in the GPU integration test "
-                "suite added in PR 2."
+                "Strain-based virial on CUDA triggers a cudagraph_trees assertion "
+                "in this environment.  CPU correctness is verified here; CUDA will "
+                "be covered in the GPU integration test suite."
             )
-        batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
-        bias = _PairDistanceBias(atom_indices=torch.tensor([0, 1]), k=1.0)
+
+        k = 1.0
+        box = 10.0
+        # MIC distance = |9.5 - 0.5 - 10| = 1 Å; dr_mic = [-1, 0, 0]
+        positions = torch.tensor([[0.5, 0.0, 0.0], [9.5, 0.0, 0.0]])
+        cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
+        pbc = torch.tensor([[True, True, True]])
+
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        idx = torch.tensor([0, 1], device=device)
+        bias = _PairDistanceBias(atom_indices=idx, k=k)
         result = bias.evaluate(batch)
-        # virial may be None if pair_distance gradient w.r.t. cell is zero
-        # (atoms in same image → cell gradient cancels); just check shape if present
-        if result.virial is not None:
-            assert result.virial.shape == (1, 3, 3)
+
+        assert result.virial is not None, "virial should be non-None for periodic batch"
+        assert result.virial.shape == (1, 3, 3)
+
+        # Analytical: W = -k * outer(dr_mic, dr_mic) = -1 * [[-1],[-1,-0,-0]] ...
+        # dr_mic = [-1, 0, 0]  →  W[0,0] = -1,  all other elements = 0
+        W = result.virial[0]  # [3, 3]
+        assert torch.allclose(W[0, 0], torch.tensor(-k, device=device), atol=1e-4), (
+            f"W[0,0] = {W[0, 0].item():.6f}, expected {-k:.6f}. "
+            "Virial may be missing the atomic-position contribution (strain not "
+            "applied to both positions and cell simultaneously)."
+        )
+        assert torch.allclose(W[1:, :], torch.zeros(2, 3, device=device), atol=1e-4), (
+            f"Off-diagonal/off-axis virial elements should be zero, got {W}"
+        )
 
     def test_evaluate_is_read_only_no_state_change(self, device: str) -> None:
         """Multiple evaluate() calls must leave bias state unchanged."""

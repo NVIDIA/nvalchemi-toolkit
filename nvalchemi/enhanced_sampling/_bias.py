@@ -263,10 +263,33 @@ class ConservativeBias:
         )
 
     def evaluate(self, current: Batch) -> BiasResult:
-        """Compute energy, forces, and (optionally) virial via autograd.
+        """Compute energy, forces, and canonical cell virial via autograd.
 
         This method runs in eager mode.  See class docstring for the
         compile boundary note and the chosen fallback.
+
+        Virial derivation
+        -----------------
+        The canonical virial is ``W = −dE/dstrain`` evaluated at the
+        identity strain.  Under a homogeneous deformation ``F`` (ASE
+        row-vector convention), both atomic positions and the cell
+        transform together::
+
+            r_n → r_n @ F
+            cell_b → cell_b @ F
+
+        A per-graph strain leaf ``F_b`` (initialised to ``I``) is applied
+        to both, and a single ``autograd.grad`` call then yields:
+
+        * ``dE/d(pos_leaf[n])`` at ``F=I`` → forces (negated).
+        * ``dE/d(F_b)`` at ``F=I`` → canonical virial ``W_b = −dE/dF_b``.
+
+        This is the correct formulation for position-dependent biases that
+        use MIC displacements: the position term ``Σ_n r_n ⊗ (−F_n)`` and
+        the cell gradient term are automatically combined.  Using an
+        independent cell leaf (without straining positions) misses the
+        position contribution and returns incorrect virials for pair
+        restraints across image boundaries.
         """
         has_cell = (
             self._supports_virial
@@ -274,39 +297,65 @@ class ConservativeBias:
             and current.cell is not None
         )
 
+        B = current.num_graphs
+        original_positions = current.positions
+        original_cell = current.cell if has_cell else None
+
         with torch.enable_grad():
-            # Create isolated autograd leaves.
-            # requires_grad_() is not supported by torch.compile — this method
+            # --- Positions leaf (for forces) --------------------------------
+            # requires_grad_() is not supported by torch.compile; evaluate()
             # is intentionally kept eager (see class docstring).
-            pos_leaf = current.positions.detach().requires_grad_(True)
+            pos_leaf = current.positions.detach().requires_grad_(True)  # [N, 3]
 
-            cell_leaf: Tensor | None = None
+            # --- Per-graph strain leaf (for canonical virial) ---------------
+            # Initialised to the identity; both positions and cell are
+            # right-multiplied by F_b so that dE/dF_b|_{F=I} = −W_b.
+            strain_leaf: Tensor | None = None
+            pos_for_energy: Tensor = pos_leaf
+
             if has_cell:
-                cell_leaf = current.cell.detach().requires_grad_(True)
+                cell = original_cell
+                if cell is not None and cell.dim() == 4:
+                    cell = cell.squeeze(1)  # [B, 3, 3]
 
-            # Temporarily replace positions (and cell) on the live batch with
-            # the fresh leaves so that self.energy() can access other batch
-            # fields (atomic_numbers, batch_idx, etc.) normally.
-            # Restored unconditionally in the finally block.
-            original_positions = current.positions
-            original_cell = current.cell if has_cell else None
+                strain_leaf = (
+                    torch.eye(3, device=pos_leaf.device, dtype=pos_leaf.dtype)
+                    .unsqueeze(0)
+                    .expand(B, -1, -1)
+                    .clone()
+                    .requires_grad_(True)
+                )  # [B, 3, 3]
+
+                # Apply per-graph strain to each atom's position:
+                # pos_n → pos_n @ F_{b(n)}
+                strain_per_atom = strain_leaf[current.batch_idx]  # [N, 3, 3]
+                pos_for_energy = torch.einsum(
+                    "nk,nkj->nj", pos_leaf, strain_per_atom
+                )  # [N, 3]
+
+                # Apply per-graph strain to the cell:  cell_b → cell_b @ F_b
+                # Detach the stored cell values; only F carries the gradient.
+                cell_for_energy = torch.bmm(cell.detach(), strain_leaf)  # [B, 3, 3]
 
             try:
-                current["positions"] = pos_leaf
-                if has_cell and cell_leaf is not None:
-                    current["cell"] = cell_leaf
+                current["positions"] = pos_for_energy
+                if has_cell and strain_leaf is not None:
+                    # Store in the same shape as the original cell tensor.
+                    stored = cell_for_energy  # type: ignore[possibly-undefined]
+                    if original_cell is not None and original_cell.dim() == 4:
+                        stored = stored.unsqueeze(1)
+                    current["cell"] = stored
 
                 bias_energy: Tensor = self.energy(current)  # [B, 1]
 
-                grad_outputs = (torch.ones_like(bias_energy),)
-                inputs: tuple[Tensor, ...] = (
-                    (pos_leaf,) if cell_leaf is None else (pos_leaf, cell_leaf)
-                )
+                inputs: list[Tensor] = [pos_leaf]
+                if strain_leaf is not None:
+                    inputs.append(strain_leaf)
 
                 grads = torch.autograd.grad(
                     outputs=(bias_energy,),
                     inputs=inputs,
-                    grad_outputs=grad_outputs,
+                    grad_outputs=(torch.ones_like(bias_energy),),
                     create_graph=False,
                     retain_graph=False,
                     allow_unused=False,
@@ -317,21 +366,13 @@ class ConservativeBias:
                 if has_cell and original_cell is not None:
                     current["cell"] = original_cell
 
-        # grads[0]: d(sum(energy))/d(positions) — negate for forces.
-        forces = -grads[0].detach()  # [N_atoms, 3]
+        # grads[0] = dE/d(pos_leaf) at strain=I → forces = −grad.
+        forces = -grads[0].detach()  # [N, 3]
 
         virial: Tensor | None = None
-        if has_cell and len(grads) > 1 and grads[1] is not None:
-            # Canonical virial W = −dE/d(strain); for the row-vector
-            # convention (ASE): W = −(dE/d(cell)) @ cell.T
-            dcell = grads[1].detach()
-            if dcell.dim() == 4:
-                dcell = dcell.squeeze(1)
-            cell = original_cell
-            if cell is not None and cell.dim() == 4:
-                cell = cell.squeeze(1)
-            if cell is not None:
-                virial = -(dcell @ cell.transpose(-1, -2))  # [B, 3, 3]
+        if strain_leaf is not None and len(grads) > 1 and grads[1] is not None:
+            # grads[1] = dE/dF_b at F=I; canonical virial W_b = −dE/dF_b.
+            virial = -grads[1].detach()  # [B, 3, 3]
 
         return BiasResult(
             energy=bias_energy.detach(),
