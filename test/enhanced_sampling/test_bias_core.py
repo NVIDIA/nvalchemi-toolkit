@@ -187,6 +187,102 @@ class TestBiasResult:
         with pytest.raises((TypeError, AttributeError)):
             r.energy = torch.ones(1, 1)  # type: ignore[misc]
 
+    # --- shape validation ---
+
+    def test_energy_wrong_ndim_raises(self) -> None:
+        """energy must be [B, 1]; a flat [B] tensor is rejected."""
+        with pytest.raises(ValueError, match="energy.*\\[B, 1\\]"):
+            BiasResult(energy=torch.zeros(2))
+
+    def test_energy_wrong_trailing_dim_raises(self) -> None:
+        """energy last dim must be 1, not 3."""
+        with pytest.raises(ValueError, match="energy.*\\[B, 1\\]"):
+            BiasResult(energy=torch.zeros(2, 3))
+
+    def test_forces_wrong_ndim_raises(self) -> None:
+        """forces must be [N, 3]; a 1-D tensor is rejected."""
+        with pytest.raises(ValueError, match="forces.*\\[N, 3\\]"):
+            BiasResult(forces=torch.zeros(9))
+
+    def test_forces_wrong_width_raises(self) -> None:
+        """forces last dim must be 3, not 1."""
+        with pytest.raises(ValueError, match="forces.*\\[N, 3\\]"):
+            BiasResult(forces=torch.zeros(4, 1))
+
+    def test_stress_wrong_shape_raises(self) -> None:
+        """stress must be [B, 3, 3]; a [B, 3] tensor is rejected."""
+        with pytest.raises(ValueError, match="stress.*\\[B, 3, 3\\]"):
+            BiasResult(stress=torch.zeros(2, 3))
+
+    def test_virial_wrong_shape_raises(self) -> None:
+        """virial must be [B, 3, 3]."""
+        with pytest.raises(ValueError, match="virial.*\\[B, 3, 3\\]"):
+            BiasResult(virial=torch.zeros(2, 9))
+
+    def test_state_version_wrong_ndim_raises(self) -> None:
+        """state_version must be 1-D."""
+        with pytest.raises(ValueError, match="state_version.*\\[B\\]"):
+            BiasResult(state_version=torch.zeros(2, 1, dtype=torch.int32))
+
+    def test_state_version_float_dtype_raises(self) -> None:
+        """state_version must be an integer dtype."""
+        with pytest.raises(ValueError, match="integer dtype"):
+            BiasResult(state_version=torch.zeros(2))  # float32
+
+    def test_state_version_integer_accepted(self) -> None:
+        """state_version with int64 dtype is accepted."""
+        r = BiasResult(state_version=torch.zeros(2, dtype=torch.int64))
+        assert r.state_version is not None
+
+    # --- batch-size consistency ---
+
+    def test_batch_size_mismatch_raises(self) -> None:
+        """energy [2, 1] and virial [3, 3, 3] have inconsistent B."""
+        with pytest.raises(ValueError, match="inconsistent"):
+            BiasResult(energy=torch.zeros(2, 1), virial=torch.zeros(3, 3, 3))
+
+    def test_batch_size_consistent_accepted(self) -> None:
+        """energy [2, 1] and virial [2, 3, 3] with matching B=2 are accepted."""
+        r = BiasResult(energy=torch.zeros(2, 1), virial=torch.zeros(2, 3, 3))
+        assert r.energy is not None
+
+    # --- finiteness ---
+
+    def test_energy_nan_raises(self) -> None:
+        with pytest.raises(ValueError, match="energy.*NaN or Inf"):
+            BiasResult(energy=torch.tensor([[float("nan")]]))
+
+    def test_energy_inf_raises(self) -> None:
+        with pytest.raises(ValueError, match="energy.*NaN or Inf"):
+            BiasResult(energy=torch.tensor([[float("inf")]]))
+
+    def test_forces_nan_raises(self) -> None:
+        bad = torch.zeros(3, 3)
+        bad[1, 2] = float("nan")
+        with pytest.raises(ValueError, match="forces.*NaN or Inf"):
+            BiasResult(forces=bad)
+
+    def test_virial_inf_raises(self) -> None:
+        bad = torch.zeros(1, 3, 3)
+        bad[0, 0, 0] = float("-inf")
+        with pytest.raises(ValueError, match="virial.*NaN or Inf"):
+            BiasResult(virial=bad)
+
+    def test_observable_nan_raises(self) -> None:
+        with pytest.raises(ValueError, match="observables.*NaN or Inf"):
+            BiasResult(observables={"cv": torch.tensor([float("nan")])})
+
+    def test_valid_result_accepted(self) -> None:
+        """A fully-populated valid BiasResult passes all checks."""
+        r = BiasResult(
+            energy=torch.zeros(2, 1),
+            forces=torch.zeros(6, 3),
+            virial=torch.zeros(2, 3, 3),
+            state_version=torch.zeros(2, dtype=torch.int64),
+            observables={"bias/a/cv": torch.zeros(2)},
+        )
+        assert r.energy is not None
+
 
 # ===========================================================================
 # 2. BiasPotential Protocol

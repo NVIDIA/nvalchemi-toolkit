@@ -99,9 +99,31 @@ class BiasResult:
 
 
 def _validate_bias_result(result: BiasResult) -> None:
-    """Eager-only validation of a ``BiasResult`` (skipped under compile)."""
+    """Eager-only validation of a ``BiasResult`` (skipped under compile).
+
+    Checks (in order):
+
+    1. Mutual exclusion of ``stress`` and ``virial``.
+    2. All tensor fields are detached (``requires_grad=False``, ``grad_fn is None``).
+    3. Shapes match the documented conventions:
+
+       * ``energy``       — ndim=2, shape ``[B, 1]``
+       * ``forces``       — ndim=2, shape ``[N, 3]``
+       * ``stress``       — ndim=3, shape ``[B, 3, 3]``
+       * ``virial``       — ndim=3, shape ``[B, 3, 3]``
+       * ``state_version`` — ndim=1, integer dtype
+
+    4. Batch-size consistency: all present system-level fields
+       (``energy``, ``stress``, ``virial``, ``state_version``) must agree
+       on the leading dimension ``B``.
+    5. All floating-point tensors (including ``observables``) are finite
+       (no NaN or Inf).
+    """
+    # 1. stress / virial mutual exclusion
     if result.stress is not None and result.virial is not None:
         raise ValueError("BiasResult: provide either 'stress' or 'virial', not both.")
+
+    # 2. Detachment check for every tensor field
     tensor_fields: dict[str, Tensor | None] = {
         "energy": result.energy,
         "forces": result.forces,
@@ -131,6 +153,69 @@ def _validate_bias_result(result: BiasResult) -> None:
         if t.grad_fn is not None:
             raise ValueError(
                 f"BiasResult.observables[{key!r}] must be detached (grad_fn is None)."
+            )
+
+    # 3. Shape checks
+    if result.energy is not None:
+        e = result.energy
+        if e.ndim != 2 or e.shape[1] != 1:
+            raise ValueError(
+                f"BiasResult.energy must have shape [B, 1], got {tuple(e.shape)}."
+            )
+
+    if result.forces is not None:
+        f = result.forces
+        if f.ndim != 2 or f.shape[1] != 3:
+            raise ValueError(
+                f"BiasResult.forces must have shape [N, 3], got {tuple(f.shape)}."
+            )
+
+    for name in ("stress", "virial"):
+        t = getattr(result, name)
+        if t is not None and (t.ndim != 3 or t.shape[1] != 3 or t.shape[2] != 3):
+            raise ValueError(
+                f"BiasResult.{name} must have shape [B, 3, 3], got {tuple(t.shape)}."
+            )
+
+    if result.state_version is not None:
+        sv = result.state_version
+        if sv.ndim != 1:
+            raise ValueError(
+                f"BiasResult.state_version must have shape [B], got {tuple(sv.shape)}."
+            )
+        if sv.dtype not in (
+            torch.int8,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+            torch.uint8,
+        ):
+            raise ValueError(
+                f"BiasResult.state_version must be an integer dtype, got {sv.dtype}."
+            )
+
+    # 4. Batch-size consistency across system-level fields
+    b_sizes: dict[str, int] = {}
+    for name in ("energy", "stress", "virial", "state_version"):
+        t = getattr(result, name)
+        if t is not None:
+            b_sizes[name] = t.shape[0]
+    if len(set(b_sizes.values())) > 1:
+        raise ValueError(
+            f"BiasResult: leading batch dimension B is inconsistent across fields: "
+            f"{b_sizes}."
+        )
+
+    # 5. Finiteness — NaN and Inf are never valid output values
+    for name, t in tensor_fields.items():
+        if t is None or not t.is_floating_point():
+            continue
+        if not t.isfinite().all():
+            raise ValueError(f"BiasResult.{name} contains NaN or Inf values.")
+    for key, t in result.observables.items():
+        if t.is_floating_point() and not t.isfinite().all():
+            raise ValueError(
+                f"BiasResult.observables[{key!r}] contains NaN or Inf values."
             )
 
 
