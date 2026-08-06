@@ -1053,6 +1053,38 @@ class TestAggregateBiasResults:
         agg = aggregate_bias_results([r1, r2])
         assert torch.allclose(agg.virial, torch.ones(1, 3, 3) * 3.0)
 
+    def test_mixed_stress_and_virial_raises(self) -> None:
+        """Mixing stress from one result and virial from another raises ValueError.
+
+        The error must come from aggregate_bias_results itself (not from
+        BiasResult.__post_init__) with a message that identifies which
+        result indices contributed each field.
+        """
+        r_stress = BiasResult(stress=torch.zeros(1, 3, 3))
+        r_virial = BiasResult(virial=torch.zeros(1, 3, 3))
+        with pytest.raises(ValueError, match="stress.*virial|virial.*stress"):
+            aggregate_bias_results([r_stress, r_virial])
+
+    def test_mixed_stress_and_virial_error_identifies_indices(self) -> None:
+        """Error message must identify which result indices are responsible."""
+        results = [
+            BiasResult(energy=torch.zeros(1, 1)),  # index 0 — no cell response
+            BiasResult(stress=torch.zeros(1, 3, 3)),  # index 1 — stress
+            BiasResult(energy=torch.zeros(1, 1)),  # index 2 — no cell response
+            BiasResult(virial=torch.zeros(1, 3, 3)),  # index 3 — virial
+        ]
+        with pytest.raises(ValueError, match=r"\[1\].*\[3\]|\[3\].*\[1\]"):
+            aggregate_bias_results(results)
+
+    def test_all_stress_aggregates_correctly(self) -> None:
+        """Multiple stress contributions are summed without raising."""
+        r1 = BiasResult(stress=torch.ones(1, 3, 3))
+        r2 = BiasResult(stress=torch.ones(1, 3, 3) * 2.0)
+        agg = aggregate_bias_results([r1, r2])
+        assert agg.stress is not None
+        assert agg.virial is None
+        assert torch.allclose(agg.stress, torch.ones(1, 3, 3) * 3.0)
+
     def test_duplicate_observable_key_raises(self) -> None:
         r1 = BiasResult(observables={"bias/a/cv": torch.zeros(1)})
         r2 = BiasResult(observables={"bias/a/cv": torch.ones(1)})

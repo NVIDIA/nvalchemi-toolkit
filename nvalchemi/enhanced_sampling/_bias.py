@@ -486,7 +486,13 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
     Rules
     -----
     * ``None`` fields are skipped (treated as zero contribution).
-    * ``stress`` and ``virial`` are accumulated separately.
+    * All results must agree on which cell-response field they use: every
+      result that carries a cell response must use **either** ``stress``
+      **or** ``virial`` — never a mix of both across the list.  Mixing
+      raises ``ValueError`` at aggregation time (not inside ``BiasResult``)
+      with a message identifying which indices contributed each field.
+      Converting between the two requires the cell volume and is the
+      caller's responsibility before aggregation.
     * ``observables`` dicts are merged; duplicate keys raise ``ValueError``
       so that namespacing (``bias/<name>/<key>``) must be applied before
       calling this function.
@@ -510,6 +516,22 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
     stress_total: Tensor | None = None
     virial_total: Tensor | None = None
     observables_total: dict[str, Tensor] = {}
+
+    # Detect stress/virial mixing up-front so the error is raised here with
+    # a clear message, not inside BiasResult.__post_init__ with a generic
+    # mutual-exclusion message that doesn't identify which results mixed them.
+    has_stress = any(r.stress is not None for r in results)
+    has_virial = any(r.virial is not None for r in results)
+    if has_stress and has_virial:
+        stress_indices = [i for i, r in enumerate(results) if r.stress is not None]
+        virial_indices = [i for i, r in enumerate(results) if r.virial is not None]
+        raise ValueError(
+            f"aggregate_bias_results: results[{stress_indices}] provide 'stress' "
+            f"and results[{virial_indices}] provide 'virial' — cannot mix both in "
+            "the same aggregation.  Make all biases return the same field.  "
+            "Converting between stress and virial requires the cell volume and is "
+            "the caller's responsibility before aggregation."
+        )
 
     for r in results:
         if r.energy is not None:
