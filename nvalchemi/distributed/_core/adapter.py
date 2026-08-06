@@ -119,6 +119,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Sequence
 
@@ -360,6 +361,19 @@ class OpAdapter:
         )
 
     @property
+    def all_reduce_replicated_outputs(self) -> tuple[int, ...]:
+        """Subset of :attr:`all_reduce_outputs` whose reduced value feeds a
+        replicated whole-system computation, so the adjoint passes the incoming
+        gradient through instead of reducing it again."""
+        return tuple(
+            sorted(
+                p
+                for p, t in self.output_transforms.items()
+                if isinstance(t, AllReduceSum) and t.replicated_consumer
+            )
+        )
+
+    @property
     def slice_outputs_owned(self) -> tuple[int, ...]:
         return tuple(
             sorted(
@@ -404,6 +418,7 @@ class OpAdapter:
             scatter_outputs=self.scatter_outputs,
             owned_slice_inputs=self.owned_slice_inputs,
             all_reduce_outputs=self.all_reduce_outputs,
+            all_reduce_replicated_outputs=self.all_reduce_replicated_outputs,
             gather_inputs_full=self.gather_inputs_full,
             slice_outputs_owned=self.slice_outputs_owned,
         )
@@ -1278,24 +1293,39 @@ def _replacement_qualname(fn: Callable | None) -> str | None:
 
 def _resolve_replacement(qualname: str | None) -> Callable | None:
     """Inverse of :func:`_replacement_qualname`. Best-effort: returns
-    ``None`` if the qualname doesn't resolve."""
-    if not qualname or ":" not in qualname:
-        return None
-    import importlib  # noqa: PLC0415
+    ``None`` if the qualname doesn't resolve.
 
-    mod_path, qual = qualname.split(":", 1)
-    try:
-        mod = importlib.import_module(mod_path)
-    except Exception:
+    An unresolved replacement installs as a no-op, so the model silently runs
+    uncorrected; that case warns and the caller is expected to rebind from a
+    live spec.
+    """
+    if not qualname:
         return None
-    obj: Any = mod
-    for part in qual.split("."):
-        if part.startswith("<"):
-            return None
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return obj
+    resolved = None
+    if ":" in qualname:
+        import importlib  # noqa: PLC0415
+
+        mod_path, qual = qualname.split(":", 1)
+        try:
+            obj: Any = importlib.import_module(mod_path)
+        except Exception:
+            obj = None
+        for part in qual.split(".") if obj is not None else ():
+            if part.startswith("<"):
+                obj = None
+                break
+            obj = getattr(obj, part, None)
+            if obj is None:
+                break
+        resolved = obj
+    if resolved is None:
+        warnings.warn(
+            f"Adapter replacement {qualname!r} did not resolve; the adapter will "
+            "install as a no-op. Rebind it from a live spec before use.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return resolved
 
 
 # Registry mapping serialized "kind" → adapter class. Subclasses that

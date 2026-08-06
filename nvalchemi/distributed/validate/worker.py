@@ -49,6 +49,47 @@ from nvalchemi.distributed.validate.reference import _ensure_neighbors
 __all__ = ["_worker_main", "_patch_physicsnemo_all_to_all_for_gloo"]
 
 
+def _rebind_replacements(spec: MLIPSpec, live: "MLIPSpec | None") -> None:
+    """Restore adapter replacements that could not cross the spawn boundary.
+
+    A replacement a wrapper builds from its own submodules — the per-layer halo
+    refresh, say — is a closure with no importable qualname, so ``from_dict``
+    leaves it unset and the adapter installs as a no-op, giving wrong results
+    rather than an error. Take the live object from the wrapper's own spec.
+
+    Parameters
+    ----------
+    spec : MLIPSpec
+        The deserialized spec, mutated in place.
+    live : MLIPSpec or None
+        The wrapper's freshly built spec, or ``None`` if it declares none.
+
+    Returns
+    -------
+    None
+    """
+    if live is None:
+        return
+
+    def _target(adapter: Any) -> tuple:
+        # Everything the adapter serializes except the replacement itself
+        # identifies what it patches, for any adapter kind.
+        d = {k: v for k, v in adapter.to_dict().items() if k != "replacement"}
+        return tuple(sorted(d.items()))
+
+    by_target = {
+        _target(h): h
+        for h in live.distribution.third_party_helpers
+        if getattr(h, "replacement", None) is not None
+    }
+    for helper in spec.distribution.third_party_helpers:
+        if getattr(helper, "replacement", None) is not None:
+            continue
+        match = by_target.get(_target(helper))
+        if match is not None:
+            object.__setattr__(helper, "replacement", match.replacement)
+
+
 def _worker_main(
     rank: int,
     world_size: int,
@@ -191,10 +232,10 @@ def _worker_main(
             # qualnames already in ``torch.ops``.
             wrapper = model_factory().to(device_str)
             _ds = getattr(wrapper, "distribution_spec", None)
-            if callable(_ds):
-                _ds()
+            _live_spec = _ds() if callable(_ds) else None
 
             spec = MLIPSpec.from_dict(spec_dict)
+            _rebind_replacements(spec, _live_spec)
             sample_batch = _payload_to_batch(sample_payload, device=device_str)
 
             # Reconstruct neighbours on the worker side using the wrapper's

@@ -208,6 +208,62 @@ def _decode_output_kinds(raw: Any) -> dict[str, OutputKind]:
     return out
 
 
+def _compile_policy_to_dict(cp: "CompilePolicy | None") -> "dict[str, Any] | None":
+    """Encode a :class:`CompilePolicy` for the JSON wire format.
+
+    ``graph_padder`` is a live object with model-specific construction and has
+    no wire representation, so it is not carried; a spec that declared one warns
+    on the way out rather than losing it silently.
+
+    Parameters
+    ----------
+    cp : CompilePolicy or None
+        The policy to encode.
+
+    Returns
+    -------
+    dict or None
+        JSON-friendly mapping, or ``None`` when no policy was declared.
+    """
+    if cp is None:
+        return None
+    if cp.graph_padder is not None:
+        warnings.warn(
+            "MLIPSpec.to_dict: CompilePolicy.graph_padder is not serializable; "
+            "the reloaded spec will use the default padder. Pass the spec object "
+            "directly for compiled distributed runs.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return {
+        "static_shapes": cp.static_shapes,
+        "force_strategy": cp.force_strategy.value,
+        "stress_via_strain": cp.stress_via_strain,
+    }
+
+
+def _compile_policy_from_dict(raw: "Any") -> "CompilePolicy | None":
+    """Inverse of :func:`_compile_policy_to_dict`.
+
+    Parameters
+    ----------
+    raw : Any
+        The encoded mapping, or ``None``.
+
+    Returns
+    -------
+    CompilePolicy or None
+        The decoded policy, or ``None`` when none was encoded.
+    """
+    if not raw:
+        return None
+    return CompilePolicy(
+        static_shapes=raw.get("static_shapes", True),
+        force_strategy=ForceStrategy(raw["force_strategy"]),
+        stress_via_strain=raw.get("stress_via_strain", False),
+    )
+
+
 class ForceStrategy(Enum):
     """How a model's forces are produced under a distributed forward.
 
@@ -452,6 +508,26 @@ class MLIPSpec:
             compile=_merge_compile_policies(self.compile, other.compile),
         )
 
+    def with_outputs(self, outputs: dict[str, OutputSpec]) -> "MLIPSpec":
+        """Return a copy with ``outputs`` layered over the declared ones.
+
+        Composes additively, like :meth:`with_adapters`: keys given here replace
+        their counterparts and every other classification is carried through.
+
+        Parameters
+        ----------
+        outputs : dict[str, OutputSpec]
+            Classifications to override.
+
+        Returns
+        -------
+        MLIPSpec
+            The spec with those outputs reclassified.
+        """
+        import dataclasses  # noqa: PLC0415
+
+        return dataclasses.replace(self, outputs=outputs)
+
     def with_adapters(self, *adapters: Any) -> "MLIPSpec":
         """Return a copy with ``adapters`` added to the distribution.
 
@@ -532,6 +608,10 @@ class MLIPSpec:
             "output_kinds": [
                 [k, self.output_kinds[k].value] for k in sorted(self.output_kinds)
             ],
+            # Dropping this silently would hand the loader a spec whose forces
+            # are computed by the model instead of the framework, which for a
+            # ``forces_via_autograd`` model scales them by the world size.
+            "compile": _compile_policy_to_dict(self.compile),
         }
 
     @classmethod
@@ -552,6 +632,7 @@ class MLIPSpec:
                 owned_only_outputs=frozenset(d.get("owned_only_outputs", [])),
                 all_reduce_outputs=frozenset(d.get("all_reduce_outputs", [])),
                 output_kinds=_decode_output_kinds(d.get("output_kinds", [])),
+                compile=_compile_policy_from_dict(d.get("compile")),
             )
         raise ValueError(
             f"MLIPSpec.from_dict: unsupported version {version}; "
