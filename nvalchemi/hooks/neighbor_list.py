@@ -63,6 +63,9 @@ import torch
 from nvalchemiops.neighbors.base_dispatch import neighbor_list_strategy_run_args
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list, suggest_neighbor_list_method
+from nvalchemiops.torch.neighbors.rebuild_detection import (
+    batch_neighbor_list_needs_rebuild,
+)
 
 try:
     from nvalchemiops.torch.neighbors.batch_cell_list import (
@@ -89,20 +92,6 @@ except ImportError:
     allocate_cell_list = None
     compute_naive_num_shifts = None
 
-try:
-    from nvalchemiops.torch.neighbors.rebuild_detection import (
-        batch_neighbor_list_needs_rebuild as _batch_nl_needs_rebuild,
-    )
-except ImportError:
-    _batch_nl_needs_rebuild = None
-
-try:
-    from nvalchemi.dynamics._ops.neighbor_list_rebuild import (
-        batch_neighbor_list_rebuild_inplace as _batch_nl_rebuild_inplace,
-    )
-except ImportError:
-    _batch_nl_rebuild_inplace = None
-
 from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
@@ -115,7 +104,7 @@ class NeighborListHook:
     This hook runs at :attr:`~DynamicsStage.BEFORE_COMPUTE` and writes
     neighbor data into the batch so that the model's ``adapt_input`` can
     read it.  An optional Verlet skin buffer avoids rebuilding the list
-    every step: the list is only recomputed when the maximum atomic
+    every step: the list is only recomputed when the maximum raw Cartesian
     displacement since the last build exceeds ``config.skin / 2``, or when
     the set of active systems changes (detected via ``system_id``).
 
@@ -144,10 +133,10 @@ class NeighborListHook:
         Verlet skin distance in the same length units as positions.
         The neighbor list is searched out to ``cutoff + skin`` so that
         atoms crossing the skin boundary but not the bare cutoff are
-        already included.  The list is only rebuilt when any atom has
-        moved more than ``skin / 2`` since the previous build (requires
-        ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
-        every step.
+        already included.  The list is only rebuilt when any atom's raw
+        Cartesian position has moved more than ``skin / 2`` since the
+        previous build (requires ``nvalchemiops >= 0.4``); set to ``0.0``
+        (default) to rebuild every step.
     max_neighbors : int | None, optional
         Maximum number of neighbors per atom for MATRIX format.  When
         ``None`` (default), auto-estimated from the cutoff via
@@ -215,11 +204,11 @@ class NeighborListHook:
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Recompute the neighbor list if needed and write it to the batch.
 
-        When ``skin > 0`` and ``nvalchemiops`` provides
+        When ``skin > 0``,
         :func:`~nvalchemiops.torch.neighbors.rebuild_detection.batch_neighbor_list_needs_rebuild`,
-        the list is only rebuilt when at least one atom has moved more than
-        ``skin / 2`` since the previous build.  The reference positions are
-        updated in-place on the GPU (no clone) whenever a rebuild occurs.
+        the list is only rebuilt when at least one atom's raw Cartesian position
+        has moved more than ``skin / 2`` since the previous build.  The reference
+        positions are updated in-place on the GPU whenever a rebuild occurs.
         """
         self._rebuild(ctx.batch)
 
@@ -286,41 +275,20 @@ class NeighborListHook:
 
         # ------------------------------------------------------------------
         # Skin check: decide per-system whether the neighbor list needs
-        # rebuilding based on atomic displacement since the last build.
-        # Uses the in-place variant to avoid per-step allocation of the
-        # rebuild_flags tensor.  Falls back to the upstream function if the
-        # in-place op is not available (nvalchemiops < 0.4 or custom op not
-        # loaded).
+        # rebuilding based on raw Cartesian displacement since the last
+        # build.  Minimum-image displacement is not valid here: wrapping an
+        # atom changes the coordinate representation that cached periodic
+        # shifts refer to and must therefore trigger a rebuild.
         # ------------------------------------------------------------------
         if self.skin > 0.0 and self._ref_positions is not None:
-            cell_inv = (
-                torch.linalg.inv_ex(self._buf_cell)[0].contiguous()
-                if self._buf_cell is not None
-                else None
+            self._rebuild_flags = batch_neighbor_list_needs_rebuild(
+                reference_positions=self._ref_positions,
+                current_positions=self._buf_positions,
+                batch_idx=self._buf_batch_idx,
+                skin_distance_threshold=self.skin / 2,
+                update_reference_positions=True,
+                num_systems=B,
             )
-            if _batch_nl_rebuild_inplace is not None:
-                _batch_nl_rebuild_inplace(
-                    reference_positions=self._ref_positions,
-                    current_positions=self._buf_positions,
-                    batch_idx=self._buf_batch_idx,
-                    rebuild_flags=self._rebuild_flags,
-                    skin_distance_threshold=self.skin / 2,
-                    update_reference_positions=True,
-                    cell=self._buf_cell,
-                    cell_inv=cell_inv,
-                    pbc=self._buf_pbc,
-                )
-            elif _batch_nl_needs_rebuild is not None:
-                self._rebuild_flags = _batch_nl_needs_rebuild(
-                    reference_positions=self._ref_positions,
-                    current_positions=self._buf_positions,
-                    batch_idx=self._buf_batch_idx,
-                    skin_distance_threshold=self.skin / 2,
-                    update_reference_positions=True,
-                    cell=self._buf_cell,
-                    cell_inv=cell_inv,
-                    pbc=self._buf_pbc,
-                )
 
         # ------------------------------------------------------------------
         # Build the neighbor list using pre-allocated buffers.
@@ -536,10 +504,9 @@ class NeighborListHook:
         else:
             self._buf_cell = None
             self._buf_pbc = None
-        # Pre-allocate rebuild_flags as all-True so that the very first step
-        # (before _ref_positions is set and the skin check runs) forces a full
-        # neighbor-list build for every system.  The in-place op zeroes this
-        # buffer at the start of each subsequent call before writing fresh values.
+        # Initialise rebuild_flags as all-True so the first step, before the skin
+        # check has reference positions, builds every system. Subsequent checks
+        # replace this tensor with the flags returned by nvalchemiops.
         self._rebuild_flags = torch.ones(B, dtype=torch.bool, device=device)
         # Pre-allocate algorithm-specific kwargs to eliminate on-demand CPU syncs
         # from the neighbor_list dispatcher.  Use the actual batch_ptr (if provided)

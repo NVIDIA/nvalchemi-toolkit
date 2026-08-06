@@ -63,8 +63,6 @@ PASSTHROUGH_OPS: list[str] = [
     "nvalchemi::velocity_rescale",
     # Hooks
     "nvalchemi_hooks::wrap_positions",
-    # NL rebuild detection
-    "nvalchemi::_batch_neighbor_list_rebuild_inplace",
 ]
 
 # Category 2: Reductions (per-atom → per-system)

@@ -16,8 +16,6 @@
 
 Covers all improvements made to NeighborListHook:
 
-* In-place rebuild-detection custom op
-  (:mod:`nvalchemi.dynamics._ops.neighbor_list_rebuild`)
 * Staging-buffer pre-allocation and copy semantics
 * Algorithm-specific kwarg pre-allocation (``_alloc_nl_kwargs``)
 * Shape-change invalidation
@@ -33,7 +31,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
@@ -114,140 +112,6 @@ def _is_neighbor(
     """Return True if atom j appears in atom i's neighbor list."""
     n = int(num_neighbors[i].item())
     return j in neighbor_matrix[i, :n].tolist()
-
-
-# ===========================================================================
-# TestNeighborListRebuildInplace — custom op
-# ===========================================================================
-
-
-class TestNeighborListRebuildInplace:
-    """Tests for :func:`nvalchemi.dynamics._ops.neighbor_list_rebuild.batch_neighbor_list_rebuild_inplace`.
-
-    The op must:
-    * zero rebuild_flags at the start of every call
-    * set flags True for systems whose atoms exceed the displacement threshold
-    * optionally update reference positions in-place when rebuild is triggered
-    """
-
-    @pytest.fixture(autouse=True)
-    def _import(self):
-        try:
-            from nvalchemi.dynamics._ops.neighbor_list_rebuild import (
-                batch_neighbor_list_rebuild_inplace as op,
-            )
-        except ImportError:
-            pytest.skip("neighbor_list_rebuild op not available")
-        self._op = op
-
-    def _call(
-        self,
-        ref: torch.Tensor,
-        cur: torch.Tensor,
-        batch_idx: torch.Tensor,
-        flags: torch.Tensor,
-        threshold: float,
-        update_ref: bool = False,
-    ) -> None:
-        self._op(
-            reference_positions=ref,
-            current_positions=cur,
-            batch_idx=batch_idx,
-            rebuild_flags=flags,
-            skin_distance_threshold=threshold,
-            update_reference_positions=update_ref,
-        )
-
-    def test_zeros_rebuild_flags_on_each_call(self):
-        """Flags must be zeroed at the start of every call."""
-        N, B = 4, 1
-        ref = torch.zeros(N, 3)
-        cur = torch.zeros(N, 3)
-        idx = torch.zeros(N, dtype=torch.int32)
-        flags = torch.ones(B, dtype=torch.bool)  # pre-set to True
-
-        self._call(ref, cur, idx, flags, threshold=0.5)
-
-        # No displacement → all flags should be False after zeroing
-        assert not flags.any(), "flags should be False when no displacement"
-
-    def test_no_displacement_no_rebuild(self):
-        N, B = 6, 2
-        ref = torch.randn(N, 3)
-        cur = ref.clone()
-        idx = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.1)
-
-        assert not flags.any()
-
-    def test_displacement_above_threshold_flags_rebuild(self):
-        N, B = 3, 1
-        ref = torch.zeros(N, 3)
-        cur = torch.zeros(N, 3)
-        cur[1, 0] = 1.0  # atom 1 moves 1.0 Å, threshold = 0.5
-        idx = torch.zeros(N, dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.5)
-
-        assert flags[0].item(), "system 0 should need rebuild"
-
-    def test_displacement_below_threshold_no_rebuild(self):
-        N, B = 3, 1
-        ref = torch.zeros(N, 3)
-        cur = torch.zeros(N, 3)
-        cur[0, 0] = 0.1  # 0.1 Å < threshold 0.5
-        idx = torch.zeros(N, dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.5)
-
-        assert not flags[0].item()
-
-    def test_selective_rebuild_multi_system(self):
-        """Only the system with large displacement gets flagged."""
-        N, B = 6, 2
-        ref = torch.zeros(N, 3)
-        cur = torch.zeros(N, 3)
-        # Atom 4 belongs to system 1 and moves 1.0 Å
-        cur[4, 0] = 1.0
-        idx = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.5)
-
-        assert not flags[0].item(), "system 0 should NOT need rebuild"
-        assert flags[1].item(), "system 1 SHOULD need rebuild"
-
-    def test_update_reference_positions(self):
-        """When update_reference_positions=True and rebuild triggered, ref is updated."""
-        N, B = 3, 1
-        ref = torch.zeros(N, 3)
-        cur = torch.zeros(N, 3)
-        cur[0, 0] = 1.0  # above threshold
-        idx = torch.zeros(N, dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.5, update_ref=True)
-
-        assert flags[0].item()
-        assert torch.allclose(ref, cur), "reference should be updated to current"
-
-    def test_reference_not_updated_when_no_rebuild(self):
-        """Reference positions must NOT change when no rebuild is needed."""
-        N, B = 3, 1
-        ref = torch.zeros(N, 3)
-        ref_clone = ref.clone()
-        cur = torch.zeros(N, 3)
-        cur[0, 0] = 0.1  # below threshold
-        idx = torch.zeros(N, dtype=torch.int32)
-        flags = torch.zeros(B, dtype=torch.bool)
-
-        self._call(ref, cur, idx, flags, threshold=0.5, update_ref=True)
-
-        assert torch.allclose(ref, ref_clone), "reference should NOT change"
 
 
 # ===========================================================================
@@ -889,6 +753,40 @@ class TestSkinCheck:
         assert _is_neighbor(nm, nn, 1, 2), (
             "moved atom 2 should now be a neighbor of atom 1"
         )
+
+    def test_periodic_fold_rebuilds_cached_shifts(self, device: str):
+        """Wrapping across a cell boundary must refresh periodic image shifts."""
+        hook = NeighborListHook(
+            _cfg(),
+            skin=0.5,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+            method="naive",
+        )
+        data = AtomicData(
+            positions=torch.tensor([[0.1, 0.0, 0.0], [19.9, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1], dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0) * 20.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        ctx = _ctx(batch)
+        hook(ctx, _STAGE)
+
+        # Cross the x boundary by less than skin / 2, then fold back into the cell.
+        # The physical MIC displacement is small, but the cached shifts refer to
+        # the pre-fold coordinate representation and must be rebuilt.
+        batch.positions[1, 0] += 0.15
+        WrapPeriodicHook()(ctx, DynamicsStage.AFTER_POST_UPDATE)
+        hook(ctx, _STAGE)
+
+        assert hook._rebuild_flags.item()
+
+        n = int(batch.num_neighbors[0].item())
+        slot = (batch.neighbor_matrix[0, :n] == 1).nonzero().item()
+        shift = batch.neighbor_matrix_shifts[0, slot]
+        cell = batch.cell.squeeze(0)
+        edge = batch.positions[1] - batch.positions[0] + shift.to(cell.dtype) @ cell
+        assert torch.linalg.vector_norm(edge) < hook.config.cutoff
 
 
 # ===========================================================================
