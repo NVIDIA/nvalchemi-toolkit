@@ -248,6 +248,11 @@ def _consolidate_node_energy(node_e: Any, batch: Any, n_graphs: int) -> Any:
     node_e_local = node_e.to_local() if hasattr(node_e, "to_local") else node_e
     ctx = current_dd_context()
     if ctx.is_halo and node_e_local.shape[0] > ctx.n_owned:
-        return system_sum(node_e_local, batch, n_graphs, scope=Scope.OWNED)
-    energy = torch.zeros(n_graphs, dtype=node_e_local.dtype, device=node_e_local.device)
-    return energy.index_add_(0, batch, node_e_local)
+        energy = system_sum(node_e_local, batch, n_graphs, scope=Scope.OWNED)
+    else:
+        energy = torch.zeros(
+            n_graphs, dtype=node_e_local.dtype, device=node_e_local.device
+        ).index_add_(0, batch, node_e_local)
+    # Wrappers emit per-system energy as ``[B, 1]``; match it so a distributed
+    # result is shaped like a single-process one.
+    return energy.reshape(n_graphs, 1)

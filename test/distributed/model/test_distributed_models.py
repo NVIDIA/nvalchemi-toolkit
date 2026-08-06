@@ -683,7 +683,10 @@ def _build_pbc_orthorhombic_argon(
 # Registered topology builders, looked up by key in the worker functions.
 _SYSTEM_BUILDERS: dict[str, Any] = {
     "nonpbc_open_argon": lambda: _build_open_argon_cluster(n_per_side=8),
-    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=4),
+    # n_per_side=5 (box ~20.0 A) so a 2-rank split leaves each domain wider than
+    # the 8.5 A LJ ghost shell; at 4 the domains are 8.0 A and the halo would
+    # wrap onto the rank's own periodic image.
+    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=5),
 }
 
 

@@ -620,6 +620,22 @@ def _graph_partition_run_forward(
     pos.requires_grad_(True)
     atoms["positions"] = pos
 
+    # Each rank differentiates only its owned energy, so the per-rank virials are
+    # genuine partials that sum to the global one.
+    _want_stress = "stress" in dist_model._wrapper.model_config.active_outputs
+    strain = cell_local = None
+    if _want_stress:
+        from nvalchemi.models._utils import prepare_strain  # noqa: PLC0415
+
+        cell_local = owned.cell
+        cell_local = (
+            cell_local.to_local() if hasattr(cell_local, "to_local") else cell_local
+        )
+        atoms["positions"], strained_cell, strain = prepare_strain(
+            pos, cell_local, owned.batch_idx.long()
+        )
+        object.__setattr__(owned, "cell", strained_cell)
+
     # Publish the per-step routing + policy so the wrapper's intent verbs
     # (refresh_neighbors / system_sum) resolve to the GP collectives.
     dist_model._dist_ctx.policy = dist_model._spec.distribution.policy
@@ -645,15 +661,38 @@ def _graph_partition_run_forward(
             # reduce-scatter adjoint already routes each owned atom's cross-rank
             # gradient back, so the owned forces come out globally-correct.
             energy_partial = output["energy"]
-            if _want_forces:
-                (grad,) = torch.autograd.grad(
+            if _want_forces or _want_stress:
+                _inputs = ([pos] if _want_forces else []) + (
+                    [strain] if _want_stress else []
+                )
+                _grads = torch.autograd.grad(
                     [energy_partial.sum()],
-                    [pos],
+                    _inputs,
                     create_graph=False,
                     retain_graph=False,
                     allow_unused=True,
                 )
-                output["forces"] = torch.zeros_like(pos) if grad is None else -grad
+                if _want_forces:
+                    grad = _grads[0]
+                    output["forces"] = torch.zeros_like(pos) if grad is None else -grad
+                if _want_stress:
+                    virial = _grads[-1]
+                    if virial is None:
+                        virial = torch.zeros(
+                            owned.num_graphs, 3, 3, dtype=pos.dtype, device=pos.device
+                        )
+                    virial = virial.detach()
+                    if dist.is_initialized() and world > 1:
+                        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+                            mesh_group as _mesh_group,
+                        )
+
+                        dist.all_reduce(
+                            virial, op=dist.ReduceOp.SUM, group=_mesh_group(mesh)
+                        )
+                    output["stress"] = virial / torch.linalg.det(
+                        cell_local
+                    ).abs().reshape(-1, 1, 1)
             # Global energy for reporting: a plain SUM across ranks of the owned
             # partials (every atom is owned once, so no double count). Detached —
             # the force path is already complete, and an autograd-aware reduce
@@ -755,11 +794,7 @@ def _halo_run_forward(
     _dd_compile = bool(
         _cp is not None and _cp.forces_via_autograd and dist_model._dd_compile_requested
     )
-    if wired_fields and _dd_compile:
-        raise NotImplementedError(
-            "wired_fields (cross-model field injection) is only supported "
-            "on the eager distributed path, not compiled."
-        )
+
     _pad_active = _dd_compile
     _orig_atoms = _orig_edges = None
     if _pad_active:
@@ -799,14 +834,63 @@ def _halo_run_forward(
     # Make the live per-step context ambient for the wrapper's forward, so
     # context-aware helpers and adapter bodies read it through
     # ``current_dd_context()``.
-    if _dd_compile:
-        # Compiled energy-autograd forward, framework-owned: the wrapper runs
-        # energy-only on plain tensors with the halo routing threaded as
-        # graph inputs; the framework consolidates per-node energy and takes
-        # the force autograd.
+    # ``forces_via_autograd`` hands the framework every derivative, eagerly too:
+    # a derivative taken inside the wrapper sees only this rank's padded block.
+    # ...but only when a derivative was requested, and never for a wired field:
+    # a wired group owns its coupled autograd, and its consumer needs dE/dr at
+    # fixed field rather than autograd over the total.
+    _active = set(dist_model._wrapper.model_config.active_outputs)
+    # Left to itself the model would differentiate an already all-reduced energy
+    # and scale every force by the world size, so the framework owns it.
+    _framework_autograd = (
+        _cp is not None
+        and _cp.forces_via_autograd
+        and bool({"forces", "stress"} & _active)
+    )
+    # Wired fields: an upstream model's owned values gathered into this model's
+    # ghost layout. Before promotion, so the grad-carrying tensor is wrapped.
+    _wired_owned = None
+    # Wired fields: an upstream model's owned values gathered into this model's
+    # ghost layout. Injected before the fixed-shape padding below
+    # so the padder covers it too — a cap-sized batch carrying one real-sized
+    # field would break the compiled graph's static shapes.
+    if wired_fields:
+        from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
+            halo_forward_exchange,
+        )
+
+        _atoms = padded_batch._atoms_group
+        # Under compile the batch has already been padded to the fixed-shape
+        # atom cap, so the gathered field has to reach the same length or the
+        # storage rejects it. Zero-pad the dead rows exactly as the graph padder
+        # does for every other per-atom field; they carry no physics and the cat
+        # leaves the real rows' autograd intact.
+        _n_cap = int(padded_batch.num_nodes)
+        for _name, _owned in wired_fields.items():
+            _field = halo_forward_exchange(_owned, meta, dist_model._halo_config)
+            _n_real = int(_field.shape[0])
+            if _n_real < _n_cap:
+                _field = torch.cat(
+                    [
+                        _field,
+                        _field.new_zeros((_n_cap - _n_real,) + tuple(_field.shape[1:])),
+                    ],
+                    dim=0,
+                )
+            _atoms[_name] = _field
+        _wired_owned = list(wired_fields.values())
+    if _dd_compile or _framework_autograd:
+        # Pinned leaves mean the caller backwards through this forward too, so
+        # the framework must not free the graph.
+        _pinned_leaves = bool(getattr(sharded, "grad_fields", None))
         with activate_dd_context(dist_model._dist_ctx):
             output = dist_model._compiled_energy_autograd_forward(
-                padded_batch, meta, sharded.num_graphs
+                padded_batch,
+                meta,
+                sharded.num_graphs,
+                eager=not _dd_compile,
+                extra_grad_inputs=_wired_owned,
+                retain_graph=_pinned_leaves,
             )
     else:
         # Cross-model wired fields: overwrite named per-atom inputs with an
@@ -814,16 +898,6 @@ def _halo_run_forward(
         # layout via the autograd-aware halo exchange. Runs before promotion
         # so the gathered (grad-carrying) tensor is what gets wrapped; its
         # backward scatter-adds ghost grads to the producing rank's owner.
-        if wired_fields:
-            from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
-                halo_forward_exchange,
-            )
-
-            _atoms = padded_batch._atoms_group
-            for _name, _owned in wired_fields.items():
-                _atoms[_name] = halo_forward_exchange(
-                    _owned, meta, dist_model._halo_config
-                )
         # Eager: promote ``positions`` (and other primary per-atom inputs)
         # to ShardTensors so custom ops see a ShardTensor input and the
         # per-layer halo correction fires.
@@ -889,12 +963,13 @@ def _halo_run_forward(
                     _eager_padder.restore()
                 if _saved_active is not None:
                     _mc.active_outputs = _saved_active
-    # Under compile, forces/stress come from autograd over the global
-    # energy, so they need the halo-reverse consolidation rather than the
-    # eager owned-only slice — drop them from owned_only. Eager keeps the
-    # declared slice.
+    # Whenever the framework derives forces/stress by autograd over the global
+    # energy, the per-node results carry ghost-row gradients that belong to
+    # other ranks' owners, so they need the halo-reverse consolidation rather
+    # than the owned-only slice — drop them from owned_only. A wrapper that
+    # returns its own per-owned-row kernel forces keeps the declared slice.
     owned_only = dist_model._spec.owned_only_outputs
-    if _dd_compile:
+    if _dd_compile or _framework_autograd:
         owned_only = owned_only - dist_model._wrapper.model_config.autograd_outputs
     result = consolidate_padded_outputs(
         output,

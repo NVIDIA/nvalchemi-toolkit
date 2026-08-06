@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from nvalchemi.distributed._core.particle_halo import (
+    halo_forward_exchange,
     pad_field,
     particle_halo_padding,
     particle_halo_padding_autograd,
@@ -43,6 +44,34 @@ if TYPE_CHECKING:
     from nvalchemi.distributed._core.halo_types import ParticleHaloConfig
 
 __all__ = ["halo_exchange"]
+
+
+def _apply_shared_strain(sharded: Any) -> None:
+    """Apply ``sharded.grad_strain`` to the padded view, if one is pinned.
+
+    The strain must land on the padded geometry: a ghost row holds an absolute
+    position, so straining before the exchange leaves its periodic offset
+    unscaled. The cell is taken from the owned batch because the padded one
+    survives a refresh and would compound the strain each time.
+    """
+    strain = getattr(sharded, "grad_strain", None)
+    if strain is None:
+        return
+    from nvalchemi.models._utils import apply_strain  # noqa: PLC0415
+
+    strain_pos, strain_cell = strain
+    padded = sharded.padded_batch
+    atoms = padded._atoms_group
+    bidx = padded.batch_idx
+    bidx = (bidx.to_local() if hasattr(bidx, "to_local") else bidx).long()
+    cell = sharded.cell
+    cell = cell.to_local() if hasattr(cell, "to_local") else cell
+
+    scaled_pos, scaled_cell = apply_strain(
+        atoms["positions"], cell, bidx, strain_pos, strain_cell
+    )
+    atoms["positions"] = scaled_pos
+    object.__setattr__(padded, "cell", scaled_cell)
 
 
 def halo_exchange(
@@ -91,9 +120,18 @@ def halo_exchange(
     from nvalchemi.data.atomic_data import AtomicData
     from nvalchemi.data.batch import Batch as BatchCls
 
-    local_pos = sharded.positions.to_local()
-    if compute_forces and not local_pos.requires_grad:
-        local_pos = local_pos.clone().requires_grad_(True)
+    # A caller that builds several halos over one owned set (the wired pipeline
+    # group) pins its autograd leaves here so every halo shares one graph;
+    # otherwise each exchange mints a fresh leaf and the caller's differentiation
+    # target is orphaned the moment the model refreshes its own halo.
+    pinned: dict[str, torch.Tensor] = (
+        (getattr(sharded, "grad_fields", None) or {}) if compute_forces else {}
+    )
+    local_pos = pinned.get("positions")
+    if local_pos is None:
+        local_pos = sharded.positions.to_local()
+        if compute_forces and not local_pos.requires_grad:
+            local_pos = local_pos.clone().requires_grad_(True)
 
     if compute_forces:
         padded_pos, meta = particle_halo_padding_autograd(local_pos, config)
@@ -124,6 +162,12 @@ def halo_exchange(
                 dtype=local.dtype,
                 device=device,
             )
+        leaf = pinned.get(name)
+        if leaf is not None:
+            # Grad-bearing field: gather it through the autograd-aware
+            # primitive, so a ghost row's gradient reaches the rank that owns
+            # the atom. ``pad_field``'s plain collective would drop it.
+            return halo_forward_exchange(leaf, meta, config)
         return pad_field(shard, meta, config)
 
     # Try in-place update on existing padded_batch if shape-compatible.
@@ -152,7 +196,10 @@ def halo_exchange(
                 atoms["forces"].zero_()
                 continue
             atoms[name] = _build_padded_field(name, shard)
+        for name, tensor in getattr(sharded, "system_fields", {}).items():
+            system[name] = tensor
         sharded.halo_meta = meta
+        _apply_shared_strain(sharded)
         return
 
     # Fresh build — AtomicData's ctor only accepts its declared fields;
@@ -167,7 +214,22 @@ def halo_exchange(
     padded_kwargs["cell"] = cell
     padded_kwargs["pbc"] = pbc
 
+    # Replicated per-system inputs (total ``charge``, ``spin``, custom system
+    # properties) ride through too. A wrapper reads them to decide WHICH
+    # physical system it is computing, and a model that finds them missing
+    # falls back to a neutral default rather than failing — so dropping them
+    # here silently changes the physics.
+    known_fields = set(AtomicData.model_fields)
+    system_extras: dict[str, torch.Tensor] = {}
+    for name, tensor in getattr(sharded, "system_fields", {}).items():
+        if name in known_fields:
+            padded_kwargs[name] = tensor
+        else:
+            system_extras[name] = tensor
+
     padded_data = AtomicData(**padded_kwargs)
+    for name, tensor in system_extras.items():
+        padded_data.add_system_property(name, tensor)
     for name, shard in atom_fields.items():
         if name in ("positions", "atomic_numbers", "atomic_masses"):
             continue
@@ -175,3 +237,4 @@ def halo_exchange(
 
     sharded.padded_batch = BatchCls.from_data_list([padded_data], device=device)
     sharded.halo_meta = meta
+    _apply_shared_strain(sharded)
