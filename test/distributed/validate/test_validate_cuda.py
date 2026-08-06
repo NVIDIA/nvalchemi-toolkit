@@ -612,9 +612,12 @@ def test_aimnet2_methane_pbc_passes():
     """3-D methane packing with full PBC. Exercises the multi-rank halo
     energy/force/stress path under PBC that the (non-PBC) carbon-chain
     sample doesn't — owned forces, stress, and energy must all match the
-    single-process reference. Stress rides the autograd /world_size
-    consolidation and is only meaningful under PBC, so this is the gate
-    that covers it for AIMNet2 under DD."""
+    single-process reference. Stress rides the autograd /world_size plus
+    cross-rank sum consolidation and is only meaningful under PBC, so this
+    is the gate that covers it for AIMNet2 under DD.
+
+    ``auto_fix=False``: the declared spec must pass as written. Letting the
+    validator repair it would hide a wrong declaration behind a working run."""
     pytest.importorskip("aimnet")
     from nvalchemi.distributed.validate import trace_and_validate
 
@@ -630,7 +633,7 @@ def test_aimnet2_methane_pbc_passes():
         device="cuda:0",
         atol=1e-5,
         rtol=1e-4,
-        auto_fix=True,
+        auto_fix=False,
     )
     assert report.ok, report.next_action
     ph = report.attempts[-1].partition_health

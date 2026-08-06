@@ -1055,3 +1055,7 @@ def test_aimnet2_wrapper_declares_halo_spec() -> None:
     # ConvSV + LRCoulomb + SRCoulomb), with no gather custom_ops.
     assert spec.distribution.custom_ops == ()
     assert len(spec.distribution.third_party_helpers) == 4
+    # Stress comes from the framework strain trick, so each rank holds a partial
+    # that the declared reduction has to sum.
+    assert "stress" in spec.all_reduce_outputs
+    assert spec.compile is not None and spec.compile.stress_via_strain
