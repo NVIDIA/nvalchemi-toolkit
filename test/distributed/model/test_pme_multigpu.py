@@ -248,7 +248,7 @@ def test_pme_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29574", _pme_equivalence_worker),
+        args=(WORLD_SIZE, "29706", _pme_equivalence_worker),
         nprocs=WORLD_SIZE,
     )
 

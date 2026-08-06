@@ -324,6 +324,6 @@ def test_uma_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29572", _uma_equivalence_worker),
+        args=(WORLD_SIZE, "29704", _uma_equivalence_worker),
         nprocs=WORLD_SIZE,
     )

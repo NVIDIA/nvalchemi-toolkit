@@ -720,9 +720,13 @@ _WRAPPER_FACTORIES: dict[str, Any] = {
 
 
 def _port_for(key: str) -> str:
-    """Deterministic free-ish port per-parametrization so concurrent
-    pytest runs don't collide. 30000 + hash(key)%5000."""
-    return str(30000 + (hash(key) & 0xFFFF) % 5000)
+    """Deterministic per-parametrization rendezvous port.
+
+    Kept below the kernel's ephemeral range: a port drawn from there can be
+    claimed for an outbound connection between the choice and the rendezvous
+    bind, which surfaces as a mid-test EADDRINUSE.
+    """
+    return str(20000 + (hash(key) & 0xFFFF) % 9000)
 
 
 # Single-GPU gloo+cuda tier: N ranks share one GPU (gloo because NCCL rejects
