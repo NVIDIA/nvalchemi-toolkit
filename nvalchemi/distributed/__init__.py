@@ -109,6 +109,7 @@ def __getattr__(name: str):  # noqa: ANN201
             "SpatialPartitioner",
         ),
         "DomainParallel": ("nvalchemi.distributed.domain_parallel", "DomainParallel"),
+        "pin_fp32": ("nvalchemi.distributed._runtime", "pin_fp32"),
         "DistributedModel": (
             "nvalchemi.distributed.distributed_model",
             "DistributedModel",
@@ -230,6 +231,7 @@ __all__ = [
     "OutputKind",
     "OutputSpec",
     "ParticleHaloConfig",
+    "pin_fp32",
     "PythonAdapter",
     "Reduce",
     "Scope",
