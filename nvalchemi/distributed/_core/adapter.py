@@ -549,38 +549,49 @@ _OUTPUT_TRANSFORM_REGISTRY: dict[str, type] = {
 }
 
 
-def _arg_transform_to_dict(t: ArgTransform) -> dict[str, Any]:
-    for kind, cls in _ARG_TRANSFORM_REGISTRY.items():
+def _transform_to_dict(t: Any, registry: dict[str, type], label: str) -> dict[str, Any]:
+    """Encode a transform as its registry name plus its dataclass fields.
+
+    The fields are carried generically rather than per-class: a transform field
+    that changes behaviour — an adjoint rule, say — would otherwise revert to its
+    default on the far side of a process boundary while the name still matched.
+    """
+    import dataclasses  # noqa: PLC0415
+
+    for kind, cls in registry.items():
         if isinstance(t, cls):
-            return {"type": kind}
-    raise TypeError(f"unknown ArgTransform: {type(t).__name__}")
+            encoded = {"type": kind}
+            encoded.update(dataclasses.asdict(t))
+            return encoded
+    raise TypeError(f"unknown {label}: {type(t).__name__}")
+
+
+def _transform_from_dict(
+    d: dict[str, Any], registry: dict[str, type], label: str
+) -> Any:
+    """Inverse of :func:`_transform_to_dict`."""
+    cls = registry.get(d.get("type"))
+    if cls is None:
+        raise ValueError(
+            f"unknown {label} type {d.get('type')!r}; expected one of {list(registry)}."
+        )
+    return cls(**{k: v for k, v in d.items() if k != "type"})
+
+
+def _arg_transform_to_dict(t: ArgTransform) -> dict[str, Any]:
+    return _transform_to_dict(t, _ARG_TRANSFORM_REGISTRY, "ArgTransform")
 
 
 def _arg_transform_from_dict(d: dict[str, Any]) -> ArgTransform:
-    cls = _ARG_TRANSFORM_REGISTRY.get(d.get("type"))
-    if cls is None:
-        raise ValueError(
-            f"unknown ArgTransform type {d.get('type')!r}; expected one of "
-            f"{list(_ARG_TRANSFORM_REGISTRY)}."
-        )
-    return cls()
+    return _transform_from_dict(d, _ARG_TRANSFORM_REGISTRY, "ArgTransform")
 
 
 def _output_transform_to_dict(t: OutputTransform) -> dict[str, Any]:
-    for kind, cls in _OUTPUT_TRANSFORM_REGISTRY.items():
-        if isinstance(t, cls):
-            return {"type": kind}
-    raise TypeError(f"unknown OutputTransform: {type(t).__name__}")
+    return _transform_to_dict(t, _OUTPUT_TRANSFORM_REGISTRY, "OutputTransform")
 
 
 def _output_transform_from_dict(d: dict[str, Any]) -> OutputTransform:
-    cls = _OUTPUT_TRANSFORM_REGISTRY.get(d.get("type"))
-    if cls is None:
-        raise ValueError(
-            f"unknown OutputTransform type {d.get('type')!r}; expected one of "
-            f"{list(_OUTPUT_TRANSFORM_REGISTRY)}."
-        )
-    return cls()
+    return _transform_from_dict(d, _OUTPUT_TRANSFORM_REGISTRY, "OutputTransform")
 
 
 # ----------------------------------------------------------------------
