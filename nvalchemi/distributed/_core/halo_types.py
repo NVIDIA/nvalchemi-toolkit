@@ -62,23 +62,47 @@ class ParticleHaloConfig:
     partitioner: Any  # SpatialPartitioner at runtime
     mesh: Any  # DeviceMesh at runtime
 
-    # Computed in __post_init__
+    # Computed on demand; see the topology properties below.
     rank: int = field(init=False)
-    neighbor_ranks: list[int] = field(init=False)
-    _pbc_images: dict[tuple[int, int], list[torch.Tensor]] = field(
-        init=False, repr=False
-    )
+    _topology: dict[str, Any] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         try:
             self.rank = self.mesh.get_local_rank()
         except Exception:
             self.rank = 0
+        self._topology = {}
 
-        self.neighbor_ranks = [
-            r for r in self.partitioner.get_neighbor_ranks(self.rank) if r != self.rank
-        ]
-        self._pbc_images = _compute_pbc_image_vectors(self.partitioner)
+    def _current_topology(self) -> dict[str, Any]:
+        """Peer list and lattice images for the partitioner's current geometry.
+
+        Derived rather than stored: a barostat contraction narrows every domain,
+        which can widen the ghost shell onto ranks further away, and a copy taken
+        at construction would keep exchanging with the old peers. Recomputed only
+        when the partitioner reports a new topology.
+        """
+        version = self.partitioner.topology_version
+        if self._topology.get("version") != version:
+            self._topology = {
+                "version": version,
+                "neighbor_ranks": [
+                    r
+                    for r in self.partitioner.get_neighbor_ranks(self.rank)
+                    if r != self.rank
+                ],
+                "pbc_images": _compute_pbc_image_vectors(self.partitioner),
+            }
+        return self._topology
+
+    @property
+    def neighbor_ranks(self) -> list[int]:
+        """Ranks this one exchanges ghosts with, for the current geometry."""
+        return self._current_topology()["neighbor_ranks"]
+
+    @property
+    def _pbc_images(self) -> dict[tuple[int, int], list[torch.Tensor]]:
+        """Lattice images offered per rank pair, for the current geometry."""
+        return self._current_topology()["pbc_images"]
 
     @property
     def pbc_shifts(

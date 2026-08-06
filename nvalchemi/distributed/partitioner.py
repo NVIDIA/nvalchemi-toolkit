@@ -49,6 +49,11 @@ class SpatialPartitioner:
         dimensions are squeezed internally.
     """
 
+    #: Incremented whenever the neighbour-rank set changes, so anything derived
+    #: from it can tell that its copy is stale. Class-level so a partitioner
+    #: built without ``__init__`` still carries one.
+    topology_version: int = 0
+
     def __init__(
         self,
         config: DomainConfig,
@@ -141,6 +146,9 @@ class SpatialPartitioner:
         self._span = self.neighbor_span()
         if self._span != previous_span:
             self._neighbor_ranks = self._compute_all_neighbor_ranks()
+            # Anything derived from the neighbour set — the halo config's peer
+            # list and lattice images — is now stale.
+            self.topology_version += 1
 
     # ------------------------------------------------------------------
     # Initialization helpers

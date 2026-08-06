@@ -125,3 +125,46 @@ class TestNonPeriodicAxis:
             box_x=16.0, cutoff=5.0, ranks_x=4, pbc=torch.zeros(3, dtype=torch.bool)
         )
         assert _compute_pbc_image_vectors(part) == {}
+
+
+class TestContractionRefreshesHaloTopology:
+    """A barostat contraction must reach the live halo config.
+
+    ``update_cell`` widens the partitioner's span when domains narrow. A halo
+    config that copied the peer list and lattice images at construction keeps
+    exchanging with the old peers, so atoms that only became reachable after the
+    contraction are never sent and their interactions are dropped in silence.
+    """
+
+    def _config(self, box_x: float):
+        from nvalchemi.distributed._core.halo_types import ParticleHaloConfig
+
+        part = _partitioner(box_x=box_x, cutoff=5.0, ranks_x=4)
+        return part, ParticleHaloConfig(ghost_width=5.5, partitioner=part, mesh=None)
+
+    def test_contraction_widens_the_offered_images(self):
+        part, halo = self._config(box_x=48.0)
+        assert part.neighbor_span()[0] == 1
+        assert _x_coefficients(halo._pbc_images, (1, 3)) == set()
+
+        # 48 A over 4 ranks gives 12 A domains; 16 A gives 4 A against a 5.5 A
+        # ghost, so rank 1 now reaches rank 3 the long way round the box.
+        part.update_cell(
+            torch.diag(torch.tensor([16.0, 12.0, 12.0], dtype=torch.float64))
+        )
+        assert part.neighbor_span()[0] == 2
+        assert _x_coefficients(halo._pbc_images, (1, 3)) == {1}
+
+    def test_contraction_widens_the_peer_set(self):
+        part, halo = self._config(box_x=48.0)
+        before = set(halo.neighbor_ranks)
+        part.update_cell(
+            torch.diag(torch.tensor([16.0, 12.0, 12.0], dtype=torch.float64))
+        )
+        assert set(halo.neighbor_ranks) >= before
+
+    def test_topology_is_not_recomputed_without_a_change(self):
+        """Derived per geometry, not per access."""
+        part, halo = self._config(box_x=48.0)
+        first = halo._pbc_images
+        assert halo._pbc_images is first
