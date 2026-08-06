@@ -102,6 +102,10 @@ class StageTimingHook:
     console_frequency : int, optional
         When ``show_console`` is ``True``, print every
         ``console_frequency`` profiled steps.  Default ``1``.
+    stage : Enum | None, optional
+        Single stage to bind the hook to when it is not dispatched across the
+        full ``profiled_stages`` set.  Default ``None``, letting the hook fire
+        at every profiled stage via ``_runs_on_stage``.
 
     Attributes
     ----------

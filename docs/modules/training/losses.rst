@@ -81,9 +81,12 @@ Built-in leaf losses for common quantum-chemistry targets.
 
    EnergyMSELoss
    EnergyMAELoss
+   EnergyHuberLoss
    ForceMSELoss
+   ForceHuberLoss
    ForceL2NormLoss
    StressMSELoss
+   StressHuberLoss
 
 
 Weight schedules

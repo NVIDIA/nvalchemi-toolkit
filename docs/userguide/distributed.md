@@ -6,9 +6,9 @@
 
 The `nvalchemi.distributed` package extends the toolkit's dynamics + model
 machinery to run across multiple GPUs via spatial domain decomposition. A
-single :class:`~nvalchemi.distributed.DomainParallel` wrapper takes any
-:class:`~nvalchemi.dynamics.base.BaseDynamics` integrator or optimizer and
-makes it run on a partitioned :class:`~nvalchemi.distributed.ShardedBatch`,
+single {py:class}`~nvalchemi.distributed.DomainParallel` wrapper takes any
+{py:class}`~nvalchemi.dynamics.base.BaseDynamics` integrator or optimizer and
+makes it run on a partitioned {py:class}`~nvalchemi.distributed.ShardedBatch`,
 with halo exchanges + cross-rank reductions handled automatically.
 
 ```{tip}
@@ -22,14 +22,15 @@ only addition at the user layer is one
 
 This guide covers:
 
-1. **Why** spatial domain decomposition and **what** it gets you.
-2. The **two storage strategies** the framework supports — halo storage
-   and sharded storage — and when to pick each.
-3. The **runtime architecture**: how
+1. {ref}`Why <dd-why-partition>` spatial domain decomposition and **what** it
+   gets you.
+2. The {ref}`two storage strategies <dd-strategies>` the framework supports —
+   halo storage and sharded storage — and when to pick each.
+3. The {ref}`runtime architecture <dd-runtime-architecture>`: how
    {py:class}`~nvalchemi.distributed.DomainParallel`,
    {py:class}`~nvalchemi.distributed.ShardedBatch`, and the
    `DistributedModel` adapter cooperate per step.
-4. A **minimal usage example** end-to-end.
+4. A {ref}`minimal usage example <dd-minimal-example>` end-to-end.
 
 Two companion guides go deeper:
 
@@ -40,8 +41,10 @@ Two companion guides go deeper:
   distribution-aware handlers.
 - {doc}`distributed_byo` — bringing your own model under
   domain decomposition: writing the wrapper, authoring or deriving an
-  :class:`MLIPSpec`, and using `trace_and_validate` to confirm
+  {py:class}`MLIPSpec`, and using `trace_and_validate` to confirm
   correctness.
+
+(dd-why-partition)=
 
 ## Why partition?
 
@@ -66,6 +69,8 @@ within the model's interaction cutoff so each rank evaluates its
 subdomain independently. Cross-rank communication happens once per
 step (the halo exchange) plus a handful of collectives for
 per-system reductions.
+
+(dd-strategies)=
 
 ## Two parallelization strategies
 
@@ -153,7 +158,7 @@ config selects it.
 ### Choosing
 
 The strategy is declared on the model's
-:class:`~nvalchemi.distributed.spec.MLIPSpec`. The shipped presets are:
+{py:class}`~nvalchemi.distributed.spec.MLIPSpec`. The shipped presets are:
 
 | Preset | Storage | Models |
 |---|---|---|
@@ -172,6 +177,8 @@ doesn't, see {doc}`distributed_byo` for the authoring workflow.
 AIMNet2 is supported as well, but its wrapper builds its (halo) spec
 inline rather than exposing a shipped `SPEC_*` preset.
 
+(dd-runtime-architecture)=
+
 ## Runtime architecture
 
 ```{graphviz}
@@ -183,13 +190,13 @@ digraph distributed_step {
     node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled"]
     edge [fontname="Helvetica" fontsize=10]
 
-    DP [label="DomainParallel.step()" fillcolor="#dce6f1"]
-    Halo [label="halo_exchange\n(populate halo rows)" fillcolor="#f9e2ae"]
-    NL [label="NeighborListHook\n(NL on padded batch)" fillcolor="#f9e2ae"]
-    Wrap [label="DistributedModel\n(spec dispatch)" fillcolor="#dce6f1"]
-    Inner [label="wrapper(padded_batch)" fillcolor="#dce6f1"]
-    Cons [label="output_consolidation\n(slice / halo_reverse / all_reduce)" fillcolor="#f9e2ae"]
-    Integ [label="inner integrator\npost_update + atom migration" fillcolor="#dce6f1"]
+    DP [label="DomainParallel.step()" fillcolor="#dce6f1" fontcolor="#111111"]
+    Halo [label="halo_exchange\n(populate halo rows)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    NL [label="NeighborListHook\n(NL on padded batch)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    Wrap [label="DistributedModel\n(spec dispatch)" fillcolor="#dce6f1" fontcolor="#111111"]
+    Inner [label="wrapper(padded_batch)" fillcolor="#dce6f1" fontcolor="#111111"]
+    Cons [label="output_consolidation\n(slice / halo_reverse / all_reduce)" fillcolor="#f9e2ae" fontcolor="#111111"]
+    Integ [label="inner integrator\npost_update + atom migration" fillcolor="#dce6f1" fontcolor="#111111"]
 
     DP -> Halo -> NL -> Wrap -> Inner -> Cons -> Integ
 }
@@ -203,11 +210,11 @@ The pieces:
   across ranks when they cross domain boundaries. It's built once on
   rank 0 from the full batch and scattered via
   {py:meth}`~nvalchemi.distributed.DomainParallel.partition`.
-- :class:`~nvalchemi.distributed.distributed_model.DistributedModel`
+- {py:class}`~nvalchemi.distributed.distributed_model.DistributedModel`
   is the per-step adapter wrapping a single-process
   {py:class}`~nvalchemi.models.base.BaseModelMixin`. Its `__call__`
-  takes a `ShardedBatch`, runs the appropriate storage path
-  (`_call_halo_storage` or `_call_sharded_storage`), and returns
+  takes a `ShardedBatch` and dispatches to the active parallelization
+  strategy's `run_forward` (halo exchange or graph-partition), returning
   consolidated outputs in the standard
   {py:class}`~nvalchemi._typing.ModelOutputs` format.
 - {py:class}`~nvalchemi.distributed.DomainParallel` is the integrator
@@ -218,6 +225,8 @@ The pieces:
 The user-facing API is `DomainParallel`; the layers below are
 internal but exposed for advanced users (e.g. running a single
 forward without an integrator).
+
+(dd-minimal-example)=
 
 ## Minimal example
 
@@ -464,7 +473,7 @@ preference:
 - The {doc}`Bring-your-own-model walkthrough <distributed_byo>`
   shows how to declare an
   {py:class}`~nvalchemi.distributed.spec.MLIPSpec` for a new wrapper,
-  validate it via :func:`trace_and_validate`, and persist the
+  validate it via {py:func}`trace_and_validate`, and persist the
   resulting spec for production use.
 - The runnable example in
   `examples/distributed/03_mace_nvt_distributed.py` is the

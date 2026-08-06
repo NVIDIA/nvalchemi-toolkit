@@ -122,7 +122,7 @@ dynamics = DemoDynamics(
     dt=0.5,
     hooks=[
         MaxForceClampHook(max_force=10.0),
-        LoggingHook(frequency=100),
+        LoggingHook(backend="csv", log_path="md_log.csv", frequency=100),
     ],
 )
 
@@ -368,7 +368,7 @@ hooks = [
     # 4. Periodic wrapping
     WrapPeriodicHook(frequency=10, stage=DynamicsStage.AFTER_POST_UPDATE),
     # 5. Observers (read final state)
-    LoggingHook(frequency=100),
+    LoggingHook(backend="csv", log_path="md_log.csv", frequency=100),
     SnapshotHook(sink=my_sink, frequency=50),
     EnergyDriftMonitorHook(threshold=1e-4),
     # 6. Profiling

@@ -578,7 +578,7 @@ def make_marshaller(original: Callable[..., Any]) -> Callable[..., Any]:
 
     A ``@torch.jit.script`` op called with a ShardTensor goes straight into the
     JIT executor — ``__torch_function__`` does NOT fire for scripted calls — so a
-    TensorExpr-fused kernel reads the wrapper's raw ``data_ptr`` (``≈0`` for the
+    TensorExpr-fused kernel reads the wrapper's raw ``data_ptr`` (``~=0`` for the
     storage-less ShardTensor) → CUDA illegal memory access. The marshaller
     unwraps ShardTensor args to their real-storage local tensors, runs the
     (still-scripted, still-fused) op, and re-wraps the output as a ShardTensor.
@@ -700,7 +700,7 @@ def auto_marshal_scripted_submodules(
         mementos.append((parent, child, mod))
         # Per-submodule detail stays available at DEBUG; the default path gets a
         # single rank-0 summary below (this fires for every scripted submodule of
-        # every layer × every rank — e.g. ~30×N for MACE — so a warning per hit
+        # every layer x every rank — e.g. ~30xN for MACE — so a warning per hit
         # buries the log).
         logger.debug(
             "auto-marshalled scripted submodule %r for the distributed path "

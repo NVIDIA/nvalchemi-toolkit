@@ -27,7 +27,7 @@ communication buffers:
 
    digraph distributed_pipeline {
        rankdir=LR;
-       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd",
+       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd" fontcolor="#111111",
              fontname="Helvetica", fontsize=11];
        edge [fontname="Helvetica", fontsize=10];
 

@@ -210,13 +210,48 @@ class _PendingFusedBatch:
 
 
 class Dataset:
-    """AtomicData-native dataset that bypasses TensorDict conversion.
+    """AtomicData-native, map-style dataset that bypasses TensorDict conversion.
 
-    Wraps a :class:`~nvalchemi.data.datapipes.backends.base.Reader` and returns
-    :class:`~nvalchemi.data.atomic_data.AtomicData` objects directly,
-    with CUDA-stream prefetching support.
+    ``Dataset`` is the entry point of nvalchemi's data pipeline. It wraps a
+    single :class:`~nvalchemi.data.datapipes.backends.base.Reader` (such as
+    :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader`) and
+    turns stored records into
+    :class:`~nvalchemi.data.atomic_data.AtomicData` graphs. Indexing returns a
+    ``(AtomicData, metadata)`` pair (``ds[i]``) and ``len(ds)`` reports the
+    sample count, so it satisfies the map-style dataset protocol that PyTorch
+    samplers expect. The pipeline is
+    ``Reader -> Dataset (-> MultiDataset) -> DataLoader``:
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` collates samples
+    into batched :class:`~nvalchemi.data.batch.Batch` graphs, and
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` concatenates
+    several datasets behind one index space.
+
+    Unlike :class:`torch.utils.data.Dataset`, this class owns collation and
+    device movement rather than deferring them to forked workers:
+
+    - it returns validated ``AtomicData`` directly, not raw tensors or a
+      ``TensorDict``;
+    - it resolves and transfers each sample to ``device`` itself;
+    - it prefetches on background threads and, when CUDA is available,
+      overlapping CUDA streams -- ``num_workers`` sizes a thread pool, not a
+      multiprocessing fork -- and ``DataLoader`` reads batches in fused windows
+      through a private batch API rather than one ``__getitem__`` per sample.
+
+    Two nuances are worth noting. ``skip_validation=True`` bypasses
+    ``AtomicData`` Pydantic validation on the fused batch path and is only safe
+    for trusted stores (for example those written by
+    :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`).
+    And ``transforms`` are applied per sample on the prefetch CUDA stream, so
+    they must be stream-safe (avoid ``.item()``, ``.cpu()``, and
+    synchronization); for per-batch work use ``DataLoader``'s
+    ``batch_transforms`` instead.
+
     ``Dataset`` implements :class:`BatchDatasetProtocol`, the batch-loading
-    protocol consumed by :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
+    contract that :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consume. For a
+    fully-resident alternative that materializes the whole dataset once and
+    trades memory for read speed, see
+    :class:`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`.
 
     Parameters
     ----------

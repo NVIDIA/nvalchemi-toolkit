@@ -191,7 +191,7 @@ class Compose:
     Per-sample composition:
 
     >>> def shift_positions(data, metadata):  # doctest: +SKIP
-    ...     new_data = data.replace(positions=data.positions + 1.0)
+    ...     new_data = data.model_copy(update={"positions": data.positions + 1.0})
     ...     return new_data, metadata
     >>> def tag_origin(data, metadata):  # doctest: +SKIP
     ...     metadata["origin"] = "shifted"
@@ -202,7 +202,8 @@ class Compose:
     Per-batch composition:
 
     >>> def scale_positions(batch):  # doctest: +SKIP
-    ...     return batch.replace(positions=batch.positions * 2.0)
+    ...     batch.positions = batch.positions * 2.0
+    ...     return batch
     >>> compose = Compose([scale_positions])  # doctest: +SKIP
     >>> new_batch = compose(batch)  # doctest: +SKIP
     """

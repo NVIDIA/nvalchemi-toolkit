@@ -60,77 +60,170 @@ class NeighborListFormat(str, Enum):
 class NeighborConfig(BaseModel):
     """Configuration for on-the-fly neighbor list construction.
 
-    An instance of this class attached to a :class:`ModelConfig` signals that
-    the model requires a neighbor list and describes the format and parameters
-    it expects.  At runtime a :class:`~nvalchemi.hooks.NeighborListHook`
-    reads this config to compute and cache the appropriate neighbor data.
+    An instance of this class attached to a :class:`ModelConfig` (via its
+    ``neighbor_config`` field) signals that the model requires a neighbor list
+    and describes the format and parameters it expects. At runtime a
+    :class:`~nvalchemi.hooks.NeighborListHook` reads this config to compute and
+    cache the appropriate neighbor data on each :class:`~nvalchemi.data.Batch`
+    before the model's forward pass, rebuilding only when atoms have moved
+    beyond the Verlet ``skin``.
 
-    Attributes
-    ----------
-    cutoff : float
-        Interaction cutoff radius in the same length units as positions.
-    format : NeighborListFormat
-        Whether to build a dense neighbor matrix (``MATRIX``) or a sparse
-        edge-index list (``COO``).  Defaults to ``COO``.
-    half_list : bool
-        If ``True``, each pair ``(i, j)`` with ``i < j`` appears only once.
-        Newton's third law is applied inside the interaction kernel to recover
-        forces on both atoms.  Defaults to ``False``.
-    skin : float
-        Verlet skin distance.  The neighbor list is only rebuilt when any atom
-        has moved more than ``skin / 2`` since the last build.  Set to ``0.0``
-        (default) to rebuild every step.
+    The single required argument is ``cutoff`` (in the same length units as
+    ``positions``). ``format`` selects the storage layout: ``COO`` produces a
+    sparse ``[E, 2]`` edge index (the default, used by most GNN-based MLIPs),
+    while ``MATRIX`` produces a dense ``[N, max_neighbors]`` neighbor matrix
+    (used by Warp interaction kernels) — see :class:`NeighborListFormat`.
+    ``half_list`` and ``skin`` tune pair deduplication and rebuild frequency,
+    respectively.
+
+    Examples
+    --------
+    A minimal sparse (COO) neighbor list with a 5 A cutoff:
+
+    >>> from nvalchemi.models.base import NeighborConfig
+    >>> nc = NeighborConfig(cutoff=5.0)
+    >>> nc.format
+    <NeighborListFormat.COO: 'coo'>
+
+    A dense half neighbor list with a Verlet skin, e.g. for a Warp kernel:
+
+    >>> from nvalchemi.models.base import NeighborListFormat
+    >>> nc = NeighborConfig(
+    ...     cutoff=5.0,
+    ...     format=NeighborListFormat.MATRIX,
+    ...     half_list=True,
+    ...     skin=1.0,
+    ... )
+
+    Attach it to a :class:`ModelConfig` to declare a neighbor-list requirement:
+
+    >>> from nvalchemi.models.base import ModelConfig
+    >>> cfg = ModelConfig(neighbor_config=NeighborConfig(cutoff=5.0))
+    >>> cfg.needs_neighborlist
+    True
+
+    Notes
+    -----
+    - ``skin=0.0`` (the default) rebuilds the neighbor list every step; a
+      positive skin defers rebuilds until any atom moves more than ``skin / 2``,
+      trading memory staleness for fewer rebuilds.
+    - ``half_list=True`` stores each ``(i, j)`` pair once; the interaction kernel
+      applies Newton's third law to recover forces on both atoms, so it is only
+      appropriate for kernels that expect a half list.
     """
 
-    cutoff: float
-    format: NeighborListFormat = NeighborListFormat.COO
-    half_list: bool = False
-    skin: float = 0.0
+    cutoff: Annotated[
+        float,
+        Field(
+            description=(
+                "Interaction cutoff radius in the same length units as positions."
+            )
+        ),
+    ]
+    format: Annotated[
+        NeighborListFormat,
+        Field(
+            description=(
+                "Whether to build a dense neighbor matrix (``MATRIX``) or a sparse "
+                "edge-index list (``COO``).  Defaults to ``COO``."
+            )
+        ),
+    ] = NeighborListFormat.COO
+    half_list: Annotated[
+        bool,
+        Field(
+            description=(
+                "If ``True``, each pair ``(i, j)`` with ``i < j`` appears only once. "
+                "Newton's third law is applied inside the interaction kernel to recover "
+                "forces on both atoms.  Defaults to ``False``."
+            )
+        ),
+    ] = False
+    skin: Annotated[
+        float,
+        Field(
+            description=(
+                "Verlet skin distance.  The neighbor list is only rebuilt when any atom "
+                "has moved more than ``skin / 2`` since the last build.  Set to ``0.0`` "
+                "(default) to rebuild every step."
+            )
+        ),
+    ] = 0.0
 
 
 class ModelConfig(BaseModel):
     """Unified model configuration combining capability declaration and
     runtime control.
 
+    ``ModelConfig`` is the contract between a model wrapper and the rest of
+    nvalchemi: dynamics engines, composition pipelines, loss functions, and the
+    :class:`BaseModelMixin` adapters all read it to decide which inputs to
+    prepare, which gradients to enable, and which outputs to compute. Every
+    :class:`BaseModelMixin` subclass must set a ``self.model_config`` instance
+    in its ``__init__`` (there is deliberately no class-level default, so each
+    wrapper owns its own config object).
+
     A ``ModelConfig`` has two kinds of fields:
 
     - **Capability fields** (frozen at construction) describe what the
       model checkpoint can do.  These use ``frozenset`` to signal
       immutability.  They are set once by the wrapper's ``__init__`` and
-      should not be changed at runtime.
+      should not be changed at runtime. Examples: ``outputs``,
+      ``autograd_outputs``, ``autograd_inputs``, ``required_inputs``,
+      ``optional_inputs``, ``supports_pbc``, ``needs_pbc``,
+      ``neighbor_config``.
     - **Runtime fields** (mutable) control what the model should compute
-      on each forward pass.  These can be changed freely by the user.
+      on each forward pass.  These can be changed freely by the user:
+      ``active_outputs`` selects the subset of ``outputs`` to compute this
+      run, and ``gradient_keys`` enables gradients on extra input tensors.
 
     ``outputs`` and ``required_inputs`` use free-form strings so new
     properties can be added without modifying this class.  Well-known
-    output keys: ``energy``, ``forces``, ``stresses``, ``hessians``,
-    ``dipoles``, ``charges``, ``embeddings``.
+    output keys: ``energy``, ``forces``, ``stress``, ``hessian``,
+    ``dipole``, ``charges``, ``embeddings``. Declare a neighbor-list
+    requirement by attaching a :class:`NeighborConfig` (see
+    :attr:`needs_neighborlist`).
 
-    Attributes
-    ----------
-    outputs : frozenset[str]
-        All properties the model can produce (frozen).
-    autograd_outputs : frozenset[str]
-        Subset of ``outputs`` computed via autograd (frozen).
-    autograd_inputs : frozenset[str]
-        Input keys needing ``requires_grad_(True)`` for autograd (frozen).
-    required_inputs : frozenset[str]
-        Extra inputs beyond ``{positions, atomic_numbers}`` that the
-        model requires (frozen).
-    optional_inputs : frozenset[str]
-        Extra inputs the model can optionally use if present (frozen).
-    supports_pbc : bool
-        Whether the model supports periodic boundary conditions (frozen).
-    needs_pbc : bool
-        Whether the model requires PBC inputs (frozen).
-    neighbor_config : NeighborConfig | None
-        Neighbor list requirements (frozen).
-    active_outputs : set[str]
-        Properties to compute this run (mutable).  Defaults to
-        ``outputs`` if not explicitly set.
-    gradient_keys : set[str]
-        Extra input keys to enable gradients for beyond those implied
-        by ``autograd_inputs`` (mutable).
+    Examples
+    --------
+    An energy-and-forces model whose forces come from autograd on positions:
+
+    >>> from nvalchemi.models.base import ModelConfig
+    >>> cfg = ModelConfig(
+    ...     outputs=frozenset({"energy", "forces"}),
+    ...     autograd_outputs=frozenset({"forces"}),
+    ...     autograd_inputs=frozenset({"positions"}),
+    ... )
+    >>> cfg.active_outputs == {"energy", "forces"}
+    True
+
+    Restrict a run to a single output without changing the model's capabilities:
+
+    >>> cfg.active_outputs = {"energy"}
+
+    Declare a PBC-aware model that needs a neighbor list:
+
+    >>> from nvalchemi.models.base import NeighborConfig
+    >>> cfg = ModelConfig(
+    ...     outputs=frozenset({"energy", "forces", "stress"}),
+    ...     autograd_outputs=frozenset({"forces", "stress"}),
+    ...     supports_pbc=True,
+    ...     needs_pbc=True,
+    ...     neighbor_config=NeighborConfig(cutoff=5.0),
+    ... )
+    >>> cfg.needs_neighborlist
+    True
+
+    Notes
+    -----
+    - ``extra="forbid"``: unknown constructor keywords raise a
+      :class:`pydantic.ValidationError`, guarding against typo'd field names.
+    - ``active_outputs`` defaults to a mutable copy of ``outputs`` when left as
+      ``None``; set it to narrow the per-run output set, and reset it to ``None``
+      to fall back to all ``outputs``.
+    - Capability fields are ``frozenset`` values: rebind the whole field to
+      change them (in-place mutation is impossible), which keeps the declared
+      capabilities effectively immutable after construction.
     """
 
     # ── Capability fields (frozen at construction) ──────────────────────
@@ -545,7 +638,7 @@ class BaseModelMixin(abc.ABC):
     def distribution_spec(
         self, strategy: "StrategyKind | None" = None
     ) -> "MLIPSpec | None":
-        """Return the :class:`MLIPSpec` describing the primitives this model
+        r"""Return the :class:`MLIPSpec` describing the primitives this model
         needs under domain parallelism *for the given parallelization strategy*.
 
         Parameters
@@ -555,7 +648,7 @@ class BaseModelMixin(abc.ABC):
             under (``HALO`` / ``GRAPH_PARTITION``); ``None``
             is treated as ``HALO``. The framework passes the config-selected
             strategy — models must not sniff the environment. The spec content is a
-            joint ``(model × strategy)`` product, so a model that supports graph
+            joint :math:`(\mathrm{model} \times \mathrm{strategy})` product, so a model that supports graph
             parallel returns a different ``(policy, adapters, shard_fields,
             consolidation)`` bundle per strategy.
 

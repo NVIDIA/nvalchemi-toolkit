@@ -48,7 +48,7 @@ Notes
 -----
 * Internal math is performed in float64 for numerical stability; inputs and
   outputs match the dtype of ``positions`` (float32 or float64).
-* The neighbor matrix must use **global** atom indices (0 … N_total−1).
+* The neighbor matrix must use **global** atom indices (:math:`0 \ldots N_{\text{total}}-1`).
 * ``fill_value`` is the sentinel used to pad short rows in the neighbor
   matrix; pass ``batch.num_nodes`` (total atoms across all systems).
 """
@@ -128,7 +128,7 @@ def lj_energy_forces_batch(
     switch_width: float,
     half_list: bool,
 ) -> tuple[Tensor, Tensor]:
-    """Compute LJ energies and forces for a batch of systems.
+    r"""Compute LJ energies and forces for a batch of systems.
 
     Parameters
     ----------
@@ -145,7 +145,7 @@ def lj_energy_forces_batch(
     num_neighbors : Tensor, shape (N,), int32
         Number of valid neighbors per atom.
     batch_idx : Tensor, shape (N,), int32
-        System index (0 … B−1) for each atom.
+        System index (:math:`0 \ldots B-1`) for each atom.
     fill_value : int
         Padding sentinel used in ``neighbor_matrix`` rows; typically
         ``batch.num_nodes`` (total atoms).
@@ -258,7 +258,7 @@ def lj_energy_forces_virial_batch(
     switch_width: float,
     half_list: bool,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Compute LJ energies, forces, and per-system virials.
+    r"""Compute LJ energies, forces, and per-system virials.
 
     Parameters and first two return values are identical to
     :func:`lj_energy_forces_batch`.
@@ -270,7 +270,7 @@ def lj_energy_forces_virial_batch(
     virials : Tensor, shape (B, 9)
         Flattened per-system virial tensors in row-major order
         ``[xx, xy, xz, yx, yy, yz, zx, zy, zz]`` with the sign convention
-        ``W = -Σ r_ij ⊗ F_ij``.
+        :math:`W = -\sum \mathbf{r}_{ij} \otimes \mathbf{F}_{ij}`.
     """
     from nvalchemiops.interactions.lj import (
         _batch_lj_energy_forces_virial_matrix_kernel_overload,

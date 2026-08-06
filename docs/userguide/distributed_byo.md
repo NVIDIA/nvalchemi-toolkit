@@ -341,7 +341,7 @@ This is the easy path. Use `SPEC_MPNN_HALO`. The framework promotes
 in the model preserves the subclass; per-layer `scatter_add_` calls
 fire halo-correction. The wrapper's only distributed-aware code is
 the autograd-leaf walk in `adapt_input` (because
-:func:`torch.autograd.grad` needs the underlying leaf, not the
+{py:func}`torch.autograd.grad` needs the underlying leaf, not the
 ShardTensor alias).
 
 See `examples/distributed/04_byo_pytorch_mpnn.py`.

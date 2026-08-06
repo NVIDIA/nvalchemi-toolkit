@@ -15,14 +15,14 @@
 
 r"""Autograd-native staged Ewald reciprocal space — the DD-*compile* path only.
 
-The reciprocal energy is bilinear in the structure factor ``S(k)``
-(``E = ½ Σ_k G(k)|S(k)|²``), so domain decomposition must assemble the global
-``S(k)`` (cross-rank all-reduce) *between* "compute partial ``S̃(k)``" and
-"compute energy from ``S̃(k)``". Crucially the framework's compiled energy-autograd
+The reciprocal energy is bilinear in the structure factor :math:`S(k)`
+(:math:`E = \tfrac{1}{2} \sum_k G(k)|S(k)|^{2}`), so domain decomposition must assemble the global
+:math:`S(k)` (cross-rank all-reduce) *between* "compute partial :math:`\tilde{S}(k)`" and
+"compute energy from :math:`\tilde{S}(k)`". Crucially the framework's compiled energy-autograd
 path consolidates energy **owned-only**, so the cotangent into the reciprocal
 energy is a non-uniform (owned-mask) vector; the correct weighted force then needs
-both the direct ``cos(k·rᵢ)`` ("field") term **and** the ``∂E/∂S̃`` ("source")
-term routed back through the partial-``S̃`` stage and the all-reduce to the other
+both the direct :math:`\cos(\mathbf{k}\cdot\mathbf{r}_i)` ("field") term **and** the :math:`\partial E/\partial \tilde{S}` ("source")
+term routed back through the partial-:math:`\tilde{S}` stage and the all-reduce to the other
 ranks' atoms. nvalchemiops' warp reciprocal exposes neither cleanly, and its
 cached-full-force backward is only correct for a *uniform* cotangent over the
 whole system — verified wrong on a non-trivial halo. So this path is pure Torch:
@@ -32,7 +32,7 @@ autograd produces the exact weighted VJP for any cotangent and it is
 This is used **only** for compiled DD. Non-DD inference and eager DD ride the
 warp kernels (``EwaldModelWrapper`` branches on the execution mode). The energy
 math matches nvalchemiops' in-tree ``_recip_ksum_energy_torch`` reference, just
-with ``S̃(k)`` (and ``Q``) supplied externally so the all-reduce can sit in the
+with :math:`\tilde{S}(k)` (and :math:`Q`) supplied externally so the all-reduce can sit in the
 seam. The self/background corrections reuse the upstream
 ``ewald_energy_corrections`` (already accept an explicit ``total_charge``).
 """
@@ -62,7 +62,7 @@ def _normalize(cell, k_vectors, alpha, num_systems):
 
 
 def _green(k_vectors_s, volume_s, alpha_s):
-    """``G[k] = (8π/V) exp(-k²/4α²)/k²`` on the half-space k-vectors (``k²<1e-10`` -> 0)."""
+    r""":math:`G[k] = (8\pi/V)\,\exp(-k^{2}/4\alpha^{2})/k^{2}` on the half-space k-vectors (:math:`k^{2}<10^{-10}` -> 0)."""
     from nvalchemiops.interactions.electrostatics.ewald_kernels import (  # noqa: PLC0415
         EIGHTPI,
     )
@@ -80,11 +80,12 @@ def ewald_partial_structure_factors(
     alpha: torch.Tensor,
     batch_idx: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    r"""Green-weighted partial structure factors ``S̃(k)`` and total charge ``Q``.
+    r"""Green-weighted partial structure factors :math:`\tilde{S}(k)` and total charge :math:`Q`.
 
-    ``Re S̃[s,k] = G(k) Σ_j q_j cos(k·r_j)``, ``Im S̃[s,k] = G(k) Σ_j q_j sin(k·r_j)``,
-    ``Q[s] = Σ_j q_j`` over the atoms supplied. Pure Torch, autograd-connected to
-    ``positions`` / ``charges`` (required so the ``∂E/∂S̃`` source term reaches the
+    :math:`\mathrm{Re}\,\tilde{S}[s,k] = G(k) \sum_j q_j \cos(\mathbf{k}\cdot\mathbf{r}_j)`,
+    :math:`\mathrm{Im}\,\tilde{S}[s,k] = G(k) \sum_j q_j \sin(\mathbf{k}\cdot\mathbf{r}_j)`,
+    :math:`Q[s] = \sum_j q_j` over the atoms supplied. Pure Torch, autograd-connected to
+    ``positions`` / ``charges`` (required so the :math:`\partial E/\partial \tilde{S}` source term reaches the
     producing atoms, incl. cross-rank via the caller's all-reduce). To restrict to
     a rank's owned atoms under DD, pass owned-masked ``charges`` (ghost charges
     zeroed). Shapes ``(K,)/(1,)`` single, ``(B,K)/(B,)`` batched; ``float64``.
@@ -129,11 +130,11 @@ def ewald_energy_from_structure_factors(
     total_charge: torch.Tensor,
     batch_idx: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    r"""Per-atom reciprocal energy from externally supplied (reduced) ``S̃(k)`` / ``Q``.
+    r"""Per-atom reciprocal energy from externally supplied (reduced) :math:`\tilde{S}(k)` / :math:`Q`.
 
-    ``E_i = ½ q_i Σ_k [cos(k·r_i) Re S̃[k] + sin(k·r_i) Im S̃[k]]`` + self/background
+    :math:`E_i = \tfrac{1}{2} q_i \sum_k [\cos(\mathbf{k}\cdot\mathbf{r}_i)\,\mathrm{Re}\,\tilde{S}[k] + \sin(\mathbf{k}\cdot\mathbf{r}_i)\,\mathrm{Im}\,\tilde{S}[k]]` + self/background
     corrections (with the global ``total_charge``). Autograd flows to ``positions``
-    (field) and ``real_sf``/``imag_sf`` (source) — so with ``S̃`` from
+    (field) and ``real_sf``/``imag_sf`` (source) — so with :math:`\tilde{S}` from
     :func:`ewald_partial_structure_factors` + a cross-rank all-reduce the weighted
     VJP is exact for any cotangent (incl. the owned-mask DD consolidation
     produces). Returns per-atom energy ``(N,)`` float64.

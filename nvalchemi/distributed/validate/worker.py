@@ -251,7 +251,7 @@ def _worker_main(
 
             # Bulk-materialize on-device per-module sums to floats. One
             # sync replaces N per-hook syncs — critical for big models
-            # (UMA: 218 submodules × many MP iterations).
+            # (UMA: 218 submodules x many MP iterations).
             if layer_records:
                 finalize_layer_records(layer_records)
 

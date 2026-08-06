@@ -19,12 +19,12 @@ PME reciprocal-space, split into stages for distributed use.
 
 Splits the monolithic ``particle_mesh_ewald`` so distributed callers can
 insert a cross-rank reduction between the per-rank partial total charge
-(``Q = Σᵢ qᵢ`` over owned atoms) and the per-atom background correction
-``(π/(2α²V))·qᵢ·Q_total``.
+(:math:`Q = \sum_i q_i` over owned atoms) and the per-atom background correction
+:math:`(\pi/(2\alpha^{2} V))\, q_i\, Q_{total}`.
 
 Stages:
 
-- :func:`pme_compute_partial_total_charge` — per-rank partial ``Σᵢ qᵢ``
+- :func:`pme_compute_partial_total_charge` — per-rank partial :math:`\sum_i q_i`
   (per-system for batched inputs). A custom op so the distributed layer
   can intercept it under halo storage and apply owned-slice + all-reduce.
 - :func:`particle_mesh_ewald_from_total_charge` — full PME pipeline (real
@@ -35,7 +35,7 @@ Motivation: under halo storage each rank sees its padded (owned + halo)
 charges, and the upstream correction sums over every row it sees — so
 ranks disagree on the background term whenever the halo is not
 charge-symmetric (e.g. 2-rank NaCl where one rank's padded charges sum to
-0 and the other to +2·q₀). Threading a globally-reduced total charge
+0 and the other to :math:`+2q_0`). Threading a globally-reduced total charge
 through the pipeline fixes this.
 """
 
@@ -85,14 +85,14 @@ __all__ = [
 # Stage 1 — partial total charge.
 # Registered as custom ops (no kernel needed — it's just a reduction) so the
 # distributed layer can attach an owned-slice + all-reduce handler under halo
-# storage. Autograd is the trivial d(Σqᵢ)/dqⱼ = 1 gradient.
+# storage. Autograd is the trivial d(sum q_i)/dq_j = 1 gradient.
 
 
 @torch.library.custom_op(
     "alchemiops::_pme_compute_partial_total_charge", mutates_args=()
 )
 def _pme_compute_partial_total_charge(charges: torch.Tensor) -> torch.Tensor:
-    """Internal: single-system partial total charge ``Σᵢ qᵢ``.
+    r"""Internal: single-system partial total charge :math:`\sum_i q_i`.
 
     Output is shape ``(1,)`` and always ``float64`` for accumulation
     stability.
@@ -114,7 +114,7 @@ def _setup_ctx_single(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
 
 
 def _backward_single(ctx: Any, grad_output: torch.Tensor) -> torch.Tensor:
-    # d(Σqᵢ)/dqⱼ = 1 ⇒ grad_charges = grad_output.expand(charges.shape)
+    # d(sum q_i)/dq_j = 1 => grad_charges = grad_output.expand(charges.shape)
     return grad_output.to(ctx.charges_dtype).expand(ctx.charges_shape).contiguous()
 
 
@@ -156,7 +156,7 @@ def _setup_ctx_batch(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
 def _backward_batch(
     ctx: Any, grad_output: torch.Tensor
 ) -> tuple[torch.Tensor, None, None]:
-    # d(out[b]) / d(charges[i]) = δ(batch_idx[i], b) — i.e.
+    # d(out[b]) / d(charges[i]) = delta(batch_idx[i], b) — i.e.
     # grad_charges[i] = grad_output[batch_idx[i]].
     (batch_idx,) = ctx.saved_tensors
     grad_charges = grad_output.to(ctx.charges_dtype).index_select(
@@ -227,7 +227,7 @@ def pme_compute_partial_total_charge(
     batch_idx: torch.Tensor | None = None,
     num_systems: int | None = None,
 ) -> torch.Tensor:
-    r"""Compute the total charge ``Q = Σᵢ qᵢ`` (globally reduced under distribution).
+    r"""Compute the total charge :math:`Q = \sum_i q_i` (globally reduced under distribution).
 
     Under halo storage the custom op is intercepted by the distributed layer:
     ``charges`` is sliced to its owned prefix before the kernel, and the partial
@@ -279,7 +279,7 @@ def pme_energy_corrections_from_total_charge(
     total_charge: torch.Tensor,
     batch_idx: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    r"""Apply self-energy and background corrections with pre-reduced ``Q``.
+    r"""Apply self-energy and background corrections with pre-reduced :math:`Q`.
 
     Same contract as upstream ``pme_energy_corrections``, except the caller
     provides the globally-correct ``total_charge`` (shape ``(1,)`` for
@@ -349,7 +349,7 @@ def pme_energy_corrections_with_charge_grad_from_total_charge(
 # Stage 2 — PME reciprocal-space impl with pre-reduced total_charge.
 # Like upstream _pme_reciprocal_space_impl with two changes:
 #   1. The corrections call uses total_charges instead of charges.sum().
-#   2. The virial background term (e_bg = π·Q²/(2α²V)) uses total_charges.
+#   2. The virial background term (e_bg = pi * Q^2/(2 alpha^2 V)) uses total_charges.
 
 
 def _pme_reciprocal_space_impl_from_total_charge(
@@ -567,8 +567,8 @@ def _pme_reciprocal_space_impl_from_total_charge(
 
     forces = None
     if compute_forces:
-        # gathered_force is -q*∇Φ in Cartesian coords; the 2× absorbs the 1/2
-        # pair-counting factor baked into the Green's function (G = 2π/(V k²)).
+        # gathered_force is -q*grad(Phi) in Cartesian coords; the 2x absorbs the 1/2
+        # pair-counting factor baked into the Green's function (G = 2pi/(V k^2)).
         forces = 2.0 * gathered_force
 
     if hybrid_forces and charges.requires_grad:

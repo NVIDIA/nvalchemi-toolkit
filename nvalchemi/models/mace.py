@@ -203,7 +203,7 @@ def _mace_uses_cueq(model: nn.Module) -> bool:
 
 
 def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
-    """Build adapters that unfuse each cueq conv ``conv_tp`` for the DD scope.
+    r"""Build adapters that unfuse each cueq conv ``conv_tp`` for the DD scope.
 
     ``mace.cli.convert_e3nn_cueq`` enables *conv fusion* on CUDA: the message
     pass (gather senders → channel-wise TP → scatter to receivers) becomes one
@@ -226,7 +226,7 @@ def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
     * **Compiled DD** — keep the conv **fused**. The fused cueq kernel streams
       the per-edge message instead of materializing it, so the saved-for-backward
       footprint matches single-GPU compiled (the unfused per-edge message is a
-      ~N·feat saved activation that roughly doubles compiled-DD peak memory and
+      :math:`{\sim}N\cdot\mathrm{feat}` saved activation that roughly doubles compiled-DD peak memory and
       halves max-N). Halo correctness comes from the message-passing refresh
       adapter's ``scatter_to_owners`` on the block output, which fires only under
       compile and is force-equivalent to the external scatter (validated).

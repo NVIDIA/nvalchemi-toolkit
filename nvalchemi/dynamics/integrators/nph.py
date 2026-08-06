@@ -60,7 +60,7 @@ __all__ = ["NPH"]
 
 
 class NPH(BaseDynamics):
-    """Isenthalpic-isobaric (NPH) integrator via MTK barostat.
+    r"""Isenthalpic-isobaric (NPH) integrator via MTK barostat.
 
     Temperature fluctuates; enthalpy H = E + PV is conserved.
 
@@ -76,7 +76,7 @@ class NPH(BaseDynamics):
         or ``[M, 3, 3]`` (triclinic).  Scalar is broadcast to ``[M]``
         isotropic.
     barostat_time : float or torch.Tensor
-        Barostat coupling time τ_P in femtoseconds ``[M]`` or scalar.
+        Barostat coupling time :math:`\tau_P` in femtoseconds ``[M]`` or scalar.
     pressure_coupling : {"isotropic", "anisotropic", "triclinic"}
         Pressure control mode.  Default ``"isotropic"``.
     n_steps : int, optional
