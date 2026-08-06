@@ -401,19 +401,17 @@ class HaloStrategy(ParallelizationStrategy):
         }
 
         new_batch = _build_batch_from_fields(new_fields, device)
-        if getattr(batch, "cell", None) is not None:
-            new_batch.cell = batch.cell.clone()
-        if getattr(batch, "pbc", None) is not None:
-            new_batch.pbc = batch.pbc.clone()
-        if getattr(batch, "energy", None) is not None:
-            new_batch.energy = batch.energy.clone()
-        # Per-graph extras the integrator reads back (e.g. NPT/NPH read
-        # ``batch.stress`` in pre_update before the next compute fills it).
-        # Migration changes atom ownership, not system count, so carry these
-        # per-system tensors across verbatim.
-        stress = getattr(batch, "stress", None)
-        if stress is not None:
-            new_batch["stress"] = stress.clone()
+        # Migration changes atom ownership, not the system schema, so every
+        # per-system tensor carries across verbatim: the cell and pbc the
+        # partition is judged against, per-graph values an integrator reads back
+        # (NPT reads ``stress`` before the next compute fills it), and model
+        # inputs a producer attached such as total charge or spin. Naming them
+        # individually silently drops whatever the list does not mention.
+        system = batch._system_group
+        if system is not None:
+            for name, tensor in system.items():
+                if isinstance(tensor, torch.Tensor):
+                    new_batch[name] = tensor.clone()
 
         # Refresh the persistent state to match the new layout and invalidate the
         # padded view — migration changes rank ownership, so the halo routing and

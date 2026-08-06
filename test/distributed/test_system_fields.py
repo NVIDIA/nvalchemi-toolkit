@@ -138,3 +138,47 @@ def test_system_fields_reach_every_rank():
         assert seen["charge"] == CHARGE, f"rank {rank} lost charge"
         assert seen["spin"] == SPIN, f"rank {rank} lost spin"
         assert seen["custom"] == CUSTOM, f"rank {rank} lost custom_scalar"
+
+
+def test_system_fields_survive_a_migration_rebuild():
+    """Migration must not narrow the system schema.
+
+    ``apply_migration`` rebuilds the batch from per-atom fields, so whatever it
+    does not carry across is gone. It used to name ``cell``, ``pbc``, ``energy``
+    and ``stress`` individually, which silently dropped total charge, spin and
+    any property a producer attached — an AIMNet2 run under a barostat would
+    revert to a neutral system partway through a trajectory.
+    """
+    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.distributed.strategy import _build_batch_from_fields
+
+    data = AtomicData(
+        positions=torch.zeros(4, 3),
+        atomic_numbers=torch.ones(4, dtype=torch.long),
+        cell=torch.eye(3).unsqueeze(0),
+        pbc=torch.ones(1, 3, dtype=torch.bool),
+    )
+    data.add_system_property("charge", torch.tensor([[-2.0]]))
+    data.add_system_property("spin", torch.tensor([[3.0]]))
+    batch = Batch.from_data_list([data])
+
+    # The reconstruction migration performs: per-atom fields only.
+    rebuilt = _build_batch_from_fields(
+        {
+            "positions": batch.positions.clone(),
+            "atomic_numbers": batch.atomic_numbers.clone(),
+        },
+        torch.device("cpu"),
+    )
+    system = batch._system_group
+    assert system is not None
+    for name, tensor in system.items():
+        if isinstance(tensor, torch.Tensor):
+            rebuilt[name] = tensor.clone()
+
+    assert set(rebuilt._system_group.keys()) == set(system.keys()), (
+        "migration narrowed the system schema; a hardcoded carry-over list "
+        "drops whatever it does not mention"
+    )
+    torch.testing.assert_close(rebuilt.charge, batch.charge)
+    torch.testing.assert_close(rebuilt.spin, batch.spin)
