@@ -25,6 +25,7 @@ directly.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -106,13 +107,19 @@ def _compute_pbc_image_vectors(
 
     Returns ``{(sender, receiver): [image_1, image_2, ...]}`` where each
     ``(3,)`` image contains integer-valued fractional lattice coefficients.
-    For a diagonal neighbor crossing D periodic boundaries there are
-    ``2^D - 1`` independent images (all non-empty subsets of crossed dims).
+
+    A ghost shell wider than one domain reaches the same neighbor from both
+    sides of a periodic axis, and the two sides are different lattice images of
+    that neighbor holding different atoms. The offsets the shell actually spans
+    are therefore enumerated per axis rather than only the outermost pair; an
+    offset that needs no wrap is the direct (unshifted) copy the caller handles
+    separately, so only wrapping offsets appear here.
     """
     images: dict[tuple[int, int], list[torch.Tensor]] = {}
     cell_matrix = partitioner.cell_matrix
     pbc = partitioner.pbc
     grid = partitioner.rank_grid
+    span = getattr(partitioner, "neighbor_span", lambda: (1, 1, 1))()
 
     total_ranks = grid[0] * grid[1] * grid[2]
     for sender_rank in range(total_ranks):
@@ -120,36 +127,42 @@ def _compute_pbc_image_vectors(
         for receiver_rank in partitioner.get_neighbor_ranks(sender_rank):
             receiver_coords = partitioner.rank_to_grid_coords(receiver_rank)
 
-            per_dim_images: list[torch.Tensor] = []
+            # Per axis: which lattice translations reach this receiver at all.
+            axis_choices: list[tuple[int, list[int]]] = []
             for dim in range(3):
                 if not pbc[dim] or grid[dim] <= 1:
                     continue
-                dim_image = torch.zeros(
-                    3, device=cell_matrix.device, dtype=cell_matrix.dtype
-                )
-                if sender_coords[dim] == grid[dim] - 1 and receiver_coords[dim] == 0:
-                    dim_image[dim] = -1
-                elif sender_coords[dim] == 0 and receiver_coords[dim] == grid[dim] - 1:
-                    dim_image[dim] = 1
-                else:
-                    continue
-                per_dim_images.append(dim_image)
+                coefficients: set[int] = set()
+                for offset in range(-int(span[dim]), int(span[dim]) + 1):
+                    stepped = sender_coords[dim] + offset
+                    if stepped % grid[dim] != receiver_coords[dim]:
+                        continue
+                    # Exact: ``stepped - receiver`` is a whole number of grids.
+                    crossings = (stepped - receiver_coords[dim]) // grid[dim]
+                    if crossings != 0:
+                        coefficients.add(-crossings)
+                if coefficients:
+                    axis_choices.append((dim, sorted(coefficients)))
 
-            if not per_dim_images:
+            if not axis_choices:
                 continue
 
-            n = len(per_dim_images)
+            # A neighbor across several axes needs every combination of their
+            # translations; the all-zero one is the direct copy.
             combo_images: list[torch.Tensor] = []
-            for mask in range(1, 1 << n):
+            dims = [dim for dim, _ in axis_choices]
+            for choice in itertools.product(*([0, *c] for _, c in axis_choices)):
+                if not any(choice):
+                    continue
                 combo = torch.zeros(
                     3, device=cell_matrix.device, dtype=cell_matrix.dtype
                 )
-                for bit in range(n):
-                    if mask & (1 << bit):
-                        combo = combo + per_dim_images[bit]
+                for dim, coefficient in zip(dims, choice):
+                    combo[dim] = coefficient
                 combo_images.append(combo)
 
-            images[(sender_rank, receiver_rank)] = combo_images
+            if combo_images:
+                images[(sender_rank, receiver_rank)] = combo_images
 
     return images
 

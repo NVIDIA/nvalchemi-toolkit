@@ -24,6 +24,10 @@ import torch
 
 from nvalchemi.distributed.config import DomainConfig
 
+# Relative slack when deciding how many domains a ghost shell spans, absorbing
+# float32 round-off in the derived domain width.
+_SPAN_ROUNDING_TOL = 1e-6
+
 
 class SpatialPartitioner:
     """Assigns atoms to spatial sub-domains on a Cartesian grid.
@@ -94,7 +98,8 @@ class SpatialPartitioner:
                 self.cells_per_dim, self.rank_grid
             )
 
-        # Precompute neighbor ranks for every rank.
+        # Precompute the ghost reach and the neighbor ranks for every rank.
+        self._span: tuple[int, int, int] = self.neighbor_span()
         self._neighbor_ranks: dict[int, list[int]] = self._compute_all_neighbor_ranks()
 
         # Precompute the cell-matrix inverse used by ``assign_atoms_to_ranks``.
@@ -115,14 +120,27 @@ class SpatialPartitioner:
         partition-time box: as the cell grows, wrapped positions fall outside it
         (fractional coords >= 1) and ``assign_atoms_to_ranks`` misroutes atoms.
 
-        Note: this handles cell *scaling* (the fix for barostat expansion). Large
-        *contraction* additionally needs the cell grid / neighbor-rank set to
-        adapt (the ghost region spans more grid cells as the box shrinks); that
-        adaptive-grid work is not covered here.
+        Contraction narrows every domain, so the ghost shell can come to span
+        more than one of them; the neighbour-rank set is rebuilt whenever that
+        happens, and :meth:`neighbor_span` raises if the geometry has contracted
+        past what the halo can express.
+
+        Parameters
+        ----------
+        cell_matrix : torch.Tensor
+            The barostat's updated cell, ``(3, 3)`` or ``(1, 3, 3)``.
+
+        Returns
+        -------
+        None
         """
         cm = cell_matrix.squeeze(0) if cell_matrix.ndim == 3 else cell_matrix
+        previous_span = getattr(self, "_span", None)
         self.cell_matrix = cm.detach()
         self._inv_cell = torch.linalg.inv(self.cell_matrix)
+        self._span = self.neighbor_span()
+        if self._span != previous_span:
+            self._neighbor_ranks = self._compute_all_neighbor_ranks()
 
     # ------------------------------------------------------------------
     # Initialization helpers
@@ -376,30 +394,102 @@ class SpatialPartitioner:
     # Neighbor ranks
     # ------------------------------------------------------------------
 
+    def domain_widths(self) -> tuple[float, float, float]:
+        """Physical width of one rank's domain along each axis, in Angstroms.
+
+        Each rank owns ``ceil(N_d / P_d)`` grid cells of width
+        ``face_distance_d / N_d``.
+
+        Returns
+        -------
+        tuple[float, float, float]
+            Per-axis domain width.
+        """
+        cm = self.cell_matrix
+        inv_cell_T = torch.linalg.inv(cm).mT
+        widths: list[float] = []
+        for d in range(3):
+            face = 1.0 / torch.linalg.norm(inv_cell_T[d]).item()
+            n_d = self.cells_per_dim[d]
+            cells_per_rank = math.ceil(n_d / self.rank_grid[d])
+            widths.append(cells_per_rank * face / n_d)
+        return (widths[0], widths[1], widths[2])
+
+    def neighbor_span(self) -> tuple[int, int, int]:
+        """Rank offsets the ghost shell reaches along each axis.
+
+        ``ceil(ghost_width / domain_width)`` — 1 while the ghost fits inside one
+        domain, more once it does not (many ranks, a small cell, or a barostat
+        contracting the box). Communicating only ``+/-1`` in that case silently
+        drops every interaction that spans two or more domains.
+
+        Returns
+        -------
+        tuple[int, int, int]
+            Per-axis offset range.
+
+        Raises
+        ------
+        ValueError
+            If the shell would have to wrap onto the rank's own periodic image,
+            which the halo exchange cannot express.
+        """
+        ghost = self.config.effective_ghost_width()
+        widths = self.domain_widths()
+        span: list[int] = []
+        for d in range(3):
+            # ``domain_widths`` derives the face distance from a float32 matrix
+            # inverse, so a shell that fits exactly lands a few ulp above 1.0 and
+            # would round up to a spurious extra domain. Absorb that before the
+            # ceil; a genuine overshoot is orders of magnitude larger.
+            ratio = (ghost / widths[d]) - _SPAN_ROUNDING_TOL if widths[d] > 0 else 0.0
+            s = max(1, math.ceil(ratio)) if widths[d] > 0 else 1
+            p_d = self.rank_grid[d]
+            # An offset of +/-P_d wraps back onto the rank itself, so the shell
+            # would need the rank's own periodic image as a ghost -- something
+            # the neighbour list cannot express. Reaching every OTHER rank is
+            # fine (they simply dedupe), so only s >= P_d is fatal.
+            if bool(self.pbc[d]) and s >= p_d > 1:
+                raise ValueError(
+                    f"Ghost width {ghost:.3f} A spans {s} rank domains along "
+                    f"axis {d} (domain width {widths[d]:.3f} A, {p_d} ranks on "
+                    f"that axis), so the halo would wrap onto the rank's own "
+                    f"periodic image. Use fewer ranks, a larger cell, or a "
+                    f"smaller cutoff/skin."
+                )
+            span.append(min(s, p_d - 1) if p_d > 1 else 0)
+        return (span[0], span[1], span[2])
+
     def _compute_all_neighbor_ranks(self) -> dict[int, list[int]]:
         """Precompute the set of neighbor ranks for every rank."""
         Px, Py, Pz = self.rank_grid
         total_ranks = Px * Py * Pz
+        span = self.neighbor_span()
         neighbor_map: dict[int, list[int]] = {}
         for rank in range(total_ranks):
-            neighbor_map[rank] = self._compute_neighbor_ranks_for(rank)
+            neighbor_map[rank] = self._compute_neighbor_ranks_for(rank, span)
         return neighbor_map
 
-    def _compute_neighbor_ranks_for(self, rank: int) -> list[int]:
-        """Return up to 26 spatial neighbor ranks for *rank*.
+    def _compute_neighbor_ranks_for(
+        self, rank: int, span: tuple[int, int, int] | None = None
+    ) -> list[int]:
+        """Return the spatial neighbor ranks the ghost shell reaches for *rank*.
 
-        For PBC dimensions, wrap around. For non-PBC, skip out-of-bounds.
+        *span* is the per-axis offset range from :meth:`neighbor_span` (computed
+        on demand when omitted). For PBC dimensions, wrap around. For non-PBC,
+        skip out-of-bounds.
         """
         Px, Py, Pz = self.rank_grid
         rx, ry, rz = self.rank_to_grid_coords(rank)
         pbc_x = bool(self.pbc[0])
         pbc_y = bool(self.pbc[1])
         pbc_z = bool(self.pbc[2])
+        sx, sy, sz = span if span is not None else self.neighbor_span()
 
         neighbors: list[int] = []
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                for dz in (-1, 0, 1):
+        for dx in range(-sx, sx + 1):
+            for dy in range(-sy, sy + 1):
+                for dz in range(-sz, sz + 1):
                     if dx == 0 and dy == 0 and dz == 0:
                         continue
                     nx = rx + dx
@@ -520,9 +610,36 @@ class IndexPartitioner:
         self.world_size: int = config.mesh.size() if config.mesh is not None else 1
 
     def get_neighbor_ranks(self, rank: int) -> list[int]:
+        """Every other rank: an index partition has no boundary shell.
+
+        Parameters
+        ----------
+        rank : int
+            The rank whose neighbours are wanted.
+
+        Returns
+        -------
+        list[int]
+            All ranks except *rank*.
+        """
         return [r for r in range(self.world_size) if r != rank]
 
     def assign_atoms_to_ranks(self, positions: torch.Tensor) -> torch.Tensor:
+        """Assign atoms to ranks in balanced contiguous index blocks.
+
+        Position-independent, unlike the spatial partitioner: atom order alone
+        decides the owner, so the assignment is stable as atoms move.
+
+        Parameters
+        ----------
+        positions : torch.Tensor
+            Atomic positions, read only for their count and device.
+
+        Returns
+        -------
+        torch.Tensor
+            Owning rank per atom, shape ``[N]``.
+        """
         n = positions.shape[0]
         counts = self._owned_counts(n)
         return torch.repeat_interleave(
