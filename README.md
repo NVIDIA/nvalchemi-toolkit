@@ -7,109 +7,40 @@
 [![codecov](https://codecov.io/gh/NVIDIA/nvalchemi-toolkit/branch/main/graph/badge.svg)](https://codecov.io/gh/NVIDIA/nvalchemi-toolkit)
 [![Documentation](https://img.shields.io/badge/docs-github%20pages-blue)](https://nvidia.github.io/nvalchemi-toolkit/)
 
-## High-performance deep-learning framework for atomic simulations
+## High-throughput AI atomic simulation on NVIDIA GPUs
 
-NVIDIA ALCHEMI Toolkit is a GPU-first Python framework for building, running, and
-deploying AI-driven atomic simulation workflows. It provides a unified interface for
-machine-learned interatomic potentials (MLIPs), batched molecular dynamics,
-composable multi-stage simulation pipelines, and model training and fine-tuning:
-all designed for high throughput on NVIDIA GPUs.
+NVIDIA ALCHEMI Toolkit is a GPU-first Python framework for AI atomic simulations.
+Run batched molecular dynamics (MD) and relaxation, train or fine-tune
+machine-learned interatomic potentials (MLIPs), and scale the same composable
+workflows from one GPU to multi-GPU systems.
 
 ### Key Features
 
-- **Batched GPU simulation**:
-  - many systems batched together in one pass on a single GPU
-  - molecular dynamics: NVE, NVT with Langevin or Nosé-Hoover chain
-    thermostats, NPT and NPH
-  - geometry relaxation: FIRE and FIRE2, with optional cell relaxation
-  - `+` fuses stages so a relax-then-MD workflow costs one forward pass per
-    step (`FusedStage`)
-  - `SizeAwareSampler` swaps in new samples as others converge, keeping the
-    GPU full on long runs
-
-- **Training and fine-tuning** ([guide](docs/userguide/training.md)):
-  - composable energy, force and stress losses with weight schedules
-  - validation and restartable checkpoints
-  - EMA and DDP hooks
-
-- **Multi-GPU scaling** ([guide](docs/userguide/distributed.md)):
-  - spatial domain decomposition splits one large system across ranks via
-    `DomainParallel` and `ShardTensor`, with automatic halo exchange
-  - `|` distributes pipeline stages across ranks (`DistributedPipeline`)
-
-- **Interatomic potentials**:
-  - wrappers for MACE, AIMNet2 and UMA
-  - your own model via `BaseModelMixin`
-
-- **Interaction terms**:
-  - Ewald and particle mesh Ewald electrostatics, which read the per-atom
-    charges an MLIP such as AIMNet2 predicts
-  - DFT-D3(BJ) dispersion
-  - Lennard-Jones, usable on its own as a lightweight potential
-
-- **Data at scale**:
-  - `AtomicData` and `Batch`, Pydantic-backed and GPU-resident
-  - Zarr serialization for trajectories and datasets
-  - `MultiDataset` mixes several datasets with balanced sampling;
-    `InMemoryDataset` keeps a hot dataset resident
-  - per-sample and per-batch transforms, CUDA-stream prefetching
-
-- **Extensible by design**:
-  - one `BaseModelMixin` wrapper, with capabilities declared through
-    `ModelConfig`, works unchanged in dynamics, training and multi-GPU runs
-  - custom integrators and optimizers by subclassing `BaseDynamics`
-  - custom loss functions by subclassing `BaseLossFunction`, and custom
-    training steps through `training_fn`
-  - custom storage backends by subclassing `Reader`
-  - your own hooks at nine per-step insertion points, for logging, safety
-    checks, enhanced sampling, profiling and convergence detection
-  - stack interaction terms onto a potential with `PipelineModelWrapper`,
-    wiring outputs between steps so AIMNet2 supplies the charges Ewald reads
-
-- **Agent skills**: task-specific API guides under `.claude/skills/`
-  (see [Using with AI coding agents](#using-with-ai-coding-agents))
+- **Batched GPU simulation**: run many MD or geometry relaxation jobs in one
+  model pass; inflight batching keeps the GPU occupied as systems finish.
+- **Bring your own model**: use MACE, AIMNet2 or UMA, or wrap another MLIP with
+  `BaseModelMixin`; add Ewald/PME electrostatics or DFT-D3(BJ) dispersion.
+- **Training and fine-tuning**: combine energy, force and stress objectives
+  with validation, restartable checkpoints, exponential moving averages and
+  distributed data-parallel training.
+- **Multi-GPU scaling**: split one large atomic system across GPUs with spatial
+  domain decomposition.
+- **Data at scale**: use GPU-resident `AtomicData` and `Batch`, Zarr storage,
+  balanced dataset mixing, transforms and CUDA-stream prefetching.
+- **Composable dynamics and hooks**: create custom integrators, chain simulation
+  stages with `+` or `|`, and attach logging, safety, sampling, profiling or
+  convergence logic at nine points per step.
+- **Agent-ready guidance**: task-specific skills and `AGENTS.md` teach coding
+  agents the toolkit APIs and repository conventions.
 
 Built on [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
 for GPU-optimized neighbor lists and interaction kernels via NVIDIA `warp-lang`.
 
-Upgrading from 0.1.0? See [CHANGELOG.md](CHANGELOG.md) for breaking changes and
-migration snippets.
-
-### Roadmap
-
-Features planned for upcoming releases:
-
-- **Generative models**: model-agnostic abstraction of generative models for
-  the ALCHEMI Toolkit simulation pipeline
-- **Crystal structure prediction (CSP) primitives**: composable, batched
-  building blocks for molecular CSP workflows
-- **Enhanced sampling**: GPU-resident collective variables and biasing methods
-- **Model distillation**: pipeline for distilling large, accurate potentials
-  into compact models for fast production inference
-- **LoRA adapters**: parameter-efficient fine-tuning that maintains many
-  specialized variants of one base potential without duplicating its weights
-- **Hessians and phonons**: analytical second derivatives through automatic
-  differentiation for vibrational and thermodynamic property prediction
-- **Domain decomposition optimization**: continued performance improvement of
-  spatial domain decomposition
-- **Kernel improvements** at the
-  [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
-  level
-
 ### Using with AI coding agents
 
-The repository ships agent-facing guidance at two levels:
+  **Skills** — task-specific API guides under .claude/skills/. Claude Code discovers them automatically when working inside a clone; for other platforms (e.g. Cursor, OpenCode), or to use them outside this repository, copy the folder contents into your project's or home skills directory.
 
-- **Skills** — task-specific API guides under `.claude/skills/`. Claude Code
-  discovers them automatically when working inside a clone; other platforms
-  are routed to the right `SKILL.md` by the table in `AGENTS.md`. To use
-  them outside this repository, copy the folder contents into your
-  project's or home skills directory.
-- **`AGENTS.md`** — repository-wide guidance (setup, conventions, gotchas,
-  and the skill routing table). Agents that follow the `AGENTS.md`
-  convention (e.g. Codex, Cursor, OpenCode, GitHub Copilot) load it
-  natively; the repository also ships a `CLAUDE.md` that imports it, so
-  Claude Code gets the same guidance automatically.
+  **AGENTS.md** — repository-wide guidance (setup, conventions, gotchas). Agents that follow the AGENTS.md convention (e.g. Codex, Cursor, OpenCode) load it natively. Claude Code auto-loads CLAUDE.md instead: to get the same guidance there, add a CLAUDE.md to your clone containing the single line @AGENTS.md (an import), or symlink it (ln -s AGENTS.md CLAUDE.md).
 
 ### Example Snippets
 
@@ -218,7 +149,7 @@ with pipeline:
 </details>
 
 <details>
-<summary>Train a model with validation and checkpointing</summary>
+<summary>Train a model with validation</summary>
 
 ```python
 import torch
@@ -270,18 +201,16 @@ For a complete runnable script, see
 ```python
 # Launch with: torchrun --nproc_per_node=2 my_dd_run.py
 import torch
-import torch.distributed as dist
-from torch.distributed.device_mesh import DeviceMesh
 
-from nvalchemi.distributed import DomainConfig, DomainParallel
+from nvalchemi.distributed import DistributedManager, DomainConfig, DomainParallel
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.models.mace import MACEWrapper
 
-dist.init_process_group(backend="nccl")
-device = torch.device(f"cuda:{dist.get_rank()}")
-torch.cuda.set_device(device)
-mesh = DeviceMesh(
-    "cuda", list(range(dist.get_world_size())), mesh_dim_names=("domain",)
+DistributedManager.initialize()
+dm = DistributedManager()
+device = torch.device(dm.device)
+mesh = dm.initialize_mesh(
+  mesh_shape=(dm.world_size,), mesh_dim_names=("domain",)
 )
 
 # The wrapper and the integrator are the same objects you would use on a
@@ -294,11 +223,13 @@ integrator = NVTLangevin(
 # One DomainConfig + one wrap is the entire user-facing addition. Atoms are
 # partitioned spatially; halo exchange and cross-rank reductions are automatic.
 domain_cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.5, mesh=mesh)
-dynamics = DomainParallel(dynamics=integrator, config=domain_cfg, n_steps=200)
+with DomainParallel(
+  dynamics=integrator, config=domain_cfg, n_steps=200
+) as dynamics:
+  owned = dynamics.partition(batch if dm.rank == 0 else None)
+  dynamics.run(owned)
 
-owned = dynamics.partition(batch if dist.get_rank() == 0 else None)
-dynamics.run(owned)
-dynamics.close()
+DistributedManager.cleanup()
 ```
 
 For complete runnable scripts, see
@@ -357,6 +288,27 @@ The `uma` extra is mutually exclusive with `mace` and the CUDA extras
 
 See the [Installation Guide](docs/userguide/about/install.md) for
 detailed setup instructions.
+
+### Roadmap
+
+Features planned for upcoming releases:
+
+- **Generative models**: model-agnostic abstraction of generative models for
+  the ALCHEMI Toolkit simulation pipeline
+- **Crystal structure prediction (CSP) primitives**: composable, batched
+  building blocks for molecular CSP workflows
+- **Enhanced sampling**: GPU-resident collective variables and biasing methods
+- **Model distillation**: pipeline for distilling large, accurate potentials
+  into compact models for fast production inference
+- **LoRA adapters**: parameter-efficient fine-tuning that maintains many
+  specialized variants of one base potential without duplicating its weights
+- **Hessians and phonons**: analytical second derivatives through automatic
+  differentiation for vibrational and thermodynamic property prediction
+- **Domain decomposition optimization**: continued performance improvement of
+  spatial domain decomposition
+- **Kernel improvements** at the
+  [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
+  level
 
 ## Contributions & Disclaimers
 
