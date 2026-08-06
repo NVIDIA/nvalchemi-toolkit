@@ -270,7 +270,7 @@ class ShardedBatch(ShardedCollection):
         # Single all_gather into a flat (world_size,) tensor, one sync.
         n_owned_t = torch.tensor([self.n_owned], dtype=torch.int64, device=device)
         sizes_t = torch.empty(world_size, dtype=torch.int64, device=device)
-        dist.all_gather_into_tensor(sizes_t, n_owned_t)
+        dist.all_gather_into_tensor(sizes_t, n_owned_t, group=mesh_group(self.mesh))
 
         # Build the block-constant assignment via repeat_interleave — no
         # per-rank Python loop or slicing.
