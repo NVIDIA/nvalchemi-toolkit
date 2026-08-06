@@ -49,7 +49,7 @@ from nvalchemi.distributed.validate.reference import _ensure_neighbors
 __all__ = ["_worker_main", "_patch_physicsnemo_all_to_all_for_gloo"]
 
 
-def _rebind_replacements(spec: MLIPSpec, live: "MLIPSpec | None") -> None:
+def _rebind_replacements(spec: MLIPSpec, live: MLIPSpec | None) -> None:
     """Restore adapter replacements that could not cross the spawn boundary.
 
     A replacement a wrapper builds from its own submodules — the per-layer halo

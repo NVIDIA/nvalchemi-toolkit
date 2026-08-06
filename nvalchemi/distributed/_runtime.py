@@ -16,9 +16,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import warnings
+from collections.abc import Iterator
+from typing import Any
 
 import torch
 from physicsnemo.distributed import (
@@ -109,10 +112,58 @@ def pin_fp32() -> None:
             try:
                 holder.fp32_precision = "ieee"
             except Exception:  # pragma: no cover - varies by torch version
-                logger.debug("could not set fp32_precision", exc_info=True)
+                # Non-fatal: the primary flags above already pin precision, and
+                # this attribute only exists on some torch versions.
+                logger.warning("could not set fp32_precision", exc_info=True)
 
 
-def _is_reduced_precision(device: "Any" = None) -> bool:
+@contextlib.contextmanager
+def pinned_fp32() -> Iterator[None]:
+    """Pin full-precision fp32 for the duration of the block, then restore.
+
+    The scoped counterpart to :func:`pin_fp32`, for callers that need one
+    comparison at full precision without changing the rest of the process.
+    Prefer :func:`pin_fp32` for a whole run: it also sets the environment
+    variable that ``mp.spawn`` / ``torchrun`` workers inherit, and restoring
+    that on exit would unpin the workers.
+
+    Yields
+    ------
+    None
+    """
+    saved: list[tuple[Any, str, Any]] = [
+        (
+            torch.backends.cuda.matmul,
+            "allow_tf32",
+            torch.backends.cuda.matmul.allow_tf32,
+        ),
+        (torch.backends.cudnn, "allow_tf32", torch.backends.cudnn.allow_tf32),
+    ]
+    saved.extend(
+        (holder, "fp32_precision", holder.fp32_precision)
+        for holder in (torch.backends.cuda.matmul, torch.backends.cudnn)
+        if hasattr(holder, "fp32_precision")
+    )
+    # Reading the global precision raises once legacy (``allow_tf32``) and new
+    # (``fp32_precision``) APIs have both been written, which ``pin_fp32`` does.
+    try:
+        saved_precision = torch.get_float32_matmul_precision()
+    except RuntimeError:  # pragma: no cover - depends on prior calls
+        saved_precision = None
+    try:
+        pin_fp32()
+        yield
+    finally:
+        for holder, attr, value in saved:
+            try:
+                setattr(holder, attr, value)
+            except Exception:  # pragma: no cover - varies by torch version
+                logger.warning("could not restore %s", attr, exc_info=True)
+        if saved_precision is not None:
+            torch.set_float32_matmul_precision(saved_precision)
+
+
+def _is_reduced_precision(device: str | torch.device | None = None) -> bool:
     """Whether fp32 matmul currently runs on the reduced-precision path.
 
     Measured rather than read off the backend flags: which kernel runs depends on
@@ -132,7 +183,9 @@ def _is_reduced_precision(device: "Any" = None) -> bool:
     return err > _REDUCED_PRECISION_THRESHOLD
 
 
-def warn_if_reduced_precision(device: "Any" = None) -> None:
+def warn_if_reduced_precision(
+    device: str | torch.device | None = None,
+) -> None:
     """Warn once per process if reduced-precision fp32 is in force."""
     global _warned_reduced_precision
     if _warned_reduced_precision or not torch.cuda.is_available():

@@ -456,21 +456,15 @@ class DistributedPipelineModel:
                             # Reuse the framework's dE/dfield: a second backward
                             # through a compiled graph returns a wrong chain term.
                             de_dfield = _fw[0]
-                            cons_extra_grads = (
-                                dict(
-                                    zip(
-                                        _extra,
-                                        torch.autograd.grad(
-                                            [e_cons.sum()],
-                                            [leaves[n] for n in _extra],
-                                            retain_graph=True,
-                                            allow_unused=True,
-                                        ),
-                                    )
+                            cons_extra_grads = {}
+                            if _extra:
+                                _extra_grads = torch.autograd.grad(
+                                    [e_cons.sum()],
+                                    [leaves[n] for n in _extra],
+                                    retain_graph=True,
+                                    allow_unused=True,
                                 )
-                                if _extra
-                                else {}
-                            )
+                                cons_extra_grads = dict(zip(_extra, _extra_grads))
                         else:
                             _cg = torch.autograd.grad(
                                 [e_cons.sum()],

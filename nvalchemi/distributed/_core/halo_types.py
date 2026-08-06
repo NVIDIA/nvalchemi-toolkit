@@ -119,7 +119,10 @@ def _compute_pbc_image_vectors(
     cell_matrix = partitioner.cell_matrix
     pbc = partitioner.pbc
     grid = partitioner.rank_grid
-    span = getattr(partitioner, "neighbor_span", lambda: (1, 1, 1))()
+    # No fallback: a partitioner without a span cannot describe how far its
+    # ghost shell reaches, and silently assuming one domain is the very
+    # under-send this function exists to prevent.
+    span = partitioner.neighbor_span()
 
     total_ranks = grid[0] * grid[1] * grid[2]
     for sender_rank in range(total_ranks):
