@@ -688,8 +688,8 @@ def compare_forces(
     ``|ΔF|_max < tolerance``.
 
     Optional stress inputs report ``|Δσ|_max`` and ``|Δσ|_rms`` (in the
-    stress tensor's native units, typically eV/Å³). Stress diff does
-    not gate pass-fail — it's diagnostic-only.
+    stress tensor's native units, typically eV/Å³) and, when present,
+    gate pass-fail alongside forces and energy.
     """
     import math  # noqa: PLC0415
 
@@ -1981,12 +1981,43 @@ def _load_uma(device: torch.device, dtype: torch.dtype, lc: dict, **_: Any) -> A
     )
 
 
+def _load_pipeline(
+    device: torch.device, dtype: torch.dtype, lc: dict, *, compile_model: bool = False
+) -> Any:
+    """Compose ``loader.steps`` into a :class:`PipelineModelWrapper`.
+
+    Each step is an ordinary loader spec (its own ``kind``), so a composed
+    benchmark reuses the single-model loaders verbatim. ``active_outputs`` on a
+    step overrides that sub-model's outputs — the producer in a wired pipeline
+    has to emit the field the consumer reads (e.g. AIMNet2's ``charges`` feeding
+    PME). One group with ``use_autograd`` couples the steps.
+    """
+    from nvalchemi.models.pipeline import PipelineGroup, PipelineModelWrapper
+
+    steps = []
+    for step_cfg in lc["steps"]:
+        sub = LOADERS[step_cfg["kind"]](
+            device, dtype, step_cfg, compile_model=compile_model
+        )
+        if step_cfg.get("active_outputs"):
+            sub.model_config.active_outputs = set(step_cfg["active_outputs"])
+        steps.append(sub)
+
+    pipeline = PipelineModelWrapper(
+        groups=[PipelineGroup(steps=steps, use_autograd=lc.get("use_autograd", True))]
+    )
+    if lc.get("active_outputs"):
+        pipeline.model_config.active_outputs = set(lc["active_outputs"])
+    return pipeline
+
+
 LOADERS: dict[str, Callable[..., Any]] = {
     "lj": _load_lj,
     "electrostatic": _load_electrostatic,
     "mace": _load_mace,
     "aimnet2": _load_aimnet2,
     "uma": _load_uma,
+    "pipeline": _load_pipeline,
 }
 
 

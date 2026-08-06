@@ -168,7 +168,7 @@ The strategy is declared on the model's
 | `SPEC_EWALD_HALO` | halo, with custom-op adapters for reciprocal-space | Ewald |
 | `SPEC_PME_HALO` | halo, with custom-op adapters for charge spreading | PME |
 | `SPEC_DFTD3_HALO` | halo, standard energy/force outputs | DFTD3 dispersion |
-| `SPEC_MPNN_GP` | graph-partition (node partition + per-layer feature all-gather) | MACE / generic MPNN, graph-parallel |
+| `SPEC_MPNN_GP` | graph-partition (node partition + per-layer feature all-gather) | generic MPNN, graph-parallel |
 
 If your model fits one of these patterns, the preset is a one-line
 declaration on your wrapper's `distribution_spec` property. If it
@@ -337,6 +337,41 @@ cuEquivariance), AIMNet2, and UMA wrappers all support it; a BYO model
 opts in by declaring a
 {py:class}`~nvalchemi.distributed.CompilePolicy` on its spec (see
 {doc}`distributed_byo`).
+
+## Matching a single-process reference
+
+A distributed forward and a single-process one do the same arithmetic on
+differently shaped tensors: the distributed one carries ghost rows, and under
+compile it pads to fixed capacities. On Ampere and newer, fp32 matmul and
+convolution may run on the reduced-precision tensor-core path (TF32), and the
+backend can select a reduced-precision kernel for one shape and a
+full-precision kernel for the other. The two results then separate by much more
+than fp32 rounding, and the gap is largest for matmul-heavy models.
+
+This is not specific to decomposition: two single-process runs with different
+batch padding diverge the same way. Decomposition is simply where it becomes
+visible, because it always changes the shapes.
+
+The framework does not change the precision regime for you — reduced precision
+is a deliberate speed/accuracy trade, and worth keeping when a run does not need
+to reproduce a reference. It does warn once when a distributed scope opens with
+reduced precision in force. When a run *does* have to agree with a
+single-process reference, or with a different rank count, pin it before building
+models:
+
+```python
+from nvalchemi.distributed import pin_fp32
+
+pin_fp32()  # before constructing models, and before any CUDA context exists
+```
+
+`pin_fp32` also sets `NVIDIA_TF32_OVERRIDE=0`, which is what reaches ranks
+started by `torchrun` or `mp.spawn`: those re-import torch with default settings
+but inherit the environment. Note that neither pinning nor anything else makes
+distributed and single-process results bitwise identical — cross-rank reduction
+order differs — so equivalence is always to a tolerance, and pinning is what
+keeps that tolerance at the fp32 noise floor rather than orders of magnitude
+above it.
 
 ## Distributed dynamics
 

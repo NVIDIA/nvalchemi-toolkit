@@ -53,6 +53,7 @@ from typing import Any, Callable
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
+from _dd_harness import free_port
 
 __all__ = ["run_gloo"]
 
@@ -98,15 +99,14 @@ def _worker(
     fn: Callable[..., None],
     queue: Any,
     args: tuple,
+    port: str,
 ) -> None:
     """Worker entry point called by ``mp.spawn``. Initialises the gloo
     process group, applies the all_to_all patch, and invokes the user
     function with ``(rank, world_size, queue, *args)``.
     """
     os.environ["MASTER_ADDR"] = "127.0.0.1"
-    # Distinct port per spawn to avoid clashes when pytest runs the same
-    # harness back-to-back.
-    os.environ.setdefault("MASTER_PORT", "29503")
+    os.environ["MASTER_PORT"] = port
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
@@ -124,6 +124,7 @@ def run_gloo(
     fn: Callable[..., None],
     args: tuple = (),
     timeout_sec: float = 60.0,
+    port: str | None = None,
 ) -> list[Any]:
     """Spawn ``world_size`` Gloo workers, run ``fn`` on each, collect
     queue payloads, return them in arrival order.
@@ -140,8 +141,9 @@ def run_gloo(
     ctx = mp.get_context("spawn")
     queue = ctx.Queue()
     procs = []
+    port = port or free_port()
     for rank in range(world_size):
-        p = ctx.Process(target=_worker, args=(rank, world_size, fn, queue, args))
+        p = ctx.Process(target=_worker, args=(rank, world_size, fn, queue, args, port))
         p.start()
         procs.append(p)
 
