@@ -1458,6 +1458,7 @@ class _DistributedAllReduceSum(torch.autograd.Function):
     def forward(  # type: ignore[override]
         tensor: torch.Tensor,
         config: "ParticleHaloConfig",
+        identity_adjoint: bool = False,
     ) -> torch.Tensor:
         # Separate forward + setup_context (no ctx) for AOT-traceability.
         if dist.is_initialized():
@@ -1466,23 +1467,31 @@ class _DistributedAllReduceSum(torch.autograd.Function):
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple, output: torch.Tensor) -> None:
-        _tensor, config = inputs
+        _tensor, config, identity_adjoint = inputs
         ctx.config = config
+        ctx.identity_adjoint = identity_adjoint
 
     @staticmethod
     def backward(ctx: Any, grad_out: torch.Tensor) -> tuple[Any, ...]:
+        if ctx.identity_adjoint:
+            # The symmetric adjoint is only correct when ``grad_out`` is this
+            # rank's own downstream partial. When the output feeds a consumer
+            # that is itself all-reduced, ``grad_out`` already holds every
+            # rank's contribution and reducing again multiplies by world size.
+            return grad_out.contiguous().clone(), None, None
         if dist.is_initialized():
             grad = funcol_all_reduce(grad_out.contiguous(), ctx.config.mesh)
         else:
             grad = grad_out.contiguous().clone()
-        # (tensor, config)
-        return grad, None
+        # (tensor, config, identity_adjoint)
+        return grad, None, None
 
 
 def distributed_all_reduce(
     tensor: torch.Tensor,
     config: "ParticleHaloConfig",
     op: dist.ReduceOp = dist.ReduceOp.SUM,
+    identity_adjoint: bool = False,
 ) -> torch.Tensor:
     """Autograd-aware SUM all-reduce across ``config.mesh``.
 
@@ -1523,4 +1532,25 @@ def distributed_all_reduce(
             f"distributed_all_reduce op={op} not implemented; only SUM is "
             "currently wired."
         )
-    return _DistributedAllReduceSum.apply(tensor, config)
+    return _DistributedAllReduceSum.apply(tensor, config, identity_adjoint)
+
+
+def all_reduce_sum_over_mesh(tensor: Any, mesh: Any) -> Any:
+    """Sum *tensor* across *mesh*'s process group, in place.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Per-rank partial to reduce.
+    mesh : DeviceMesh
+        Mesh whose group the reduction runs on.
+
+    Returns
+    -------
+    torch.Tensor
+        *tensor*, reduced across the group (unchanged single-process).
+    """
+    if not dist.is_initialized():
+        return tensor
+    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
+    return tensor
