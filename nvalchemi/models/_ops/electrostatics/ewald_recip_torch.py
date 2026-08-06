@@ -138,6 +138,15 @@ def ewald_energy_from_structure_factors(
     :func:`ewald_partial_structure_factors` + a cross-rank all-reduce the weighted
     VJP is exact for any cotangent (incl. the owned-mask DD consolidation
     produces). Returns per-atom energy ``(N,)`` float64.
+
+    ``charges`` is cast to float64 ONCE and that tensor is used for both the
+    k-sum and the corrections call. Passing the caller's original (float32)
+    tensor to the corrections while the k-sum uses the cast copy reaches the
+    opaque kernel from one leaf by two routes of differing dtype, which
+    ``torch.compile`` mis-accumulates: the traced forward and ``dE/dpositions``
+    stay exact while ``dE/dcharges`` comes out ~28% wrong (and near-zero in a
+    reduced case). Only shows up where charges carry a gradient — a wired
+    pipeline feeding in predicted charges.
     """
     from nvalchemiops.torch.interactions.electrostatics.ewald import (  # noqa: PLC0415
         ewald_energy_corrections,
@@ -172,8 +181,8 @@ def ewald_energy_from_structure_factors(
     volume = torch.abs(torch.linalg.det(cell_3d)).to(torch.float64)
     if batch_idx is None:
         return ewald_energy_corrections(
-            e_ksum, charges, volume.reshape(1), alpha_s, total_charge.reshape(1)
+            e_ksum, q, volume.reshape(1), alpha_s, total_charge.reshape(1)
         )
     return ewald_energy_corrections_batch(
-        e_ksum, charges, batch_idx.to(torch.int32), volume, alpha_s, total_charge
+        e_ksum, q, batch_idx.to(torch.int32), volume, alpha_s, total_charge
     )

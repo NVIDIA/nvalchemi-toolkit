@@ -795,6 +795,54 @@ def _owned_charge_mask(charges: torch.Tensor, n_owned: Any) -> torch.Tensor:
     return charges * (rowidx < n_owned).to(charges.dtype)
 
 
+def _reciprocal_torch_local(
+    positions: torch.Tensor,
+    charges: torch.Tensor,
+    cell: torch.Tensor,
+    k_vectors: torch.Tensor,
+    alpha: torch.Tensor,
+    batch_idx: torch.Tensor | None,
+) -> torch.Tensor:
+    """Single-process autograd-native reciprocal per-atom energy.
+
+    The staged structure-factor form, differentiable in positions, charges **and**
+    the cell. The monolithic kernel reaches the cell only through a detached
+    Green's function, so a virial taken by strain-autograd through it is
+    incomplete; this path carries that dependence.
+
+    Parameters
+    ----------
+    positions, charges, cell, k_vectors, alpha : torch.Tensor
+        Standard reciprocal-space inputs.
+    batch_idx : torch.Tensor | None
+        Per-atom system index, or ``None`` for a single system.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-atom reciprocal energy.
+    """
+    from nvalchemi.models._ops.electrostatics.ewald_recip_torch import (  # noqa: PLC0415
+        ewald_energy_from_structure_factors,
+        ewald_partial_structure_factors,
+    )
+
+    real_sf, imag_sf, total_charge = ewald_partial_structure_factors(
+        positions, charges, cell, k_vectors, alpha, batch_idx=batch_idx
+    )
+    return ewald_energy_from_structure_factors(
+        positions,
+        charges,
+        cell,
+        k_vectors,
+        alpha,
+        real_sf,
+        imag_sf,
+        total_charge,
+        batch_idx=batch_idx,
+    )
+
+
 def _reciprocal_torch_dd(
     positions: torch.Tensor,
     charges: torch.Tensor,
@@ -864,7 +912,9 @@ def ewald_reciprocal_contribution(
 
     * energy-only under domain decomposition -> Torch staged :math:`\tilde{S}` (compile-safe,
       cross-rank all-reduced);
-    * energy-only single-GPU -> the differentiable monolithic ``ewald_reciprocal_space``;
+    * energy-only single-GPU with a grad-bearing cell -> the staged
+      ``_reciprocal_torch_local`` (the only form differentiable in the cell);
+    * energy-only single-GPU otherwise -> the monolithic ``ewald_reciprocal_space``;
     * forces/virial requested (eager) -> warp staged structure factors (the spec's
       halo handlers reduce :math:`\tilde{S}` across ranks; single-GPU fires nothing).
 
@@ -875,12 +925,22 @@ def ewald_reciprocal_contribution(
     # Single-system batches pass batch_idx=None to the differentiable paths to
     # avoid a data-dependent ``nonzero`` (a graph break under compile).
     bidx = batch_idx if num_systems > 1 else None
-    autograd_recip = not compute_forces and not compute_virial
+    # The warp reciprocal only attaches dE/dq under ``hybrid_forces``; without it
+    # the energy must come from a backend that is differentiable in the charges.
+    autograd_recip = not hybrid_forces or (not compute_forces and not compute_virial)
     ctx = current_dd_context()
 
     if autograd_recip and ctx is not None and getattr(ctx, "is_halo", False):
         return (
             _reciprocal_torch_dd(positions, charges, cell, k_vectors, alpha, bidx, ctx),
+            None,
+            None,
+        )
+    if autograd_recip and cell.requires_grad:
+        # A live cell means the caller differentiates w.r.t. it (a strain-autograd
+        # virial); only the staged form carries that dependence.
+        return (
+            _reciprocal_torch_local(positions, charges, cell, k_vectors, alpha, bidx),
             None,
             None,
         )

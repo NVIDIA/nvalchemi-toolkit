@@ -473,8 +473,9 @@ def _pme_reciprocal_space_impl_from_total_charge(
     cell_for_vol = cell_spline if cell_spline.dim() == 3 else cell_spline.unsqueeze(0)
     volume = torch.abs(torch.linalg.det(cell_for_vol)).to(input_dtype)
 
+    is_compiled = torch.compiler.is_compiling()
     mesh_fft = torch.fft.rfftn(mesh_grid, norm="backward", dim=fft_dims)
-    if torch.compiler.is_compiling():
+    if is_compiled:
         # cuFFT emits non-contiguous output; the convolve op requires contiguous
         # input under compile.
         mesh_fft = mesh_fft.contiguous()
@@ -489,6 +490,9 @@ def _pme_reciprocal_space_impl_from_total_charge(
         alpha_gsf,
         volume,
         is_batch,
+        # Autograd metadata only; the op's backward uses it to keep Inductor
+        # from reordering past the opaque consumer.
+        is_compiled,
     )
     potential_mesh = torch.fft.irfftn(
         convolved_mesh, norm="forward", s=mesh_dimensions, dim=fft_dims

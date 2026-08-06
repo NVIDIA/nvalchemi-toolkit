@@ -114,7 +114,10 @@ def _aimnet2_halo_spec() -> Any:
         CompilePolicy,
         ForceStrategy,
         MethodAdapter,
+        OutputKind,
+        OutputSpec,
         PythonAdapter,
+        Reduce,
     )
 
     helpers = (
@@ -127,23 +130,31 @@ def _aimnet2_halo_spec() -> Any:
         MethodAdapter(LRCoulomb, "forward", _distributed_coulomb_forward),
         MethodAdapter(SRCoulomb, "forward", _distributed_coulomb_forward),
     )
-    _AIMNET2_HALO_SPEC_CACHE = replace(
-        SPEC_MPNN_HALO,
-        distribution=replace(
-            SPEC_MPNN_HALO.distribution,
-            adapters=helpers,
-            # Only positions are sharded; atomic_numbers stay plain because they
-            # feed an embedding that would otherwise mix tensor types in backward.
-            shard_fields=("positions",),
-        ),
-        # Forces come from autograd over an energy-only forward; the per-system
-        # sum already yields the global energy. The dense neighbor matrix is
-        # padded to fixed shapes for compile.
-        compile=CompilePolicy(
-            static_shapes=True,
-            force_strategy=ForceStrategy.FRAMEWORK_FROM_GLOBAL_ENERGY,
-            graph_padder=DenseBatchPadder(),
-        ),
+    _AIMNET2_HALO_SPEC_CACHE = (
+        replace(
+            SPEC_MPNN_HALO,
+            distribution=replace(
+                SPEC_MPNN_HALO.distribution,
+                adapters=helpers,
+                # Only positions are sharded; atomic_numbers stay plain because they
+                # feed an embedding that would otherwise mix tensor types in backward.
+                shard_fields=("positions",),
+            ),
+            # Forces come from autograd over an energy-only forward; the per-system
+            # sum already yields the global energy. The dense neighbor matrix is
+            # padded to fixed shapes for compile.
+            compile=CompilePolicy(
+                static_shapes=True,
+                force_strategy=ForceStrategy.FRAMEWORK_FROM_GLOBAL_ENERGY,
+                graph_padder=DenseBatchPadder(),
+                # AIMNet2 is differentiable in positions and cell, so the framework
+                # strain-autograd yields the virial; without this the DD forward
+                # returns no stress at all.
+                stress_via_strain=True,
+            ),
+        )
+        # A strain-trick virial is a per-rank partial; the reduction sums them.
+        .with_outputs({"stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)})
     )
     return _AIMNET2_HALO_SPEC_CACHE
 

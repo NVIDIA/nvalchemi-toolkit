@@ -213,7 +213,7 @@ def _ewald_equivalence_worker(rank: int, world_size: int) -> None:
     # energy holds to ~1e-4 absolute; per-atom forces to ~1e-3 relative
     # (same tolerance the cueq/MACE multi-GPU test uses).
     torch.testing.assert_close(
-        e_local.view(1),
+        e_local.view(1).to(e_ref.dtype),
         e_ref,
         rtol=1e-4,
         atol=1e-4,

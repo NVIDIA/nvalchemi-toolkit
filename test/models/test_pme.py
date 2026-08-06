@@ -191,7 +191,8 @@ class TestPMEModelConfig:
 
     def test_autograd_outputs_includes_forces(self):
         w = _make_pme()
-        assert w.model_config.autograd_outputs == frozenset({"forces"})
+        # Default is hybrid_forces=False, so stress is autograd-derived too.
+        assert w.model_config.autograd_outputs == frozenset({"forces", "stress"})
 
     def test_needs_pbc(self):
         w = _make_pme()
@@ -735,7 +736,7 @@ class TestPMEIntegration:
 
     def test_hybrid_forces_stress_has_no_grad_fn(self):
         """Kernel virial is computed on detached positions/cell."""
-        w = _make_pme()
+        w = _make_pme(hybrid_forces=True)
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(True)

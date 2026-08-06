@@ -184,8 +184,8 @@ overrides = [{ name = "python-hostlist", marker = "sys_platform == 'never'" }]
 
 [[manifest.dependency-metadata]]
 name = "nvalchemi-toolkit-ops"
-version = "0.4.0"
-requires-dist = ["warp-lang>=1.13.0,<1.15", "numpy", "torch>=2.8.0 ; extra == 'torch'", "torch>=2.8.0 ; extra == 'torch-cu12'", "torch>=2.8.0 ; extra == 'torch-cu13'"]
+version = "0.4.1"
+requires-dist = ["warp-lang>=1.13.0", "numpy", "torch>=2.8.0 ; extra == 'torch'", "torch>=2.8.0 ; extra == 'torch-cu12'", "torch>=2.8.0 ; extra == 'torch-cu13'"]
 provides-extras = ["torch", "torch-cu12", "torch-cu13"]
 
 [[package]]
@@ -4106,9 +4106,9 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy", specifier = "<2.4" },
-    { name = "nvalchemi-toolkit-ops", specifier = ">=0.4.0" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=0.3.1" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.3.1" },
+    { name = "nvalchemi-toolkit-ops", specifier = ">=0.4.1" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=0.4.1" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.4.1" },
     { name = "nvidia-physicsnemo", specifier = ">=2.0.0" },
     { name = "nvidia-physicsnemo", extras = ["cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=2.0.0" },
     { name = "nvidia-physicsnemo", extras = ["cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=2.0.0" },
@@ -4174,14 +4174,14 @@ docs = [
 
 [[package]]
 name = "nvalchemi-toolkit-ops"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.4.1"
+source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
     { name = "warp-lang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/ff/d0b5333356a9a3efda851ffb23820b874b05fbe1caabaa6fad3c4005bda6/nvalchemi_toolkit_ops-0.4.0-py3-none-any.whl", hash = "sha256:f245c393c210a78160eab783d01c3d2d7fda54014bad1885c4210ced8000a3f7", size = 1254925, upload-time = "2026-07-13T18:03:52.887Z" },
+    { url = "https://pypi.nvidia.com/nvalchemi-toolkit-ops/nvalchemi_toolkit_ops-0.4.1-py3-none-any.whl", hash = "sha256:f2f1e195f90d7a27ec52c26484ef727d734cc34cab15d45a3a38e2077c046c88" },
 ]
 
 [package.optional-dependencies]
