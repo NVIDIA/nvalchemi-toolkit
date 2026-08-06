@@ -151,9 +151,6 @@ class DistributedPipelineModel:
 
     def _make_dist_model(self, step: Any, cfg: "DomainConfig") -> Any:
         """Build a (possibly compiled) persistent :class:`DistributedModel`."""
-        from nvalchemi.distributed.distributed_model import (  # noqa: PLC0415
-            DistributedModel,
-        )
 
         compiled = self._compile and self._compile_capable(step)
         return DistributedModel(
@@ -219,6 +216,13 @@ class DistributedPipelineModel:
             mc = step.model.model_config
             grad_fields |= set(mc.autograd_inputs) | set(mc.gradient_keys)
         grad_fields -= {field, out_key, "cell"}
+        # Built once and retained, like the per-step path: a model rebuilt each
+        # forward loses its grown shape caps and its compiled-region cache, so a
+        # compiled wired run would recompile every step.
+        producer_cfg = self._model_cfg(producer)
+        consumer_cfg = self._model_cfg(consumer)
+        producer_dm, _ = self._make_dist_model(producer, producer_cfg)
+        consumer_dm, consumer_compiled = self._make_dist_model(consumer, consumer_cfg)
         return {
             "kind": "wired",
             "grad_fields": sorted(grad_fields),
@@ -226,8 +230,11 @@ class DistributedPipelineModel:
             "consumer": consumer,
             "producer_out_key": out_key,
             "field": field,
-            "producer_cfg": self._model_cfg(producer),
-            "consumer_cfg": self._model_cfg(consumer),
+            "producer_cfg": producer_cfg,
+            "consumer_cfg": consumer_cfg,
+            "producer_dm": producer_dm,
+            "consumer_dm": consumer_dm,
+            "consumer_compiled": consumer_compiled,
         }
 
     # ------------------------------------------------------------------
@@ -248,6 +255,10 @@ class DistributedPipelineModel:
         for plan in self._group_plans:
             for item in plan.get("steps", ()):
                 item["dm"].close()
+            for key in ("producer_dm", "consumer_dm"):
+                dm = plan.get(key)
+                if dm is not None:
+                    dm.close()
         self._closed = True
 
     def __del__(self) -> None:
@@ -349,9 +360,6 @@ class DistributedPipelineModel:
         """
         import torch  # noqa: PLC0415
 
-        from nvalchemi.distributed.distributed_model import (  # noqa: PLC0415
-            DistributedModel,
-        )
         from nvalchemi.distributed.helpers import to_local  # noqa: PLC0415
         from nvalchemi.distributed.particle_halo import (  # noqa: PLC0415
             halo_exchange,
@@ -371,139 +379,129 @@ class DistributedPipelineModel:
         pos_leaf_marked = False
         try:
             sharded.invalidate_padded_view()
-            with DistributedModel(producer, plan["producer_cfg"]) as pdm:
-                # Build the producer halo with grad-bearing positions so the
-                # energy / field graph reaches them, even though the producer
-                # emits no forces of its own.
-                pdm._ensure_initialized(sharded)
-                # Differentiate the owned positions, not the padded view: a
-                # halo refresh mints a fresh leaf and would orphan a padded one.
-                leaves: dict[str, Any] = {}
-                for name in plan["grad_fields"]:
-                    src = getattr(sharded, name, None)
-                    if src is None:
-                        raise ValueError(
-                            f"{name!r} is differentiated by a model in this wired "
-                            "group but is not a per-atom field on the batch, so no "
-                            "autograd leaf can be pinned for it."
+            pdm = plan["producer_dm"]
+            # Build the producer halo with grad-bearing positions so the
+            # energy / field graph reaches them, even though the producer
+            # emits no forces of its own.
+            pdm._ensure_initialized(sharded)
+            # Differentiate the owned positions, not the padded view: a
+            # halo refresh mints a fresh leaf and would orphan a padded one.
+            leaves: dict[str, Any] = {}
+            for name in plan["grad_fields"]:
+                src = getattr(sharded, name, None)
+                if src is None:
+                    raise ValueError(
+                        f"{name!r} is differentiated by a model in this wired "
+                        "group but is not a per-atom field on the batch, so no "
+                        "autograd leaf can be pinned for it."
+                    )
+                leaves[name] = to_local(src).detach().clone().requires_grad_(True)
+            pos_leaf = leaves["positions"]
+            sharded.grad_fields = leaves
+            pos_leaf_marked = True
+            if want_stress:
+                # Two leaves so the position and cell halves of the virial
+                # can be read separately; both are per-rank partials.
+                _shape = (int(sharded.num_graphs), 3, 3)
+                _kw = {"dtype": pos_leaf.dtype, "device": pos_leaf.device}
+                strain = torch.zeros(*_shape, requires_grad=True, **_kw)
+                strain_cell = torch.zeros(*_shape, requires_grad=True, **_kw)
+                sharded.grad_strain = (strain, strain_cell)
+            halo_exchange(sharded, pdm._halo_config, compute_forces=True)
+            prod_out = pdm(sharded)
+            e_prod = prod_out["energy"]
+            owned_field = prod_out[out_key]
+            prod_pos_leaf = pos_leaf
+            prod_halo_cfg = pdm._halo_config
+            world_size = pdm._world_size or 1
+
+            # Consumer: direct kernel force + energy differentiable in the
+            # wired field, whose ghost values are gathered (autograd-aware)
+            # from the producer's owned values.
+            sharded.invalidate_padded_view()
+            cons_mc = consumer.model_config
+            saved_cons = cons_mc.active_outputs
+            # The consumer's own strain-autograd virial is the fixed-field
+            # term this split needs, already consolidated by its output rule.
+            if want_stress and "stress" not in cons_mc.outputs:
+                raise NotImplementedError(
+                    f"{type(consumer).__name__} consumes the wired field "
+                    f"'{field}' but produces no stress, so the group's virial "
+                    "would silently omit its contribution. Drop 'stress' from "
+                    "the pipeline's active_outputs, or use a consumer that "
+                    "emits it."
+                )
+            cons_mc.active_outputs = (
+                {"energy", "forces", "stress"} if want_stress else {"energy", "forces"}
+            )
+            cons_stress = None
+            try:
+                # ``extra_grad_inputs`` keeps the graph alive for this
+                # group's backward.
+                cdm = plan["consumer_dm"]
+                cdm._ensure_initialized(sharded)
+                # Only the producer's leaf stays pinned; it carries the chain.
+                sharded.grad_strain = None
+                halo_exchange(sharded, cdm._halo_config, compute_forces=True)
+                cons_out = cdm(sharded, wired_fields={field: owned_field})
+                e_cons = cons_out["energy"]
+                f_cons_direct = cons_out.get("forces")
+                cons_stress = cons_out.get("stress")
+                # Either model may read a pinned field, so sum both backwards.
+                _extra = [n for n in plan["grad_fields"] if n != "positions"]
+                _fw = cons_out.get("_extra_grads")
+                if _fw:
+                    # Reuse the framework's dE/dfield: a second backward
+                    # through a compiled graph returns a wrong chain term.
+                    de_dfield = _fw[0]
+                    cons_extra_grads = {}
+                    if _extra:
+                        _extra_grads = torch.autograd.grad(
+                            [e_cons.sum()],
+                            [leaves[n] for n in _extra],
+                            retain_graph=True,
+                            allow_unused=True,
                         )
-                    leaves[name] = to_local(src).detach().clone().requires_grad_(True)
-                pos_leaf = leaves["positions"]
-                sharded.grad_fields = leaves
-                pos_leaf_marked = True
-                if want_stress:
-                    # Two leaves so the position and cell halves of the virial
-                    # can be read separately; both are per-rank partials.
-                    _shape = (int(sharded.num_graphs), 3, 3)
-                    _kw = {"dtype": pos_leaf.dtype, "device": pos_leaf.device}
-                    strain = torch.zeros(*_shape, requires_grad=True, **_kw)
-                    strain_cell = torch.zeros(*_shape, requires_grad=True, **_kw)
-                    sharded.grad_strain = (strain, strain_cell)
-                halo_exchange(sharded, pdm._halo_config, compute_forces=True)
-                prod_out = pdm(sharded)
-                e_prod = prod_out["energy"]
-                owned_field = prod_out[out_key]
-                prod_pos_leaf = pos_leaf
-                prod_halo_cfg = pdm._halo_config
-                world_size = pdm._world_size or 1
-
-                # Consumer: direct kernel force + energy differentiable in the
-                # wired field, whose ghost values are gathered (autograd-aware)
-                # from the producer's owned values.
-                sharded.invalidate_padded_view()
-                cons_mc = consumer.model_config
-                saved_cons = cons_mc.active_outputs
-                # The consumer's own strain-autograd virial is the fixed-field
-                # term this split needs, already consolidated by its output rule.
-                if want_stress and "stress" not in cons_mc.outputs:
-                    raise NotImplementedError(
-                        f"{type(consumer).__name__} consumes the wired field "
-                        f"'{field}' but produces no stress, so the group's virial "
-                        "would silently omit its contribution. Drop 'stress' from "
-                        "the pipeline's active_outputs, or use a consumer that "
-                        "emits it."
+                        cons_extra_grads = dict(zip(_extra, _extra_grads))
+                else:
+                    _cg = torch.autograd.grad(
+                        [e_cons.sum()],
+                        [owned_field] + [leaves[n] for n in _extra],
+                        retain_graph=True,
+                        allow_unused=True,
                     )
-                cons_mc.active_outputs = (
-                    {"energy", "forces", "stress"}
-                    if want_stress
-                    else {"energy", "forces"}
-                )
-                cons_stress = None
-                try:
-                    # ``extra_grad_inputs`` keeps the graph alive for this
-                    # group's backward.
-                    cons_compiled = self._compile and self._compile_capable(
-                        plan["consumer"]
-                    )
-                    with DistributedModel(
-                        consumer,
-                        plan["consumer_cfg"],
-                        compile=cons_compiled,
-                        compile_kwargs=self._compile_kwargs if cons_compiled else None,
-                    ) as cdm:
-                        cdm._ensure_initialized(sharded)
-                        # Only the producer's leaf stays pinned; it carries the chain.
-                        sharded.grad_strain = None
-                        halo_exchange(sharded, cdm._halo_config, compute_forces=True)
-                        cons_out = cdm(sharded, wired_fields={field: owned_field})
-                        e_cons = cons_out["energy"]
-                        f_cons_direct = cons_out.get("forces")
-                        cons_stress = cons_out.get("stress")
-                        # Either model may read a pinned field, so sum both backwards.
-                        _extra = [n for n in plan["grad_fields"] if n != "positions"]
-                        _fw = cons_out.get("_extra_grads")
-                        if _fw:
-                            # Reuse the framework's dE/dfield: a second backward
-                            # through a compiled graph returns a wrong chain term.
-                            de_dfield = _fw[0]
-                            cons_extra_grads = {}
-                            if _extra:
-                                _extra_grads = torch.autograd.grad(
-                                    [e_cons.sum()],
-                                    [leaves[n] for n in _extra],
-                                    retain_graph=True,
-                                    allow_unused=True,
-                                )
-                                cons_extra_grads = dict(zip(_extra, _extra_grads))
-                        else:
-                            _cg = torch.autograd.grad(
-                                [e_cons.sum()],
-                                [owned_field] + [leaves[n] for n in _extra],
-                                retain_graph=True,
-                                allow_unused=True,
-                            )
-                            de_dfield = _cg[0]
-                            cons_extra_grads = dict(zip(_extra, _cg[1:]))
-                finally:
-                    cons_mc.active_outputs = saved_cons
-                    sharded.grad_strain = (strain, strain_cell) if want_stress else None
+                    de_dfield = _cg[0]
+                    cons_extra_grads = dict(zip(_extra, _cg[1:]))
+            finally:
+                cons_mc.active_outputs = saved_cons
+                sharded.grad_strain = (strain, strain_cell) if want_stress else None
 
-                # One backward through the producer for -dE_prod/dr and the chain
-                # -(dE_cons/dfield)(dfield/dr) together.
-                extra_names = [n for n in plan["grad_fields"] if n != "positions"]
-                grad_inputs = [prod_pos_leaf]
-                if strain is not None:
-                    grad_inputs += [strain, strain_cell]
-                grad_inputs += [leaves[n] for n in extra_names]
-                surrogate = e_prod.sum()
-                if de_dfield is not None:
-                    surrogate = surrogate + (owned_field * de_dfield.detach()).sum()
-                grads = torch.autograd.grad(
-                    [surrogate],
-                    grad_inputs,
-                    retain_graph=False,
-                    allow_unused=True,
-                )
-                g_pos = grads[0]
-                g_strain = grads[1] if strain is not None else None
-                g_strain_cell = grads[2] if strain is not None else None
-                # The leaf is the owned tensor, so ghost gradients are already routed.
-                n_core = 1 if strain is None else 3
-                extra_grads = {}
-                for i, name in enumerate(extra_names):
-                    parts = [grads[n_core + i], cons_extra_grads.get(name)]
-                    live = [p for p in parts if p is not None]
-                    extra_grads[name] = None if not live else sum(live[1:], live[0])
+            # One backward through the producer for -dE_prod/dr and the chain
+            # -(dE_cons/dfield)(dfield/dr) together.
+            extra_names = [n for n in plan["grad_fields"] if n != "positions"]
+            grad_inputs = [prod_pos_leaf]
+            if strain is not None:
+                grad_inputs += [strain, strain_cell]
+            grad_inputs += [leaves[n] for n in extra_names]
+            surrogate = e_prod.sum()
+            if de_dfield is not None:
+                surrogate = surrogate + (owned_field * de_dfield.detach()).sum()
+            grads = torch.autograd.grad(
+                [surrogate],
+                grad_inputs,
+                retain_graph=False,
+                allow_unused=True,
+            )
+            g_pos = grads[0]
+            g_strain = grads[1] if strain is not None else None
+            g_strain_cell = grads[2] if strain is not None else None
+            # The leaf is the owned tensor, so ghost gradients are already routed.
+            n_core = 1 if strain is None else 3
+            extra_grads = {}
+            for i, name in enumerate(extra_names):
+                parts = [grads[n_core + i], cons_extra_grads.get(name)]
+                live = [p for p in parts if p is not None]
+                extra_grads[name] = None if not live else sum(live[1:], live[0])
         finally:
             prod_mc.active_outputs = saved_prod
             if pos_leaf_marked:
