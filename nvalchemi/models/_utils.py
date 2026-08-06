@@ -180,8 +180,9 @@ def prepare_strain(
         The returned tensor is an unconstrained autograd leaf; only its
         symmetric part is applied as strain.
     """
+    n_systems = cell.shape[0]
     displacement = torch.zeros(
-        cell.shape[0],
+        n_systems,
         3,
         3,
         dtype=positions.dtype,
