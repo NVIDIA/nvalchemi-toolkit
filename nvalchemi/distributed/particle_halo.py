@@ -57,6 +57,7 @@ def _apply_shared_strain(sharded: Any) -> None:
     strain = getattr(sharded, "grad_strain", None)
     if strain is None:
         return
+    from nvalchemi.data.batch import set_transient  # noqa: PLC0415
     from nvalchemi.models._utils import apply_strain  # noqa: PLC0415
 
     strain_pos, strain_cell = strain
@@ -71,7 +72,7 @@ def _apply_shared_strain(sharded: Any) -> None:
         atoms["positions"], cell, bidx, strain_pos, strain_cell
     )
     atoms["positions"] = scaled_pos
-    object.__setattr__(padded, "cell", scaled_cell)
+    set_transient(padded, "cell", scaled_cell)
 
 
 def halo_exchange(

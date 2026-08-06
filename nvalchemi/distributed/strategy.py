@@ -625,6 +625,7 @@ def _graph_partition_run_forward(
     _want_stress = "stress" in dist_model._wrapper.model_config.active_outputs
     strain = cell_local = None
     if _want_stress:
+        from nvalchemi.data.batch import set_transient  # noqa: PLC0415
         from nvalchemi.models._utils import prepare_strain  # noqa: PLC0415
 
         cell_local = owned.cell
@@ -634,7 +635,7 @@ def _graph_partition_run_forward(
         atoms["positions"], strained_cell, strain = prepare_strain(
             pos, cell_local, owned.batch_idx.long()
         )
-        object.__setattr__(owned, "cell", strained_cell)
+        set_transient(owned, "cell", strained_cell)
 
     # Publish the per-step routing + policy so the wrapper's intent verbs
     # (refresh_neighbors / system_sum) resolve to the GP collectives.
