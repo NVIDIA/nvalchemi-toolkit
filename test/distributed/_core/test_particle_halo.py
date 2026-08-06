@@ -192,7 +192,7 @@ class TestIdentifyGhostsSplit:
         assert direct_mask.tolist() == [True]
         assert pbc_list == []
 
-    def test_sender_owned_atom_wrapped_into_receiver_core_is_pbc_ghost(self):
+    def test_sender_owned_atom_wrapped_into_receiver_core_is_direct_ghost(self):
         config = _make_halo_config(
             box_length=30.0,
             ghost_width=3.0,
@@ -200,9 +200,26 @@ class TestIdentifyGhostsSplit:
             rank=1,
         )
         # Rank 1 retains an atom just beyond the periodic z boundary. Rank 0
-        # needs the -cell image at z=0.1 as a ghost until ownership migrates.
+        # needs it as a ghost until ownership migrates. Halo routing uses the
+        # canonical z=0.1 position to select rank 0 but transmits raw z=30.1;
+        # the receiver's neighbor list supplies the -cell image.
         positions = torch.tensor([[15.0, 15.0, 30.1]])
         direct_mask, pbc_list = _identify_ghosts_split(positions, 0, config)
+
+        assert direct_mask.tolist() == [True]
+        assert pbc_list == []
+
+    def test_primary_cell_atom_uses_pbc_image_for_periodic_neighbor(self):
+        config = _make_halo_config(
+            box_length=30.0,
+            ghost_width=3.0,
+            world_size=2,
+            rank=0,
+        )
+        # This atom is in rank 0's primary-cell core but lies in rank 1's
+        # periodic halo. Rank 1 therefore receives the +cell image at z=30.1.
+        positions = torch.tensor([[15.0, 15.0, 0.1]])
+        direct_mask, pbc_list = _identify_ghosts_split(positions, 1, config)
 
         assert direct_mask.tolist() == [False]
         assert len(pbc_list) == 1
@@ -210,7 +227,7 @@ class TestIdentifyGhostsSplit:
         assert pbc_mask.tolist() == [True]
         torch.testing.assert_close(
             positions[pbc_mask] + shift,
-            torch.tensor([[15.0, 15.0, 0.1]]),
+            torch.tensor([[15.0, 15.0, 30.1]]),
         )
 
     def test_center_atom_not_ghost(self):
