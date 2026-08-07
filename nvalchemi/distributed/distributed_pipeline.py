@@ -151,6 +151,9 @@ class DistributedPipelineModel:
 
     def _make_dist_model(self, step: Any, cfg: "DomainConfig") -> Any:
         """Build a (possibly compiled) persistent :class:`DistributedModel`."""
+        from nvalchemi.distributed.distributed_model import (  # noqa: PLC0415
+            DistributedModel,
+        )
 
         compiled = self._compile and self._compile_capable(step)
         return DistributedModel(
