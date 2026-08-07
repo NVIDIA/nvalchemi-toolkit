@@ -119,6 +119,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Sequence
 
@@ -360,6 +361,19 @@ class OpAdapter:
         )
 
     @property
+    def all_reduce_replicated_outputs(self) -> tuple[int, ...]:
+        """Subset of :attr:`all_reduce_outputs` whose reduced value feeds a
+        replicated whole-system computation, so the adjoint passes the incoming
+        gradient through instead of reducing it again."""
+        return tuple(
+            sorted(
+                p
+                for p, t in self.output_transforms.items()
+                if isinstance(t, AllReduceSum) and t.replicated_consumer
+            )
+        )
+
+    @property
     def slice_outputs_owned(self) -> tuple[int, ...]:
         return tuple(
             sorted(
@@ -404,6 +418,7 @@ class OpAdapter:
             scatter_outputs=self.scatter_outputs,
             owned_slice_inputs=self.owned_slice_inputs,
             all_reduce_outputs=self.all_reduce_outputs,
+            all_reduce_replicated_outputs=self.all_reduce_replicated_outputs,
             gather_inputs_full=self.gather_inputs_full,
             slice_outputs_owned=self.slice_outputs_owned,
         )
@@ -534,38 +549,49 @@ _OUTPUT_TRANSFORM_REGISTRY: dict[str, type] = {
 }
 
 
-def _arg_transform_to_dict(t: ArgTransform) -> dict[str, Any]:
-    for kind, cls in _ARG_TRANSFORM_REGISTRY.items():
+def _transform_to_dict(t: Any, registry: dict[str, type], label: str) -> dict[str, Any]:
+    """Encode a transform as its registry name plus its dataclass fields.
+
+    The fields are carried generically rather than per-class: a transform field
+    that changes behaviour — an adjoint rule, say — would otherwise revert to its
+    default on the far side of a process boundary while the name still matched.
+    """
+    import dataclasses  # noqa: PLC0415
+
+    for kind, cls in registry.items():
         if isinstance(t, cls):
-            return {"type": kind}
-    raise TypeError(f"unknown ArgTransform: {type(t).__name__}")
+            encoded = {"type": kind}
+            encoded.update(dataclasses.asdict(t))
+            return encoded
+    raise TypeError(f"unknown {label}: {type(t).__name__}")
+
+
+def _transform_from_dict(
+    d: dict[str, Any], registry: dict[str, type], label: str
+) -> Any:
+    """Inverse of :func:`_transform_to_dict`."""
+    cls = registry.get(d.get("type"))
+    if cls is None:
+        raise ValueError(
+            f"unknown {label} type {d.get('type')!r}; expected one of {list(registry)}."
+        )
+    return cls(**{k: v for k, v in d.items() if k != "type"})
+
+
+def _arg_transform_to_dict(t: ArgTransform) -> dict[str, Any]:
+    return _transform_to_dict(t, _ARG_TRANSFORM_REGISTRY, "ArgTransform")
 
 
 def _arg_transform_from_dict(d: dict[str, Any]) -> ArgTransform:
-    cls = _ARG_TRANSFORM_REGISTRY.get(d.get("type"))
-    if cls is None:
-        raise ValueError(
-            f"unknown ArgTransform type {d.get('type')!r}; expected one of "
-            f"{list(_ARG_TRANSFORM_REGISTRY)}."
-        )
-    return cls()
+    return _transform_from_dict(d, _ARG_TRANSFORM_REGISTRY, "ArgTransform")
 
 
 def _output_transform_to_dict(t: OutputTransform) -> dict[str, Any]:
-    for kind, cls in _OUTPUT_TRANSFORM_REGISTRY.items():
-        if isinstance(t, cls):
-            return {"type": kind}
-    raise TypeError(f"unknown OutputTransform: {type(t).__name__}")
+    return _transform_to_dict(t, _OUTPUT_TRANSFORM_REGISTRY, "OutputTransform")
 
 
 def _output_transform_from_dict(d: dict[str, Any]) -> OutputTransform:
-    cls = _OUTPUT_TRANSFORM_REGISTRY.get(d.get("type"))
-    if cls is None:
-        raise ValueError(
-            f"unknown OutputTransform type {d.get('type')!r}; expected one of "
-            f"{list(_OUTPUT_TRANSFORM_REGISTRY)}."
-        )
-    return cls()
+    return _transform_from_dict(d, _OUTPUT_TRANSFORM_REGISTRY, "OutputTransform")
 
 
 # ----------------------------------------------------------------------
@@ -1278,24 +1304,39 @@ def _replacement_qualname(fn: Callable | None) -> str | None:
 
 def _resolve_replacement(qualname: str | None) -> Callable | None:
     """Inverse of :func:`_replacement_qualname`. Best-effort: returns
-    ``None`` if the qualname doesn't resolve."""
-    if not qualname or ":" not in qualname:
-        return None
-    import importlib  # noqa: PLC0415
+    ``None`` if the qualname doesn't resolve.
 
-    mod_path, qual = qualname.split(":", 1)
-    try:
-        mod = importlib.import_module(mod_path)
-    except Exception:
+    An unresolved replacement installs as a no-op, so the model silently runs
+    uncorrected; that case warns and the caller is expected to rebind from a
+    live spec.
+    """
+    if not qualname:
         return None
-    obj: Any = mod
-    for part in qual.split("."):
-        if part.startswith("<"):
-            return None
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return obj
+    resolved = None
+    if ":" in qualname:
+        import importlib  # noqa: PLC0415
+
+        mod_path, qual = qualname.split(":", 1)
+        try:
+            obj: Any = importlib.import_module(mod_path)
+        except Exception:
+            obj = None
+        for part in qual.split(".") if obj is not None else ():
+            if part.startswith("<"):
+                obj = None
+                break
+            obj = getattr(obj, part, None)
+            if obj is None:
+                break
+        resolved = obj
+    if resolved is None:
+        warnings.warn(
+            f"Adapter replacement {qualname!r} did not resolve; the adapter will "
+            "install as a no-op. Rebind it from a live spec before use.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return resolved
 
 
 # Registry mapping serialized "kind" → adapter class. Subclasses that

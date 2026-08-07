@@ -156,7 +156,8 @@ class TestEwaldModelConfig:
 
     def test_autograd_outputs_includes_forces(self):
         w = _make_ewald()
-        assert w.model_config.autograd_outputs == frozenset({"forces"})
+        # Default is hybrid_forces=False, so stress is autograd-derived too.
+        assert w.model_config.autograd_outputs == frozenset({"forces", "stress"})
 
     def test_needs_pbc(self):
         w = _make_ewald()
@@ -546,7 +547,9 @@ class TestEwaldIntegration:
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernels return no virial."""
-        w = _make_ewald()
+        # Analytic-path guard: without hybrid_forces the wrapper derives stress
+        # from the energy and never consults a kernel virial.
+        w = _make_ewald(hybrid_forces=True)
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch()
         self._build_nl(batch, w)
@@ -684,7 +687,7 @@ class TestEwaldHybridForces:
 
     def test_forces_have_no_grad_fn(self):
         """Direct kernel forces are computed on detached positions."""
-        w = _make_ewald()
+        w = _make_ewald(hybrid_forces=True)
         batch = _make_charged_batch()
         self._build_nl(batch, w)
         out = w(batch)
@@ -701,7 +704,7 @@ class TestEwaldHybridForces:
 
     def test_energy_no_grad_fn_without_charge_grad(self):
         """When charges don't require grad, _InjectChargeGrad is skipped."""
-        w = _make_ewald()
+        w = _make_ewald(hybrid_forces=True)
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(False)
         self._build_nl(batch, w)
@@ -711,7 +714,7 @@ class TestEwaldHybridForces:
     def test_charge_gradient_matches_finite_difference(self):
         """energy.backward() should recover the injected dE/dq."""
         torch.manual_seed(42)
-        w = _make_ewald()
+        w = _make_ewald(hybrid_forces=True)
         batch = _make_charged_batch(n_atoms=4, box_size=8.0, dtype=torch.float64)
         fd_grad = _finite_difference_charge_gradient(w, batch, self._build_nl)
         batch.charges = batch.charges.detach().requires_grad_(True)
@@ -732,7 +735,7 @@ class TestEwaldHybridForces:
 
     def test_stress_has_no_grad_fn(self):
         """Kernel virial is computed on detached positions/cell."""
-        w = _make_ewald()
+        w = _make_ewald(hybrid_forces=True)
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(True)

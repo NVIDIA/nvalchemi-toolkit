@@ -25,6 +25,7 @@ forward:
   cutoff_attr: cutoff
   upfront_halo_exchange: true
   dd_compile_capable: true
+  has_stress: true
 
 nvt:
   cutoff_attr: cutoff

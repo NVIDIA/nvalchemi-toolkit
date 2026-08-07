@@ -229,7 +229,7 @@ def test_pme_slab_dist_model_equivalence_2ranks():
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29591", _slab_equivalence_worker, "pme"),
+        args=(WORLD_SIZE, "29708", _slab_equivalence_worker, "pme"),
         nprocs=WORLD_SIZE,
     )
 

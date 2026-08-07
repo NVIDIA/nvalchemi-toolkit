@@ -314,6 +314,6 @@ def test_mace_cueq_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29571", _mace_cueq_equivalence_worker),
+        args=(WORLD_SIZE, "29703", _mace_cueq_equivalence_worker),
         nprocs=WORLD_SIZE,
     )

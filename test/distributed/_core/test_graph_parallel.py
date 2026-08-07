@@ -1,5 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Graph-parallel execution gate on a toy MACE-style MPNN.
 
@@ -26,6 +38,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
+from _dd_harness import free_port
 
 from nvalchemi.distributed._core.context import (
     DistributedContext,
@@ -125,9 +138,9 @@ def _graph_parallel(model, z, pos, edge_index, batch, n_sys, rank, world, mesh, 
     return energy.detach(), -g_owned, offset, n_owned
 
 
-def _worker(rank: int, world: int) -> None:
-    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
-    os.environ.setdefault("MASTER_PORT", "29901")
+def _worker(rank: int, world: int, port: str) -> None:
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = port
     dist.init_process_group("gloo", rank=rank, world_size=world)
     from torch.distributed.device_mesh import init_device_mesh
 
@@ -155,13 +168,13 @@ def _worker(rank: int, world: int) -> None:
 
 
 def test_graph_parallel_toy_mpnn_2ranks() -> None:
-    mp.spawn(_worker, args=(2,), nprocs=2)
+    mp.spawn(_worker, args=(2, free_port()), nprocs=2)
 
 
 def test_graph_parallel_toy_mpnn_3ranks() -> None:
-    mp.spawn(_worker, args=(3,), nprocs=3)
+    mp.spawn(_worker, args=(3, free_port()), nprocs=3)
 
 
 if __name__ == "__main__":
     for w in (2, 3):
-        mp.spawn(_worker, args=(w,), nprocs=w)
+        mp.spawn(_worker, args=(w, free_port()), nprocs=w)

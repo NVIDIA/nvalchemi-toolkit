@@ -19,3 +19,4 @@ loader:
 forward:
   cutoff_attr: cutoff
   upfront_halo_exchange: true
+  has_stress: true

@@ -332,35 +332,6 @@ def _mace_product_block_static_index_forward(
     return self.linear(node_feats)
 
 
-def _with_all_reduce_stress(spec: Any) -> Any:
-    """Declare ``stress`` as a cross-rank ``ALL_REDUCE`` output on a halo spec.
-
-    MACE computes stress with the displacement/strain trick, so under domain
-    decomposition each rank produces a per-rank *partial* virial (the strain leaf
-    deforms only its owned atoms). ``SPEC_MPNN_HALO`` ships stress as
-    ``PER_GRAPH / Reduce.NONE`` — which only divides the over-counted replicated-
-    energy gradient by ``world_size`` and never sums the partials, giving wrong
-    stress on a non-degenerate partition. ``ALL_REDUCE`` restores the global virial
-    (``/world_size`` then cross-rank sum). Mirrors UMA's stress override; the
-    ``outputs=`` lowering composes additively with the preset (energy/forces/
-    atomic_energies classifications are preserved).
-    """
-    import dataclasses  # noqa: PLC0415
-
-    from nvalchemi.distributed.output_kinds import (  # noqa: PLC0415
-        OutputKind,
-        OutputSpec,
-        Reduce,
-    )
-
-    return dataclasses.replace(
-        spec,
-        outputs={
-            "stress": OutputSpec(kind=OutputKind.PER_GRAPH, reduce=Reduce.ALL_REDUCE)
-        },
-    )
-
-
 _MACE_CUEQ_SPEC_CACHE: Any = None
 
 
@@ -444,13 +415,20 @@ def _mace_cueq_spec() -> Any:
             _mace_product_block_static_index_forward,
         ),
     )
-    from nvalchemi.distributed.spec import CompilePolicy, ForceStrategy
+    from nvalchemi.distributed.spec import (
+        CompilePolicy,
+        ForceStrategy,
+        OutputKind,
+        OutputSpec,
+        Reduce,
+    )
 
     # cueq fused kernels + the SphericalHarmonics marshal on the MPNN-halo
     # preset, plus the MACE compile policy: forces come from autograd over a
     # compiled energy-only forward.
-    _MACE_CUEQ_SPEC_CACHE = _with_all_reduce_stress(
-        SPEC_MPNN_HALO.with_adapters(*_custom_ops, *_marshal).with_compile(
+    _MACE_CUEQ_SPEC_CACHE = (
+        SPEC_MPNN_HALO.with_adapters(*_custom_ops, *_marshal)
+        .with_compile(
             CompilePolicy(
                 static_shapes=True,
                 force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
@@ -459,6 +437,8 @@ def _mace_cueq_spec() -> Any:
                 stress_via_strain=True,
             )
         )
+        # A strain-trick virial is a per-rank partial; the reduction sums them.
+        .with_outputs({"stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)})
     )
     return _MACE_CUEQ_SPEC_CACHE
 
@@ -497,12 +477,16 @@ def _mace_scripted_spec() -> Any:
     from nvalchemi.distributed.spec import (  # noqa: PLC0415
         CompilePolicy,
         ForceStrategy,
+        OutputKind,
+        OutputSpec,
+        Reduce,
     )
 
     # The SphericalHarmonics marshal on the MPNN-halo preset, plus the MACE
     # compile policy (forces via autograd over a compiled energy-only forward).
-    _MACE_SCRIPTED_SPEC_CACHE = _with_all_reduce_stress(
-        SPEC_MPNN_HALO.with_adapters(*_marshal).with_compile(
+    _MACE_SCRIPTED_SPEC_CACHE = (
+        SPEC_MPNN_HALO.with_adapters(*_marshal)
+        .with_compile(
             CompilePolicy(
                 static_shapes=True,
                 force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
@@ -511,6 +495,8 @@ def _mace_scripted_spec() -> Any:
                 stress_via_strain=True,
             )
         )
+        # A strain-trick virial is a per-rank partial; the reduction sums them.
+        .with_outputs({"stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)})
     )
     return _MACE_SCRIPTED_SPEC_CACHE
 

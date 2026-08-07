@@ -1,0 +1,47 @@
+# AIMNet2 -> PME composed model under DistributedPipelineModel.
+#
+# The wired case: PME's energy depends on the charges AIMNet2 predicts, so the
+# two share one autograd graph and cannot run independently. The equivalence
+# gate covers energy, forces AND stress — stress is the term that carries the
+# cross-model chain (dE_pme/dq)(dq/d strain), so it is the one a wiring bug
+# silently drops.
+#
+# AIMNet2's warp kernels are float32-only, so the whole run is fp32. Methane
+# packing keeps the system organic (AIMNet2 is C/H/N/O) and charge-neutral.
+model: AIMNet2+PME
+dtype: fp32
+default_sizes: [500, 2000]
+
+system:
+  builder: build_methane_packing
+  sizing: null
+  pbc: true
+  charges: false
+  compute_neighbors: true
+
+loader:
+  kind: pipeline
+  use_autograd: true            # coupled group: PME consumes AIMNet2's charges
+  active_outputs: [energy, forces, stress]
+  steps:
+    - kind: aimnet2
+      checkpoint: aimnet2
+      compile: false
+      # ``charges`` is the wired field PME reads; stress must be active so the
+      # composite derives it.
+      active_outputs: [energy, forces, stress, charges]
+    - kind: electrostatic
+      module: nvalchemi.models.pme
+      class: PMEModelWrapper
+      cutoff: 6.0
+      hybrid_forces: false
+      active_outputs: [energy, forces, stress]
+
+forward:
+  pipeline: true
+  # The synthesized pipeline neighbor plan carries the max sub-model cutoff, so
+  # the one shared partition holds every sub-model's ghost layer.
+  cutoff_attr: model_config.neighbor_config.cutoff
+  upfront_halo_exchange: false   # each sub-model builds its own halo
+  charge_zero: true              # neutral-molecule scalar charge
+  has_stress: true

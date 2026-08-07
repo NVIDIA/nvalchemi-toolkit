@@ -105,11 +105,28 @@ class AllReduceSum:
     """Sum the output's per-rank partial across the mesh via
     :func:`distributed_all_reduce`.
 
-    Backward is symmetric (the all-reduce is its own adjoint), so this
-    plugs cleanly into autograd. Pair with :class:`SliceOwned` on the
-    input side — slice ensures each atom contributes once locally;
-    AllReduceSum collects partials into a globally-correct result.
+    Pair with :class:`SliceOwned` on the input side — slice ensures each
+    atom contributes once locally; AllReduceSum collects partials into a
+    globally-correct result.
+
+    Parameters
+    ----------
+    replicated_consumer : bool, default False
+        Whether the gradient arriving at this node in backward is already the
+        global sum. ``False`` (the default) means it is this rank's partial and
+        the adjoint sums across ranks — the all-reduce is its own adjoint.
+        ``True`` means every rank already holds the same gradient, so reducing
+        again would multiply it by the world size.
+
+        This is a property of how the reduced value is consumed downstream, and
+        it is measurable: capture ``grad_out`` in
+        ``_DistributedAllReduceSum.backward`` and compare it across ranks. On
+        PME's eager path the charge mesh's incoming gradient is bit-identical on
+        every rank (hence ``True`` there), while the total charge's differs
+        (hence the default). Do not infer it — measure it.
     """
+
+    replicated_consumer: bool = False
 
 
 @dataclass(frozen=True)
