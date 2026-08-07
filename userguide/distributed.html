@@ -1,0 +1,1143 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Distributed Simulations &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ShardTensor: How Per-Atom Fields Flow Across Ranks" href="distributed_shardtensor.html" />
+    <link rel="prev" title="Data Sinks" href="dynamics_sinks.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Distributed...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="distributed-simulations">
+<span id="distributed-guide"></span><h1>Distributed Simulations<a class="headerlink" href="#distributed-simulations" title="Link to this heading">#</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code> package extends the toolkit’s dynamics + model
+machinery to run across multiple GPUs via spatial domain decomposition. A
+single <a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a> wrapper takes any
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> integrator or optimizer and
+makes it run on a partitioned <a class="reference internal" href="../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch" title="nvalchemi.distributed.ShardedBatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardedBatch</span></code></a>,
+with halo exchanges + cross-rank reductions handled automatically.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The distributed API is intentionally separate from the single-process
+dynamics API: the same <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>
+wrapper, the same hooks, and the same integrators run unchanged. The
+only addition at the user layer is one
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainConfig.html#nvalchemi.distributed.DomainConfig" title="nvalchemi.distributed.DomainConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainConfig</span></code></a> and a
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a> wrap.</p>
+</div>
+<p>This guide covers:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="#dd-why-partition"><span class="std std-ref">Why</span></a> spatial domain decomposition and <strong>what</strong> it
+gets you.</p></li>
+<li><p>The <a class="reference internal" href="#dd-strategies"><span class="std std-ref">two storage strategies</span></a> the framework supports —
+halo storage and sharded storage — and when to pick each.</p></li>
+<li><p>The <a class="reference internal" href="#dd-runtime-architecture"><span class="std std-ref">runtime architecture</span></a>: how
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a>,
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch" title="nvalchemi.distributed.ShardedBatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardedBatch</span></code></a>, and the
+<code class="docutils literal notranslate"><span class="pre">DistributedModel</span></code> adapter cooperate per step.</p></li>
+<li><p>A <a class="reference internal" href="#dd-minimal-example"><span class="std std-ref">minimal usage example</span></a> end-to-end.</p></li>
+</ol>
+<p>Two companion guides go deeper:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="distributed_shardtensor.html"><span class="doc">ShardTensor: How Per-Atom Fields Flow Across Ranks</span></a> — how
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ShardTensor</span></code>
+represents a partitioned per-atom field and how its
+<code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code> dispatch routes operations through
+distribution-aware handlers.</p></li>
+<li><p><a class="reference internal" href="distributed_byo.html"><span class="doc">Bring Your Own Model: Authoring a Distribution Spec</span></a> — bringing your own model under
+domain decomposition: writing the wrapper, authoring or deriving an
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MLIPSpec</span></code>, and using <code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code> to confirm
+correctness.</p></li>
+</ul>
+<section id="why-partition">
+<span id="dd-why-partition"></span><h2>Why partition?<a class="headerlink" href="#why-partition" title="Link to this heading">#</a></h2>
+<p>A standard MLIP forward on a single GPU lays out every atom’s per-atom
+fields (<code class="docutils literal notranslate"><span class="pre">positions</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code>, <code class="docutils literal notranslate"><span class="pre">node_features</span></code>) as a single
+<code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">F)</span></code> tensor and computes everything in one process. That’s optimal
+for systems up to a few thousand atoms but breaks down past that:</p>
+<ul class="simple">
+<li><p><strong>Memory.</strong> Per-atom node features can dominate the activation budget
+in modern message-passing networks; the largest production MACE /
+UMA configurations OOM at &lt; 50k atoms on an H100.</p></li>
+<li><p><strong>Throughput.</strong> Even when memory fits, a single GPU’s neighbor-list
+build, message passing, and force consolidation are sequential — no
+amount of batching helps a single trajectory.</p></li>
+<li><p><strong>Latency.</strong> Multi-thousand-step MD trajectories on a single GPU
+measure in days; spatial parallelism cuts wall-clock proportionally
+to GPU count.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code> answers all three by <strong>partitioning atoms across
+GPUs by spatial location</strong>, replicating only the small <em>halo</em> of atoms
+within the model’s interaction cutoff so each rank evaluates its
+subdomain independently. Cross-rank communication happens once per
+step (the halo exchange) plus a handful of collectives for
+per-system reductions.</p>
+</section>
+<section id="two-parallelization-strategies">
+<span id="dd-strategies"></span><h2>Two parallelization strategies<a class="headerlink" href="#two-parallelization-strategies" title="Link to this heading">#</a></h2>
+<p>The choice of how per-atom fields are laid out across ranks is the
+single biggest architectural decision in any distributed MD framework.
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code> ships two, selected with <code class="docutils literal notranslate"><span class="pre">DomainConfig.strategy</span></code>
+(<a class="reference internal" href="../modules/generated/nvalchemi.distributed.config.StrategyKind.html#nvalchemi.distributed.config.StrategyKind" title="nvalchemi.distributed.config.StrategyKind"><code class="xref py py-class docutils literal notranslate"><span class="pre">StrategyKind</span></code></a>): <strong>halo</strong> (the
+default, spatial domain decomposition) and <strong>graph-parallel</strong> (a
+node partition for models that build their own neighbour list).</p>
+<section id="halo-storage">
+<h3>Halo storage<a class="headerlink" href="#halo-storage" title="Link to this heading">#</a></h3>
+<p>Each rank holds <em>all</em> the per-atom rows it needs to evaluate its
+owned atoms — that’s <code class="docutils literal notranslate"><span class="pre">n_owned</span></code> owned rows plus a <code class="docutils literal notranslate"><span class="pre">n_halo</span></code>-row halo of
+copies of neighbouring ranks’ atoms within <code class="docutils literal notranslate"><span class="pre">ghost_width</span></code> of any owned
+atom. The padded layout is:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>rank 0:   [ owned_0 | halo_from_1, halo_from_2, ... ]  # shape (n_padded, F)
+rank 1:   [ owned_1 | halo_from_0, halo_from_2, ... ]  # shape (n_padded, F)
+…
+</pre></div>
+</div>
+<p>A halo exchange at the start of each step refreshes the halo rows.
+The model then evaluates each rank’s <code class="docutils literal notranslate"><span class="pre">n_padded</span></code> rows as a regular
+forward pass — every cross-rank pair distance is computed locally
+because the partner atom is already in the halo. The only
+distributed mechanics on the model’s hot path are halo-correction
+scatters (when a <code class="docutils literal notranslate"><span class="pre">scatter_add_</span></code> writes into halo rows that should
+be reverse-summed back to owners) and per-system reductions (when
+the model produces a per-graph quantity like total energy).</p>
+<p><strong>Pick halo storage when:</strong></p>
+<ul class="simple">
+<li><p>The model is a scatter-heavy MPNN (MACE, NequIP, Allegro, ORB, UMA).
+Every message-passing layer does a <code class="docutils literal notranslate"><span class="pre">scatter_sum</span></code> into per-atom
+features; halo-correction handles the cross-rank case naturally.</p></li>
+<li><p>The model has a clear interaction cutoff (typically <code class="docutils literal notranslate"><span class="pre">&lt;</span> <span class="pre">6</span> <span class="pre">Å</span></code> for
+modern MLIPs). The cutoff bounds the halo width; long-range
+models (Ewald, PME) can still use halo storage with a separate
+reciprocal-space dispatch.</p></li>
+</ul>
+<p>This is the default for the <code class="docutils literal notranslate"><span class="pre">MACE</span></code> / <code class="docutils literal notranslate"><span class="pre">LJ</span></code> / <code class="docutils literal notranslate"><span class="pre">UMA</span></code> / <code class="docutils literal notranslate"><span class="pre">Ewald</span></code> / <code class="docutils literal notranslate"><span class="pre">PME</span></code>
+wrappers shipped with the toolkit.</p>
+</section>
+<section id="graph-parallel-storage-node-partition">
+<h3>Graph-parallel storage (node partition)<a class="headerlink" href="#graph-parallel-storage-node-partition" title="Link to this heading">#</a></h3>
+<p>Instead of a spatial halo, atoms are split by <em>index</em> into balanced
+contiguous blocks. Each rank owns <code class="docutils literal notranslate"><span class="pre">n_owned</span></code> atoms but holds the full
+geometry <strong>replicated</strong>, so a model that builds its own neighbour list
+inside <code class="docutils literal notranslate"><span class="pre">forward</span></code> — UMA / eSCN-family models emit their own <code class="docutils literal notranslate"><span class="pre">edge_index</span></code>
+via an internal <code class="docutils literal notranslate"><span class="pre">radius_pbc</span></code> kernel — still sees every position.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>rank 0:   positions = ALL n_global rows (replicated);  owns nodes [0 .. n0)
+rank 1:   positions = ALL n_global rows (replicated);  owns nodes [n0 .. n0+n1)
+…
+</pre></div>
+</div>
+<p>Each rank runs the model on its owned block; a per-message-passing-layer
+feature <code class="docutils literal notranslate"><span class="pre">all_gather</span></code> reconstructs the full node set the convolution
+needs, and a reduce-scatter adjoint routes each owned atom’s cross-rank
+gradient back on the backward pass. Per-system quantities (energy,
+stress) sum the owned slices with an <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code>; forces come from the
+model’s own autograd. Because the partition is by index rather than
+geometry, the cell is an ordinary model input, atoms never migrate
+between ranks, and only the edge count drifts under MD (compiled runs
+cap edges, not atoms).</p>
+<p><strong>Pick graph-parallel storage when:</strong></p>
+<ul class="simple">
+<li><p>The model rebuilds its own neighbour list inside <code class="docutils literal notranslate"><span class="pre">forward</span></code> and can’t
+be handed a pre-padded halo view (UMA / eSCN-family). There is no
+pre-forward seam to attach a halo to, but the full replicated
+geometry gives the internal builder everything it needs.</p></li>
+<li><p>You want to scale a <em>single</em> system past one GPU’s memory: per-rank
+message-passing activations span only <code class="docutils literal notranslate"><span class="pre">n_owned</span></code> rows even though the
+positions are replicated, so peak memory falls with rank count.</p></li>
+</ul>
+<p>Select it with <code class="docutils literal notranslate"><span class="pre">DomainConfig(strategy=StrategyKind.GRAPH_PARTITION)</span></code>; the
+default is halo. The <code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_GP</span></code> preset declares this layout for
+generic MPNNs, and UMA’s wrapper returns a node-partition spec when the
+config selects it.</p>
+</section>
+<section id="choosing">
+<h3>Choosing<a class="headerlink" href="#choosing" title="Link to this heading">#</a></h3>
+<p>The strategy is declared on the model’s
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec" title="nvalchemi.distributed.spec.MLIPSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLIPSpec</span></code></a>. The shipped presets are:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Preset</p></th>
+<th class="head"><p>Storage</p></th>
+<th class="head"><p>Models</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_HALO</span></code></p></td>
+<td><p>halo, halo-correction scatter, halo-read gather</p></td>
+<td><p>MACE, NequIP, generic MPNN</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_LJ_HALO</span></code></p></td>
+<td><p>halo, halo-correction scatter</p></td>
+<td><p>Lennard-Jones, pair potentials</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_UMA_HALO</span></code></p></td>
+<td><p>halo, local scatter (eSCN backbone is halo-unaware)</p></td>
+<td><p>UMA</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_EWALD_HALO</span></code></p></td>
+<td><p>halo, with custom-op adapters for reciprocal-space</p></td>
+<td><p>Ewald</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_PME_HALO</span></code></p></td>
+<td><p>halo, with custom-op adapters for charge spreading</p></td>
+<td><p>PME</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_DFTD3_HALO</span></code></p></td>
+<td><p>halo, standard energy/force outputs</p></td>
+<td><p>DFTD3 dispersion</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_GP</span></code></p></td>
+<td><p>graph-partition (node partition + per-layer feature all-gather)</p></td>
+<td><p>generic MPNN, graph-parallel</p></td>
+</tr>
+</tbody>
+</table>
+<p>If your model fits one of these patterns, the preset is a one-line
+declaration on your wrapper’s <code class="docutils literal notranslate"><span class="pre">distribution_spec</span></code> property. If it
+doesn’t, see <a class="reference internal" href="distributed_byo.html"><span class="doc">Bring Your Own Model: Authoring a Distribution Spec</span></a> for the authoring workflow.</p>
+<p>AIMNet2 is supported as well, but its wrapper builds its (halo) spec
+inline rather than exposing a shipped <code class="docutils literal notranslate"><span class="pre">SPEC_*</span></code> preset.</p>
+</section>
+</section>
+<section id="runtime-architecture">
+<span id="dd-runtime-architecture"></span><h2>Runtime architecture<a class="headerlink" href="#runtime-architecture" title="Link to this heading">#</a></h2>
+<figure class="align-default" id="id1">
+<div class="graphviz"><object data="../_images/graphviz-186e58f5aed257ff2bb9da7c29395402c0217444.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph distributed_step {
+    rankdir=TB
+    fontname=&quot;Helvetica&quot;
+    node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot;]
+    edge [fontname=&quot;Helvetica&quot; fontsize=10]
+
+    DP [label=&quot;DomainParallel.step()&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
+    Halo [label=&quot;halo_exchange\n(populate halo rows)&quot; fillcolor=&quot;#f9e2ae&quot; fontcolor=&quot;#111111&quot;]
+    NL [label=&quot;NeighborListHook\n(NL on padded batch)&quot; fillcolor=&quot;#f9e2ae&quot; fontcolor=&quot;#111111&quot;]
+    Wrap [label=&quot;DistributedModel\n(spec dispatch)&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
+    Inner [label=&quot;wrapper(padded_batch)&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
+    Cons [label=&quot;output_consolidation\n(slice / halo_reverse / all_reduce)&quot; fillcolor=&quot;#f9e2ae&quot; fontcolor=&quot;#111111&quot;]
+    Integ [label=&quot;inner integrator\npost_update + atom migration&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
+
+    DP -&gt; Halo -&gt; NL -&gt; Wrap -&gt; Inner -&gt; Cons -&gt; Integ
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">Per-step flow under DomainParallel.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>The pieces:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch" title="nvalchemi.distributed.ShardedBatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardedBatch</span></code></a> is the persistent
+rank-local store of owned atoms (positions, velocities, forces,
+cell, etc.) plus the rank-assignment map needed to migrate atoms
+across ranks when they cross domain boundaries. It’s built once on
+rank 0 from the full batch and scattered via
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.partition" title="nvalchemi.distributed.DomainParallel.partition"><code class="xref py py-meth docutils literal notranslate"><span class="pre">partition()</span></code></a>.</p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.distributed.DistributedModel.html#nvalchemi.distributed.DistributedModel" title="nvalchemi.distributed.distributed_model.DistributedModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedModel</span></code></a>
+is the per-step adapter wrapping a single-process
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>. Its <code class="docutils literal notranslate"><span class="pre">__call__</span></code>
+takes a <code class="docutils literal notranslate"><span class="pre">ShardedBatch</span></code> and dispatches to the active parallelization
+strategy’s <code class="docutils literal notranslate"><span class="pre">run_forward</span></code> (halo exchange or graph-partition), returning
+consolidated outputs in the standard
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelOutputs</span></code> format.</p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a> is the integrator
+wrapper. It composes a <code class="docutils literal notranslate"><span class="pre">DistributedModel</span></code> with any
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> subclass and
+drives the per-step loop.</p></li>
+</ul>
+<p>The user-facing API is <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>; the layers below are
+internal but exposed for advanced users (e.g. running a single
+forward without an integrator).</p>
+</section>
+<section id="minimal-example">
+<span id="dd-minimal-example"></span><h2>Minimal example<a class="headerlink" href="#minimal-example" title="Link to this heading">#</a></h2>
+<p>A complete distributed MACE NVT trajectory:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed.device_mesh</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeviceMesh</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainConfig</span><span class="p">,</span> <span class="n">DomainParallel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostMemory</span><span class="p">,</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SnapshotHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <span class="n">MACEWrapper</span>
+
+<span class="c1"># torchrun populates RANK / WORLD_SIZE / LOCAL_RANK</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">)</span>
+<span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+<span class="n">mesh</span> <span class="o">=</span> <span class="n">DeviceMesh</span><span class="p">(</span>
+    <span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">())),</span> <span class="n">mesh_dim_names</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;domain&quot;</span><span class="p">,)</span>
+<span class="p">)</span>
+
+<span class="c1"># 1. Wrap the model — same wrapper as single-process.</span>
+<span class="n">wrapper</span> <span class="o">=</span> <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span><span class="s2">&quot;medium-0b2&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+<span class="c1"># 2. Build the inner integrator with a NeighborListHook.</span>
+<span class="n">nl_hook</span> <span class="o">=</span> <span class="n">NeighborListHook</span><span class="p">(</span>
+    <span class="n">wrapper</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+    <span class="n">skin</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">sink</span> <span class="o">=</span> <span class="n">HostMemory</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">snap_hook</span> <span class="o">=</span> <span class="n">SnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">sink</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="n">integrator</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">wrapper</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>        <span class="c1"># fs</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+    <span class="n">friction</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">nl_hook</span><span class="p">,</span> <span class="n">snap_hook</span><span class="p">],</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># 3. Wrap with DomainParallel + a DomainConfig describing the mesh</span>
+<span class="c1">#    and the halo width (``cutoff = wrapper.cutoff`` for an exact match).</span>
+<span class="n">domain_cfg</span> <span class="o">=</span> <span class="n">DomainConfig</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">cutoff</span><span class="p">),</span> <span class="n">skin</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">)</span>
+<span class="n">dynamics</span> <span class="o">=</span> <span class="n">DomainParallel</span><span class="p">(</span><span class="n">dynamics</span><span class="o">=</span><span class="n">integrator</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">domain_cfg</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="c1"># 4. Build the full batch on rank 0; partition.</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">build_my_batch</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+<span class="n">owned</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+<span class="c1"># 5. Run. ``DomainParallel.run`` is the canonical entry point; the</span>
+<span class="c1">#    SnapshotHook accumulates per-step batches in ``sink``.</span>
+<span class="n">dynamics</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">owned</span><span class="p">)</span>
+
+<span class="n">dynamics</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The full version, with xyz trajectory persistence and CLI arguments,
+ships as <code class="docutils literal notranslate"><span class="pre">examples/distributed/03_mace_nvt_distributed.py</span></code>.</p>
+</section>
+<section id="domainconfig">
+<h2>DomainConfig<a class="headerlink" href="#domainconfig" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainConfig.html#nvalchemi.distributed.DomainConfig" title="nvalchemi.distributed.DomainConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainConfig</span></code></a> carries the runtime
+parameters every rank needs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cutoff</span></code> — the model’s interaction cutoff (Å). Sets the minimum halo
+width.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skin</span></code> — extra ghost-region padding (Å) so the halo doesn’t need
+rebuilding every step. Set to 0 for one-shot inference; set to
+<code class="docutils literal notranslate"><span class="pre">0.3</span> <span class="pre">–</span> <span class="pre">1.0</span> <span class="pre">Å</span></code> for MD where atoms drift between rebuilds.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mesh</span></code> — the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a>. Construct
+manually or derive from <code class="docutils literal notranslate"><span class="pre">dist.get_world_size()</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">DomainConfig</span></code> also carries optional fields for advanced runs — <code class="docutils literal notranslate"><span class="pre">compile</span></code>
+(enable a compiled distributed forward), <code class="docutils literal notranslate"><span class="pre">strategy</span></code> (select the
+parallelization strategy, e.g. halo vs. graph-partition), and finer
+partition/migration tuning (<code class="docutils literal notranslate"><span class="pre">ghost_width</span></code>, <code class="docutils literal notranslate"><span class="pre">grid_dims</span></code>,
+<code class="docutils literal notranslate"><span class="pre">require_nondegenerate</span></code>, <code class="docutils literal notranslate"><span class="pre">migration_hysteresis</span></code>). See the class for the
+full list; the three fields above are all a typical run needs.</p>
+</section>
+<section id="compiled-distributed-runs">
+<h2>Compiled distributed runs<a class="headerlink" href="#compiled-distributed-runs" title="Link to this heading">#</a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">compile=True</span></code> on the <code class="docutils literal notranslate"><span class="pre">DomainConfig</span></code> to run the per-rank forward under
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">domain_cfg</span> <span class="o">=</span> <span class="n">DomainConfig</span><span class="p">(</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">wrapper</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">skin</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">,</span> <span class="nb">compile</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The distributed forward is <strong>fixed-shape</strong>: the framework pads each rank’s
+graph to per-rank capacity caps so tensor shapes stay static across MD
+steps. The caps grow a few times during warm-up and then settle, so a
+trajectory reaches a <strong>recompile-free steady state</strong> — the compiled graph
+is reused every step. That is what makes compiled DD practical for MD
+rather than one-shot inference. The shipped MACE (including
+cuEquivariance), AIMNet2, and UMA wrappers all support it; a BYO model
+opts in by declaring a
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.CompilePolicy.html#nvalchemi.distributed.CompilePolicy" title="nvalchemi.distributed.CompilePolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompilePolicy</span></code></a> on its spec (see
+<a class="reference internal" href="distributed_byo.html"><span class="doc">Bring Your Own Model: Authoring a Distribution Spec</span></a>).</p>
+</section>
+<section id="matching-a-single-process-reference">
+<h2>Matching a single-process reference<a class="headerlink" href="#matching-a-single-process-reference" title="Link to this heading">#</a></h2>
+<p>A distributed forward and a single-process one do the same arithmetic on
+differently shaped tensors: the distributed one carries ghost rows, and under
+compile it pads to fixed capacities. On Ampere and newer, fp32 matmul and
+convolution may run on the reduced-precision tensor-core path (TF32), and the
+backend can select a reduced-precision kernel for one shape and a
+full-precision kernel for the other. The two results then separate by much more
+than fp32 rounding, and the gap is largest for matmul-heavy models.</p>
+<p>This is not specific to decomposition: two single-process runs with different
+batch padding diverge the same way. Decomposition is simply where it becomes
+visible, because it always changes the shapes.</p>
+<p>The framework does not change the precision regime for you — reduced precision
+is a deliberate speed/accuracy trade, and worth keeping when a run does not need
+to reproduce a reference. It does warn once when a distributed scope opens with
+reduced precision in force. When a run <em>does</em> have to agree with a
+single-process reference, or with a different rank count, pin it before building
+models:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">pin_fp32</span>
+
+<span class="n">pin_fp32</span><span class="p">()</span>  <span class="c1"># before constructing models, and before any CUDA context exists</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">pin_fp32</span></code> also sets <code class="docutils literal notranslate"><span class="pre">NVIDIA_TF32_OVERRIDE=0</span></code>, which is what reaches ranks
+started by <code class="docutils literal notranslate"><span class="pre">torchrun</span></code> or <code class="docutils literal notranslate"><span class="pre">mp.spawn</span></code>: those re-import torch with default settings
+but inherit the environment. Note that neither pinning nor anything else makes
+distributed and single-process results bitwise identical — cross-rank reduction
+order differs — so equivalence is always to a tolerance, and pinning is what
+keeps that tolerance at the fp32 noise floor rather than orders of magnitude
+above it.</p>
+</section>
+<section id="distributed-dynamics">
+<h2>Distributed dynamics<a class="headerlink" href="#distributed-dynamics" title="Link to this heading">#</a></h2>
+<p>Any <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> integrator or
+optimizer runs under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> — you wrap it exactly like the NVT
+example above and call <code class="docutils literal notranslate"><span class="pre">partition()</span></code> / <code class="docutils literal notranslate"><span class="pre">run()</span></code>. What changes under domain
+decomposition is <em>where global quantities come from</em>.</p>
+<section id="what-the-inner-integrator-sees">
+<h3>What the inner integrator sees<a class="headerlink" href="#what-the-inner-integrator-sees" title="Link to this heading">#</a></h3>
+<p>Under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>, each rank’s inner integrator sees <strong>only its
+owned atoms</strong> — never ghosts, never the whole system. The owned + ghost
+(halo) view exists only inside the model forward; your <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> /
+<code class="docutils literal notranslate"><span class="pre">post_update</span></code> are handed the owned <code class="docutils literal notranslate"><span class="pre">Batch</span></code>. Two consequences:</p>
+<ul class="simple">
+<li><p><strong>Per-atom operations are correct as-is.</strong> Position integration,
+velocity half-kicks, per-atom Langevin friction and noise, applying
+forces — anything that only touches per-atom fields works under DD with
+no changes. <code class="docutils literal notranslate"><span class="pre">NVE</span></code> and <code class="docutils literal notranslate"><span class="pre">NVTLangevin</span></code> are exact under DD for exactly this
+reason.</p></li>
+<li><p><strong>Global reductions are not.</strong> Any quantity that reduces across <em>all</em>
+atoms in a system — total kinetic energy, temperature, degrees of
+freedom, a global force dot-product (FIRE), a convergence test, a
+barostat’s kinetic pressure — is wrong if computed as a local <code class="docutils literal notranslate"><span class="pre">.sum()</span></code>
+/ <code class="docutils literal notranslate"><span class="pre">.max()</span></code> over one rank’s shard. Each rank would see only its slice.</p></li>
+</ul>
+</section>
+<section id="supported-ensembles">
+<h3>Supported ensembles<a class="headerlink" href="#supported-ensembles" title="Link to this heading">#</a></h3>
+<p>The shipped thermostats and barostats declare their global quantities as
+<em>intent</em>; <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>’s dynamics coordinator supplies the cross-rank
+reduction, so the integrator body stays free of any distributed code. For
+these, there is nothing to do — wrap in <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> and run:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Integrator</p></th>
+<th class="head"><p>Under DD</p></th>
+<th class="head"><p>Example</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NVE</span></code></p></td>
+<td><p>Exact; per-atom only, no reduction</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NVTLangevin</span></code></p></td>
+<td><p>Exact; per-atom only, no reduction</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">03_mace_nvt_distributed.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Nosé–Hoover NVT</p></td>
+<td><p>Global KE + DOF reduced by the coordinator</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NPT</span></code></p></td>
+<td><p>Global KE + DOF + pressure; replicated barostat + cell</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">06_mace_npt_distributed.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NPH</span></code></p></td>
+<td><p>Global KE + pressure; replicated cell</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FIRE</span></code> / <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code></p></td>
+<td><p>Global <code class="docutils literal notranslate"><span class="pre">v·f</span></code>, <code class="docutils literal notranslate"><span class="pre">v·v</span></code>, <code class="docutils literal notranslate"><span class="pre">f·f</span></code> dot-products</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">07_fire_nvt_dd.py</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>You can also run <strong>two-dimensional parallelism</strong> — a pipeline of stages,
+each stage itself domain-decomposed — by feeding <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> stages
+to a <code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> over a <code class="docutils literal notranslate"><span class="pre">(pipeline,</span> <span class="pre">domain)</span></code> mesh;
+<code class="docutils literal notranslate"><span class="pre">07_fire_nvt_dd.py</span></code> shows a FIRE→NVT pipeline where each stage is its own
+DD sub-mesh.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Global thermostat/barostat support (Nosé–Hoover, NPT, NPH) is recent.
+Validate long production barostat trajectories before relying on them.</p>
+</div>
+</section>
+<section id="bring-your-own-integrator-under-dd">
+<h3>Bring your own integrator under DD<a class="headerlink" href="#bring-your-own-integrator-under-dd" title="Link to this heading">#</a></h3>
+<p>A custom <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> subclass (see
+<a class="reference internal" href="dynamics_simulations.html"><span class="doc">Optimization and Integrators</span></a> → <em>Writing your own dynamics</em>) runs under
+<code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> unchanged <strong>as long as every operation is per-atom.</strong> If
+your integrator needs a <em>global</em> scalar, make it DD-aware — in order of
+preference:</p>
+<ol class="arabic">
+<li><p><strong>Reuse a shipped ensemble</strong> when your scheme is Nosé–Hoover / NPT /
+NPH / FIRE-shaped: the coordinator already globalizes its
+thermodynamic quantities.</p></li>
+<li><p><strong>Compute the global scalar in a <code class="docutils literal notranslate"><span class="pre">HookScope.GLOBAL</span></code> hook.</strong> This is the
+sanctioned public seam. A hook whose <code class="docutils literal notranslate"><span class="pre">scope</span></code> is <code class="docutils literal notranslate"><span class="pre">HookScope.GLOBAL</span></code>
+receives the <em>full gathered system on every rank</em>, so it can compute
+any global quantity identically everywhere and hand it to the
+integrator, which then reads a plain Python value (no shard math):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookScope</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">GlobalKineticEnergyHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whole-system KE, computed identically on every rank.</span>
+
+<span class="sd">    ``scope = GLOBAL`` makes DomainParallel gather the full system onto</span>
+<span class="sd">    every rank before the hook runs, so every rank writes the same</span>
+<span class="sd">    value onto the integrator it wraps.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>
+    <span class="n">scope</span> <span class="o">=</span> <span class="n">HookScope</span><span class="o">.</span><span class="n">GLOBAL</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">integrator</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_integrator</span> <span class="o">=</span> <span class="n">integrator</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>  <span class="c1"># the FULL system, identical on every rank</span>
+        <span class="n">ke</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">atomic_masses</span> <span class="o">*</span> <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">velocities</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_integrator</span><span class="o">.</span><span class="n">global_kinetic_energy</span> <span class="o">=</span> <span class="n">ke</span>
+
+<span class="c1"># Register on the OUTER DomainParallel so the GLOBAL gather fires;</span>
+<span class="c1"># the integrator reads ``self.global_kinetic_energy`` in post_update.</span>
+<span class="n">dynamics</span> <span class="o">=</span> <span class="n">DomainParallel</span><span class="p">(</span>
+    <span class="n">dynamics</span><span class="o">=</span><span class="n">my_integrator</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">domain_cfg</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">GlobalKineticEnergyHook</span><span class="p">(</span><span class="n">my_integrator</span><span class="p">)],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Because every rank computed the same value from the same gathered
+system, the integrator stays in lockstep. A <code class="docutils literal notranslate"><span class="pre">GLOBAL</span></code> hook gathers the
+whole system when it fires, so it suits step-boundary couplings — not a
+per-step hot-loop scalar on very large systems.</p>
+</li>
+<li><p><strong>Read <code class="docutils literal notranslate"><span class="pre">energy</span></code> directly</strong> — the forward already reduces per-system
+energy to its global value and replicates it to every rank, so
+<code class="docutils literal notranslate"><span class="pre">batch.energy</span></code> is global. Never re-sum it.</p></li>
+</ol>
+<p><strong>Don’ts under DD:</strong></p>
+<ul class="simple">
+<li><p>Don’t call <code class="docutils literal notranslate"><span class="pre">torch.distributed.all_reduce</span></code> yourself over the world
+group. Route global reductions through the framework (a shipped
+ensemble, or a <code class="docutils literal notranslate"><span class="pre">GLOBAL</span></code> hook) so they stay correct under whichever
+strategy is active — a hand-rolled reduction can double-count on a
+replicated layout, where every rank already holds the full data.</p></li>
+<li><p>Don’t try to read owned + ghost atoms inside <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> /
+<code class="docutils literal notranslate"><span class="pre">post_update</span></code> — you only ever get owned atoms; the halo view lives
+inside the forward.</p></li>
+<li><p>Don’t make a per-rank control-flow decision (like “converged”) from a
+local scalar. <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> already reduces convergence mesh-wide; a
+divergent local decision desyncs collectives.</p></li>
+</ul>
+</section>
+</section>
+<section id="next-steps">
+<h2>Next steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>The <a class="reference internal" href="distributed_shardtensor.html"><span class="doc">ShardTensor walkthrough</span></a>
+explains how per-atom tensors flow through halo exchange and
+per-system reductions, and what subclass propagation guarantees the
+framework relies on.</p></li>
+<li><p>The <a class="reference internal" href="distributed_byo.html"><span class="doc">Bring-your-own-model walkthrough</span></a>
+shows how to declare an
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec" title="nvalchemi.distributed.spec.MLIPSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLIPSpec</span></code></a> for a new wrapper,
+validate it via <code class="xref py py-func docutils literal notranslate"><span class="pre">trace_and_validate()</span></code>, and persist the
+resulting spec for production use.</p></li>
+<li><p>The runnable example in
+<code class="docutils literal notranslate"><span class="pre">examples/distributed/03_mace_nvt_distributed.py</span></code> is the
+end-to-end version of the snippet above.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dynamics_sinks.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Data Sinks</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed_shardtensor.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">ShardTensor: How Per-Atom Fields Flow Across Ranks</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-partition">Why partition?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-parallelization-strategies">Two parallelization strategies</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#halo-storage">Halo storage</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#graph-parallel-storage-node-partition">Graph-parallel storage (node partition)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing">Choosing</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-architecture">Runtime architecture</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-example">Minimal example</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#domainconfig">DomainConfig</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compiled-distributed-runs">Compiled distributed runs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#matching-a-single-process-reference">Matching a single-process reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#distributed-dynamics">Distributed dynamics</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-inner-integrator-sees">What the inner integrator sees</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#supported-ensembles">Supported ensembles</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#bring-your-own-integrator-under-dd">Bring your own integrator under DD</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next steps</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/distributed.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,1121 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.graph_padder &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/graph_padder';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.graph_padder</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Fixed-shape graph padding for compiled domain-decomposed MD.</span>
+
+<span class="sd">Under ``torch.compile``, a domain-decomposed model&#39;s graph must keep a stable</span>
+<span class="sd">shape across MD steps, or every step that changes the owned+ghost atom / edge</span>
+<span class="sd">count triggers a recompile. The fix is to pad each step&#39;s graph to fixed</span>
+<span class="sd">per-rank capacities with inert dead atoms / dead edges that contribute nothing.</span>
+
+<span class="sd">This module owns two pieces of that mechanism:</span>
+
+<span class="sd">* :class:`GraphPadder` — the protocol a model declares (via</span>
+<span class="sd">  ``CompilePolicy(graph_padder=...)``) for *how* its graph representation is</span>
+<span class="sd">  padded to a capacity and stripped back. The framework owns *when* to pad; the</span>
+<span class="sd">  padder owns the representation-specific ``pad`` / ``unpad``. Built-ins cover</span>
+<span class="sd">  common representations (COO ``edge_index``, dense ``(N, K)`` neighbor matrix)</span>
+<span class="sd">  so most models declare nothing.</span>
+<span class="sd">* :func:`resolve_cap` — the shared grow-only capacity policy.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextvars</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;COOPadder&quot;</span><span class="p">,</span> <span class="s2">&quot;DenseBatchPadder&quot;</span><span class="p">,</span> <span class="s2">&quot;GraphPadder&quot;</span><span class="p">,</span> <span class="s2">&quot;resolve_cap&quot;</span><span class="p">]</span>
+
+
+<span class="c1"># Ambient DD group for collective cap agreement. When a group is set (by the</span>
+<span class="c1"># framework around the compiled-DD padding scope), :func:`resolve_cap`</span>
+<span class="c1"># all-reduce-MAXes each cap&#39;s real count so every rank grows to an *identical*</span>
+<span class="c1"># cap and the compiled graph recompiles in lockstep. A per-rank-local cap</span>
+<span class="c1"># desyncs on an uneven partition: one rank crosses a bucket boundary and</span>
+<span class="c1"># recompiles while its peers keep the cached graph, their halo all_to_all</span>
+<span class="c1"># sequences drift out of step, and NCCL hangs at the watchdog timeout. Outside</span>
+<span class="c1"># this scope (eager, single-GPU) caps grow locally — no collective, no change.</span>
+<span class="n">_CAP_AGREEMENT</span><span class="p">:</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">(</span>
+    <span class="s2">&quot;_CAP_AGREEMENT&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cap_agreement_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Make :func:`resolve_cap` grow caps collectively over ``group``.</span>
+
+<span class="sd">    The framework wraps the compiled-DD padding scope in this so every rank</span>
+<span class="sd">    agrees one cap per key (grow-only, MAX-reduced across ``group``) and stays</span>
+<span class="sd">    in graph-shape lockstep. ``device`` is where the scalar reduction tensor</span>
+<span class="sd">    lives (matches the collective backend). A no-op for single-rank groups.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="n">_CAP_AGREEMENT</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="n">group</span><span class="p">,</span> <span class="n">device</span><span class="p">))</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">_CAP_AGREEMENT</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="GraphPadder">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.GraphPadder.html#nvalchemi.distributed.GraphPadder">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">GraphPadder</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How a model&#39;s graph representation is padded to a fixed capacity.</span>
+
+<span class="sd">    Declared on ``CompilePolicy.graph_padder``; the default is :class:`COOPadder`.</span>
+<span class="sd">    :meth:`pad` runs before the compiled forward and :meth:`unpad` on the raw</span>
+<span class="sd">    output, so the wrapper stays distribution-agnostic and the compiled graph</span>
+<span class="sd">    shape stays constant.</span>
+
+<span class="sd">    The padder owns capacity resolution: it is handed a mutable ``cap_state``</span>
+<span class="sd">    dict (persistent across MD steps) and sizes its own caps with</span>
+<span class="sd">    :func:`resolve_cap`. This matters because *when* a capacity becomes knowable</span>
+<span class="sd">    is representation-specific — a COO graph knows its atom/edge counts up front,</span>
+<span class="sd">    but a model that rebuilds its graph inside :meth:`pad` only learns its edge</span>
+<span class="sd">    count partway through.</span>
+
+<span class="sd">    Padding must be inert: dead atoms carry no contribution (e.g. ``Z=0``, parked</span>
+<span class="sd">    beyond any cutoff) and dead edges have a zero envelope (e.g. a self-loop</span>
+<span class="sd">    longer than the cutoff, or a non-degenerate image so spherical harmonics</span>
+<span class="sd">    don&#39;t ``NaN``). The owned-only output consolidation drops the dead rows</span>
+<span class="sd">    regardless, but they must not perturb the real atoms&#39; values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GraphPadder.pad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.GraphPadder.html#nvalchemi.distributed.GraphPadder.pad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cap_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">cap_atoms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``data`` padded to fixed per-rank capacities.</span>
+
+<span class="sd">        Resolve the capacities with :func:`resolve_cap` against ``cap_state``</span>
+<span class="sd">        (grow-only, persistent across steps), then pad ``data`` and return it.</span>
+
+<span class="sd">        ``cap_atoms`` (strategy-supplied) selects whether the atom dim is capped</span>
+<span class="sd">        too or only edges: halo caps both (owned+ghost fluctuate); a graph-parallel</span>
+<span class="sd">        node partition caps edges only (fixed atom set). Padders whose layout only</span>
+<span class="sd">        ever caps atoms may ignore it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="GraphPadder.unpad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.GraphPadder.html#nvalchemi.distributed.GraphPadder.unpad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unpad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">n_real</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the dead-atom / dead-edge rows from a raw model output.</span>
+
+<span class="sd">        ``n_real`` overrides the real row count to strip to; pass it on paths</span>
+<span class="sd">        where no :meth:`pad` ran (e.g. eager / sharded), else leave it ``None``</span>
+<span class="sd">        to use the count the matching :meth:`pad` recorded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="resolve_cap">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.resolve_cap.html#nvalchemi.distributed.resolve_cap">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">resolve_cap</span><span class="p">(</span>
+    <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">real</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">initial_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">grow_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.30</span><span class="p">,</span>
+    <span class="n">stride</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">strict_gt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Grow-only fixed-shape capacity for ``key``, ``&gt;= real + extra``.</span>
+
+<span class="sd">    A cap is sized on first sight with ``initial_factor`` headroom, regrows with</span>
+<span class="sd">    ``grow_factor`` only when the real count would overflow, and is always</span>
+<span class="sd">    rounded up to a multiple of ``stride`` so small MD-step fluctuation lands in</span>
+<span class="sd">    the same bucket — keeping the compiled graph from recompiling. The cap only</span>
+<span class="sd">    ever grows, so a hot path reuses one compiled graph.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state</span>
+<span class="sd">        Mutable dict holding the persistent caps across forwards (the caller</span>
+<span class="sd">        owns its lifetime).</span>
+<span class="sd">    key</span>
+<span class="sd">        Which capacity (e.g. ``&quot;atoms&quot;`` / ``&quot;edges&quot;`` / ``&quot;max_send&quot;``).</span>
+<span class="sd">    real</span>
+<span class="sd">        The real count needed this step (before padding).</span>
+<span class="sd">    initial_factor</span>
+<span class="sd">        Headroom multiplier applied the first time ``key`` is sized, set to cover</span>
+<span class="sd">        the equilibrated peak from the first compile (e.g. edges climb ~25%</span>
+<span class="sd">        through equilibration, atoms barely move).</span>
+<span class="sd">    grow_factor</span>
+<span class="sd">        Headroom multiplier applied on a later overflow.</span>
+<span class="sd">    stride</span>
+<span class="sd">        Bucket size; the cap is rounded up to a multiple of this (16 for</span>
+<span class="sd">        kernel-friendly shapes; coarser counts that swing more use a larger one).</span>
+<span class="sd">    extra</span>
+<span class="sd">        Slots reserved beyond ``real`` (e.g. UMA reserves 2 for the dead-edge</span>
+<span class="sd">        anchor pair).</span>
+<span class="sd">    strict_gt</span>
+<span class="sd">        Overflow test: ``real + extra &gt; cap`` when True (the default; edges /</span>
+<span class="sd">        send), or ``&gt;= cap`` when False (atoms, which need a strictly-larger cap</span>
+<span class="sd">        because the dead row sits at ``cap - 1``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        The (possibly grown) capacity for ``key``, recorded in ``state``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">need</span> <span class="o">=</span> <span class="n">real</span> <span class="o">+</span> <span class="n">extra</span>
+
+    <span class="c1"># Collective agreement: under a compiled-DD pad scope, grow every rank&#39;s cap</span>
+    <span class="c1"># off the *global* max real count so the resolved cap (and thus the padded</span>
+    <span class="c1"># graph shape) is identical on all ranks. Bucketing a per-rank-local count</span>
+    <span class="c1"># would let one rank cross a boundary and recompile alone -&gt; halo all_to_all</span>
+    <span class="c1"># desync -&gt; hang. Runs eagerly (framework side), so the .item() sync never</span>
+    <span class="c1"># reaches the compiled trace.</span>
+    <span class="n">_agree</span> <span class="o">=</span> <span class="n">_CAP_AGREEMENT</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">_agree</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">_group</span><span class="p">,</span> <span class="n">_device</span> <span class="o">=</span> <span class="n">_agree</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">_group</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">need</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">_device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">_t</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">_group</span><span class="p">)</span>
+            <span class="n">need</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">_t</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bucket</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">factor</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">stride</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="n">stride</span><span class="p">)</span> <span class="o">*</span> <span class="n">stride</span>
+
+    <span class="n">cap</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cap</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cap</span> <span class="o">=</span> <span class="n">_bucket</span><span class="p">(</span><span class="n">need</span><span class="p">,</span> <span class="n">initial_factor</span><span class="p">)</span>
+        <span class="n">state</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cap</span>
+        <span class="k">return</span> <span class="n">cap</span>
+    <span class="n">overflow</span> <span class="o">=</span> <span class="n">need</span> <span class="o">&gt;</span> <span class="n">cap</span> <span class="k">if</span> <span class="n">strict_gt</span> <span class="k">else</span> <span class="n">need</span> <span class="o">&gt;=</span> <span class="n">cap</span>
+    <span class="k">if</span> <span class="n">overflow</span><span class="p">:</span>
+        <span class="n">cap</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">stride</span><span class="p">,</span> <span class="n">_bucket</span><span class="p">(</span><span class="n">need</span><span class="p">,</span> <span class="n">grow_factor</span><span class="p">))</span>
+        <span class="n">state</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cap</span>
+    <span class="k">return</span> <span class="n">cap</span></div>
+
+
+
+<div class="viewcode-block" id="COOPadder">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.COOPadder.html#nvalchemi.distributed.COOPadder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">COOPadder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Built-in :class:`GraphPadder` for COO ``edge_index`` graphs.</span>
+
+<span class="sd">    The inferred default: a model whose halo-padded graph is an ordinary</span>
+<span class="sd">    :class:`~nvalchemi.data.Batch` with per-atom fields and a per-edge</span>
+<span class="sd">    ``neighbor_list`` (COO endpoints) declares nothing. It works on the abstract</span>
+<span class="sd">    ``Batch`` storage groups, so it is model-agnostic.</span>
+
+<span class="sd">    Atom / edge counts are knowable up front, so :meth:`pad` resolves both caps</span>
+<span class="sd">    from ``cap_state`` before padding: ``&quot;atoms&quot;`` (1.15 initial headroom,</span>
+<span class="sd">    ``strict_gt=False`` since the dead node sits at the last slot) and ``&quot;edges&quot;``</span>
+<span class="sd">    (1.35 initial headroom — edge count climbs ~25% through equilibration). Both</span>
+<span class="sd">    regrow x1.30 on overflow, stride 16.</span>
+
+<span class="sd">    Layout:</span>
+
+<span class="sd">    * Per-atom fields -&gt; ``n_cap``: appended rows carry zeros and join the last</span>
+<span class="sd">      graph (their node outputs are dropped by the owned-only consolidation).</span>
+<span class="sd">    * Per-edge fields -&gt; ``e_cap``: invalid edges (sentinel rows with endpoint</span>
+<span class="sd">      ``&gt;= n_real``) and the fill are routed to an isolated dead node (the last</span>
+<span class="sd">      row, ``n_cap - 1``) as self-loops. ``neighbor_list_shifts`` for those rows</span>
+<span class="sd">      uses the ``[1, 0, 0]`` image so the edge vector is non-degenerate (a zero</span>
+<span class="sd">      vector ``NaN``\\ s through spherical harmonics). The dead node is referenced</span>
+<span class="sd">      by no real edge and masked out of every owned output.</span>
+
+<span class="sd">    :meth:`unpad` is a no-op: the owned-only output consolidation already drops</span>
+<span class="sd">    the dead / ghost rows. The framework restores the transient padded storage</span>
+<span class="sd">    separately (the padded ``Batch`` is reused in place across MD steps).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="COOPadder.pad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.COOPadder.html#nvalchemi.distributed.COOPadder.pad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pad</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span> <span class="n">cap_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">cap_atoms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Batch&quot;</span><span class="p">:</span>  <span class="c1"># noqa: ARG002  (halo padder always caps atoms)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve atom / edge caps from ``cap_state`` and pad the halo-padded</span>
+<span class="sd">        ``Batch`` to them. Mutates ``data`` in place and returns it; ``None`` is a</span>
+<span class="sd">        safe no-op.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">n_cap</span> <span class="o">=</span> <span class="n">resolve_cap</span><span class="p">(</span>
+            <span class="n">cap_state</span><span class="p">,</span>
+            <span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span>
+            <span class="n">initial_factor</span><span class="o">=</span><span class="mf">1.15</span><span class="p">,</span>
+            <span class="n">grow_factor</span><span class="o">=</span><span class="mf">1.30</span><span class="p">,</span>
+            <span class="n">stride</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+            <span class="n">strict_gt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">e_cap</span> <span class="o">=</span> <span class="n">resolve_cap</span><span class="p">(</span>
+            <span class="n">cap_state</span><span class="p">,</span>
+            <span class="s2">&quot;edges&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">num_edges</span><span class="p">,</span>
+            <span class="n">initial_factor</span><span class="o">=</span><span class="mf">1.35</span><span class="p">,</span>
+            <span class="n">grow_factor</span><span class="o">=</span><span class="mf">1.30</span><span class="p">,</span>
+            <span class="n">stride</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_pad_coo_to_caps</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_cap</span><span class="p">,</span> <span class="n">e_cap</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="COOPadder.unpad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.COOPadder.html#nvalchemi.distributed.COOPadder.unpad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unpad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">n_real</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op: the owned-only output consolidation drops the dead rows.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pad_coo_to_caps</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span> <span class="n">n_cap</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">e_cap</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Batch&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pad a halo-padded COO ``Batch`` to ``n_cap`` atoms / ``e_cap`` edges.</span>
+
+<span class="sd">    Shared by :meth:`COOPadder.pad` (resolves the caps first) and</span>
+<span class="sd">    ``ShardedBatch.pad_padded_view_to_caps`` (handed explicit caps). Mutates</span>
+<span class="sd">    ``data`` in place and returns it; raises on cap overflow.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">SegmentedLevelStorage</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">data</span>
+    <span class="k">if</span> <span class="n">pb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">data</span>
+    <span class="n">n_real</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">num_nodes</span>
+    <span class="n">e_real</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">num_edges</span>
+    <span class="k">if</span> <span class="n">n_real</span> <span class="o">&gt;=</span> <span class="n">n_cap</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;atom pad cap overflow: n_padded=</span><span class="si">{</span><span class="n">n_real</span><span class="si">}</span><span class="s2"> &gt;= n_cap=</span><span class="si">{</span><span class="n">n_cap</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">e_real</span> <span class="o">&gt;</span> <span class="n">e_cap</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;edge pad cap overflow: E=</span><span class="si">{</span><span class="n">e_real</span><span class="si">}</span><span class="s2"> &gt; e_cap=</span><span class="si">{</span><span class="n">e_cap</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">dead</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">pad_n</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="n">n_real</span>
+
+    <span class="c1"># per-atom fields -&gt; n_cap (zero pad rows, joined to last graph)</span>
+    <span class="n">atoms</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">_atoms_group</span>
+    <span class="n">new_atom_data</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">atoms</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">atoms</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">pad_n</span><span class="p">,)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">atoms</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))],</span>
+            <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">atoms</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="n">n_graphs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+    <span class="n">sl</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span><span class="n">n_graphs</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">sl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">sl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">pad_n</span>
+    <span class="n">pb</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s2">&quot;atoms&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">new_atom_data</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">atoms</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">attr_map</span><span class="o">=</span><span class="n">atoms</span><span class="o">.</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="n">segment_lengths</span><span class="o">=</span><span class="n">sl</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># per-edge fields -&gt; e_cap (invalid/pad -&gt; isolated dead self-loop)</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">_edges_group</span>
+    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">edges</span><span class="o">.</span><span class="n">num_elements</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">data</span>
+    <span class="n">nl</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span>  <span class="c1"># [E, 2]; sentinel endpoints == n_real</span>
+    <span class="n">invalid</span> <span class="o">=</span> <span class="p">(</span><span class="n">nl</span> <span class="o">&gt;=</span> <span class="n">n_real</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">pad_e</span> <span class="o">=</span> <span class="n">e_cap</span> <span class="o">-</span> <span class="n">e_real</span>
+    <span class="n">new_edge_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+        <span class="n">trailing</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
+            <span class="n">routed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">invalid</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">dead</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
+            <span class="n">fill</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">new_full</span><span class="p">((</span><span class="n">pad_e</span><span class="p">,)</span> <span class="o">+</span> <span class="n">trailing</span><span class="p">,</span> <span class="n">dead</span><span class="p">)</span>
+            <span class="n">new_edge_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">routed</span><span class="p">,</span> <span class="n">fill</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list_shifts&quot;</span><span class="p">:</span>
+            <span class="c1"># nonzero image for dead/invalid edges (zero vector -&gt; NaN).</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">trailing</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">unit</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+                <span class="n">unit</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">unit</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">trailing</span><span class="p">)</span>
+            <span class="n">routed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">invalid</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">unit</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
+            <span class="n">fill</span> <span class="o">=</span> <span class="n">unit</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="n">pad_e</span><span class="p">,)</span> <span class="o">+</span> <span class="n">trailing</span><span class="p">)</span>
+            <span class="n">new_edge_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">routed</span><span class="p">,</span> <span class="n">fill</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fill</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">pad_e</span><span class="p">,)</span> <span class="o">+</span> <span class="n">trailing</span><span class="p">)</span>
+            <span class="n">new_edge_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">t</span><span class="p">,</span> <span class="n">fill</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">n_edge_seg</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+    <span class="n">esl</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span><span class="n">n_edge_seg</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">esl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">esl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">pad_e</span>
+    <span class="n">pb</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s2">&quot;edges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">new_edge_data</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">edges</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">attr_map</span><span class="o">=</span><span class="n">edges</span><span class="o">.</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="n">segment_lengths</span><span class="o">=</span><span class="n">esl</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="c1"># Sentinel: pad this per-system label with the last system&#39;s index (value</span>
+<span class="c1"># depends on the system count, not a constant).</span>
+<span class="n">_LAST_SYSTEM</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="DensePadder">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DensePadder.html#nvalchemi.distributed.DensePadder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DensePadder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Built-in :class:`GraphPadder` for dense ``(N, K)`` neighbor-matrix graphs.</span>
+
+<span class="sd">    The dense counterpart of :class:`COOPadder`: the graph is an ``(N, K)``</span>
+<span class="sd">    neighbor matrix that rides the atom dimension (no separate edge dim). Pads the</span>
+<span class="sd">    per-atom row fields to a fixed atom capacity and repoints the neighbor</span>
+<span class="sd">    matrix&#39;s padding sentinel to an isolated dead atom (the last row); ``unpad``</span>
+<span class="sd">    slices the dead rows off the per-atom outputs.</span>
+
+<span class="sd">    Parametrized by the model&#39;s field names: ``count_key`` (field whose row count</span>
+<span class="sd">    is the atom count), ``nbmat_key`` (the neighbor matrix), ``row_pads``</span>
+<span class="sd">    (per-atom field -&gt; pad fill value; pass :data:`LAST_SYSTEM` to pad a</span>
+<span class="sd">    per-system label with the last system&#39;s index), and ``atom_output_keys``</span>
+<span class="sd">    (per-atom outputs that get dead rows stripped in :meth:`unpad`).</span>
+
+<span class="sd">    Layout assumption: the input&#39;s last pre-pad row is the model&#39;s own</span>
+<span class="sd">    padding/sentinel atom, so the real atom count is ``n_rows - 1`` and neighbor</span>
+<span class="sd">    entries ``&gt;= n_rows - 1`` are the sentinel — both get repointed to the dead</span>
+<span class="sd">    row.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">LAST_SYSTEM</span> <span class="o">=</span> <span class="n">_LAST_SYSTEM</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">count_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">nbmat_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">row_pads</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">atom_output_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">n_systems_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cap_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+        <span class="n">initial_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.15</span><span class="p">,</span>
+        <span class="n">grow_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.15</span><span class="p">,</span>
+        <span class="n">stride</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_key</span> <span class="o">=</span> <span class="n">count_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbmat_key</span> <span class="o">=</span> <span class="n">nbmat_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">row_pads</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">row_pads</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atom_output_keys</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">atom_output_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_systems_key</span> <span class="o">=</span> <span class="n">n_systems_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cap_key</span> <span class="o">=</span> <span class="n">cap_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_factor</span> <span class="o">=</span> <span class="n">initial_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grow_factor</span> <span class="o">=</span> <span class="n">grow_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stride</span> <span class="o">=</span> <span class="n">stride</span>
+        <span class="c1"># Owned+ghost atom count of the last padded graph (== n_rows - 1, the</span>
+        <span class="c1"># model&#39;s sentinel/pad index), stashed in pad() for unpad().</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_real</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="DensePadder.pad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DensePadder.html#nvalchemi.distributed.DensePadder.pad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pad</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">cap_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">cap_atoms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>  <span class="c1"># noqa: ARG002  (halo padder always caps atoms)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the atom cap from ``cap_state`` and pad the dense fields.</span>
+
+<span class="sd">        ``data`` is the model&#39;s plain-tensor input dict; returns a shallow copy</span>
+<span class="sd">        with the row fields + neighbor matrix padded to the atom cap.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">n_cur</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">count_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">n_cap</span> <span class="o">=</span> <span class="n">resolve_cap</span><span class="p">(</span>
+            <span class="n">cap_state</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cap_key</span><span class="p">,</span>
+            <span class="n">n_cur</span><span class="p">,</span>
+            <span class="n">initial_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_factor</span><span class="p">,</span>
+            <span class="n">grow_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grow_factor</span><span class="p">,</span>
+            <span class="n">stride</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stride</span><span class="p">,</span>
+            <span class="n">strict_gt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">dead</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">sent_old</span> <span class="o">=</span> <span class="n">n_cur</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_real</span> <span class="o">=</span> <span class="n">sent_old</span>
+        <span class="n">n_sys</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_systems_key</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_systems_key</span> <span class="k">else</span> <span class="mi">1</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_pad_rows</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">fill</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">t</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">t</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">t</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">new_full</span><span class="p">((</span><span class="n">p</span><span class="p">,)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span> <span class="n">fill</span><span class="p">)],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">fill</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">row_pads</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">out</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">fill_val</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_sys</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">fill</span> <span class="ow">is</span> <span class="n">_LAST_SYSTEM</span> <span class="k">else</span> <span class="n">fill</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_pad_rows</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">fill_val</span><span class="p">)</span>
+
+        <span class="n">nb</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nbmat_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Repoint the old sentinel (entries &gt;= sent_old) to the dead row,</span>
+            <span class="c1"># then fill pad rows with dead self-refs; masking (slot == dead)</span>
+            <span class="c1"># drops them from every owned output.</span>
+            <span class="n">nb</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">nb</span> <span class="o">&gt;=</span> <span class="n">sent_old</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">nb</span><span class="p">,</span> <span class="n">dead</span><span class="p">),</span> <span class="n">nb</span><span class="p">)</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">nb</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">nb</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">nb</span><span class="p">,</span> <span class="n">nb</span><span class="o">.</span><span class="n">new_full</span><span class="p">((</span><span class="n">p</span><span class="p">,)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">nb</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span> <span class="n">dead</span><span class="p">)],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+                <span class="p">)</span>
+            <span class="n">out</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">nbmat_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">nb</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="DensePadder.unpad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DensePadder.html#nvalchemi.distributed.DensePadder.unpad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unpad</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">n_real</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slice the dead-atom rows off the per-atom outputs.</span>
+
+<span class="sd">        Strips to ``n_real`` when given (eager / sharded paths, where no</span>
+<span class="sd">        :meth:`pad` ran), else to the count the matching :meth:`pad` stashed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">n_real</span> <span class="k">if</span> <span class="n">n_real</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_real</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">output</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_output_keys</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">n</span><span class="p">:</span>
+                <span class="n">output</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DenseBatchPadder">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DenseBatchPadder.html#nvalchemi.distributed.DenseBatchPadder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DenseBatchPadder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Built-in :class:`GraphPadder` for dense ``(N, K)`` neighbor-matrix</span>
+<span class="sd">    :class:`~nvalchemi.data.Batch`\\ es (AIMNet2).</span>
+
+<span class="sd">    The batch-level counterpart of :class:`DensePadder`. The framework compiles</span>
+<span class="sd">    the whole ``wrapper.forward``, so the fixed-shape padding must land on the</span>
+<span class="sd">    halo-padded ``Batch`` *before* ``adapt_input`` runs — the same seam</span>
+<span class="sd">    :class:`COOPadder` uses. This padder pads the atom-level storage group to a</span>
+<span class="sd">    fixed atom capacity with inert dead atoms (zeros, ``Z=0``, joined to the last</span>
+<span class="sd">    graph) and repoints the ``neighbor_matrix`` sentinel so no real atom ever sees</span>
+<span class="sd">    a dead atom as a neighbor.</span>
+
+<span class="sd">    ``adapt_input`` then appends its own padding atom on top of this fixed-shape</span>
+<span class="sd">    batch, so the compiled model input keeps a constant ``(n_cap + 1, …)`` shape</span>
+<span class="sd">    across MD steps. The sentinel is repointed to ``n_cap`` — the index of that</span>
+<span class="sd">    appended pad atom — so aimnet&#39;s ``calc_masks`` masks every dead / sentinel</span>
+<span class="sd">    neighbor slot to zero.</span>
+
+<span class="sd">    :meth:`unpad` is a no-op: the owned-only ``mol_sum`` (masked by ``n_owned``)</span>
+<span class="sd">    drops the dead rows from the energy, and the per-atom force output is sliced</span>
+<span class="sd">    by the framework&#39;s output consolidation. The framework restores the transient</span>
+<span class="sd">    padded storage separately (the padded ``Batch`` is reused in place across MD</span>
+<span class="sd">    steps).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nbmat_key : str, default ``&quot;neighbor_matrix&quot;``</span>
+<span class="sd">        The dense neighbor-matrix node field whose padding sentinel (unused slots,</span>
+<span class="sd">        set to the pre-pad node count) must be repointed to the appended pad-atom</span>
+<span class="sd">        index.</span>
+<span class="sd">    initial_factor, grow_factor, stride</span>
+<span class="sd">        Forwarded to :func:`resolve_cap` for the ``&quot;atoms&quot;`` capacity.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">nbmat_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span>
+        <span class="n">initial_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.15</span><span class="p">,</span>
+        <span class="n">grow_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.30</span><span class="p">,</span>
+        <span class="n">stride</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbmat_key</span> <span class="o">=</span> <span class="n">nbmat_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_factor</span> <span class="o">=</span> <span class="n">initial_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grow_factor</span> <span class="o">=</span> <span class="n">grow_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stride</span> <span class="o">=</span> <span class="n">stride</span>
+
+<div class="viewcode-block" id="DenseBatchPadder.pad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DenseBatchPadder.html#nvalchemi.distributed.DenseBatchPadder.pad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pad</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span> <span class="n">cap_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">cap_atoms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Batch&quot;</span><span class="p">:</span>  <span class="c1"># noqa: ARG002  (halo padder always caps atoms)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the atom cap from ``cap_state`` and pad the halo-padded</span>
+<span class="sd">        ``Batch`` to it. Mutates ``data`` in place and returns it; ``None`` is a</span>
+<span class="sd">        safe no-op.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">n_cap</span> <span class="o">=</span> <span class="n">resolve_cap</span><span class="p">(</span>
+            <span class="n">cap_state</span><span class="p">,</span>
+            <span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span>
+            <span class="n">initial_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_factor</span><span class="p">,</span>
+            <span class="n">grow_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grow_factor</span><span class="p">,</span>
+            <span class="n">stride</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stride</span><span class="p">,</span>
+            <span class="n">strict_gt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_pad_dense_batch_to_cap</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_cap</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbmat_key</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="DenseBatchPadder.unpad">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DenseBatchPadder.html#nvalchemi.distributed.DenseBatchPadder.unpad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unpad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">n_real</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op: the owned-only mol_sum + output consolidation drop dead rows.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pad_dense_batch_to_cap</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span> <span class="n">n_cap</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nbmat_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Batch&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pad a halo-padded dense-nbmat ``Batch`` to ``n_cap`` atoms.</span>
+
+<span class="sd">    Pads every atom-level node field to ``n_cap`` (zero pad rows, joined to the</span>
+<span class="sd">    last graph) and repoints the ``neighbor_matrix`` sentinel (entries</span>
+<span class="sd">    ``&gt;= n_real``) to ``n_cap`` — the index of the pad atom ``adapt_input``</span>
+<span class="sd">    appends — so dead / unused neighbor slots are masked by aimnet&#39;s</span>
+<span class="sd">    ``calc_masks``. Dead rows self-reference ``n_cap`` too. Mutates ``data`` in</span>
+<span class="sd">    place and returns it; raises on cap overflow.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">SegmentedLevelStorage</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">data</span>
+    <span class="n">n_real</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">num_nodes</span>
+    <span class="k">if</span> <span class="n">n_real</span> <span class="o">&gt;=</span> <span class="n">n_cap</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;atom pad cap overflow: n_padded=</span><span class="si">{</span><span class="n">n_real</span><span class="si">}</span><span class="s2"> &gt;= n_cap=</span><span class="si">{</span><span class="n">n_cap</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">pad_n</span> <span class="o">=</span> <span class="n">n_cap</span> <span class="o">-</span> <span class="n">n_real</span>
+    <span class="n">sentinel</span> <span class="o">=</span> <span class="n">n_cap</span>  <span class="c1"># the pad atom adapt_input appends sits at index n_cap</span>
+
+    <span class="n">atoms</span> <span class="o">=</span> <span class="n">pb</span><span class="o">.</span><span class="n">_atoms_group</span>
+    <span class="n">new_atom_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">atoms</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">atoms</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+        <span class="n">trailing</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="n">nbmat_key</span><span class="p">:</span>
+            <span class="c1"># Repoint unused/sentinel slots (&gt;= n_real) to the future pad atom,</span>
+            <span class="c1"># then fill dead rows with pad-atom self-refs. calc_masks masks them</span>
+            <span class="c1"># all to zero, so no real atom sees a dead atom as a neighbor.</span>
+            <span class="n">repointed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">t</span> <span class="o">&gt;=</span> <span class="n">n_real</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">sentinel</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
+            <span class="n">fill</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">new_full</span><span class="p">((</span><span class="n">pad_n</span><span class="p">,)</span> <span class="o">+</span> <span class="n">trailing</span><span class="p">,</span> <span class="n">sentinel</span><span class="p">)</span>
+            <span class="n">new_atom_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">repointed</span><span class="p">,</span> <span class="n">fill</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">new_atom_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">t</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">pad_n</span><span class="p">,)</span> <span class="o">+</span> <span class="n">trailing</span><span class="p">)],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">n_graphs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+    <span class="n">sl</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span><span class="n">n_graphs</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">sl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">sl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">pad_n</span>
+    <span class="n">pb</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s2">&quot;atoms&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">new_atom_data</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">atoms</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">attr_map</span><span class="o">=</span><span class="n">atoms</span><span class="o">.</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="n">segment_lengths</span><span class="o">=</span><span class="n">sl</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

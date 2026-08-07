@@ -1,0 +1,1097 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.distributed_pipeline &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/distributed_pipeline';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.distributed_pipeline</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Domain-decomposed composition of models (``DistributedPipelineModel``).</span>
+
+<span class="sd">Runs a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` (e.g.</span>
+<span class="sd">MACE + DFT-D3, AIMNet2 + PME) under domain decomposition, giving each</span>
+<span class="sd">sub-model its own right-sized halo over one shared owned partition rather</span>
+<span class="sd">than forcing every sub-model onto the largest cutoff&#39;s ghost region.</span>
+
+<span class="sd">The caller builds one ``ShardedBatch`` at the max cutoff (one owned</span>
+<span class="sd">partition); the composite rebuilds each sub-model&#39;s halo over it via</span>
+<span class="sd">``ShardedBatch.invalidate_padded_view`` between models, so the owned set is</span>
+<span class="sd">never recomputed. It mirrors</span>
+<span class="sd">:class:`~nvalchemi.distributed.distributed_model.DistributedModel`&#39;s</span>
+<span class="sd">context-manager + ``__call__(sharded_batch)`` contract, so it is drop-in for</span>
+<span class="sd">``BaseDynamics``.</span>
+
+<span class="sd">Three group kinds:</span>
+
+<span class="sd">* **Direct-force** (``use_autograd=False``): sub-models whose forces are</span>
+<span class="sd">  direct per-atom kernel outputs (DFT-D3, Lennard-Jones, Ewald / PME with</span>
+<span class="sd">  ``hybrid_forces=True``) compose by summing owned-aligned per-atom energies /</span>
+<span class="sd">  forces / stresses — no cross-model autograd.</span>
+
+<span class="sd">* **Shared-autograd** (``use_autograd=True``, e.g. MACE energy → ``-dE/dr``):</span>
+<span class="sd">  the group force is ``-d(sum E_m)/dr`` over the summed energy. With one shared</span>
+<span class="sd">  owned partition and no cross-model coupling it decomposes exactly into</span>
+<span class="sd">  ``sum_m (-dE_m/dr_owned)``, so each sub-model runs its own autograd forward</span>
+<span class="sd">  (forces enabled) and the owned-aligned results are summed — identical to a</span>
+<span class="sd">  single shared ``positions`` leaf with one ``backward()``, while reusing each</span>
+<span class="sd">  model&#39;s eager / compile paths.</span>
+
+<span class="sd">* **Wired cross-model fields**: a consumer&#39;s energy depends on a per-atom field</span>
+<span class="sd">  the producer makes (e.g. PME&#39;s energy on AIMNet2&#39;s ``charges``), so the two</span>
+<span class="sd">  models share one autograd graph and can&#39;t run independently. See</span>
+<span class="sd">  :meth:`_run_wired_autograd_group`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainConfig</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.sharded_batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardedBatch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineModelWrapper</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DistributedPipelineModel&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="DistributedPipelineModel">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DistributedPipelineModel.html#nvalchemi.distributed.DistributedPipelineModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributedPipelineModel</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Domain decomposition of a composed (pipeline) model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pipeline : PipelineModelWrapper</span>
+<span class="sd">        The composed model. Its groups / steps supply the ordered sub-models;</span>
+<span class="sd">        each sub-model&#39;s ``model_config.neighbor_config.cutoff`` sets that</span>
+<span class="sd">        model&#39;s ghost width.</span>
+<span class="sd">    domain_config : DomainConfig</span>
+<span class="sd">        Base config carrying the mesh + skin. Per-model configs are derived</span>
+<span class="sd">        from it by overriding ``cutoff`` with each sub-model&#39;s cutoff. The</span>
+<span class="sd">        caller should build the shared :class:`ShardedBatch` at (at least) the</span>
+<span class="sd">        **max** sub-model cutoff so the one owned partition&#39;s cells hold every</span>
+<span class="sd">        model&#39;s ghost layer.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The composite does not build the ``ShardedBatch`` — the caller does (once,</span>
+<span class="sd">    at the max cutoff), exactly as for a single :class:`DistributedModel`. The</span>
+<span class="sd">    composite only orchestrates per-model halos over it and sums the results.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pipeline</span><span class="p">:</span> <span class="s2">&quot;PipelineModelWrapper&quot;</span><span class="p">,</span>
+        <span class="n">domain_config</span><span class="p">:</span> <span class="s2">&quot;DomainConfig&quot;</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="nb">compile</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">compile_kwargs</span><span class="p">:</span> <span class="s2">&quot;dict | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineModelWrapper</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="n">PipelineModelWrapper</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;DistributedPipelineModel expects a PipelineModelWrapper; for a &quot;</span>
+                <span class="s2">&quot;single model use DistributedModel.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span> <span class="o">=</span> <span class="n">pipeline</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">domain_config</span> <span class="o">=</span> <span class="n">domain_config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">additive_keys</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">additive_keys</span>
+        <span class="c1"># Only sub-models with an autograd-force compiled path (MACE, AIMNet2)</span>
+        <span class="c1"># compile; kernel-force models (DFTD3 / PME / Ewald / LJ) and the</span>
+        <span class="c1"># composite glue always run eager.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compile</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">compile</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compile_kwargs</span> <span class="o">=</span> <span class="n">compile_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># Per-group plans: &quot;per_step&quot; (no cross-step field dependency — run each</span>
+        <span class="c1"># sub-model independently and sum) or &quot;wired&quot; (a later step consumes a</span>
+        <span class="c1"># per-atom field an earlier step produces, e.g. PME needs AIMNet2&#39;s</span>
+        <span class="c1"># charges — one coupled autograd graph). Per-step plans hold persistent</span>
+        <span class="c1"># DistributedModel instances so compiled graphs survive across MD steps.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_group_plans</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_group</span><span class="p">(</span><span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">groups</span>
+        <span class="p">]</span>
+
+    <span class="c1"># Fields always present on a Batch, so never a cross-step wired dependency.</span>
+    <span class="n">_BATCH_FIELDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;positions&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_masses&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;cell&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;pbc&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_model_cfg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DomainConfig&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Per-model :class:`DomainConfig` (this sub-model&#39;s ghost width).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">domain_config</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
+            <span class="n">update</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="o">.</span><span class="n">cutoff</span><span class="p">}</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compile_capable</span><span class="p">(</span><span class="n">step</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether a sub-model declares an autograd-force compiled path.</span>
+
+<span class="sd">        Compile capability is a model property (strategy-agnostic), so the</span>
+<span class="sd">        default (halo) spec is sufficient here.&quot;&quot;&quot;</span>
+        <span class="n">_ds</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;distribution_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">_ds</span><span class="p">()</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">_ds</span><span class="p">)</span> <span class="k">else</span> <span class="n">_ds</span>
+        <span class="n">cp</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="s2">&quot;compile&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">cp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cp</span><span class="p">,</span> <span class="s2">&quot;forces_via_autograd&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_dist_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DomainConfig&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a (possibly compiled) persistent :class:`DistributedModel`.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.distributed_model</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+            <span class="n">DistributedModel</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">compiled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compile</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compile_capable</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DistributedModel</span><span class="p">(</span>
+            <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">cfg</span><span class="p">,</span>
+            <span class="nb">compile</span><span class="o">=</span><span class="n">compiled</span><span class="p">,</span>
+            <span class="n">compile_kwargs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_compile_kwargs</span> <span class="k">if</span> <span class="n">compiled</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">),</span> <span class="n">compiled</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plan_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Classify a pipeline group as per-step or wired.</span>
+
+<span class="sd">        A *wired* group has a step whose ``required_inputs`` (excluding always-</span>
+<span class="sd">        present batch fields) is produced — after any ``PipelineStep.wire``</span>
+<span class="sd">        rename — by an earlier step in the same group. Only one such</span>
+<span class="sd">        producer-&gt;consumer field over a two-step group is supported; anything</span>
+<span class="sd">        richer raises ``NotImplementedError``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">produced</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">wired</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">:</span>
+            <span class="n">needed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_BATCH_FIELDS</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">needed</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">produced</span><span class="p">:</span>
+                    <span class="n">p_step</span><span class="p">,</span> <span class="n">p_out</span> <span class="o">=</span> <span class="n">produced</span><span class="p">[</span><span class="n">f</span><span class="p">]</span>
+                    <span class="n">wired</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">p_step</span><span class="p">,</span> <span class="n">p_out</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">f</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+                <span class="n">produced</span><span class="p">[</span><span class="n">step</span><span class="o">.</span><span class="n">wire</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">out_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">out_key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">wired</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">:</span>
+                <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_cfg</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+                <span class="n">dm</span><span class="p">,</span> <span class="n">compiled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_dist_model</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+                <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;step&quot;</span><span class="p">:</span> <span class="n">s</span><span class="p">,</span>
+                        <span class="s2">&quot;use_autograd&quot;</span><span class="p">:</span> <span class="n">group</span><span class="o">.</span><span class="n">use_autograd</span><span class="p">,</span>
+                        <span class="s2">&quot;dm&quot;</span><span class="p">:</span> <span class="n">dm</span><span class="p">,</span>
+                        <span class="s2">&quot;compiled&quot;</span><span class="p">:</span> <span class="n">compiled</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;per_step&quot;</span><span class="p">,</span> <span class="s2">&quot;steps&quot;</span><span class="p">:</span> <span class="n">steps</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">group</span><span class="o">.</span><span class="n">use_autograd</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;DistributedPipelineModel supports wired cross-model fields only &quot;</span>
+                <span class="s2">&quot;in shared-autograd groups (use_autograd=True); the charge &quot;</span>
+                <span class="s2">&quot;pathway (e.g. AIMNet2 -&gt; PME) needs the combined-energy autograd.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">wired</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;DistributedPipelineModel C3 supports exactly one producer-&gt;&quot;</span>
+                <span class="s2">&quot;consumer wired field over a two-step group; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">wired</span><span class="p">)</span><span class="si">}</span><span class="s2"> wired field(s) over </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">)</span><span class="si">}</span><span class="s2"> steps.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">producer</span><span class="p">,</span> <span class="n">out_key</span><span class="p">,</span> <span class="n">consumer</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">wired</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># Pinned so the leaf survives each model&#39;s own halo refresh. The wired</span>
+        <span class="c1"># field and ``cell`` are excluded: the group differentiates the first</span>
+        <span class="c1"># explicitly, and the strain leaves carry the second.</span>
+        <span class="n">grad_fields</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="p">(</span><span class="n">producer</span><span class="p">,</span> <span class="n">consumer</span><span class="p">):</span>
+            <span class="n">mc</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span>
+            <span class="n">grad_fields</span> <span class="o">|=</span> <span class="nb">set</span><span class="p">(</span><span class="n">mc</span><span class="o">.</span><span class="n">autograd_inputs</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">mc</span><span class="o">.</span><span class="n">gradient_keys</span><span class="p">)</span>
+        <span class="n">grad_fields</span> <span class="o">-=</span> <span class="p">{</span><span class="n">field</span><span class="p">,</span> <span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">}</span>
+        <span class="c1"># Built once and retained, like the per-step path: a model rebuilt each</span>
+        <span class="c1"># forward loses its grown shape caps and its compiled-region cache, so a</span>
+        <span class="c1"># compiled wired run would recompile every step.</span>
+        <span class="n">producer_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_cfg</span><span class="p">(</span><span class="n">producer</span><span class="p">)</span>
+        <span class="n">consumer_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_cfg</span><span class="p">(</span><span class="n">consumer</span><span class="p">)</span>
+        <span class="n">producer_dm</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_dist_model</span><span class="p">(</span><span class="n">producer</span><span class="p">,</span> <span class="n">producer_cfg</span><span class="p">)</span>
+        <span class="n">consumer_dm</span><span class="p">,</span> <span class="n">consumer_compiled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_dist_model</span><span class="p">(</span><span class="n">consumer</span><span class="p">,</span> <span class="n">consumer_cfg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;wired&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;grad_fields&quot;</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">grad_fields</span><span class="p">),</span>
+            <span class="s2">&quot;producer&quot;</span><span class="p">:</span> <span class="n">producer</span><span class="p">,</span>
+            <span class="s2">&quot;consumer&quot;</span><span class="p">:</span> <span class="n">consumer</span><span class="p">,</span>
+            <span class="s2">&quot;producer_out_key&quot;</span><span class="p">:</span> <span class="n">out_key</span><span class="p">,</span>
+            <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="n">field</span><span class="p">,</span>
+            <span class="s2">&quot;producer_cfg&quot;</span><span class="p">:</span> <span class="n">producer_cfg</span><span class="p">,</span>
+            <span class="s2">&quot;consumer_cfg&quot;</span><span class="p">:</span> <span class="n">consumer_cfg</span><span class="p">,</span>
+            <span class="s2">&quot;producer_dm&quot;</span><span class="p">:</span> <span class="n">producer_dm</span><span class="p">,</span>
+            <span class="s2">&quot;consumer_dm&quot;</span><span class="p">:</span> <span class="n">consumer_dm</span><span class="p">,</span>
+            <span class="s2">&quot;consumer_compiled&quot;</span><span class="p">:</span> <span class="n">consumer_compiled</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Context-manager contract (mirrors DistributedModel for drop-in use)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DistributedPipelineModel&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">_exc</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="DistributedPipelineModel.close">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DistributedPipelineModel.html#nvalchemi.distributed.DistributedPipelineModel.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tear down the persistent per-model :class:`DistributedModel` instances</span>
+<span class="sd">        (restoring their adapters / compiled state). Idempotent.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">plan</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_group_plans</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;steps&quot;</span><span class="p">,</span> <span class="p">()):</span>
+                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;dm&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;producer_dm&quot;</span><span class="p">,</span> <span class="s2">&quot;consumer_dm&quot;</span><span class="p">):</span>
+                <span class="n">dm</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">dm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">dm</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># noqa: S110</span>
+            <span class="k">pass</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Forward</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sharded</span><span class="p">:</span> <span class="s2">&quot;ShardedBatch&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run each sub-model over the shared owned partition; sum the results.</span>
+
+<span class="sd">        For every sub-model: drop the previous model&#39;s ghost layer</span>
+<span class="sd">        (``invalidate_padded_view``) so the halo is rebuilt at *this* model&#39;s</span>
+<span class="sd">        ghost width, run it through a :class:`DistributedModel`, and accumulate</span>
+<span class="sd">        its owned-aligned outputs. All sub-models see the same owned atoms, so</span>
+<span class="sd">        per-atom forces line up by owned index and per-system energies /</span>
+<span class="sd">        stresses add directly.</span>
+
+<span class="sd">        For a **shared-autograd** sub-model the per-model ``active_outputs`` is</span>
+<span class="sd">        temporarily widened to include the group&#39;s derivative keys (``forces`` /</span>
+<span class="sd">        ``stress``) so the sub-model&#39;s own forward emits them via autograd;</span>
+<span class="sd">        summing those is exactly the group&#39;s ``-d(sum E_m)/dr``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sharded : ShardedBatch</span>
+<span class="sd">            The shared partition, built once by the caller at the max cutoff.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            Summed outputs (``energy`` / ``forces`` / ``stress`` over</span>
+<span class="sd">            ``additive_keys``); any non-additive key takes the first</span>
+<span class="sd">            sub-model that produced it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">per_model</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">plan</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_group_plans</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;kind&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;wired&quot;</span><span class="p">:</span>
+                <span class="n">per_model</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_wired_autograd_group</span><span class="p">(</span><span class="n">sharded</span><span class="p">,</span> <span class="n">plan</span><span class="p">))</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;steps&quot;</span><span class="p">]:</span>
+                <span class="n">step</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;step&quot;</span><span class="p">]</span>
+                <span class="c1"># Each sub-model rebuilds its own halo over the shared owned set.</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">invalidate_padded_view</span><span class="p">()</span>
+                <span class="n">mc</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span>
+                <span class="n">saved_active</span> <span class="o">=</span> <span class="n">mc</span><span class="o">.</span><span class="n">active_outputs</span>
+                <span class="c1"># A compiled sub-model already emits forces via its compiled</span>
+                <span class="c1"># energy-autograd path, so only widen active_outputs when eager.</span>
+                <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;use_autograd&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;compiled&quot;</span><span class="p">]:</span>
+                    <span class="n">mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_autograd_active_outputs</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">per_model</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;dm&quot;</span><span class="p">](</span><span class="n">sharded</span><span class="p">))</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="n">mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="n">saved_active</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_combine</span><span class="p">(</span><span class="n">per_model</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run_wired_autograd_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sharded</span><span class="p">:</span> <span class="s2">&quot;ShardedBatch&quot;</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run a wired producer-&gt;consumer shared-autograd group.</span>
+
+<span class="sd">        The consumer&#39;s energy depends on a per-atom field the producer computes</span>
+<span class="sd">        (e.g. PME&#39;s energy on AIMNet2&#39;s ``charges``), so the two models form one</span>
+<span class="sd">        coupled autograd graph. The total force is::</span>
+
+<span class="sd">            F = -dE_prod/dr               (producer&#39;s own energy)</span>
+<span class="sd">                - (dE_cons/dfield)(dfield/dr)   (the cross-model chain)</span>
+<span class="sd">                - dE_cons/dr|_field        (consumer&#39;s own force, at fixed field)</span>
+
+<span class="sd">        Realized as: run the producer for energy + field only (no forces, so its</span>
+<span class="sd">        graph is retained), with grad-bearing positions via a</span>
+<span class="sd">        ``compute_forces=True`` halo. Run the consumer with its ghost field</span>
+<span class="sd">        gathered from the producer&#39;s owned values through the autograd-aware</span>
+<span class="sd">        ``wired_fields`` exchange, taking its own forces and the field gradient</span>
+<span class="sd">        ``dE_cons/dfield`` on the producer&#39;s owned atoms. One backward</span>
+<span class="sd">        through the producer over ``E_prod + &lt;field, dE_cons/dfield&gt;`` yields the</span>
+<span class="sd">        first two force terms; that gradient is sent back to the owning ranks and</span>
+<span class="sd">        the per-rank replication from the two all-reduced energies is divided</span>
+<span class="sd">        out; the consumer&#39;s owned kernel forces are then added.</span>
+
+<span class="sd">        Stress follows the same split. A symmetric per-system strain leaf pinned</span>
+<span class="sd">        on the ``ShardedBatch`` deforms the producer&#39;s padded geometry, so the</span>
+<span class="sd">        same surrogate backward yields ``dE_prod/d eps`` and the cross-model</span>
+<span class="sd">        chain ``(dE_cons/dfield)(dfield/d eps)``. The consumer&#39;s remaining</span>
+<span class="sd">        ``dE_cons/d eps`` at fixed field is its own stress output, consolidated</span>
+<span class="sd">        by its declared output rule.</span>
+
+<span class="sd">        Sub-models therefore emit their own derivatives here, where the</span>
+<span class="sd">        single-process pipeline would strip them and take one outer backward.</span>
+<span class="sd">        That is the same trade the non-wired shared-autograd group already makes</span>
+<span class="sd">        (see the module docstring): each model&#39;s validated eager / compile path</span>
+<span class="sd">        produces its owned-aligned share, and the composite adds only the one</span>
+<span class="sd">        term no single model can — the cross-model chain.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_local</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.particle_halo</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+            <span class="n">halo_exchange</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">producer</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;producer&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">consumer</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;consumer&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">out_key</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;producer_out_key&quot;</span><span class="p">]</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;field&quot;</span><span class="p">]</span>
+        <span class="n">want_stress</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+
+        <span class="n">prod_mc</span> <span class="o">=</span> <span class="n">producer</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">saved_prod</span> <span class="o">=</span> <span class="n">prod_mc</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="n">prod_mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="n">out_key</span><span class="p">}</span>
+        <span class="n">strain</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">strain_cell</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">pos_leaf_marked</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sharded</span><span class="o">.</span><span class="n">invalidate_padded_view</span><span class="p">()</span>
+            <span class="n">pdm</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;producer_dm&quot;</span><span class="p">]</span>
+            <span class="c1"># Build the producer halo with grad-bearing positions so the</span>
+            <span class="c1"># energy / field graph reaches them, even though the producer</span>
+            <span class="c1"># emits no forces of its own.</span>
+            <span class="n">pdm</span><span class="o">.</span><span class="n">_ensure_initialized</span><span class="p">(</span><span class="n">sharded</span><span class="p">)</span>
+            <span class="c1"># Differentiate the owned positions, not the padded view: a</span>
+            <span class="c1"># halo refresh mints a fresh leaf and would orphan a padded one.</span>
+            <span class="n">leaves</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;grad_fields&quot;</span><span class="p">]:</span>
+                <span class="n">src</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sharded</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">src</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is differentiated by a model in this wired &quot;</span>
+                        <span class="s2">&quot;group but is not a per-atom field on the batch, so no &quot;</span>
+                        <span class="s2">&quot;autograd leaf can be pinned for it.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">leaves</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">to_local</span><span class="p">(</span><span class="n">src</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">pos_leaf</span> <span class="o">=</span> <span class="n">leaves</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span>
+            <span class="n">sharded</span><span class="o">.</span><span class="n">grad_fields</span> <span class="o">=</span> <span class="n">leaves</span>
+            <span class="n">pos_leaf_marked</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">want_stress</span><span class="p">:</span>
+                <span class="c1"># Two leaves so the position and cell halves of the virial</span>
+                <span class="c1"># can be read separately; both are per-rank partials.</span>
+                <span class="n">_shape</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">sharded</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">),</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+                <span class="n">_kw</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">pos_leaf</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">pos_leaf</span><span class="o">.</span><span class="n">device</span><span class="p">}</span>
+                <span class="n">strain</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">_shape</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">_kw</span><span class="p">)</span>
+                <span class="n">strain_cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">_shape</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">_kw</span><span class="p">)</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">grad_strain</span> <span class="o">=</span> <span class="p">(</span><span class="n">strain</span><span class="p">,</span> <span class="n">strain_cell</span><span class="p">)</span>
+            <span class="n">halo_exchange</span><span class="p">(</span><span class="n">sharded</span><span class="p">,</span> <span class="n">pdm</span><span class="o">.</span><span class="n">_halo_config</span><span class="p">,</span> <span class="n">compute_forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">prod_out</span> <span class="o">=</span> <span class="n">pdm</span><span class="p">(</span><span class="n">sharded</span><span class="p">)</span>
+            <span class="n">e_prod</span> <span class="o">=</span> <span class="n">prod_out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+            <span class="n">owned_field</span> <span class="o">=</span> <span class="n">prod_out</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span>
+            <span class="n">prod_pos_leaf</span> <span class="o">=</span> <span class="n">pos_leaf</span>
+            <span class="n">prod_halo_cfg</span> <span class="o">=</span> <span class="n">pdm</span><span class="o">.</span><span class="n">_halo_config</span>
+            <span class="n">world_size</span> <span class="o">=</span> <span class="n">pdm</span><span class="o">.</span><span class="n">_world_size</span> <span class="ow">or</span> <span class="mi">1</span>
+
+            <span class="c1"># Consumer: direct kernel force + energy differentiable in the</span>
+            <span class="c1"># wired field, whose ghost values are gathered (autograd-aware)</span>
+            <span class="c1"># from the producer&#39;s owned values.</span>
+            <span class="n">sharded</span><span class="o">.</span><span class="n">invalidate_padded_view</span><span class="p">()</span>
+            <span class="n">cons_mc</span> <span class="o">=</span> <span class="n">consumer</span><span class="o">.</span><span class="n">model_config</span>
+            <span class="n">saved_cons</span> <span class="o">=</span> <span class="n">cons_mc</span><span class="o">.</span><span class="n">active_outputs</span>
+            <span class="c1"># The consumer&#39;s own strain-autograd virial is the fixed-field</span>
+            <span class="c1"># term this split needs, already consolidated by its output rule.</span>
+            <span class="k">if</span> <span class="n">want_stress</span> <span class="ow">and</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cons_mc</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">consumer</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> consumes the wired field &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&#39; but produces no stress, so the group&#39;s virial &quot;</span>
+                    <span class="s2">&quot;would silently omit its contribution. Drop &#39;stress&#39; from &quot;</span>
+                    <span class="s2">&quot;the pipeline&#39;s active_outputs, or use a consumer that &quot;</span>
+                    <span class="s2">&quot;emits it.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">cons_mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span> <span class="k">if</span> <span class="n">want_stress</span> <span class="k">else</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}</span>
+            <span class="p">)</span>
+            <span class="n">cons_stress</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># ``extra_grad_inputs`` keeps the graph alive for this</span>
+                <span class="c1"># group&#39;s backward.</span>
+                <span class="n">cdm</span> <span class="o">=</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;consumer_dm&quot;</span><span class="p">]</span>
+                <span class="n">cdm</span><span class="o">.</span><span class="n">_ensure_initialized</span><span class="p">(</span><span class="n">sharded</span><span class="p">)</span>
+                <span class="c1"># Only the producer&#39;s leaf stays pinned; it carries the chain.</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">grad_strain</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">halo_exchange</span><span class="p">(</span><span class="n">sharded</span><span class="p">,</span> <span class="n">cdm</span><span class="o">.</span><span class="n">_halo_config</span><span class="p">,</span> <span class="n">compute_forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">cons_out</span> <span class="o">=</span> <span class="n">cdm</span><span class="p">(</span><span class="n">sharded</span><span class="p">,</span> <span class="n">wired_fields</span><span class="o">=</span><span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="n">owned_field</span><span class="p">})</span>
+                <span class="n">e_cons</span> <span class="o">=</span> <span class="n">cons_out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+                <span class="n">f_cons_direct</span> <span class="o">=</span> <span class="n">cons_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+                <span class="n">cons_stress</span> <span class="o">=</span> <span class="n">cons_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+                <span class="c1"># Either model may read a pinned field, so sum both backwards.</span>
+                <span class="n">_extra</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;grad_fields&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="s2">&quot;positions&quot;</span><span class="p">]</span>
+                <span class="n">_fw</span> <span class="o">=</span> <span class="n">cons_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_extra_grads&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">_fw</span><span class="p">:</span>
+                    <span class="c1"># Reuse the framework&#39;s dE/dfield: a second backward</span>
+                    <span class="c1"># through a compiled graph returns a wrong chain term.</span>
+                    <span class="n">de_dfield</span> <span class="o">=</span> <span class="n">_fw</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">cons_extra_grads</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="k">if</span> <span class="n">_extra</span><span class="p">:</span>
+                        <span class="n">_extra_grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
+                            <span class="p">[</span><span class="n">e_cons</span><span class="o">.</span><span class="n">sum</span><span class="p">()],</span>
+                            <span class="p">[</span><span class="n">leaves</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">_extra</span><span class="p">],</span>
+                            <span class="n">retain_graph</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                            <span class="n">allow_unused</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="n">cons_extra_grads</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">_extra</span><span class="p">,</span> <span class="n">_extra_grads</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_cg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
+                        <span class="p">[</span><span class="n">e_cons</span><span class="o">.</span><span class="n">sum</span><span class="p">()],</span>
+                        <span class="p">[</span><span class="n">owned_field</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">leaves</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">_extra</span><span class="p">],</span>
+                        <span class="n">retain_graph</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">allow_unused</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">de_dfield</span> <span class="o">=</span> <span class="n">_cg</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">cons_extra_grads</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">_extra</span><span class="p">,</span> <span class="n">_cg</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">cons_mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="n">saved_cons</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">grad_strain</span> <span class="o">=</span> <span class="p">(</span><span class="n">strain</span><span class="p">,</span> <span class="n">strain_cell</span><span class="p">)</span> <span class="k">if</span> <span class="n">want_stress</span> <span class="k">else</span> <span class="kc">None</span>
+
+            <span class="c1"># One backward through the producer for -dE_prod/dr and the chain</span>
+            <span class="c1"># -(dE_cons/dfield)(dfield/dr) together.</span>
+            <span class="n">extra_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;grad_fields&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="s2">&quot;positions&quot;</span><span class="p">]</span>
+            <span class="n">grad_inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">prod_pos_leaf</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">strain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">grad_inputs</span> <span class="o">+=</span> <span class="p">[</span><span class="n">strain</span><span class="p">,</span> <span class="n">strain_cell</span><span class="p">]</span>
+            <span class="n">grad_inputs</span> <span class="o">+=</span> <span class="p">[</span><span class="n">leaves</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">extra_names</span><span class="p">]</span>
+            <span class="n">surrogate</span> <span class="o">=</span> <span class="n">e_prod</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">de_dfield</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">surrogate</span> <span class="o">=</span> <span class="n">surrogate</span> <span class="o">+</span> <span class="p">(</span><span class="n">owned_field</span> <span class="o">*</span> <span class="n">de_dfield</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">surrogate</span><span class="p">],</span>
+                <span class="n">grad_inputs</span><span class="p">,</span>
+                <span class="n">retain_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">allow_unused</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">g_pos</span> <span class="o">=</span> <span class="n">grads</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">g_strain</span> <span class="o">=</span> <span class="n">grads</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">strain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">g_strain_cell</span> <span class="o">=</span> <span class="n">grads</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="n">strain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="c1"># The leaf is the owned tensor, so ghost gradients are already routed.</span>
+            <span class="n">n_core</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">strain</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">3</span>
+            <span class="n">extra_grads</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">extra_names</span><span class="p">):</span>
+                <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">grads</span><span class="p">[</span><span class="n">n_core</span> <span class="o">+</span> <span class="n">i</span><span class="p">],</span> <span class="n">cons_extra_grads</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span>
+                <span class="n">live</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span> <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+                <span class="n">extra_grads</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">live</span> <span class="k">else</span> <span class="nb">sum</span><span class="p">(</span><span class="n">live</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">live</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">prod_mc</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="n">saved_prod</span>
+            <span class="k">if</span> <span class="n">pos_leaf_marked</span><span class="p">:</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">grad_fields</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">grad_strain</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">forces</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">g_pos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Taken against the owned leaf, so the halo reverse has already run.</span>
+            <span class="n">forces</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">to_local</span><span class="p">(</span><span class="n">g_pos</span><span class="p">)</span> <span class="o">/</span> <span class="n">world_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">f_cons_direct</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">forces</span> <span class="o">=</span> <span class="n">f_cons_direct</span> <span class="k">if</span> <span class="n">forces</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">forces</span> <span class="o">+</span> <span class="n">f_cons_direct</span>
+
+        <span class="c1"># The producer&#39;s leaf carries its own virial and the cross-model chain,</span>
+        <span class="c1"># both per-rank partials of the replicated group energy: divide out that</span>
+        <span class="c1"># replication, then sum across ranks. Every rank walks the term whether</span>
+        <span class="c1"># or not its own gradient came back populated, because the reduction is</span>
+        <span class="c1"># a collective. The consumer&#39;s virial arrives already consolidated.</span>
+        <span class="c1">#</span>
+        <span class="c1"># A strain leaf of ours for the consumer looks symmetric but is not.</span>
+        <span class="c1"># Measured against a single-process reference, its position terms</span>
+        <span class="c1"># consolidate at 1/world_size but PME&#39;s cell term does not, and no single</span>
+        <span class="c1"># coefficient fits: the cell reaches PME&#39;s energy both through the</span>
+        <span class="c1"># all-reduced charge mesh and directly through the reciprocal kernel each</span>
+        <span class="c1"># rank evaluates on that mesh, and those two routes do not share a</span>
+        <span class="c1"># cross-rank reduction.</span>
+        <span class="n">stress</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">to_local</span><span class="p">(</span><span class="n">sharded</span><span class="o">.</span><span class="n">cell</span><span class="p">))</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">want_stress</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.gather_primitives</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+                <span class="n">all_reduce_sum_over_mesh</span> <span class="k">as</span> <span class="n">_all_reduce_sum_over_mesh</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">sharded</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">volume</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">volume</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="p">(</span><span class="n">g_strain</span><span class="p">,</span> <span class="n">g_strain_cell</span><span class="p">):</span>
+                <span class="n">local</span> <span class="o">=</span> <span class="n">zeros</span> <span class="k">if</span> <span class="n">g</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">to_local</span><span class="p">(</span><span class="n">g</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+                <span class="n">term</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">_all_reduce_sum_over_mesh</span><span class="p">(</span><span class="n">local</span> <span class="o">/</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">prod_halo_cfg</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+                    <span class="o">/</span> <span class="n">volume</span>
+                <span class="p">)</span>
+                <span class="n">stress</span> <span class="o">=</span> <span class="n">term</span> <span class="k">if</span> <span class="n">stress</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">stress</span> <span class="o">+</span> <span class="n">term</span>
+            <span class="k">if</span> <span class="n">cons_stress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_cs</span> <span class="o">=</span> <span class="n">to_local</span><span class="p">(</span><span class="n">cons_stress</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+                <span class="n">stress</span> <span class="o">=</span> <span class="n">_cs</span> <span class="k">if</span> <span class="n">stress</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">stress</span> <span class="o">+</span> <span class="n">_cs</span>
+
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">e_prod</span> <span class="o">+</span> <span class="n">e_cons</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">extra_grads</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">g</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># d(group energy)/d(field), owned-aligned. The world-size divisor</span>
+                <span class="c1"># is the same replicated-energy factor the forces carry.</span>
+                <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;d_energy_d_</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">to_local</span><span class="p">(</span><span class="n">g</span><span class="p">)</span> <span class="o">/</span> <span class="n">world_size</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">forces</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">stress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stress</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_autograd_active_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Widen a shared-autograd sub-model&#39;s ``active_outputs`` to emit the</span>
+<span class="sd">        group&#39;s derivatives via its own autograd.</span>
+
+<span class="sd">        Where the single-process pipeline strips ``forces`` / ``stress`` from a</span>
+<span class="sd">        sub-model and computes them once from the summed energy, the distributed</span>
+<span class="sd">        composite instead has each sub-model produce them, so the owned-aligned</span>
+<span class="sd">        per-model forces sum to the group force. Only keys the pipeline produces</span>
+<span class="sd">        *and* the sub-model can emit are added; ``energy`` is always kept.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">)</span> <span class="o">|</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">}</span>
+        <span class="n">wanted</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">)</span>
+        <span class="n">producible</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">base</span> <span class="o">|</span> <span class="p">(</span><span class="n">wanted</span> <span class="o">&amp;</span> <span class="n">producible</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_combine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">per_model</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sum owned-aligned additive outputs across sub-models.&quot;&quot;&quot;</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">seen</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">per_model</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                    <span class="n">seen</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+            <span class="n">vals</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">per_model</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">r</span> <span class="ow">and</span> <span class="n">r</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">vals</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">additive_keys</span><span class="p">:</span>
+                <span class="n">acc</span> <span class="o">=</span> <span class="n">vals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">vals</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                    <span class="n">acc</span> <span class="o">=</span> <span class="n">acc</span> <span class="o">+</span> <span class="n">v</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">acc</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">vals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.resolve\_global\_rank
+===========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: resolve_global_rank

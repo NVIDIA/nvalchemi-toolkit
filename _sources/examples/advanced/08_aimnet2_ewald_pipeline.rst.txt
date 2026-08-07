@@ -21,7 +21,7 @@
 AIMNet2 + Ewald Pipeline Geometry Optimization
 ===============================================
 
-This example demonstrates the **autograd pipeline** — the most powerful
+This example demonstrates the **autograd pipeline** — a powerful
 composition pattern in nvalchemi — by combining a machine-learning
 potential (AIMNet2) with a long-range electrostatics model (Ewald
 summation) for geometry optimization of water clusters.
@@ -240,8 +240,8 @@ Model setup: AIMNet2 + Ewald pipeline
                 use_autograd=True,
             ),
         ]
-    )
-    pipe.set_config("active_outputs", {"energy", "forces", "stress", "charge"})
+    ).eval()
+    pipe.set_config("active_outputs", {"energy", "forces", "stress", "charges"})
     print(f"\nPipeline: {[type(m).__name__ for m in pipe._models]}")
     print(f"  Output Capabilities: {sorted(pipe.model_config.outputs)}")
     print(f"  Active Outputs: {sorted(pipe.model_config.active_outputs)}")
@@ -259,7 +259,7 @@ Model setup: AIMNet2 + Ewald pipeline
 
     Pipeline: ['AIMNet2Wrapper', 'EwaldModelWrapper']
       Output Capabilities: ['charges', 'energy', 'forces', 'stress']
-      Active Outputs: ['charge', 'energy', 'forces', 'stress']
+      Active Outputs: ['charges', 'energy', 'forces', 'stress']
 
 
 
@@ -388,68 +388,68 @@ Results
 
       step     energy (eV)     fmax (eV/Å)  system
     --------------------------------------------------------
-         0     -10400.6104         23.4682       0
+         0     -10400.6123         23.4682       0
          0     -10402.3193         16.8440       1
-         0     -10402.9629         12.5703       2
+         0     -10402.9639         12.5703       2
          0     -10402.0645         16.2362       3
          0     -10403.9424          9.4354       4
          0     -10403.2383         10.8009       5
-         0     -10403.2236         17.4852       6
+         0     -10403.2246         17.4852       6
          0     -10403.6875          8.3472       7
-         0     -10404.3193          6.4198       8
-         0     -10402.1523         16.6543       9
-        20     -10404.8916          2.2696       0
-        20     -10404.8682          1.9737       1
-        20     -10404.9785          1.4736       2
+         0     -10404.3203          6.4198       8
+         0     -10402.1514         16.6543       9
+        20     -10404.8906          2.2696       0
+        20     -10404.8672          1.9737       1
+        20     -10404.9775          1.4736       2
         20     -10404.9424          1.8235       3
         20     -10405.0654          1.0731       4
-        20     -10405.0088          1.4613       5
-        20     -10405.0361          1.2685       6
-        20     -10405.0273          0.8512       7
-        20     -10405.0430          0.7171       8
+        20     -10405.0098          1.4613       5
+        20     -10405.0371          1.2685       6
+        20     -10405.0264          0.8512       7
+        20     -10405.0439          0.7171       8
         20     -10404.9512          1.9664       9
         40     -10405.0215          1.2345       0
-        40     -10404.9521          0.9435       1
-        40     -10405.0273          1.0000       2
+        40     -10404.9531          0.9435       1
+        40     -10405.0283          1.0000       2
         40     -10405.0322          1.0886       3
-        40     -10405.0840          0.5507       4
+        40     -10405.0830          0.5507       4
         40     -10405.0518          1.0469       5
-        40     -10405.0723          0.5793       6
+        40     -10405.0732          0.5793       6
         40     -10405.0439          0.7121       7
-        40     -10405.0645          0.5764       8
-        40     -10405.0205          1.0538       9
-        60     -10405.0928          0.5273       0
+        40     -10405.0625          0.5764       8
+        40     -10405.0215          1.0538       9
+        60     -10405.0918          0.5273       0
         60     -10405.0469          0.6912       1
-        60     -10405.0801          0.4905       2
+        60     -10405.0791          0.4905       2
         60     -10405.0898          0.5114       3
-        60     -10405.1025          0.2559       4
-        60     -10405.0908          0.4586       5
-        60     -10405.0996          0.3485       6
-        60     -10405.0791          0.5254       7
-        60     -10405.0908          0.3445       8
+        60     -10405.1035          0.2559       4
+        60     -10405.0889          0.4586       5
+        60     -10405.1016          0.3485       6
+        60     -10405.0801          0.5254       7
+        60     -10405.0918          0.3445       8
         60     -10405.0801          0.5271       9
-        80     -10405.1123          0.1125       0
+        80     -10405.1113          0.1125       0
         80     -10405.1064          0.2462       1
-        80     -10405.1104          0.1464       2
-        80     -10405.1113          0.1388       3
-        80     -10405.1123          0.0549       4
-        80     -10405.1113          0.1089       5
-        80     -10405.1123          0.0560       6
-        80     -10405.1084          0.2120       7
+        80     -10405.1094          0.1464       2
+        80     -10405.1104          0.1388       3
+        80     -10405.1143          0.0549       4
+        80     -10405.1104          0.1089       5
+        80     -10405.1133          0.0560       6
+        80     -10405.1064          0.2120       7
         80     -10405.1104          0.1245       8
-        80     -10405.1104          0.1432       9
+        80     -10405.1113          0.1432       9
 
     Final per-system results (threshold = 0.05 eV/Å):
       Cluster 0: energy = -10405.1123 eV, fmax = 0.0490 eV/Å  [CONVERGED]
       Cluster 1: energy = -10405.1133 eV, fmax = 0.0344 eV/Å  [CONVERGED]
       Cluster 2: energy = -10405.1123 eV, fmax = 0.0229 eV/Å  [CONVERGED]
-      Cluster 3: energy = -10405.1123 eV, fmax = 0.0457 eV/Å  [CONVERGED]
-      Cluster 4: energy = -10405.1133 eV, fmax = 0.0158 eV/Å  [CONVERGED]
-      Cluster 5: energy = -10405.1123 eV, fmax = 0.0347 eV/Å  [CONVERGED]
+      Cluster 3: energy = -10405.1113 eV, fmax = 0.0457 eV/Å  [CONVERGED]
+      Cluster 4: energy = -10405.1123 eV, fmax = 0.0158 eV/Å  [CONVERGED]
+      Cluster 5: energy = -10405.1113 eV, fmax = 0.0347 eV/Å  [CONVERGED]
       Cluster 6: energy = -10405.1123 eV, fmax = 0.0203 eV/Å  [CONVERGED]
       Cluster 7: energy = -10405.1123 eV, fmax = 0.0125 eV/Å  [CONVERGED]
-      Cluster 8: energy = -10405.1123 eV, fmax = 0.0148 eV/Å  [CONVERGED]
-      Cluster 9: energy = -10405.1123 eV, fmax = 0.0448 eV/Å  [CONVERGED]
+      Cluster 8: energy = -10405.1113 eV, fmax = 0.0148 eV/Å  [CONVERGED]
+      Cluster 9: energy = -10405.1113 eV, fmax = 0.0448 eV/Å  [CONVERGED]
 
 
 
@@ -521,7 +521,7 @@ Optional convergence plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.892 seconds)
+   **Total running time of the script:** (0 minutes 7.131 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_08_aimnet2_ewald_pipeline.py:

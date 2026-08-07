@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.384** total execution time for 8 files **from examples/advanced**:
+**00:14.630** total execution time for 10 files **from examples/advanced**:
 
 .. container::
 
@@ -32,27 +32,33 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
-     - 00:04.384
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``01_biased_potential.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``02_custom_hook.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``03_custom_convergence.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_advanced_08_aimnet2_ewald_pipeline.py` (``08_aimnet2_ewald_pipeline.py``)
+     - 00:07.131
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``06_ewald_electrostatics.py``)
-     - 00:00.000
+     - 00:03.497
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_10_mace_training.py` (``10_mace_training.py``)
+     - 00:01.149
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``02_custom_hook.py``)
+     - 00:01.094
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``07_composable_model_composition.py``)
-     - 00:00.000
+     - 00:00.834
      - 0.0
-   * - :ref:`sphx_glr_examples_advanced_08_aimnet2_ewald_pipeline.py` (``08_aimnet2_ewald_pipeline.py``)
+   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
+     - 00:00.299
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
+     - 00:00.241
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``01_biased_potential.py``)
+     - 00:00.222
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``03_custom_convergence.py``)
+     - 00:00.164
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_09_uma_nve.py` (``09_uma_nve.py``)
      - 00:00.000
      - 0.0

@@ -1,0 +1,6 @@
+﻿nvalchemi.hooks.collect\_scalars
+================================
+
+.. currentmodule:: nvalchemi.hooks
+
+.. autofunction:: collect_scalars

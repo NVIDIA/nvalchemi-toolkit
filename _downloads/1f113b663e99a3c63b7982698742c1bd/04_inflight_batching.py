@@ -36,14 +36,14 @@ Lifecycle of a system:
    digraph inflight_lifecycle {
        rankdir=TB
        fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
-       dataset [label="Dataset\\nSizeAwareSampler.request_replacement()" fillcolor="#eeeeee"]
+       dataset [label="Dataset\\nSizeAwareSampler.request_replacement()" fillcolor="#eeeeee" fontcolor="#111111"]
        stage0  [label="Live batch (GPU)\\nstage 0 — FIRE relaxation"]
        stage1  [label="Live batch (GPU)\\nstage 1 — NVT equilibration"]
-       sink    [label="ConvergedSnapshotHook\\n→ HostMemory sink" fillcolor="#f9e2ae"]
-       freed   [label="Slot freed" fillcolor="#eeeeee"]
+       sink    [label="ConvergedSnapshotHook\\n→ HostMemory sink" fillcolor="#f9e2ae" fontcolor="#111111"]
+       freed   [label="Slot freed" fillcolor="#eeeeee" fontcolor="#111111"]
 
        dataset -> stage0 [style=bold]
        stage0 -> stage1 [label="converges" style=bold]

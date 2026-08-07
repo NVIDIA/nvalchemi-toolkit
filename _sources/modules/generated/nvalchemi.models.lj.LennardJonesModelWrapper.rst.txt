@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.lj
 
+
 .. autoclass:: LennardJonesModelWrapper
     :members:
+
 
 .. raw:: html
 

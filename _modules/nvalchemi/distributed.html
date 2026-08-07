@@ -1,0 +1,745 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Spatial domain decomposition for distributed molecular dynamics.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_register_dynamo_subclass</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register :class:`ShardTensor` so Dynamo recognises it as a tensor.</span>
+
+<span class="sd">    Adds our subclass to :data:`torch._dynamo.config.traceable_tensor_subclasses`</span>
+<span class="sd">    so :func:`torch._dynamo.utils.istensor` returns True for ShardTensor</span>
+<span class="sd">    instances. Required for ``torch.compile`` to trace through models</span>
+<span class="sd">    that receive ShardTensor inputs (the ``_promote_positions_to_shardtensor``</span>
+<span class="sd">    path in :class:`DistributedModel`).</span>
+
+<span class="sd">    Done at module import — eager-only callers pay the cost of importing</span>
+<span class="sd">    the dynamo config module (cheap; it&#39;s already loaded in any</span>
+<span class="sd">    torch-using process).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch._dynamo.config</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">_dynamo_config</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># pragma: no cover — torch without dynamo is rare</span>
+        <span class="k">return</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.shard_tensor</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardTensor</span> <span class="k">as</span> <span class="n">_ShardTensor</span>
+
+    <span class="n">_dynamo_config</span><span class="o">.</span><span class="n">traceable_tensor_subclasses</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_ShardTensor</span><span class="p">)</span>
+
+
+<span class="n">_register_dynamo_subclass</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.particle_halo</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">ParticleHaloConfig</span> <span class="k">as</span> <span class="n">ParticleHaloConfig</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.reshard</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">reshard_by_destination</span> <span class="k">as</span> <span class="n">reshard_by_destination</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">DomainConfig</span> <span class="k">as</span> <span class="n">DomainConfig</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">HookScope</span> <span class="k">as</span> <span class="n">HookScope</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.domain_parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainParallel</span> <span class="k">as</span> <span class="n">DomainParallel</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.partitioner</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">SpatialPartitioner</span> <span class="k">as</span> <span class="n">SpatialPartitioner</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.sharded_batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardedBatch</span> <span class="k">as</span> <span class="n">ShardedBatch</span>
+
+
+<div class="viewcode-block" id="autograd_target">
+<a class="viewcode-back" href="../../modules/generated/nvalchemi.distributed.autograd_target.html#nvalchemi.distributed.autograd_target">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">autograd_target</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the tensor to pass as :func:`torch.autograd.grad`&#39;s ``inputs=``.</span>
+
+<span class="sd">    Under domain decomposition the framework wraps ``data.positions`` (and</span>
+<span class="sd">    ``data.charges``) as a :class:`ShardTensor` view of a halo-padded leaf via</span>
+<span class="sd">    :meth:`Tensor.as_subclass`. The view is *not* itself in the autograd graph —</span>
+<span class="sd">    only the underlying tensor is — so passing the view directly to</span>
+<span class="sd">    :func:`torch.autograd.grad` raises &quot;differentiated Tensors appears to not</span>
+<span class="sd">    have been used in the graph&quot;. This helper returns the in-graph leaf instead.</span>
+
+<span class="sd">    Call this once where the autograd target is set up (e.g. in ``adapt_input``);</span>
+<span class="sd">    the wrapper stays distribution-unaware otherwise.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    t : torch.Tensor</span>
+<span class="sd">        The tensor to differentiate against — a plain tensor, or a ShardTensor</span>
+<span class="sd">        view of a halo-padded leaf.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        The underlying ``(n_padded, *F)`` leaf when ``t`` is a ShardTensor with a</span>
+<span class="sd">        captured autograd source (the halo-padded positions case); ``t`` itself</span>
+<span class="sd">        otherwise (single-process, where ``t`` is already the right target).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">target_method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="s2">&quot;autograd_target&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">target_method</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">target_method</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">t</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># noqa: ANN201</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy-import public symbols on first access.&quot;&quot;&quot;</span>
+    <span class="n">_imports</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;DomainConfig&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.config&quot;</span><span class="p">,</span> <span class="s2">&quot;DomainConfig&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;HookScope&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.config&quot;</span><span class="p">,</span> <span class="s2">&quot;HookScope&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;SpatialPartitioner&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.partitioner&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SpatialPartitioner&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;DomainParallel&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.domain_parallel&quot;</span><span class="p">,</span> <span class="s2">&quot;DomainParallel&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;pin_fp32&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;pin_fp32&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;DistributedModel&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.distributed_model&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DistributedModel&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;DistributedPipelineModel&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.distributed_pipeline&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DistributedPipelineModel&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;ShardedBatch&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.sharded_batch&quot;</span><span class="p">,</span> <span class="s2">&quot;ShardedBatch&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;ParticleHaloConfig&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._core.particle_halo&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ParticleHaloConfig&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;reshard_by_destination&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._core.reshard&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;reshard_by_destination&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Declarative spec types named in a wrapper&#39;s ``distribution_spec``. The</span>
+        <span class="c1"># intent vocabulary an adapter body calls lives in</span>
+        <span class="c1"># ``nvalchemi.distributed.helpers``; the communication primitives in</span>
+        <span class="c1"># ``nvalchemi.distributed.ops``.</span>
+        <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;DistributionSpec&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;DistributionSpec&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;OpAdapter&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;OpAdapter&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;MethodAdapter&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;MethodAdapter&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;FunctionAdapter&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;FunctionAdapter&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;PythonAdapter&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;PythonAdapter&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;JitAdapter&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;JitAdapter&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;AdapterRegistry&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;AdapterRegistry&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;AdapterStatus&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed._core.adapter&quot;</span><span class="p">,</span> <span class="s2">&quot;AdapterStatus&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;OutputKind&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.output_kinds&quot;</span><span class="p">,</span> <span class="s2">&quot;OutputKind&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;OutputSpec&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.output_kinds&quot;</span><span class="p">,</span> <span class="s2">&quot;OutputSpec&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;Reduce&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.output_kinds&quot;</span><span class="p">,</span> <span class="s2">&quot;Reduce&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;CompilePolicy&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;CompilePolicy&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;ForceStrategy&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.spec&quot;</span><span class="p">,</span> <span class="s2">&quot;ForceStrategy&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;GraphPadder&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.graph_padder&quot;</span><span class="p">,</span> <span class="s2">&quot;GraphPadder&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;COOPadder&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.graph_padder&quot;</span><span class="p">,</span> <span class="s2">&quot;COOPadder&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;DensePadder&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.graph_padder&quot;</span><span class="p">,</span> <span class="s2">&quot;DensePadder&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;DenseBatchPadder&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.graph_padder&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DenseBatchPadder&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;resolve_cap&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.graph_padder&quot;</span><span class="p">,</span> <span class="s2">&quot;resolve_cap&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;trace_and_validate&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.validate&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;trace_and_validate&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Intent vocabulary an adapter body / wrapper calls, re-exported here for</span>
+        <span class="c1"># convenience (canonical home: ``nvalchemi.distributed.helpers``;</span>
+        <span class="c1"># mechanism in ``nvalchemi.distributed.ops``).</span>
+        <span class="s2">&quot;current_dd_context&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._core.context&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;current_dd_context&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;neighbor_refresh_adapters&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;neighbor_refresh_adapters&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;refresh_neighbors&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;refresh_neighbors&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;scatter_to_owners&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;scatter_to_owners&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;system_sum&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;system_sum&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;to_local&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;to_local&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;localize&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;localize&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;distributed_method&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed.helpers&quot;</span><span class="p">,</span> <span class="s2">&quot;distributed_method&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;Scope&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;nvalchemi.distributed._core.enums&quot;</span><span class="p">,</span> <span class="s2">&quot;Scope&quot;</span><span class="p">),</span>
+        <span class="c1"># DDP training-runtime helpers (recommended manager + rank/world/device</span>
+        <span class="c1"># resolvers). Folded in from the former top-level distributed.py module.</span>
+        <span class="s2">&quot;DistributedManager&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DistributedManager&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;PhysicsNeMoUninitializedDistributedManagerWarning&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;PhysicsNeMoUninitializedDistributedManagerWarning&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;resolve_world_size&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;resolve_world_size&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;resolve_global_rank&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;resolve_global_rank&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;collective_device&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">&quot;nvalchemi.distributed._runtime&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;collective_device&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_imports</span><span class="p">:</span>
+        <span class="n">module_path</span><span class="p">,</span> <span class="n">attr</span> <span class="o">=</span> <span class="n">_imports</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+        <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;module </span><span class="si">{</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;AdapterRegistry&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AdapterStatus&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;CompilePolicy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ForceStrategy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DistributedModel&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DistributedPipelineModel&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DistributionSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DomainConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DomainParallel&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;HookScope&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;JitAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;FunctionAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;GraphPadder&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;COOPadder&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DensePadder&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DenseBatchPadder&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;resolve_cap&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MethodAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OpAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OutputKind&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OutputSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ParticleHaloConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;pin_fp32&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PythonAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Reduce&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Scope&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ShardedBatch&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SpatialPartitioner&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;autograd_target&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;collective_device&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;current_dd_context&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DistributedManager&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PhysicsNeMoUninitializedDistributedManagerWarning&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;resolve_global_rank&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;resolve_world_size&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;neighbor_refresh_adapters&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;distributed_method&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;localize&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;refresh_neighbors&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;reshard_by_destination&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;scatter_to_owners&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;system_sum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;to_local&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;trace_and_validate&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

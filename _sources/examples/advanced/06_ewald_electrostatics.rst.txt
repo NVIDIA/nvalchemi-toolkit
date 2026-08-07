@@ -63,7 +63,7 @@ Key concepts demonstrated
 * Using :meth:`~nvalchemi.models.ewald.EwaldModelWrapper.invalidate_cache` when
   the simulation cell changes between evaluations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-72
+.. GENERATED FROM PYTHON SOURCE LINES 61-71
 
 .. code-block:: Python
 
@@ -74,8 +74,7 @@ Key concepts demonstrated
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics.base import DynamicsStage
-    from nvalchemi.hooks import NeighborListHook
-    from nvalchemi.hooks._context import HookContext
+    from nvalchemi.hooks import DynamicsContext, NeighborListHook
     from nvalchemi.models.ewald import EwaldModelWrapper
 
 
@@ -85,7 +84,7 @@ Key concepts demonstrated
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 73-80
+.. GENERATED FROM PYTHON SOURCE LINES 72-79
 
 Ewald model setup
 ------------------
@@ -95,7 +94,7 @@ estimated automatically from the ``accuracy`` target (default 1e-6) each
 time the simulation cell changes.  For a fixed-cell run the cache is
 computed once and reused.
 
-.. GENERATED FROM PYTHON SOURCE LINES 80-85
+.. GENERATED FROM PYTHON SOURCE LINES 79-84
 
 .. code-block:: Python
 
@@ -111,7 +110,7 @@ computed once and reused.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-99
+.. GENERATED FROM PYTHON SOURCE LINES 85-98
 
 Building a NaCl rock-salt supercell
 -------------------------------------
@@ -127,7 +126,7 @@ Lattice constant a₀ = 5.64 Å (experimental value).
 Formal charges: Na → +1 e, Cl → −1 e.
 The system is overall charge-neutral (32 Na + 32 Cl).
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-179
+.. GENERATED FROM PYTHON SOURCE LINES 98-178
 
 .. code-block:: Python
 
@@ -224,14 +223,14 @@ The system is overall charge-neutral (32 Na + 32 Cl).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-184
+.. GENERATED FROM PYTHON SOURCE LINES 179-183
 
 Building the neighbor list and evaluating energy + forces
 ----------------------------------------------------------
 For a one-shot energy evaluation, build the neighbor list manually using
 :class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-208
+.. GENERATED FROM PYTHON SOURCE LINES 183-207
 
 .. code-block:: Python
 
@@ -239,8 +238,8 @@ For a one-shot energy evaluation, build the neighbor list manually using
     nl_hook = NeighborListHook(
         model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
-    # Create a minimal HookContext for one-time neighbor list build
-    ctx = HookContext(
+    # Create a minimal DynamicsContext for one-time neighbor list build
+    ctx = DynamicsContext(
         batch=batch,
         step_count=0,
         model=model,
@@ -268,13 +267,13 @@ For a one-shot energy evaluation, build the neighbor list manually using
  .. code-block:: none
 
 
-    Ewald energy: -285.5506 eV
+    Ewald energy: -285.5505 eV
     Max force magnitude: 0.0000 eV/Å
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 209-221
+.. GENERATED FROM PYTHON SOURCE LINES 208-220
 
 Comparison with the analytical Madelung energy
 ------------------------------------------------
@@ -289,7 +288,7 @@ k_e = 14.3996 eV·Å/e², q = 1 e, and r_{Na–Cl} = a₀/2.
 For a finite supercell the Ewald result converges to the thermodynamic
 limit to within the accuracy set in the model (1e-6 here).
 
-.. GENERATED FROM PYTHON SOURCE LINES 221-235
+.. GENERATED FROM PYTHON SOURCE LINES 220-234
 
 .. code-block:: Python
 
@@ -317,13 +316,13 @@ limit to within the accuracy set in the model (1e-6 here).
 
 
     Analytical Madelung energy (32 f.u.): -285.5573 eV
-    Ewald energy:                                    -285.5506 eV
-    Relative error:                                  2.36e-05
+    Ewald energy:                                    -285.5505 eV
+    Relative error:                                  2.39e-05
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 236-241
+.. GENERATED FROM PYTHON SOURCE LINES 235-240
 
 Forces should vanish at the perfect-crystal geometry
 -----------------------------------------------------
@@ -331,7 +330,7 @@ At the ideal rock-salt lattice sites every atom sits at a potential minimum
 by symmetry, so the net force on each atom is zero.  Finite cell and
 numerical accuracy leave a small residual.
 
-.. GENERATED FROM PYTHON SOURCE LINES 241-247
+.. GENERATED FROM PYTHON SOURCE LINES 240-246
 
 .. code-block:: Python
 
@@ -350,12 +349,12 @@ numerical accuracy leave a small residual.
  .. code-block:: none
 
 
-    Mean force magnitude at ideal geometry: 5.3939e-07 eV/Å  (should be ≈0)
+    Mean force magnitude at ideal geometry: 5.2749e-07 eV/Å  (should be ≈0)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 248-253
+.. GENERATED FROM PYTHON SOURCE LINES 247-252
 
 Evaluating with a perturbed geometry
 --------------------------------------
@@ -363,7 +362,7 @@ Displace atoms by a small random amount and re-evaluate to show non-zero forces.
 Call :meth:`~nvalchemi.models.ewald.EwaldModelWrapper.invalidate_cache` if the
 cell changes between evaluations (here the cell is unchanged, so not required).
 
-.. GENERATED FROM PYTHON SOURCE LINES 253-284
+.. GENERATED FROM PYTHON SOURCE LINES 252-283
 
 .. code-block:: Python
 
@@ -381,8 +380,8 @@ cell changes between evaluations (here the cell is unchanged, so not required).
         pbc=torch.tensor([[True, True, True]]),
     )
     batch_pert = Batch.from_data_list([data_pert])
-    # Create HookContext for perturbed batch
-    ctx_pert = HookContext(
+    # Create DynamicsContext for perturbed batch
+    ctx_pert = DynamicsContext(
         batch=batch_pert,
         step_count=0,
         model=model,
@@ -417,7 +416,7 @@ cell changes between evaluations (here the cell is unchanged, so not required).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.333 seconds)
+   **Total running time of the script:** (0 minutes 3.497 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_06_ewald_electrostatics.py:

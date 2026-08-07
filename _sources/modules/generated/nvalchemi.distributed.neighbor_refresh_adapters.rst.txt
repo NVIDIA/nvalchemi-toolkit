@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.neighbor\_refresh\_adapters
+=================================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: neighbor_refresh_adapters

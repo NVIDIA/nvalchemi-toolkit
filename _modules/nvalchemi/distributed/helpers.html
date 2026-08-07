@@ -1,0 +1,856 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.helpers &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/helpers';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.helpers</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Context-aware helpers for domain-decomposed model wrappers.</span>
+
+<span class="sd">Functions a model author calls inside a wrapper to express a distributed</span>
+<span class="sd">operation by intent — &quot;refresh my neighbor rows&quot;, &quot;sum per system&quot; — without</span>
+<span class="sd">naming the mechanism. Each reads the live distributed context the framework</span>
+<span class="sd">sets up for the forward and does the right thing under the halo policy, in</span>
+<span class="sd">single-process, and under ``torch.compile``.</span>
+
+<span class="sd">This is the shared home of logic that would otherwise be copy-pasted across</span>
+<span class="sd">model wrappers.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.compile_routing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">compile_routing_active</span><span class="p">,</span>
+    <span class="n">get_compile_routing</span><span class="p">,</span>
+    <span class="n">get_gp_compile_routing</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">current_dd_context</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.enums</span><span class="w"> </span><span class="kn">import</span> <span class="n">Scope</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.gather_primitives</span><span class="w"> </span><span class="kn">import</span> <span class="n">fixed_gather_to_replicate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.particle_halo</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">halo_forward_static_op</span><span class="p">,</span>
+    <span class="n">halo_scatter_correct_static_op</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.per_system</span><span class="w"> </span><span class="kn">import</span> <span class="n">per_system_reduce</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;Scope&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;distributed_method&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;neighbor_refresh_adapters&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;localize&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;refresh_neighbors&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;scatter_to_owners&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;system_sum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;to_local&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="to_local">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.to_local.html#nvalchemi.distributed.to_local">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">to_local</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the plain local tensor backing a ShardTensor, else ``x`` unchanged.</span>
+
+<span class="sd">    Call this before handing a tensor to a kernel that must not see a</span>
+<span class="sd">    ShardTensor. On the halo policy the result is the rank&#39;s owned+ghost block.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : Any</span>
+<span class="sd">        A tensor, ShardTensor, or any non-tensor value.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Any</span>
+<span class="sd">        ``x.to_local()`` for a ShardTensor; ``x`` unchanged otherwise (a plain</span>
+<span class="sd">        tensor or non-tensor passes straight through, so the call is always safe).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s2">&quot;to_local&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">x</span>
+    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">to_local</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="localize">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.localize.html#nvalchemi.distributed.localize">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">localize</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run :func:`to_local` over every value in a model-input dict.</span>
+
+<span class="sd">    Localize a whole input dict in one call so a kernel that consumes it never</span>
+<span class="sd">    sees a ShardTensor.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : dict[str, Any]</span>
+<span class="sd">        A model-input dict whose values may include ShardTensors.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, Any]</span>
+<span class="sd">        A shallow copy with each value run through :func:`to_local`; non-tensor</span>
+<span class="sd">        entries (configs, ints) pass through unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">to_local</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span></div>
+
+
+
+<div class="viewcode-block" id="distributed_method">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.distributed_method.html#nvalchemi.distributed.distributed_method">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">distributed_method</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorate a ``MethodAdapter`` body that only diverges under domain decomposition.</span>
+
+<span class="sd">    Removes the boilerplate guard repeated across method adapters so the body</span>
+<span class="sd">    holds only the distributed behavior. The wrapped replacement runs the</span>
+<span class="sd">    original method verbatim whenever the live context is not distributed</span>
+<span class="sd">    (single-process, or any call outside a distributed forward), and otherwise</span>
+<span class="sd">    invokes ``body`` with the live context already in hand. Gating on</span>
+<span class="sd">    ``is_distributed`` (not ``is_halo``) keeps the body policy-agnostic: it fires</span>
+<span class="sd">    under any strategy (halo, graph-parallel, graph-replicate), and its</span>
+<span class="sd">    cross-rank steps are expressed through the policy-dispatched intent verbs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    body : callable</span>
+<span class="sd">        The halo behavior, called as</span>
+<span class="sd">        ``body(ctx, original, instance, *args, **kwargs)`` where ``ctx`` is the</span>
+<span class="sd">        live :class:`~nvalchemi.distributed._core.context.DistributedContext` and</span>
+<span class="sd">        ``original`` is the unpatched method.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    callable</span>
+<span class="sd">        An ``(original, instance, *args, **kwargs)`` replacement suitable for</span>
+<span class="sd">        :class:`~nvalchemi.distributed._core.adapter.MethodAdapter`.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; @distributed_method</span>
+<span class="sd">    ... def _refresh_block(ctx, original, block, x, *args, **kwargs):</span>
+<span class="sd">    ...     return original(block, refresh_neighbors(x), *args, **kwargs)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wrapped</span><span class="p">(</span><span class="n">original</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">instance</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">current_dd_context</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">original</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">body</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">original</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapped</span></div>
+
+
+
+<div class="viewcode-block" id="neighbor_refresh_adapters">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.neighbor_refresh_adapters.html#nvalchemi.distributed.neighbor_refresh_adapters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">neighbor_refresh_adapters</span><span class="p">(</span>
+    <span class="n">modules</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">always</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build adapters that recombine each module&#39;s per-node ``forward`` output</span>
+<span class="sd">    across ranks.</span>
+
+<span class="sd">    For message-passing blocks whose internal scatter the framework cannot reach:</span>
+<span class="sd">    pass the live sub-modules (``model.interactions``); this finds the concrete</span>
+<span class="sd">    classes that define ``forward`` and returns one :class:`MethodAdapter` per</span>
+<span class="sd">    class. Each adapter runs the block, then applies :func:`scatter_to_owners` to</span>
+<span class="sd">    forward output ``output`` (an ``int`` index when the block returns a tuple,</span>
+<span class="sd">    else the whole output).</span>
+
+<span class="sd">    By default this fires only inside a compiled DD region (the halo path needs</span>
+<span class="sd">    it only under compile; eager halo corrects via dispatch). ``always=True``</span>
+<span class="sd">    fires in eager too — the node-replicate strategy, where the block&#39;s</span>
+<span class="sd">    per-node output is each rank&#39;s partial message sum and the recombine is the</span>
+<span class="sd">    all-reduce that must run every forward. In single-process ``scatter_to_owners``</span>
+<span class="sd">    is the identity, so the adapter is a no-op there regardless.</span>
+
+<span class="sd">    Correcting the block&#39;s per-node output equals correcting its internal scatter</span>
+<span class="sd">    when the downstream ops are linear in the message (true at MACE&#39;s interaction</span>
+<span class="sd">    boundary: the nonlinear product basis is a separate downstream block, so it</span>
+<span class="sd">    sees the recombined message).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">MethodAdapter</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_refresh</span><span class="p">(</span><span class="n">original</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">original</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">always</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">compile_routing_active</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">fixed</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="n">fixed</span><span class="p">[</span><span class="n">output</span><span class="p">]</span> <span class="o">=</span> <span class="n">scatter_to_owners</span><span class="p">(</span><span class="n">fixed</span><span class="p">[</span><span class="n">output</span><span class="p">])</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">out</span><span class="p">)(</span><span class="n">fixed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scatter_to_owners</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+
+    <span class="n">seen</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">modules</span><span class="p">:</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+        <span class="n">seen</span><span class="o">.</span><span class="n">setdefault</span><span class="p">((</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="p">),</span> <span class="bp">cls</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">MethodAdapter</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="n">_refresh</span><span class="p">)</span> <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">seen</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="refresh_neighbors">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.refresh_neighbors.html#nvalchemi.distributed.refresh_neighbors">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">refresh_neighbors</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Populate this rank&#39;s neighbor (ghost) rows of a per-node tensor.</span>
+
+<span class="sd">    Call this at the start of a message-passing block that reads a node&#39;s</span>
+<span class="sd">    neighbors: it refreshes the ghost rows of ``x`` so each rank sees current</span>
+<span class="sd">    neighbor features. Autograd-aware — gradients on the refreshed rows</span>
+<span class="sd">    accumulate back to the owning ranks.</span>
+
+<span class="sd">    On the halo policy ``x`` is ``[owned | ghost (| dead padding)]``; owned rows</span>
+<span class="sd">    are exchanged into the ghost region and any trailing padding rows are</span>
+<span class="sd">    preserved. In single-process this is the identity.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : torch.Tensor</span>
+<span class="sd">        ``(n_rows, *F)`` per-node features with this rank&#39;s owned rows</span>
+<span class="sd">        first.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Same shape as ``x`` with the neighbor rows populated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Under compile: use the fixed-shape static op wired to the step&#39;s routing</span>
+    <span class="c1"># tensors (not current_dd_context, which would bake stale values). ``x`` is</span>
+    <span class="c1"># already capped, so the op runs over the whole padded tensor.</span>
+    <span class="n">routing</span> <span class="o">=</span> <span class="n">get_compile_routing</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">routing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">si</span><span class="p">,</span> <span class="n">rd</span><span class="p">,</span> <span class="n">rr</span><span class="p">,</span> <span class="n">no</span><span class="p">,</span> <span class="n">ws</span> <span class="o">=</span> <span class="n">routing</span>
+        <span class="k">return</span> <span class="n">halo_forward_static_op</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">si</span><span class="p">,</span> <span class="n">rd</span><span class="p">,</span> <span class="n">rr</span><span class="p">,</span> <span class="n">no</span><span class="p">,</span> <span class="n">ws</span><span class="p">)</span>
+    <span class="c1"># Graph-parallel (node-partition) under a model-internal compiled forward:</span>
+    <span class="c1"># the fullgraph-traceable fixed all-gather, so the per-layer node replicate</span>
+    <span class="c1"># fuses into the compiled region. Gated on ``is_compiling`` so the eager path</span>
+    <span class="c1"># keeps the (faster, exact-size) ``policy.replicate`` all-gather; the routing</span>
+    <span class="c1"># is static (index partition), so reading it as trace-time constants never</span>
+    <span class="c1"># recompiles.</span>
+    <span class="n">gp</span> <span class="o">=</span> <span class="n">get_gp_compile_routing</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">gp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">():</span>
+        <span class="n">gi</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">local</span><span class="p">,</span> <span class="n">cap</span><span class="p">,</span> <span class="n">ws</span><span class="p">,</span> <span class="n">mesh</span> <span class="o">=</span> <span class="n">gp</span>
+        <span class="k">return</span> <span class="n">fixed_gather_to_replicate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">gi</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">local</span><span class="p">,</span> <span class="n">cap</span><span class="p">,</span> <span class="n">ws</span><span class="p">,</span> <span class="n">mesh</span><span class="p">)</span>
+    <span class="n">ctx</span> <span class="o">=</span> <span class="n">current_dd_context</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">x</span>
+    <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">replicate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="scatter_to_owners">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.scatter_to_owners.html#nvalchemi.distributed.scatter_to_owners">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">scatter_to_owners</span><span class="p">(</span><span class="n">out</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fold per-edge contributions written into ghost rows back to owners.</span>
+
+<span class="sd">    After a message-passing block scatters per-edge messages into nodes — leaving</span>
+<span class="sd">    each rank&#39;s partial sums in its ghost rows — this accumulates those partials</span>
+<span class="sd">    into the owning ranks and re-broadcasts, so every rank&#39;s owned and ghost rows</span>
+<span class="sd">    hold the correct totals for the next block. Autograd-aware. Identity in</span>
+<span class="sd">    single-process.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    out : torch.Tensor</span>
+<span class="sd">        ``(n_rows, *F)`` per-node tensor with this rank&#39;s partial sums in</span>
+<span class="sd">        the ghost rows.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Same shape, with owners and ghosts carrying the cross-rank totals.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Under compile: the fixed-shape static op wired to the step&#39;s routing</span>
+    <span class="c1"># tensors — the in-graph form of the eager reverse+forward below.</span>
+    <span class="n">routing</span> <span class="o">=</span> <span class="n">get_compile_routing</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">routing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">si</span><span class="p">,</span> <span class="n">rd</span><span class="p">,</span> <span class="n">rr</span><span class="p">,</span> <span class="n">no</span><span class="p">,</span> <span class="n">ws</span> <span class="o">=</span> <span class="n">routing</span>
+        <span class="k">return</span> <span class="n">halo_scatter_correct_static_op</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">si</span><span class="p">,</span> <span class="n">rd</span><span class="p">,</span> <span class="n">rr</span><span class="p">,</span> <span class="n">no</span><span class="p">,</span> <span class="n">ws</span><span class="p">)</span>
+    <span class="n">ctx</span> <span class="o">=</span> <span class="n">current_dd_context</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">out</span>
+    <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">fold</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="system_sum">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.system_sum.html#nvalchemi.distributed.system_sum">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">system_sum</span><span class="p">(</span>
+    <span class="n">vals</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">scope</span><span class="p">:</span> <span class="n">Scope</span> <span class="o">=</span> <span class="n">Scope</span><span class="o">.</span><span class="n">OWNED</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sum per-node values into per-system totals, without double-counting.</span>
+
+<span class="sd">    Each rank holds neighbor copies of atoms it does not own, so a plain</span>
+<span class="sd">    ``scatter_add`` over all rows would over-count. This sums only this</span>
+<span class="sd">    rank&#39;s owned rows and (for :attr:`Scope.OWNED`) all-reduces across the</span>
+<span class="sd">    mesh to the true global per-system total. In single-process it is a</span>
+<span class="sd">    plain ``scatter_add`` over all rows.</span>
+
+<span class="sd">    Under compile it masks the ghost / dead rows by the routing&#39;s n_owned tensor</span>
+<span class="sd">    (a tensor mask, not a dynamic slice, so the partition can drift without</span>
+<span class="sd">    forcing a recompile) and reduces over all rows. A wrapper calls it the same</span>
+<span class="sd">    way in both modes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    vals : torch.Tensor</span>
+<span class="sd">        ``(n_rows, *F)`` per-node values with owned rows first.</span>
+<span class="sd">    idx : torch.Tensor</span>
+<span class="sd">        ``(n_rows,)`` integer system index for each row, in ``[0, n)``.</span>
+<span class="sd">    n : int</span>
+<span class="sd">        Number of systems in the (global) batch.</span>
+<span class="sd">    scope : Scope, default ``Scope.OWNED``</span>
+<span class="sd">        ``OWNED`` → owned-only sum + cross-rank all-reduce (global total on</span>
+<span class="sd">        every rank). ``LOCAL`` → this rank&#39;s owned-only partial with no</span>
+<span class="sd">        all-reduce (the framework&#39;s output consolidation finishes it).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        ``(n, *F)`` per-system totals (replicated on every rank for</span>
+<span class="sd">        ``OWNED``; a per-rank partial for ``LOCAL``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">idx_long</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+    <span class="c1"># Under compile: mask the ghost / dead rows by the n_owned tensor (not a</span>
+    <span class="c1"># dynamic ``[:n_owned]`` slice, which would recompile as the partition</span>
+    <span class="c1"># drifts), then reduce over all rows (masked rows contribute 0).</span>
+    <span class="n">routing</span> <span class="o">=</span> <span class="n">get_compile_routing</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">routing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">current_dd_context</span><span class="p">()</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">n_owned_t</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">routing</span>
+        <span class="n">rowidx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">vals</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">vals</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">owned</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">rowidx</span> <span class="o">&lt;</span> <span class="n">n_owned_t</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">vals</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">vals</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">masked</span> <span class="o">=</span> <span class="n">vals</span> <span class="o">*</span> <span class="n">owned</span>
+        <span class="k">if</span> <span class="n">scope</span> <span class="ow">is</span> <span class="n">Scope</span><span class="o">.</span><span class="n">OWNED</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">per_system_reduce</span><span class="p">(</span><span class="n">masked</span><span class="p">,</span> <span class="n">idx_long</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">halo_config</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">vals</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="o">*</span><span class="n">vals</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+        <span class="k">return</span> <span class="n">out</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx_long</span><span class="p">,</span> <span class="n">masked</span><span class="p">)</span>
+    <span class="n">ctx</span> <span class="o">=</span> <span class="n">current_dd_context</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">vals</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="o">*</span><span class="n">vals</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+        <span class="k">return</span> <span class="n">out</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx_long</span><span class="p">,</span> <span class="n">vals</span><span class="p">)</span>
+    <span class="n">n_owned</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">n_owned</span>
+    <span class="c1"># Owned rows are a contiguous slice; ``owned_offset`` is 0 when they come</span>
+    <span class="c1"># first (halo padded view, node-partition shard) and the rank&#39;s interior</span>
+    <span class="c1"># start under the node-replicate strategy (every rank holds the full set).</span>
+    <span class="n">off</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">owned_offset</span>
+    <span class="n">vals_owned</span> <span class="o">=</span> <span class="n">vals</span><span class="p">[</span><span class="n">off</span> <span class="p">:</span> <span class="n">off</span> <span class="o">+</span> <span class="n">n_owned</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="n">idx_owned</span> <span class="o">=</span> <span class="n">idx_long</span><span class="p">[</span><span class="n">off</span> <span class="p">:</span> <span class="n">off</span> <span class="o">+</span> <span class="n">n_owned</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">scope</span> <span class="ow">is</span> <span class="n">Scope</span><span class="o">.</span><span class="n">OWNED</span><span class="p">:</span>
+        <span class="c1"># ``per_system_reduce`` needs only the mesh to all-reduce over. The halo</span>
+        <span class="c1"># policy carries it on ``halo_config``; a halo-free policy (graph</span>
+        <span class="c1"># parallel) supplies it straight off the context.</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">halo_config</span>
+        <span class="k">if</span> <span class="n">cfg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>  <span class="c1"># noqa: PLC0415</span>
+
+            <span class="n">cfg</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">mesh</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">per_system_reduce</span><span class="p">(</span><span class="n">vals_owned</span><span class="p">,</span> <span class="n">idx_owned</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+    <span class="c1"># LOCAL: per-rank partial, no all-reduce; consolidation finishes the sum.</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">vals</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="o">*</span><span class="n">vals</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+    <span class="k">return</span> <span class="n">out</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx_owned</span><span class="p">,</span> <span class="n">vals_owned</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

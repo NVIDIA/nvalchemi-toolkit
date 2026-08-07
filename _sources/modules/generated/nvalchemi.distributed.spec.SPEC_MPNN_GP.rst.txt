@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_MPNN\_GP
+=========================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_MPNN_GP

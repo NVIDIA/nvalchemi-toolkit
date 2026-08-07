@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.datapipes.dataset &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.data.datapipes.dataset &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/dataset';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -439,19 +442,23 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">Future</span><span class="p">,</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Reader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">SampleTransform</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-
-<span class="c1"># TODO: refactor to subclass PNM when stable</span>
 
 
 <span class="nd">@runtime_checkable</span>
@@ -463,12 +470,10 @@ document.write(`
 <span class="sd">    :class:`~nvalchemi.data.datapipes.backends.base.Reader` ABC.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_load_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw tensor data for a single sample.&quot;&quot;&quot;</span>
-        <span class="o">...</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sample_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return additional metadata for a sample.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_many</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw tensor data and metadata for multiple samples.&quot;&quot;&quot;</span>
         <span class="o">...</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -477,6 +482,74 @@ document.write(`
 
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Release resources held by the reader.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BatchDatasetProtocol</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Protocol for nvalchemi datasets that load :class:`Batch` objects.</span>
+
+<span class="sd">    Implementations provide the batch-loading and prefetch contract used by</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of samples available for batching.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return one sample and its metadata by index.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch_index_lists</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load several batches immediately.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submit one sample for prefetching.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch_fused_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch_index_lists</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submit multiple batches for fused prefetch.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_fused_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Consume the next pending fused prefetch result.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">has_pending_fused_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether fused prefetch results are waiting.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">cancel_prefetch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cancel pending prefetch work.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of queued prefetch requests.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return field names available in dataset samples.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return lightweight metadata for a sample.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release resources held by the dataset.&quot;&quot;&quot;</span>
         <span class="o">...</span>
 
 
@@ -505,14 +578,93 @@ document.write(`
     <span class="n">event</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_FusedBatchPrefetchResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Container for fused multi-batch prefetch results.</span>
+
+<span class="sd">    Used for both validated (AtomicData) and raw (dict) fused-prefetch</span>
+<span class="sd">    paths.  When ``raw`` is ``True``, ``data`` holds raw tensor dicts</span>
+<span class="sd">    and ``metadata`` is ``None``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch_splits : list[int]</span>
+<span class="sd">        Number of samples in each sub-batch, used to split</span>
+<span class="sd">        the flat result list back into per-batch groups.</span>
+<span class="sd">    raw : bool</span>
+<span class="sd">        Whether the data contains raw tensor dicts (True) or</span>
+<span class="sd">        AtomicData objects (False).</span>
+<span class="sd">    data : list[Any] | None</span>
+<span class="sd">        Loaded samples in request order, or None on error.</span>
+<span class="sd">    metadata : list[dict[str, Any]] | None</span>
+<span class="sd">        Per-sample metadata (validated path only), or None.</span>
+<span class="sd">    error : Exception | None</span>
+<span class="sd">        Exception if loading failed, or None.</span>
+<span class="sd">    event : torch.cuda.Event | None</span>
+<span class="sd">        CUDA event for stream synchronization, or None.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">batch_splits</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">raw</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">event</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_PendingFusedBatch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Queued fused batch request and its submitted future.&quot;&quot;&quot;</span>
+
+    <span class="n">batch_index_lists</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">future</span><span class="p">:</span> <span class="n">Future</span><span class="p">[</span><span class="n">_FusedBatchPrefetchResult</span><span class="p">]</span>
+
+
 <div class="viewcode-block" id="Dataset">
 <a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Dataset</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;AtomicData-native dataset that bypasses TensorDict conversion.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;AtomicData-native, map-style dataset that bypasses TensorDict conversion.</span>
 
-<span class="sd">    Wraps a :class:`~nvalchemi.data.datapipes.backends.base.Reader` and returns</span>
-<span class="sd">    :class:`~nvalchemi.data.atomic_data.AtomicData` objects directly,</span>
-<span class="sd">    with CUDA-stream prefetching support.</span>
+<span class="sd">    ``Dataset`` is the entry point of nvalchemi&#39;s data pipeline. It wraps a</span>
+<span class="sd">    single :class:`~nvalchemi.data.datapipes.backends.base.Reader` (such as</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader`) and</span>
+<span class="sd">    turns stored records into</span>
+<span class="sd">    :class:`~nvalchemi.data.atomic_data.AtomicData` graphs. Indexing returns a</span>
+<span class="sd">    ``(AtomicData, metadata)`` pair (``ds[i]``) and ``len(ds)`` reports the</span>
+<span class="sd">    sample count, so it satisfies the map-style dataset protocol that PyTorch</span>
+<span class="sd">    samplers expect. The pipeline is</span>
+<span class="sd">    ``Reader -&gt; Dataset (-&gt; MultiDataset) -&gt; DataLoader``:</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` collates samples</span>
+<span class="sd">    into batched :class:`~nvalchemi.data.batch.Batch` graphs, and</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` concatenates</span>
+<span class="sd">    several datasets behind one index space.</span>
+
+<span class="sd">    Unlike :class:`torch.utils.data.Dataset`, this class owns collation and</span>
+<span class="sd">    device movement rather than deferring them to forked workers:</span>
+
+<span class="sd">    - it returns validated ``AtomicData`` directly, not raw tensors or a</span>
+<span class="sd">      ``TensorDict``;</span>
+<span class="sd">    - it resolves and transfers each sample to ``device`` itself;</span>
+<span class="sd">    - it prefetches on background threads and, when CUDA is available,</span>
+<span class="sd">      overlapping CUDA streams -- ``num_workers`` sizes a thread pool, not a</span>
+<span class="sd">      multiprocessing fork -- and ``DataLoader`` reads batches in fused windows</span>
+<span class="sd">      through a private batch API rather than one ``__getitem__`` per sample.</span>
+
+<span class="sd">    Two nuances are worth noting. ``skip_validation=True`` bypasses</span>
+<span class="sd">    ``AtomicData`` Pydantic validation on the fused batch path and is only safe</span>
+<span class="sd">    for trusted stores (for example those written by</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`).</span>
+<span class="sd">    And ``transforms`` are applied per sample on the prefetch CUDA stream, so</span>
+<span class="sd">    they must be stream-safe (avoid ``.item()``, ``.cpu()``, and</span>
+<span class="sd">    synchronization); for per-batch work use ``DataLoader``&#39;s</span>
+<span class="sd">    ``batch_transforms`` instead.</span>
+
+<span class="sd">    ``Dataset`` implements :class:`BatchDatasetProtocol`, the batch-loading</span>
+<span class="sd">    contract that :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consume. For a</span>
+<span class="sd">    fully-resident alternative that materializes the whole dataset once and</span>
+<span class="sd">    trades memory for read speed, see</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -522,6 +674,9 @@ document.write(`
 <span class="sd">        Target device. ``&quot;auto&quot;`` picks CUDA if available, otherwise CPU.</span>
 <span class="sd">    num_workers : int, default=2</span>
 <span class="sd">        Thread pool size for async prefetch.</span>
+<span class="sd">    transforms : Sequence[SampleTransform] | None, default=None</span>
+<span class="sd">        Optional per-sample transforms applied after device transfer.</span>
+<span class="sd">        See :meth:`__init__` for details.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -540,6 +695,13 @@ document.write(`
 <span class="sd">    &gt;&gt;&gt; # reader = MyReader(&quot;dataset.zarr&quot;)  # doctest: +SKIP</span>
 <span class="sd">    &gt;&gt;&gt; # ds = Dataset(reader, device=&quot;cpu&quot;)  # doctest: +SKIP</span>
 <span class="sd">    &gt;&gt;&gt; # atomic_data, meta = ds[0]           # doctest: +SKIP</span>
+
+<span class="sd">    With a user-supplied per-sample transform:</span>
+
+<span class="sd">    &gt;&gt;&gt; def shift(data, metadata):                              # doctest: +SKIP</span>
+<span class="sd">    ...     return data.replace(positions=data.positions + 1.0), metadata</span>
+<span class="sd">    &gt;&gt;&gt; ds = Dataset(reader, device=&quot;cpu&quot;, transforms=[shift])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; atomic_data, meta = ds[0]                               # doctest: +SKIP</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -548,6 +710,8 @@ document.write(`
         <span class="o">*</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">skip_validation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">transforms</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SampleTransform</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the AtomicData-native dataset.</span>
 
@@ -559,42 +723,106 @@ document.write(`
 <span class="sd">            Target device. ``&quot;auto&quot;`` picks CUDA if available, otherwise CPU.</span>
 <span class="sd">        num_workers : int, default=2</span>
 <span class="sd">            Thread pool size for async prefetch.</span>
+<span class="sd">        skip_validation : bool, default=False</span>
+<span class="sd">            If ``True``, bypass ``AtomicData`` construction and Pydantic</span>
+<span class="sd">            validation in the fused batch prefetch path, building batches</span>
+<span class="sd">            directly from raw tensor dicts via</span>
+<span class="sd">            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`. This</span>
+<span class="sd">            is safe when the backing store is already validated (e.g.</span>
+<span class="sd">            data written by :class:`AtomicDataZarrWriter`).</span>
+<span class="sd">        transforms : Sequence[SampleTransform] | None, default=None</span>
+<span class="sd">            Optional per-sample transforms applied after device transfer.</span>
+<span class="sd">            ``None`` or an empty sequence disables transform application</span>
+<span class="sd">            (zero runtime overhead on the hot path). Non-empty sequences</span>
+<span class="sd">            are composed via :class:`~nvalchemi.data.transforms.Compose`;</span>
+<span class="sd">            see :data:`~nvalchemi.data.transforms._types.SampleTransform`</span>
+<span class="sd">            for the expected signature.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        TypeError</span>
-<span class="sd">            If reader does not implement the required interface.</span>
+<span class="sd">            If ``reader`` does not implement the required interface, or</span>
+<span class="sd">            if ``transforms`` is not a :class:`~collections.abc.Sequence`</span>
+<span class="sd">            (e.g. a single callable or a generator was passed).</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            Raised from :meth:`__getitem__` when any transform fails;</span>
+<span class="sd">            the original exception is attached via ``__cause__``.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Transforms execute on the prefetch CUDA stream when prefetching</span>
+<span class="sd">        is active. They must use stream-aware ops only; avoid ``.item()``,</span>
+<span class="sd">        ``.cpu()``, ``.numpy()``, :func:`torch.cuda.synchronize`, or</span>
+<span class="sd">        overriding ``stream=`` inside transforms, as these would</span>
+<span class="sd">        serialize the prefetch worker with the main stream.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Validate reader implements the required protocol</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="p">(</span><span class="n">Reader</span><span class="p">,</span> <span class="n">ReaderProtocol</span><span class="p">)):</span>
+        <span class="n">has_batch_reader</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;read_many&quot;</span><span class="p">)</span>
+        <span class="n">has_sample_reader</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;_load_sample&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+            <span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;_get_sample_metadata&quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">Reader</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="n">has_batch_reader</span> <span class="ow">or</span> <span class="n">has_sample_reader</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;reader must implement Reader interface, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
+        <span class="c1"># Validate transforms is a Sequence (catches single-callable / generator)</span>
+        <span class="k">if</span> <span class="n">transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transforms</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;transforms must be a Sequence of callables, not a single &quot;</span>
+                <span class="s2">&quot;callable or generator. Pass [fn] instead of fn.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">target_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_target_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reader</span> <span class="o">=</span> <span class="n">reader</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="o">=</span> <span class="n">target_device</span>
 
-        <span class="c1"># Resolve device</span>
-        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                    <span class="s2">&quot;Device expected to be a string or instance of `torch.device`.&quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot; Got </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">.&quot;</span>
-                <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="o">=</span> <span class="n">device</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># fallback</span>
-            <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">skip_validation</span> <span class="o">=</span> <span class="n">skip_validation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;field_levels&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
 
         <span class="c1"># Prefetch state</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Future</span><span class="p">[</span><span class="n">_PrefetchResult</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">_PendingFusedBatch</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Per-sample transform pipeline (None when no transforms configured so</span>
+        <span class="c1"># the hot path short-circuits with a single is-None check).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span><span class="p">:</span> <span class="n">Compose</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">Compose</span><span class="p">(</span><span class="n">transforms</span><span class="p">)</span> <span class="k">if</span> <span class="n">transforms</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_target_device</span><span class="p">(</span>
+        <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the target device while preserving nvalchemi defaults.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        device : str | torch.device | None</span>
+<span class="sd">            Requested device. ``None`` and ``&quot;auto&quot;`` select CUDA when</span>
+<span class="sd">            available, otherwise CPU.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.device</span>
+<span class="sd">            Resolved target device.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If *device* is not a string, ``torch.device``, or ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Device expected to be a string or instance of `torch.device`.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; Got </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_executor</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThreadPoolExecutor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Lazily create the thread pool executor.</span>
@@ -610,6 +838,53 @@ document.write(`
                 <span class="n">thread_name_prefix</span><span class="o">=</span><span class="s2">&quot;datapipe_prefetch&quot;</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_read_raw_samples</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read raw samples from the underlying reader.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;read_many&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">read_many</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_load_sample</span><span class="p">(</span><span class="n">index</span><span class="p">),</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_get_sample_metadata</span><span class="p">(</span><span class="n">index</span><span class="p">),</span>  <span class="c1"># type: ignore[attr-defined]</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">indices</span>
+        <span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_atomic_samples</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">raw_samples</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate raw samples and transfer them to the target device.&quot;&quot;&quot;</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">data_dict</span><span class="p">),</span> <span class="n">metadata</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">data_dict</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">raw_samples</span>
+        <span class="p">]</span>
+
+        <span class="n">event</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">metadata</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
+                    <span class="p">]</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
+                    <span class="p">]</span>
+            <span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+            <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize_on_device</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span> <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
+            <span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">samples</span><span class="p">,</span> <span class="n">event</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_load_and_transform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -635,26 +910,12 @@ document.write(`
         <span class="n">result</span> <span class="o">=</span> <span class="n">_PrefetchResult</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="c1"># Load raw dict from reader (CPU, potentially slow IO)</span>
-            <span class="n">data_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_load_sample</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-            <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_get_sample_metadata</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-
-            <span class="c1"># Construct AtomicData directly from dict</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">data_dict</span><span class="p">)</span>
-
-            <span class="c1"># Auto-transfer to target device if specified</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">):</span>
-                        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                    <span class="c1"># Record event for synchronization</span>
-                    <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
-                    <span class="n">result</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-            <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span>
-            <span class="n">result</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span>
+            <span class="n">samples</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">]),</span> <span class="n">stream</span>
+            <span class="p">)</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">event</span>
 
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="n">result</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="n">e</span>
@@ -703,6 +964,212 @@ document.write(`
             <span class="bp">self</span><span class="o">.</span><span class="n">prefetch</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span></div>
 
 
+<div class="viewcode-block" id="Dataset.prefetch_many">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.prefetch_many">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch_many</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submit one batch of sample indices as a fused async prefetch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : Sequence[int]</span>
+<span class="sd">            Sample indices to prefetch as one batch.</span>
+<span class="sd">        stream : torch.cuda.Stream | None, default=None</span>
+<span class="sd">            CUDA stream for GPU operations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_fused_batches</span><span class="p">([</span><span class="n">indices</span><span class="p">],</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_fused_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch_index_lists</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_FusedBatchPrefetchResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load multiple batches in one fused read_many call.</span>
+
+<span class="sd">        When ``self.skip_validation`` is ``True``, returns raw tensor</span>
+<span class="sd">        dicts (no ``AtomicData`` construction).  Otherwise validates</span>
+<span class="sd">        each sample through ``AtomicData.model_validate``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_index_lists : Sequence[Sequence[int]]</span>
+<span class="sd">            Per-batch index lists to concatenate and read together.</span>
+<span class="sd">        stream : torch.cuda.Stream | None, default=None</span>
+<span class="sd">            Optional CUDA stream for GPU operations.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        _FusedBatchPrefetchResult</span>
+<span class="sd">            Combined result with batch split metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch_splits</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">batch_index_lists</span><span class="p">]</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">skip_validation</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_FusedBatchPrefetchResult</span><span class="p">(</span><span class="n">batch_splits</span><span class="o">=</span><span class="n">batch_splits</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="n">raw</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">all_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">batch_indices</span> <span class="ow">in</span> <span class="n">batch_index_lists</span><span class="p">:</span>
+                <span class="n">all_indices</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
+
+            <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">(</span><span class="n">all_indices</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">raw</span><span class="p">:</span>
+                <span class="n">raw_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">tensor_dict</span> <span class="k">for</span> <span class="n">tensor_dict</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">raw_samples</span><span class="p">]</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">raw_dicts</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">samples</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">,</span> <span class="n">stream</span><span class="p">)</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="p">[</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">event</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="n">e</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+
+<div class="viewcode-block" id="Dataset.prefetch_fused_batches">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.prefetch_fused_batches">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch_fused_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch_index_lists</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submit multiple batches as one fused async read.</span>
+
+<span class="sd">        All indices across the provided batch lists are concatenated</span>
+<span class="sd">        into a single ``read_many`` call, amortizing Zarr I/O overhead.</span>
+<span class="sd">        Use :meth:`get_fused_batches` to consume the results.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_index_lists : Sequence[Sequence[int]]</span>
+<span class="sd">            Per-batch index lists.</span>
+<span class="sd">        stream : torch.cuda.Stream | None, default=None</span>
+<span class="sd">            CUDA stream for GPU operations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Fused batch prefetch queue is full; consume a pending chunk first.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">frozen_batch_index_lists</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> <span class="k">for</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">batch_index_lists</span>
+        <span class="p">)</span>
+        <span class="n">executor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_executor</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">_PendingFusedBatch</span><span class="p">(</span>
+                <span class="n">batch_index_lists</span><span class="o">=</span><span class="n">frozen_batch_index_lists</span><span class="p">,</span>
+                <span class="n">future</span><span class="o">=</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_load_fused_batches</span><span class="p">,</span> <span class="n">frozen_batch_index_lists</span><span class="p">,</span> <span class="n">stream</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fused_result_to_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">_FusedBatchPrefetchResult</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert a fused prefetch result into per-batch objects.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">result</span><span class="o">.</span><span class="n">error</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Fused batch prefetch returned None data without error&quot;</span><span class="p">)</span>
+
+        <span class="n">batches</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Batch</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">batch_splits</span><span class="p">:</span>
+            <span class="n">batch_slice</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">size</span><span class="p">]</span>
+            <span class="n">offset</span> <span class="o">+=</span> <span class="n">size</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">raw</span><span class="p">:</span>
+                <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Batch</span><span class="o">.</span><span class="n">from_raw_dicts</span><span class="p">(</span>
+                        <span class="n">batch_slice</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span>
+                        <span class="n">field_levels</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+                        <span class="n">batch_slice</span><span class="p">,</span>
+                        <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">field_levels</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">batches</span>
+
+<div class="viewcode-block" id="Dataset.load_batches">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.load_batches">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_batches</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch_index_lists</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load several batches immediately.</span>
+
+<span class="sd">        This is the synchronous counterpart to</span>
+<span class="sd">        :meth:`prefetch_fused_batches`/:meth:`get_fused_batches`. The provided</span>
+<span class="sd">        batch index lists are read through one fused reader request so backends</span>
+<span class="sd">        can coalesce I/O while returning one :class:`Batch` per input list.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_index_lists : Sequence[Sequence[int]]</span>
+<span class="sd">            Per-batch sample indices.</span>
+<span class="sd">        stream : torch.cuda.Stream | None, default=None</span>
+<span class="sd">            CUDA stream for device transfer when supported.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[Batch]</span>
+<span class="sd">            One :class:`Batch` per input batch-index list.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_result_to_batches</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_fused_batches</span><span class="p">(</span><span class="n">batch_index_lists</span><span class="p">,</span> <span class="n">stream</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.has_pending_fused_batches">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.has_pending_fused_batches">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">has_pending_fused_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether a fused prefetch chunk is waiting to be consumed.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_fused_batches">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.get_fused_batches">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_fused_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Consume the pending fused prefetch and yield per-batch results.</span>
+
+<span class="sd">        Blocks until the fused read completes, then splits the flat</span>
+<span class="sd">        result list according to the original batch sizes and yields</span>
+<span class="sd">        one :class:`~nvalchemi.data.batch.Batch` per sub-batch.</span>
+
+<span class="sd">        Yields</span>
+<span class="sd">        ------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            One batch per sub-batch from the fused read.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If no fused prefetch is pending.</span>
+<span class="sd">        Exception</span>
+<span class="sd">            If the background read failed, re-raises the original error.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;No fused batch prefetch pending; call prefetch_fused_batches() &quot;</span>
+                <span class="s2">&quot;before get_fused_batches().&quot;</span>
+            <span class="p">)</span>
+        <span class="n">pending</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+
+        <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_result_to_batches</span><span class="p">(</span><span class="n">pending</span><span class="o">.</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">())</span></div>
+
+
 <div class="viewcode-block" id="Dataset.cancel_prefetch">
 <a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.cancel_prefetch">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">cancel_prefetch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -715,6 +1182,7 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span></div>
 
@@ -739,6 +1207,10 @@ document.write(`
 <span class="sd">        ------</span>
 <span class="sd">        IndexError</span>
 <span class="sd">            If index is out of range.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            Raised when a configured transform fails; the original</span>
+<span class="sd">            exception is chained via ``__cause__``. See</span>
+<span class="sd">            :class:`~nvalchemi.data.transforms.Compose`.</span>
 <span class="sd">        Exception</span>
 <span class="sd">            If prefetch failed, re-raises the original error.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -763,17 +1235,91 @@ document.write(`
                 <span class="p">)</span>
             <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">metadata</span>
 
-        <span class="c1"># Not prefetched, load synchronously</span>
-        <span class="n">data_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_load_sample</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-        <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_get_sample_metadata</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="c1"># Not prefetched, load synchronously through the reader batch path.</span>
+        <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">])</span>
+        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-        <span class="c1"># Construct AtomicData directly from dict</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">data_dict</span><span class="p">)</span>
+<div class="viewcode-block" id="Dataset.read_many">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.read_many">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_many</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read and validate multiple samples in one dataset request.</span>
 
-        <span class="c1"># Auto-transfer to target device if specified</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : Sequence[int]</span>
+<span class="sd">            Sample indices to load in order.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[tuple[AtomicData, dict[str, Any]]]</span>
+<span class="sd">            Ordered ``(AtomicData, metadata)`` pairs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">samples</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_batch">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.get_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read sample indices and return a validated :class:`Batch`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : Sequence[int]</span>
+<span class="sd">            Sample indices to batch in order.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            Batched AtomicData as a disjoint graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">indices</span><span class="p">),)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">batch_index_lists</span> <span class="o">==</span> <span class="n">key</span>
+        <span class="p">):</span>
+            <span class="n">pending</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="n">batches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_result_to_batches</span><span class="p">(</span><span class="n">pending</span><span class="o">.</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">())</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batches</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Prefetch for indices </span><span class="si">{</span><span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> returned </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">batches</span><span class="p">)</span><span class="si">}</span><span class="s2"> batches&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">batches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([</span><span class="n">indices</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finalize_on_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Move ``data`` to ``target_device`` and apply the transform pipeline.</span>
+
+<span class="sd">        Shared by the prefetch worker path (both stream and non-stream</span>
+<span class="sd">        branches) and the synchronous ``__getitem__`` fallback. When</span>
+<span class="sd">        ``self._sample_transform`` is ``None`` the transform step is</span>
+<span class="sd">        skipped, making the no-transforms hot path a single</span>
+<span class="sd">        ``is None`` check past the device transfer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData</span>
+<span class="sd">            Freshly constructed sample on the reader&#39;s (CPU) device.</span>
+<span class="sd">        metadata : dict[str, Any]</span>
+<span class="sd">            Per-sample metadata dict.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[AtomicData, dict[str, Any]]</span>
+<span class="sd">            The (possibly transformed) pair, ready to return to the caller.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -786,12 +1332,62 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">)</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pin_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the underlying reader should return pinned CPU tensors.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;pin_memory&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+
+    <span class="nd">@pin_memory</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pin_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Request pinned-memory reads from the underlying reader.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        enabled : bool</span>
+<span class="sd">            Whether reader outputs should be page-locked.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;pin_memory&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">enabled</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prefetch_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of pending prefetch requests.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            Count of queued single-sample and fused-batch prefetches.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return field names available in reader samples.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str]</span>
+<span class="sd">            Field names exposed by the backing reader.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">field_names</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;field_names&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">field_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">field_names</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">raw_samples</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">data_dict</span><span class="p">,</span> <span class="n">_metadata</span> <span class="o">=</span> <span class="n">raw_samples</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">data_dict</span><span class="p">)</span>
+
 <div class="viewcode-block" id="Dataset.get_metadata">
 <a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset.get_metadata">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return lightweight metadata for a sample without full construction.</span>
 
-<span class="sd">        Loads the raw tensor dictionary from the reader and extracts shape</span>
+<span class="sd">        Delegates to the reader when it provides lightweight metadata;</span>
+<span class="sd">        otherwise loads the raw tensor dictionary and extracts shape</span>
 <span class="sd">        information for atom and edge counts, avoiding the overhead of full</span>
 <span class="sd">        ``AtomicData`` construction and validation.</span>
 
@@ -812,7 +1408,10 @@ document.write(`
 <span class="sd">        KeyError</span>
 <span class="sd">            If the sample dict does not contain ``&quot;atomic_numbers&quot;``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">data_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">_load_sample</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;get_metadata&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+        <span class="n">data_dict</span><span class="p">,</span> <span class="n">_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">num_atoms</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">])</span>
         <span class="n">num_edges</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">if</span> <span class="s2">&quot;neighbor_list&quot;</span> <span class="ow">in</span> <span class="n">data_dict</span> <span class="ow">and</span> <span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -840,12 +1439,17 @@ document.write(`
 <span class="sd">        executor, and closes the underlying reader.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Drain pending futures</span>
-        <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">futures_to_drain</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Future</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+            <span class="o">*</span><span class="p">[</span><span class="n">pending</span><span class="o">.</span><span class="n">future</span> <span class="k">for</span> <span class="n">pending</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="p">],</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures_to_drain</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Ignoring error during prefetch future cleanup&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fused_batch_prefetch_queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
         <span class="c1"># Shutdown executor</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.dftd3 &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.models.dftd3 &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/dftd3';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -456,8 +459,8 @@ document.write(`
 <span class="sd">  :func:`load_dftd3_params` calls :func:`extract_dftd3_parameters` which</span>
 <span class="sd">  downloads the Fortran reference archive from the Grimme group website,</span>
 <span class="sd">  parses it in-memory, and caches the result automatically.</span>
-<span class="sd">* Stress/virial computation (needed for NPT/NPH) is available via</span>
-<span class="sd">  ``model_config.active_outputs`` including ``&quot;stress&quot;``.</span>
+<span class="sd">* Stress/virial computation (needed for NPT/NPH) is enabled by including</span>
+<span class="sd">  ``&quot;stress&quot;`` in ``model_config.active_outputs``.</span>
 <span class="sd">* The reference Fortran DFT-D3 implementation uses a cutoff of 95 Bohr</span>
 <span class="sd">  (~50 Å) with no smoothing.  This wrapper defaults to a shorter cutoff</span>
 <span class="sd">  (15 Å) with C5-style smoothing controlled by ``smoothing_fraction``.</span>
@@ -499,6 +502,7 @@ document.write(`
 <span class="n">BOHR_TO_ANGSTROM</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.529177210544</span>
 <span class="n">ANGSTROM_TO_BOHR</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">BOHR_TO_ANGSTROM</span>
 <span class="n">HARTREE_TO_EV</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">27.211386245981</span>
+
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
 <span class="c1"># DFT-D3 reference parameter source</span>
@@ -949,6 +953,41 @@ document.write(`
     <span class="c1"># BaseModelMixin required properties</span>
     <span class="c1"># ------------------------------------------------------------------</span>
 
+<div class="viewcode-block" id="DFTD3ModelWrapper.distribution_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html#nvalchemi.models.dftd3.DFTD3ModelWrapper.distribution_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Domain-decomposition spec for DFT-D3(BJ).</span>
+
+<span class="sd">        Halo-only; the ``strategy`` argument is accepted for the framework</span>
+<span class="sd">        contract and ignored.</span>
+
+<span class="sd">        DFTD3 has no global coupling (coordination numbers, C6 interpolation,</span>
+<span class="sd">        and the dispersion sum are all within-cutoff), so it needs no cross-rank</span>
+<span class="sd">        op. The per-system seams are reductions the framework owns: energy from</span>
+<span class="sd">        the raw per-atom dispersion energies (``atomic_energies``) and stress</span>
+<span class="sd">        from the raw per-atom virial (``atomic_virial``), both reduced</span>
+<span class="sd">        owned-aware, so :meth:`forward` carries no distributed logic. Forces are</span>
+<span class="sd">        direct per-atom, owned-only.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MLIPSpec</span>
+<span class="sd">            :data:`~nvalchemi.distributed.spec.SPEC_DFTD3_HALO`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SPEC_DFTD3_HALO</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+            <span class="n">SPEC_DFTD3_HALO</span><span class="p">,</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="n">SPEC_DFTD3_HALO</span><span class="o">.</span><span class="n">distribution</span><span class="p">,</span> <span class="n">shard_fields</span><span class="o">=</span><span class="p">()</span>
+            <span class="p">),</span>
+            <span class="n">node_energy_key</span><span class="o">=</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+            <span class="n">node_virial_key</span><span class="o">=</span><span class="s2">&quot;atomic_virial&quot;</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="p">{}</span>
@@ -1037,17 +1076,31 @@ document.write(`
         <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
             <span class="n">output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="s2">&quot;atomic_energies&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+            <span class="ow">and</span> <span class="s2">&quot;atomic_energies&quot;</span> <span class="ow">in</span> <span class="n">model_output</span>
+        <span class="p">):</span>
+            <span class="n">output</span><span class="p">[</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">]</span>
+        <span class="c1"># Per-atom virial: passed through for the framework&#39;s owned-aware</span>
+        <span class="c1"># per-system stress reduction under decomposition (``node_virial_key``).</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="s2">&quot;atomic_virial&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+            <span class="ow">and</span> <span class="s2">&quot;atomic_virial&quot;</span> <span class="ow">in</span> <span class="n">model_output</span>
+        <span class="p">):</span>
+            <span class="n">output</span><span class="p">[</span><span class="s2">&quot;atomic_virial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;atomic_virial&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;virial&quot;</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="s2">&quot;stress output requires cell for volume computation&quot;</span>
                     <span class="p">)</span>
-                <span class="c1"># Cauchy stress sigma = W/V (eV/A^3).</span>
+                <span class="c1"># Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).</span>
                 <span class="n">virial</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;virial&quot;</span><span class="p">]</span>
                 <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virial</span> <span class="o">/</span> <span class="n">volume</span>
+                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">virial</span> <span class="o">/</span> <span class="n">volume</span>
             <span class="k">elif</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
+                <span class="c1"># Direct stress outputs are expected to already use the</span>
+                <span class="c1"># public tensile-positive Cauchy stress convention.</span>
                 <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1077,7 +1130,7 @@ document.write(`
 <div class="viewcode-block" id="DFTD3ModelWrapper.forward">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html#nvalchemi.models.dftd3.DFTD3ModelWrapper.forward">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the DFT-D3(BJ) kernel and return a :class:`ModelOutputs` dict.</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Run the DFT-D3(BJ) kernel and return a :class:`ModelOutputs` dict.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1092,8 +1145,8 @@ document.write(`
 <span class="sd">        ModelOutputs</span>
 <span class="sd">            OrderedDict with keys ``&quot;energy&quot;`` (shape ``[B, 1]``, eV),</span>
 <span class="sd">            ``&quot;forces&quot;`` (shape ``[N, 3]``, eV/Å), and optionally</span>
-<span class="sd">            ``&quot;stress&quot;`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress</span>
-<span class="sd">            ``W/V``).</span>
+<span class="sd">            ``&quot;stress&quot;`` (shape ``[B, 3, 3]``, :math:`\mathrm{eV}/\mathrm{\AA}^3` — Cauchy stress</span>
+<span class="sd">            ``-W/V``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.dispersion</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># lazy</span>
             <span class="n">D3Parameters</span><span class="p">,</span>
@@ -1120,9 +1173,6 @@ document.write(`
         <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cell_bohr</span> <span class="o">=</span> <span class="n">cell</span> <span class="o">*</span> <span class="n">ANGSTROM_TO_BOHR</span>
 
-        <span class="c1"># Also scale a2 from Bohr to Bohr (no conversion needed — a2 is</span>
-        <span class="c1"># already stored in Bohr, matching the kernel&#39;s expectation).</span>
-
         <span class="n">compute_virial</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
 
         <span class="n">d3_params</span> <span class="o">=</span> <span class="n">D3Parameters</span><span class="p">(</span>
@@ -1134,6 +1184,31 @@ document.write(`
 
         <span class="n">smoothing_on</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">smoothing_fraction</span><span class="p">)</span>
         <span class="n">smoothing_off</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span>
+
+        <span class="c1"># Per-atom dispersion energies are needed when the per-system total is</span>
+        <span class="c1"># assembled from them; a plain non-PBC run takes the kernel&#39;s</span>
+        <span class="c1"># per-system energy directly.</span>
+        <span class="c1">#</span>
+        <span class="c1"># The kernel accumulates each atom&#39;s half-share into ``energy[batch_idx[i]]``</span>
+        <span class="c1"># and reads the PBC cell as ``cell[batch_idx[i]]``; interactions come from</span>
+        <span class="c1"># ``neighbor_matrix``, not ``batch_idx``.</span>
+        <span class="n">want_atomic</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;atomic_energies&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+            <span class="ow">or</span> <span class="n">cell_bohr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">positions_bohr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">want_atomic</span><span class="p">:</span>
+            <span class="n">eff_batch_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="n">n_atoms</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span>
+            <span class="p">)</span>
+            <span class="n">eff_cell</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">cell_bohr</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">cell_bohr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">eff_num_systems</span> <span class="o">=</span> <span class="n">n_atoms</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">eff_batch_idx</span><span class="p">,</span> <span class="n">eff_cell</span><span class="p">,</span> <span class="n">eff_num_systems</span> <span class="o">=</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">cell_bohr</span><span class="p">,</span> <span class="n">B</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="n">dftd3</span><span class="p">(</span>
             <span class="n">positions</span><span class="o">=</span><span class="n">positions_bohr</span><span class="p">,</span>
@@ -1148,25 +1223,49 @@ document.write(`
             <span class="n">s5_smoothing_off</span><span class="o">=</span><span class="n">smoothing_off</span> <span class="o">*</span> <span class="n">ANGSTROM_TO_BOHR</span><span class="p">,</span>
             <span class="n">d3_params</span><span class="o">=</span><span class="n">d3_params</span><span class="p">,</span>
             <span class="n">fill_value</span><span class="o">=</span><span class="n">fill_value</span><span class="p">,</span>
-            <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch_idx</span><span class="p">,</span>
-            <span class="n">cell</span><span class="o">=</span><span class="n">cell_bohr</span><span class="p">,</span>
+            <span class="n">batch_idx</span><span class="o">=</span><span class="n">eff_batch_idx</span><span class="p">,</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">eff_cell</span><span class="p">,</span>
             <span class="n">neighbor_matrix</span><span class="o">=</span><span class="n">neighbor_matrix</span><span class="p">,</span>
             <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="n">neighbor_matrix_shifts</span><span class="p">,</span>
             <span class="n">compute_virial</span><span class="o">=</span><span class="n">compute_virial</span><span class="p">,</span>
-            <span class="n">num_systems</span><span class="o">=</span><span class="n">B</span><span class="p">,</span>
+            <span class="n">num_systems</span><span class="o">=</span><span class="n">eff_num_systems</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># dftd3 returns (energy[B], forces[N,3], coord_num[N])</span>
-        <span class="c1"># or (energy[B], forces[N,3], coord_num[N], virial[B,3,3]) when compute_virial=True.</span>
-        <span class="k">if</span> <span class="n">compute_virial</span><span class="p">:</span>
-            <span class="n">energy_ha</span><span class="p">,</span> <span class="n">forces_ha_bohr</span><span class="p">,</span> <span class="n">_coord_num</span><span class="p">,</span> <span class="n">virial_ha</span> <span class="o">=</span> <span class="n">result</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">energy_ha</span><span class="p">,</span> <span class="n">forces_ha_bohr</span><span class="p">,</span> <span class="n">_coord_num</span> <span class="o">=</span> <span class="n">result</span>
-            <span class="n">virial_ha</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Return order (see ``dftd3``): energy, forces, coord_num, virial</span>
+        <span class="c1"># (if requested). Under the per-atom ``batch_idx`` these are per-atom.</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="n">energy_ha</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">forces_ha_bohr</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">raw_virial_ha</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="k">if</span> <span class="n">compute_virial</span> <span class="k">else</span> <span class="kc">None</span>
 
         <span class="c1"># Convert units: Hartree -&gt; eV, Hartree/Bohr -&gt; eV/Å.</span>
-        <span class="n">energies_ev</span> <span class="o">=</span> <span class="n">energy_ha</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">*</span> <span class="n">HARTREE_TO_EV</span>  <span class="c1"># (B,)</span>
-        <span class="n">energies_ev</span> <span class="o">=</span> <span class="n">energies_ev</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (B, 1)</span>
+        <span class="n">atomic_energies_ev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">atomic_virial_ev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">virial_ha</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">want_atomic</span><span class="p">:</span>
+            <span class="c1"># ``energy_ha`` is per-atom here -&gt; per-system totals in fp64 so the</span>
+            <span class="c1"># sum is order-independent.</span>
+            <span class="n">atomic_energies_ev</span> <span class="o">=</span> <span class="n">energy_ha</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">*</span> <span class="n">HARTREE_TO_EV</span>
+            <span class="n">energies_ev</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="n">atomic_energies_ev</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>  <span class="c1"># (B, 1)</span>
+            <span class="k">if</span> <span class="n">raw_virial_ha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Per-atom virial (eV): kept for the framework&#39;s owned-aware</span>
+                <span class="c1"># per-system stress reduction under decomposition</span>
+                <span class="c1"># (``node_virial_key``), and collapsed by the real batch index</span>
+                <span class="c1"># for the single-process per-system stress.</span>
+                <span class="n">atomic_virial_ev</span> <span class="o">=</span> <span class="n">raw_virial_ha</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">*</span> <span class="n">HARTREE_TO_EV</span>
+                <span class="n">virial_ha</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">raw_virial_ha</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="n">raw_virial_ha</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">energies_ev</span> <span class="o">=</span> <span class="p">(</span><span class="n">energy_ha</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">*</span> <span class="n">HARTREE_TO_EV</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span>
+                <span class="o">-</span><span class="mi">1</span>
+            <span class="p">)</span>  <span class="c1"># (B, 1)</span>
+            <span class="n">virial_ha</span> <span class="o">=</span> <span class="n">raw_virial_ha</span>
 
         <span class="n">forces_ev_ang</span> <span class="o">=</span> <span class="n">forces_ha_bohr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
             <span class="n">HARTREE_TO_EV</span> <span class="o">/</span> <span class="n">BOHR_TO_ANGSTROM</span>
@@ -1176,9 +1275,19 @@ document.write(`
             <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">energies_ev</span><span class="p">,</span>
             <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">forces_ev_ang</span><span class="p">,</span>
         <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">atomic_energies_ev</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="s2">&quot;atomic_energies&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="p">):</span>
+            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">atomic_energies_ev</span>
         <span class="k">if</span> <span class="n">virial_ha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Virial: Hartree -&gt; eV (purely energy units, no length scaling).</span>
             <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;virial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virial_ha</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">*</span> <span class="n">HARTREE_TO_EV</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">atomic_virial_ev</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="s2">&quot;atomic_virial&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="p">):</span>
+            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;atomic_virial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">atomic_virial_ev</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
 

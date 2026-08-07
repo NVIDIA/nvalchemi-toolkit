@@ -54,7 +54,7 @@ Key concepts demonstrated
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import FIRE
     from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
-    from nvalchemi.hooks import HookContext
+    from nvalchemi.hooks import DynamicsContext
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -330,7 +330,7 @@ take a near-zero force step during a large momentum phase.
         stage = DynamicsStage.AFTER_STEP
         frequency = 50
 
-        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
             batch = ctx.batch
             step = ctx.step_count + 1
             energy = batch.energy.squeeze(-1)
@@ -388,7 +388,7 @@ take a near-zero force step during a large momentum phase.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.215 seconds)
+   **Total running time of the script:** (0 minutes 0.164 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_03_custom_convergence.py:

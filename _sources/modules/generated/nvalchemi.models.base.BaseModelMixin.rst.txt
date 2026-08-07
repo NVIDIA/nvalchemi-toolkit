@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.base
 
+
 .. autoclass:: BaseModelMixin
     :members:
+
 
 .. raw:: html
 

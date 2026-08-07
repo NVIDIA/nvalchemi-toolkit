@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.mace &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.models.mace &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/mace';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -420,6 +423,7 @@ document.write(`
 <span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class="c1"># See the License for the specific language governing permissions and</span>
 <span class="c1"># limitations under the License.</span>
+
 <span class="sd">&quot;&quot;&quot;MACE model wrapper.</span>
 
 <span class="sd">Wraps any MACE model (``MACE``, ``ScaleShiftMACE``, etc.) as a</span>
@@ -466,10 +470,12 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
@@ -484,9 +490,83 @@ document.write(`
     <span class="n">NeighborListFormat</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSpec</span>
+
 <span class="n">_torch_version</span> <span class="o">=</span> <span class="n">version</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">)</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;MACEWrapper&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_load_atomic_energies</span><span class="p">(</span>
+    <span class="n">atomic_energies</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">atomic_energies_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return normalized atomic energy overrides from inline values or JSON.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">atomic_energies</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">atomic_energies_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Specify only one of atomic_energies or atomic_energies_path.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">atomic_energies_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">atomic_energies_path</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">atomic_energies</span>
+    <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;atomic_energies must be a mapping of atomic number to E0.&quot;</span><span class="p">)</span>
+    <span class="n">normalized</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">atomic_number</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="n">raw</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">atomic_number</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;atomic energy key </span><span class="si">{</span><span class="n">atomic_number</span><span class="si">!r}</span><span class="s2"> is not an atomic number.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="n">normalized</span><span class="p">[</span><span class="n">z</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">normalized</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_atomic_energies</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Overwrite MACE atomic reference energies in-place.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;atomic_energies_fn&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;MACE model has no atomic_energies_fn module.&quot;</span><span class="p">)</span>
+    <span class="n">atomic_energies_fn</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">atomic_energies_fn</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">atomic_energies_fn</span><span class="p">,</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="s2">&quot;MACE model atomic_energies_fn has no atomic_energies tensor.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;MACE model has no atomic_numbers tensor.&quot;</span><span class="p">)</span>
+
+    <span class="n">target</span> <span class="o">=</span> <span class="n">atomic_energies_fn</span><span class="o">.</span><span class="n">atomic_energies</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;MACE atomic_energies_fn.atomic_energies is not a tensor.&quot;</span><span class="p">)</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="n">_load_atomic_energies</span><span class="p">(</span><span class="n">atomic_energies</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">normalized</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="n">atomic_numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">index_by_z</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> <span class="n">index</span> <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">)}</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">index_by_z</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Atomic energy overrides contain elements not supported by the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;MACE checkpoint: </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">updated</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">flat</span> <span class="o">=</span> <span class="n">updated</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">flat</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;MACE atomic_energies tensor size does not match model.atomic_numbers: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flat</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">for</span> <span class="n">atomic_number</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="n">normalized</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">flat</span><span class="p">[</span><span class="n">index_by_z</span><span class="p">[</span><span class="n">atomic_number</span><span class="p">]]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="n">energy</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="n">target</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">updated</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_patch_e3nn_irrep_len_for_compile</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -505,6 +585,331 @@ document.write(`
             <span class="n">Irrep</span><span class="o">.</span><span class="fm">__len__</span> <span class="o">=</span> <span class="nb">tuple</span><span class="o">.</span><span class="fm">__len__</span>
     <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
         <span class="k">pass</span>
+
+
+<span class="c1"># cuEquivariance support — distributed wiring for cueq-converted MACE.</span>
+<span class="c1">#</span>
+<span class="c1"># On CUDA the converter fuses the InteractionBlock&#39;s ``conv_tp`` into one opaque</span>
+<span class="c1"># kernel that absorbs the gather + tensor-product + scatter with the edge indices</span>
+<span class="c1"># *internal*, hiding both from ShardTensor dispatch — so under DD it computes a</span>
+<span class="c1"># purely local message (no halo gather of ghost senders, no reverse-exchange of</span>
+<span class="c1"># ghost-receiver partials) and is silently wrong on non-degenerate partitions.</span>
+<span class="c1"># The fix unfuses the conv for the DD scope (``_cueq_conv_unfuse_adapters``):</span>
+<span class="c1"># the conv reverts to the external ``node_feats[sender]`` gather + ``scatter_sum``</span>
+<span class="c1"># that plain MACE uses, where the halo handlers already fire. The remaining cueq</span>
+<span class="c1"># kernels are node/edge-local and get pass-through OpAdapters.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mace_uses_cueq</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;True iff any submodule of *model* is a cuequivariance kernel.</span>
+
+<span class="sd">    Walks ``named_modules`` and checks class module path. Cheap enough to</span>
+<span class="sd">    call per-``distribution_spec`` access — MACE&#39;s module tree is shallow.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">mod</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+        <span class="n">mod_path</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="k">if</span> <span class="n">mod_path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;cuequivariance&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cueq_conv_unfuse_adapters</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Build adapters that unfuse each cueq conv ``conv_tp`` for the DD scope.</span>
+
+<span class="sd">    ``mace.cli.convert_e3nn_cueq`` enables *conv fusion* on CUDA: the message</span>
+<span class="sd">    pass (gather senders → channel-wise TP → scatter to receivers) becomes one</span>
+<span class="sd">    opaque ``cuequivariance`` kernel that takes the sender/receiver indices</span>
+<span class="sd">    internally (``conv_tp(node_feats, edge_attrs, tp_weights, edge_index)``).</span>
+<span class="sd">    That kernel gathers + scatters on **rank-local** indices and bypasses</span>
+<span class="sd">    ShardTensor dispatch, so under DD it computes a purely local message — no</span>
+<span class="sd">    halo gather of ghost senders, no reverse-exchange of ghost-receiver partials</span>
+<span class="sd">    to their owners — silently wrong on any non-degenerate partition (a</span>
+<span class="sd">    degenerate partition masks it: the halo correction is a no-op there).</span>
+
+<span class="sd">    The fix is **mode-dependent** (one adapter, two behaviours, chosen by the</span>
+<span class="sd">    framework&#39;s compile signal — mirrors :func:`neighbor_refresh_adapters`):</span>
+
+<span class="sd">    * **Eager DD** — unfuse to the *external* gather + scatter plain (non-cueq)</span>
+<span class="sd">      MACE uses: ``scatter_sum(conv_tp(node_feats[sender], edge_attrs,</span>
+<span class="sd">      tp_weights), receiver)``. ``node_feats[sender]`` routes through the halo</span>
+<span class="sd">      read-refresh and ``scatter_sum`` through the halo scatter-correction</span>
+<span class="sd">      dispatch handlers (which the fused kernel bypasses).</span>
+<span class="sd">    * **Compiled DD** — keep the conv **fused**. The fused cueq kernel streams</span>
+<span class="sd">      the per-edge message instead of materializing it, so the saved-for-backward</span>
+<span class="sd">      footprint matches single-GPU compiled (the unfused per-edge message is a</span>
+<span class="sd">      :math:`{\sim}N\cdot\mathrm{feat}` saved activation that roughly doubles compiled-DD peak memory and</span>
+<span class="sd">      halves max-N). Halo correctness comes from the message-passing refresh</span>
+<span class="sd">      adapter&#39;s ``scatter_to_owners`` on the block output, which fires only under</span>
+<span class="sd">      compile and is force-equivalent to the external scatter (validated).</span>
+
+<span class="sd">    Both forms are machine-precision force-equivalent to the single-process cueq</span>
+<span class="sd">    reference. Declared on the spec, so the framework installs it only inside the</span>
+<span class="sd">    distributed scope; single-process keeps the fused kernel untouched. Returns</span>
+<span class="sd">    one :class:`ModuleForwardAdapter` per fused conv (empty when none are fused).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">mace.tools.scatter</span><span class="w"> </span><span class="kn">import</span> <span class="n">scatter_sum</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">ModuleForwardAdapter</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.compile_routing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">compile_routing_active</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_conv_forward</span><span class="p">(</span><span class="n">conv_tp</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">fused_forward</span> <span class="o">=</span> <span class="n">conv_tp</span><span class="o">.</span><span class="n">forward</span>  <span class="c1"># cueq fused conv (with_cueq_conv_fusion)</span>
+        <span class="n">seg_forward</span> <span class="o">=</span> <span class="n">conv_tp</span><span class="o">.</span><span class="n">original_forward</span>  <span class="c1"># raw per-edge SegmentedPolynomial</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_conv_forward</span><span class="p">(</span>
+            <span class="n">node_feats</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+            <span class="n">edge_attrs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+            <span class="n">tp_weights</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+            <span class="n">edge_index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">compile_routing_active</span><span class="p">():</span>
+                <span class="c1"># Compiled DD: stay fused (no per-edge message materialized);</span>
+                <span class="c1"># the refresh adapter&#39;s scatter_to_owners halo-corrects the</span>
+                <span class="c1"># block output.</span>
+                <span class="k">return</span> <span class="n">fused_forward</span><span class="p">(</span><span class="n">node_feats</span><span class="p">,</span> <span class="n">edge_attrs</span><span class="p">,</span> <span class="n">tp_weights</span><span class="p">,</span> <span class="n">edge_index</span><span class="p">)</span>
+            <span class="c1"># Eager DD: per-edge channel-wise TP (no internal indices), then the</span>
+            <span class="c1"># external scatter the halo-correction dispatch handler intercepts.</span>
+            <span class="n">sender</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">receiver</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">mji</span> <span class="o">=</span> <span class="n">seg_forward</span><span class="p">([</span><span class="n">tp_weights</span><span class="p">,</span> <span class="n">node_feats</span><span class="p">[</span><span class="n">sender</span><span class="p">],</span> <span class="n">edge_attrs</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">scatter_sum</span><span class="p">(</span>
+                <span class="n">src</span><span class="o">=</span><span class="n">mji</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">receiver</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dim_size</span><span class="o">=</span><span class="n">node_feats</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_conv_forward</span>
+
+    <span class="n">adapters</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">inter</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;interactions&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+        <span class="n">conv_tp</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">inter</span><span class="p">,</span> <span class="s2">&quot;conv_tp&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># Only the conv-fusion wrapper carries ``original_forward`` (the raw</span>
+        <span class="c1"># SegmentedPolynomial); the non-fused ChannelWiseTensorProduct path is</span>
+        <span class="c1"># already DD-correct and has nothing to unfuse.</span>
+        <span class="k">if</span> <span class="n">conv_tp</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">conv_tp</span><span class="p">,</span> <span class="s2">&quot;original_forward&quot;</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">adapters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">ModuleForwardAdapter</span><span class="p">(</span>
+                <span class="n">conv_tp</span><span class="p">,</span> <span class="n">_make_conv_forward</span><span class="p">(</span><span class="n">conv_tp</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;cueq_conv_halo&quot;</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">adapters</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mace_product_block_static_index_forward</span><span class="p">(</span>
+    <span class="n">original</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">node_feats</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">sc</span><span class="p">:</span> <span class="s2">&quot;torch.Tensor | None&quot;</span><span class="p">,</span>
+    <span class="n">node_attrs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrap ``EquivariantProductBasisBlock.forward`` to derive the cueq</span>
+<span class="sd">    symmetric-contraction element index with a static-shape ``argmax`` instead of</span>
+<span class="sd">    the data-dependent ``torch.nonzero(node_attrs)[:, 1]``.</span>
+
+<span class="sd">    Mirrors mace&#39;s cueq branch exactly except for the index op. ``argmax`` returns</span>
+<span class="sd">    one index per row (== ``nonzero[:, 1]`` for genuine one-hot rows), so under</span>
+<span class="sd">    DD-compile the inert dead-padding rows (``Z=0`` -&gt; all-zero one-hot) map to</span>
+<span class="sd">    element 0 and ``index_attrs`` keeps ``n_padded`` rows — matching ``node_feats``</span>
+<span class="sd">    and avoiding the cueq ``uniform_1d`` &quot;batch dim mismatch&quot;. The non-cueq path</span>
+<span class="sd">    has no ``nonzero``, so it delegates to the original. Declared on the cueq spec</span>
+<span class="sd">    (see :func:`_mace_cueq_spec`); installed only inside the distributed scope, so</span>
+<span class="sd">    single-process keeps the stock forward.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">use_cueq</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">use_cueq_mul_ir</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;use_agnostic_product&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="n">node_attrs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">node_feats</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">node_feats</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">node_feats</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;cueq_config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cfg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">enabled</span> <span class="ow">and</span> <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">optimize_all</span> <span class="ow">or</span> <span class="n">cfg</span><span class="o">.</span><span class="n">optimize_symmetric</span><span class="p">):</span>
+            <span class="n">use_cueq</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">layout_str</span> <span class="o">==</span> <span class="s2">&quot;mul_ir&quot;</span><span class="p">:</span>
+            <span class="n">use_cueq_mul_ir</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_cueq</span><span class="p">:</span>
+        <span class="c1"># Stock path (symmetric_contractions takes node_attrs directly) — no</span>
+        <span class="c1"># nonzero, nothing to correct.</span>
+        <span class="k">return</span> <span class="n">original</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node_feats</span><span class="p">,</span> <span class="n">sc</span><span class="p">,</span> <span class="n">node_attrs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">use_cueq_mul_ir</span><span class="p">:</span>
+        <span class="n">node_feats</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">node_feats</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">index_attrs</span> <span class="o">=</span> <span class="n">node_attrs</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">int</span><span class="p">()</span>
+    <span class="n">node_feats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">symmetric_contractions</span><span class="p">(</span><span class="n">node_feats</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">index_attrs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sc</span> <span class="ow">and</span> <span class="n">sc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">node_feats</span><span class="p">)</span> <span class="o">+</span> <span class="n">sc</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">node_feats</span><span class="p">)</span>
+
+
+<span class="n">_MACE_CUEQ_SPEC_CACHE</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mace_cueq_spec</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the MACE MLIPSpec for the cueq path.</span>
+
+<span class="sd">    The message gather + scatter are made halo-correct by *unfusing* the conv</span>
+<span class="sd">    (see :func:`_cueq_conv_unfuse_adapters`, declared per-wrapper in</span>
+<span class="sd">    :meth:`distribution_spec`): the conv reverts to the external</span>
+<span class="sd">    ``node_feats[sender]`` gather + ``scatter_sum`` that plain MACE uses, so the</span>
+<span class="sd">    cueq kernels here are all node/edge-local and declared as **pass-throughs**</span>
+<span class="sd">    (``uniform_1d`` — the channel-wise TP / symmetric contraction;</span>
+<span class="sd">    ``indexed_linear_B/C`` — linear layers; ``segmented_transpose`` — layout</span>
+<span class="sd">    transpose; ``fused_tensor_product`` + backwards — present for cueq builds</span>
+<span class="sd">    that route the TP through it). The pass-through OpAdapter unwraps ShardTensor</span>
+<span class="sd">    args to local, runs the opaque kernel, and re-wraps so distribution metadata</span>
+<span class="sd">    survives the kernel boundary; no per-op cross-rank correction is needed.</span>
+
+<span class="sd">    Declares the cueq kernels by qualified op name, so the spec builds without</span>
+<span class="sd">    ``cuequivariance``/``cuequivariance_ops_torch`` imported. Each name is</span>
+<span class="sd">    resolved to its live ``torch.ops.cuequivariance.*`` op lazily, when the</span>
+<span class="sd">    adapter installs at DD runtime (where the cueq extension is present).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_MACE_CUEQ_SPEC_CACHE</span>
+    <span class="k">if</span> <span class="n">_MACE_CUEQ_SPEC_CACHE</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_MACE_CUEQ_SPEC_CACHE</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">SPEC_MPNN_HALO</span><span class="p">,</span>
+        <span class="n">OpAdapter</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># All node/edge-local opaque kernels — pass-through (unwrap → run → re-wrap).</span>
+    <span class="c1"># The conv&#39;s cross-rank correction lives in the unfuse adapter + the external</span>
+    <span class="c1"># scatter&#39;s halo handler, not on any of these ops. Declared by qualified op</span>
+    <span class="c1"># name (not a live handle): the spec is data, so it can be built without the</span>
+    <span class="c1"># ``cuequivariance_ops_torch`` extension loaded — ``OpAdapter`` resolves each</span>
+    <span class="c1"># name to its live op at ``install`` time (i.e. only when a cueq model</span>
+    <span class="c1"># actually runs under DD, where the extension is present).</span>
+    <span class="n">_custom_ops</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::fused_tensor_product&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::fused_tensor_product_bwd&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::fused_tensor_product_bwd_bwd&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::uniform_1d&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::indexed_linear_B&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::indexed_linear_C&quot;</span><span class="p">),</span>
+        <span class="n">OpAdapter</span><span class="p">(</span><span class="s2">&quot;cuequivariance::segmented_transpose&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="c1"># cueq fuses the tensor products / linear / symmetric contractions but does</span>
+    <span class="c1"># NOT replace e3nn&#39;s ``SphericalHarmonics``, whose ``forward`` calls a</span>
+    <span class="c1"># scripted kernel and an in-place ``sh.mul_(cat)`` normalization that both</span>
+    <span class="c1"># mishandle sharded tensors (the scripted kernel faults; the in-place op</span>
+    <span class="c1"># fails under compile). Marshal the whole ``SphericalHarmonics.forward`` so</span>
+    <span class="c1"># both run on a plain local tensor.</span>
+    <span class="c1">#</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">MethodAdapter</span>
+
+    <span class="n">_marshal</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">MethodAdapter</span><span class="p">(</span>
+            <span class="s2">&quot;e3nn.o3&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SphericalHarmonics&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;forward&quot;</span><span class="p">,</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;marshal&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># cueq&#39;s ``EquivariantProductBasisBlock.forward`` derives the per-node</span>
+        <span class="c1"># element index for the symmetric contraction with</span>
+        <span class="c1"># ``torch.nonzero(node_attrs)[:, 1]``. Under DD-compile the graph is padded</span>
+        <span class="c1"># to fixed-shape caps with inert dead atoms (``Z=0`` -&gt; all-zero one-hot</span>
+        <span class="c1"># ``node_attrs`` row), so ``nonzero`` UNDERCOUNTS — ``index_attrs`` gets</span>
+        <span class="c1"># fewer rows than ``node_feats`` (``n_padded``) and the cueq ``uniform_1d``</span>
+        <span class="c1"># kernel raises &quot;batch dim mismatch&quot; (caught in the fake impl on some</span>
+        <span class="c1"># backends, at eager runtime on others). The wrap swaps in</span>
+        <span class="c1"># ``node_attrs.argmax(dim=1)`` — one index per row, == ``nonzero[:, 1]``</span>
+        <span class="c1"># for real one-hot rows; dead rows map to element 0 and are stripped from</span>
+        <span class="c1"># the owned-only output. Static-shape, so it also sidesteps the</span>
+        <span class="c1"># data-dependent ``nonzero`` under compile. Non-cueq path is untouched.</span>
+        <span class="n">MethodAdapter</span><span class="p">(</span>
+            <span class="s2">&quot;mace.modules.blocks&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;EquivariantProductBasisBlock&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;forward&quot;</span><span class="p">,</span>
+            <span class="n">_mace_product_block_static_index_forward</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">CompilePolicy</span><span class="p">,</span>
+        <span class="n">ForceStrategy</span><span class="p">,</span>
+        <span class="n">OutputKind</span><span class="p">,</span>
+        <span class="n">OutputSpec</span><span class="p">,</span>
+        <span class="n">Reduce</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># cueq fused kernels + the SphericalHarmonics marshal on the MPNN-halo</span>
+    <span class="c1"># preset, plus the MACE compile policy: forces come from autograd over a</span>
+    <span class="c1"># compiled energy-only forward.</span>
+    <span class="n">_MACE_CUEQ_SPEC_CACHE</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">SPEC_MPNN_HALO</span><span class="o">.</span><span class="n">with_adapters</span><span class="p">(</span><span class="o">*</span><span class="n">_custom_ops</span><span class="p">,</span> <span class="o">*</span><span class="n">_marshal</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">with_compile</span><span class="p">(</span>
+            <span class="n">CompilePolicy</span><span class="p">(</span>
+                <span class="n">static_shapes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">force_strategy</span><span class="o">=</span><span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_NODE_ENERGY</span><span class="p">,</span>
+                <span class="c1"># MACE is fully differentiable in positions + cell, so the</span>
+                <span class="c1"># framework strain-autograd gives correct compiled-DD stress.</span>
+                <span class="n">stress_via_strain</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># A strain-trick virial is a per-rank partial; the reduction sums them.</span>
+        <span class="o">.</span><span class="n">with_outputs</span><span class="p">({</span><span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">ALL_REDUCE</span><span class="p">)})</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_MACE_CUEQ_SPEC_CACHE</span>
+
+
+<span class="n">_MACE_SCRIPTED_SPEC_CACHE</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mace_scripted_spec</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the MACE non-cueq MLIPSpec with scripted-op marshalling wired.</span>
+
+<span class="sd">    Plain (non-cueq) MACE runs e3nn&#39;s ``SphericalHarmonics`` layer, whose</span>
+<span class="sd">    ``forward`` calls a scripted kernel and an in-place ``sh.mul_(cat)``</span>
+<span class="sd">    normalization. On the distributed halo path the scripted kernel mishandles</span>
+<span class="sd">    sharded tensors and faults. Auto-discovery only wraps scripted *submodules*,</span>
+<span class="sd">    not a scripted *function* called from a plain ``forward``, so MACE marshals</span>
+<span class="sd">    the whole ``SphericalHarmonics.forward`` explicitly. Cached.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_MACE_SCRIPTED_SPEC_CACHE</span>
+    <span class="k">if</span> <span class="n">_MACE_SCRIPTED_SPEC_CACHE</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_MACE_SCRIPTED_SPEC_CACHE</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">MethodAdapter</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SPEC_MPNN_HALO</span>
+
+    <span class="c1"># Marshal the whole SphericalHarmonics.forward: unwrap the sharded input to</span>
+    <span class="c1"># its local tensor once so both the scripted kernel and the in-place</span>
+    <span class="c1"># ``sh.mul_(cat)`` run on a plain local tensor, then re-wrap the output.</span>
+    <span class="n">_marshal</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">MethodAdapter</span><span class="p">(</span>
+            <span class="s2">&quot;e3nn.o3&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;SphericalHarmonics&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;forward&quot;</span><span class="p">,</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;marshal&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">CompilePolicy</span><span class="p">,</span>
+        <span class="n">ForceStrategy</span><span class="p">,</span>
+        <span class="n">OutputKind</span><span class="p">,</span>
+        <span class="n">OutputSpec</span><span class="p">,</span>
+        <span class="n">Reduce</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># The SphericalHarmonics marshal on the MPNN-halo preset, plus the MACE</span>
+    <span class="c1"># compile policy (forces via autograd over a compiled energy-only forward).</span>
+    <span class="n">_MACE_SCRIPTED_SPEC_CACHE</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">SPEC_MPNN_HALO</span><span class="o">.</span><span class="n">with_adapters</span><span class="p">(</span><span class="o">*</span><span class="n">_marshal</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">with_compile</span><span class="p">(</span>
+            <span class="n">CompilePolicy</span><span class="p">(</span>
+                <span class="n">static_shapes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">force_strategy</span><span class="o">=</span><span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_NODE_ENERGY</span><span class="p">,</span>
+                <span class="c1"># MACE is fully differentiable in positions + cell, so the</span>
+                <span class="c1"># framework strain-autograd gives correct compiled-DD stress.</span>
+                <span class="n">stress_via_strain</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># A strain-trick virial is a per-rank partial; the reduction sums them.</span>
+        <span class="o">.</span><span class="n">with_outputs</span><span class="p">({</span><span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">ALL_REDUCE</span><span class="p">)})</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_MACE_SCRIPTED_SPEC_CACHE</span>
 
 
 <div class="viewcode-block" id="MACEWrapper">
@@ -541,9 +946,20 @@ document.write(`
 
     <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reconstruction_spec</span><span class="p">:</span> <span class="s2">&quot;BaseSpec | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkpoint_spec</span> <span class="o">=</span> <span class="n">reconstruction_spec</span>
+
+        <span class="c1"># e3nn&#39;s ``Irrep.__len__`` raises under TorchDynamo guard-building, so</span>
+        <span class="c1"># any compiled MACE needs this idempotent compat shim before the first</span>
+        <span class="c1"># traced forward.</span>
+        <span class="n">_patch_e3nn_irrep_len_for_compile</span><span class="p">()</span>
 
         <span class="c1"># Cache the model dtype — determined at construction, stable thereafter.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_model_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">dtype</span>
@@ -555,18 +971,21 @@ document.write(`
         <span class="n">node_emb</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">z_table</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">z_table</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">z_table</span><span class="p">):</span>
             <span class="n">node_emb</span><span class="p">[</span><span class="n">z</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
-        <span class="c1"># Cast to model device+dtype so _node_attrs needs no per-step conversion.</span>
-        <span class="c1"># Must use the model&#39;s device here: from_checkpoint moves the inner model</span>
-        <span class="c1"># to the target device before calling cls(model), so the buffer must be</span>
-        <span class="c1"># placed on that device from construction rather than relying on a</span>
-        <span class="c1"># subsequent .to() call that never happens.</span>
+        <span class="c1"># Place on the model&#39;s device+dtype so _node_attrs needs no per-step</span>
+        <span class="c1"># conversion. Use the model&#39;s device (from_checkpoint moves the inner</span>
+        <span class="c1"># model before calling cls(model), so no later .to() is guaranteed).</span>
         <span class="n">model_device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
         <span class="n">node_emb</span> <span class="o">=</span> <span class="n">node_emb</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">model_device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_model_dtype</span><span class="p">)</span>
         <span class="c1"># persistent=False: derived from model.atomic_numbers, excluded from</span>
         <span class="c1"># state_dict but still tracked for device / dtype moves.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;_node_emb&quot;</span><span class="p">,</span> <span class="n">node_emb</span><span class="p">,</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
-            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;hessian&quot;</span><span class="p">}),</span>
+            <span class="c1"># ``atomic_energies`` (per-atom energy = MACE&#39;s raw ``node_energy``)</span>
+            <span class="c1"># is a normal output; the distributed force path requests it to get</span>
+            <span class="c1"># a per-node energy to differentiate, and callers may ask for it too.</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;hessian&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">}</span>
+            <span class="p">),</span>
             <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
             <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}),</span>
             <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
@@ -581,6 +1000,20 @@ document.write(`
             <span class="p">),</span>
         <span class="p">)</span>
 
+<div class="viewcode-block" id="MACEWrapper.checkpoint_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.checkpoint_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkpoint_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;BaseSpec | None&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the factory spec used to reconstruct this wrapper, if known.</span>
+
+<span class="sd">        Wrappers created by :meth:`from_checkpoint` store a callable spec for</span>
+<span class="sd">        that factory so strategy checkpoints can rebuild optimized MACE models</span>
+<span class="sd">        without introspecting the transformed inner MACE module constructor.</span>
+<span class="sd">        Wrappers around arbitrary live modules return ``None`` and use the</span>
+<span class="sd">        generic constructor-introspection fallback.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_checkpoint_spec</span></div>
+
+
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># BaseModelMixin required properties</span>
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -592,6 +1025,61 @@ document.write(`
             <span class="s2">&quot;node_embeddings&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">hidden_dim</span><span class="p">,),</span>
             <span class="s2">&quot;graph_embeddings&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">hidden_dim</span><span class="p">,),</span>
         <span class="p">}</span>
+
+<div class="viewcode-block" id="MACEWrapper.distribution_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.distribution_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;MLIPSpec for MACE under domain decomposition.</span>
+
+<span class="sd">        MACE uses the MPNN halo spec: every message-passing layer scatters over</span>
+<span class="sd">        edges into ``node_feats`` (halo rows kept in sync), and a final</span>
+<span class="sd">        per-graph scatter over node energies produces total energy (halo rows</span>
+<span class="sd">        dropped, then all-reduced across ranks). For cueq-converted checkpoints</span>
+<span class="sd">        the fused ``conv_tp`` kernel hides that gather/scatter, so the spec</span>
+<span class="sd">        installs a mode-dependent conv adapter for the DD scope</span>
+<span class="sd">        (``_cueq_conv_unfuse_adapters``): under eager DD it unfuses to the</span>
+<span class="sd">        external gather + scatter plain MACE uses (halo handlers fire); under</span>
+<span class="sd">        compiled DD it keeps the conv fused for memory parity with single-GPU</span>
+<span class="sd">        and relies on the refresh adapter&#39;s ``scatter_to_owners`` for halo</span>
+<span class="sd">        correctness.</span>
+
+<span class="sd">        Memoized on first access. The per-checkpoint additions over the base</span>
+<span class="sd">        spec are: the message-passing halo refresh (``neighbor_refresh_adapters``</span>
+<span class="sd">        discovers the concrete InteractionBlocks and declares their per-node</span>
+<span class="sd">        output halo-corrected under compile; ``NVALCHEMI_MACE_NO_REFRESH=1`` drops</span>
+<span class="sd">        it, debug only) and, for cueq, the conv unfuse adapters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyKind</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">if</span> <span class="n">strategy</span> <span class="o">==</span> <span class="n">StrategyKind</span><span class="o">.</span><span class="n">GRAPH_PARTITION</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;MACE supports the halo strategy; &quot;</span>
+                <span class="s2">&quot;graph-partition is not implemented for MACE.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">cached</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_dist_spec_cache&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">neighbor_refresh_adapters</span>  <span class="c1"># noqa: PLC0415</span>
+
+            <span class="n">uses_cueq</span> <span class="o">=</span> <span class="n">_mace_uses_cueq</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
+            <span class="n">base</span> <span class="o">=</span> <span class="n">_mace_cueq_spec</span><span class="p">()</span> <span class="k">if</span> <span class="n">uses_cueq</span> <span class="k">else</span> <span class="n">_mace_scripted_spec</span><span class="p">()</span>
+            <span class="n">refresh</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">()</span>
+                <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_MACE_NO_REFRESH&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
+                <span class="k">else</span> <span class="n">neighbor_refresh_adapters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">interactions</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># cueq conv fusion (CUDA) hides the message gather/scatter in an</span>
+            <span class="c1"># opaque kernel that bypasses halo correction. The mode-dependent</span>
+            <span class="c1"># adapter unfuses it under eager DD (external-scatter path, joining</span>
+            <span class="c1"># plain MACE) and keeps it fused under compiled DD (memory parity</span>
+            <span class="c1"># with single-GPU; halo handled by the refresh adapter).</span>
+            <span class="n">halo_conv</span> <span class="o">=</span> <span class="n">_cueq_conv_unfuse_adapters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="n">uses_cueq</span> <span class="k">else</span> <span class="p">()</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">with_adapters</span><span class="p">(</span><span class="o">*</span><span class="n">refresh</span><span class="p">,</span> <span class="o">*</span><span class="n">halo_conv</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dist_spec_cache</span> <span class="o">=</span> <span class="n">cached</span>
+        <span class="k">return</span> <span class="n">cached</span></div>
+
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Convenience properties</span>
@@ -652,11 +1140,24 @@ document.write(`
 <span class="sd">        the pipeline handles format conversion and cutoff filtering</span>
 <span class="sd">        before calling this model.</span>
 
-<span class="sd">        .. note::</span>
-<span class="sd">            This method does **not** call ``super().adapt_input()`` because</span>
-<span class="sd">            :class:`~nvalchemi.data.Batch` does not implement ``model_dump()``,</span>
-<span class="sd">            which the base implementation requires.  Gradient enabling on</span>
-<span class="sd">            ``positions`` is handled manually here instead.</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            The input system; an ``AtomicData`` is promoted to a single-graph</span>
+<span class="sd">            ``Batch``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Unused; accepted for interface compatibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            MACE inputs: ``positions``, ``node_attrs``, ``batch``, ``ptr``,</span>
+<span class="sd">            ``edge_index`` ``[2, E]``, ``shifts`` ``[E, 3]``, ``cell`` ``[B, 3, 3]``.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Does not call ``super().adapt_input()`` (``Batch`` has no ``model_dump``);</span>
+<span class="sd">        gradient enabling on ``positions`` is handled here.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">):</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
@@ -669,14 +1170,13 @@ document.write(`
         <span class="n">edge_index</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">neighbor_list</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>  <span class="c1"># [2, E]</span>
         <span class="n">E</span> <span class="o">=</span> <span class="n">edge_index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
-        <span class="c1"># Cast positions to model dtype, then enable gradients on the converted</span>
-        <span class="c1"># tensor.  We always clone before enabling grad so that data.positions</span>
-        <span class="c1"># is never mutated in-place (which would happen when dtype already</span>
-        <span class="c1"># matches and .to() returns the same storage).</span>
+        <span class="c1"># Enable grad on positions for force/stress; clone first so we never</span>
+        <span class="c1"># mutate a caller leaf in-place, but pass a grad-requiring tensor through</span>
+        <span class="c1"># unchanged (it already carries its upstream graph).</span>
         <span class="n">positions</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="n">compute_forces</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
         <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
-        <span class="k">if</span> <span class="n">compute_forces</span> <span class="ow">or</span> <span class="n">compute_stresses</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">compute_forces</span> <span class="ow">or</span> <span class="n">compute_stresses</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">positions</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
             <span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
             <span class="n">positions</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 
@@ -702,19 +1202,26 @@ document.write(`
         <span class="k">else</span><span class="p">:</span>
             <span class="n">cell</span> <span class="o">=</span> <span class="n">cell_raw</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="c1"># Pre-compute physical shift vectors [E, 3].</span>
-        <span class="c1"># MACE&#39;s prepare_graph always reads data[&quot;shifts&quot;] (physical Å vectors)</span>
-        <span class="c1"># directly; it only recomputes them internally when</span>
-        <span class="c1"># compute_displacement=True (stress path).  We must supply &quot;shifts&quot; for</span>
-        <span class="c1"># the energy/force-only path.</span>
+        <span class="c1"># Physical shifts [E, 3] = neighbor_list_shifts @ cell[graph]; MACE&#39;s</span>
+        <span class="c1"># energy/force-only path reads data[&quot;shifts&quot;] directly. Drop sentinel</span>
+        <span class="c1"># edges (endpoint == n_atoms) first — a sentinel sender is out of bounds</span>
+        <span class="c1"># and would fault the sender-indexed gathers below.</span>
         <span class="c1"># Convention: shifts[e] = neighbor_list_shifts[e] @ cell[graph_of_sender_e]</span>
         <span class="c1"># matching get_symmetric_displacement in mace.modules.utils.</span>
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span>
+        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[:,</span> <span class="n">valid</span><span class="p">]</span>
+        <span class="n">neighbor_list_shifts</span> <span class="o">=</span> <span class="n">neighbor_list_shifts</span><span class="p">[</span><span class="n">valid</span><span class="p">]</span>
+
         <span class="n">sender</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># [E] — source node indices</span>
         <span class="n">batch_per_edge</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">[</span><span class="n">sender</span><span class="p">]</span>
         <span class="n">shifts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;eb,ebc-&gt;ec&quot;</span><span class="p">,</span> <span class="n">neighbor_list_shifts</span><span class="p">,</span> <span class="n">cell</span><span class="p">[</span><span class="n">batch_per_edge</span><span class="p">])</span>
+
+        <span class="n">node_attrs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node_attrs</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="p">{</span>
             <span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">positions</span><span class="p">,</span>
-            <span class="s2">&quot;node_attrs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node_attrs</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="s2">&quot;node_attrs&quot;</span><span class="p">:</span> <span class="n">node_attrs</span><span class="p">,</span>
             <span class="c1"># MACE requires int64 for graph-topology tensors.</span>
             <span class="s2">&quot;batch&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">(),</span>
             <span class="s2">&quot;ptr&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_ptr</span><span class="o">.</span><span class="n">long</span><span class="p">(),</span>
@@ -731,12 +1238,24 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">raw_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map MACE output keys to nvalchemi standard keys.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map MACE raw outputs to nvalchemi standard keys.</span>
 
-<span class="sd">        MACE uses ``&quot;energy&quot;`` / ``&quot;stress&quot;`` / ``&quot;hessian&quot;``; nvalchemi</span>
-<span class="sd">        expects ``&quot;energy&quot;`` / ``&quot;stress&quot;`` / ``&quot;hessian&quot;``.</span>
-<span class="sd">        Renaming happens *before* calling ``super()`` so the base auto-mapper</span>
-<span class="sd">        sees the canonical key names.</span>
+<span class="sd">        Normalizes ``energy`` shape, forwards ``forces`` / ``stress`` / ``hessian``</span>
+<span class="sd">        when present, and exposes MACE&#39;s ``node_energy`` as ``atomic_energies``,</span>
+<span class="sd">        then delegates to the base auto-mapper.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        raw_output : dict[str, Any]</span>
+<span class="sd">            The dict returned by ``MACE.forward``.</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            The input system the outputs were computed for.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            The standardized outputs (subset of ``energy``, ``forces``,</span>
+<span class="sd">            ``stress``, ``hessian``, ``atomic_energies``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">energy</span> <span class="o">=</span> <span class="n">raw_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
         <span class="n">mapped</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
@@ -748,6 +1267,11 @@ document.write(`
             <span class="n">mapped</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw_output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">raw_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;hessian&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">mapped</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw_output</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span>
+        <span class="c1"># Per-atom energy = MACE&#39;s raw ``node_energy``. The base auto-mapper</span>
+        <span class="c1"># keeps it only when ``atomic_energies`` is active, so it is free</span>
+        <span class="c1"># otherwise.</span>
+        <span class="k">if</span> <span class="n">raw_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_energy&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mapped</span><span class="p">[</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw_output</span><span class="p">[</span><span class="s2">&quot;node_energy&quot;</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">mapped</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
 
@@ -756,19 +1280,53 @@ document.write(`
     <span class="c1"># Forward pass</span>
     <span class="c1"># ------------------------------------------------------------------</span>
 
+<div class="viewcode-block" id="MACEWrapper.modify_ema_methods">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.modify_ema_methods">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">modify_ema_methods</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore cuEquivariance methods discarded by EMA model copying.</span>
+
+<span class="sd">        ``torch.optim.swa_utils.AveragedModel`` deep-copies its source model.</span>
+<span class="sd">        cuEquivariance fused convolution modules attach their specialized</span>
+<span class="sd">        ``forward`` method at runtime, and that instance method is not retained</span>
+<span class="sd">        by the copy. Reapply MACE&#39;s fusion wrapper only when it is missing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">mace.modules.wrapper_ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_cueq_conv_fusion</span>
+
+        <span class="k">for</span> <span class="n">interaction</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;interactions&quot;</span><span class="p">,</span> <span class="p">()):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">interaction</span><span class="p">,</span> <span class="s2">&quot;conv_fusion&quot;</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">conv_tp</span> <span class="o">=</span> <span class="n">interaction</span><span class="o">.</span><span class="n">conv_tp</span>
+            <span class="k">if</span> <span class="s2">&quot;forward&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">conv_tp</span><span class="p">):</span>
+                <span class="n">with_cueq_conv_fusion</span><span class="p">(</span><span class="n">conv_tp</span><span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="MACEWrapper.forward">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.forward">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the MACE model and return the output.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the MACE model for the active outputs.</span>
+
+<span class="sd">        Pure and distribution-agnostic: computes exactly what</span>
+<span class="sd">        ``model_config.active_outputs`` requests. Forces/stress run MACE&#39;s</span>
+<span class="sd">        internal autograd; an ``atomic_energies``-only request runs an</span>
+<span class="sd">        energy-only forward returning per-atom energy.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            The input system (with neighbor data attached).</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`adapt_input`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            The standardized outputs for the active set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
+        <span class="n">compute_forces</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="n">active</span>
+        <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">active</span>
+
         <span class="n">model_inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="n">compute_forces</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
-        <span class="p">)</span>
-        <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
-        <span class="p">)</span>
-
         <span class="n">raw_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span>
             <span class="n">model_inputs</span><span class="p">,</span>
             <span class="n">compute_force</span><span class="o">=</span><span class="n">compute_forces</span><span class="p">,</span>
@@ -776,7 +1334,10 @@ document.write(`
             <span class="c1"># compute_displacement enables the MACE displacement trick required</span>
             <span class="c1"># for stress computation via autograd through cell @ neighbor_list_shifts.</span>
             <span class="n">compute_displacement</span><span class="o">=</span><span class="n">compute_stresses</span><span class="p">,</span>
-            <span class="n">training</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Only inference supported right now.</span>
+            <span class="c1"># Train mode retains the autograd graph through forces/stresses so</span>
+            <span class="c1"># force/stress losses can backprop; eval mode (inference, MD, DD)</span>
+            <span class="c1"># keeps the cheaper no-create-graph path.</span>
+            <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">raw_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span></div>
@@ -793,10 +1354,19 @@ document.write(`
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute node and graph embeddings without forces or stresses.</span>
 
-<span class="sd">        Writes ``node_embeddings`` (shape ``[N, hidden_dim]``) and</span>
-<span class="sd">        ``graph_embeddings`` (shape ``[B, hidden_dim]``, sum-pooled over atoms)</span>
-<span class="sd">        into *data* in-place and returns it.  Does **not** mutate</span>
-<span class="sd">        ``model_config``.</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            The input system; an ``AtomicData`` is promoted to a ``Batch``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`adapt_input`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomicData | Batch</span>
+<span class="sd">            *data*, with ``node_embeddings`` ``[N, hidden_dim]`` and</span>
+<span class="sd">            ``graph_embeddings`` ``[B, hidden_dim]`` (sum-pooled) written in</span>
+<span class="sd">            place. ``model_config`` is not mutated.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">):</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
@@ -819,11 +1389,8 @@ document.write(`
                 <span class="s2">&quot;Ensure the model is a standard MACE variant.&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Write node embeddings directly to the atoms group to avoid the</span>
-        <span class="c1"># default &quot;system&quot; routing in MultiLevelStorage for unknown keys.</span>
-        <span class="c1"># If we wrote via `data.node_embeddings = ...`, it would land in the</span>
-        <span class="c1"># system group (batch_size = [N]) and then block the graph_embeddings</span>
-        <span class="c1"># write (batch_size = [B]) from going to the same group.</span>
+        <span class="c1"># Write to the atoms group directly: a plain attribute set would route to</span>
+        <span class="c1"># the system group and block the later per-graph graph_embeddings write.</span>
         <span class="n">atoms_group</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">_atoms_group</span>
         <span class="k">if</span> <span class="n">atoms_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">atoms_group</span><span class="p">[</span><span class="s2">&quot;node_embeddings&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node_feats</span>
@@ -860,6 +1427,8 @@ document.write(`
         <span class="n">enable_cueq</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">atomic_energies</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">atomic_energies_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">compile_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MACEWrapper&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a MACE model from a checkpoint and return a :class:`MACEWrapper`.</span>
@@ -903,6 +1472,10 @@ document.write(`
 <span class="sd">        compile_model : bool, optional</span>
 <span class="sd">            Apply ``torch.compile``.  Sets eval mode and freezes parameters;</span>
 <span class="sd">            the model is **inference-only** after this step.</span>
+<span class="sd">        atomic_energies : Mapping[int | str, float] | None, optional</span>
+<span class="sd">            Per-element E0 overrides keyed by atomic number.</span>
+<span class="sd">        atomic_energies_path : Path | str | None, optional</span>
+<span class="sd">            JSON file containing per-element E0 overrides keyed by atomic number.</span>
 <span class="sd">        **compile_kwargs</span>
 <span class="sd">            Forwarded to ``torch.compile``.</span>
 
@@ -914,7 +1487,10 @@ document.write(`
 <span class="sd">        ------</span>
 <span class="sd">        ImportError</span>
 <span class="sd">            If ``mace-torch`` is not installed, or if ``enable_cueq=True``</span>
-<span class="sd">            and ``cuequivariance`` is not installed.</span>
+<span class="sd">            and either ``cuequivariance`` or the ``cuequivariance-ops-torch``</span>
+<span class="sd">            CUDA kernels (the ``cu12`` / ``cu13`` dependency groups) are missing.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``enable_cueq=True`` and ``device`` is not a CUDA device.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">MACE</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">or</span> <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">MACE</span><span class="o">.</span><span class="n">_raise_error</span><span class="p">(</span>
             <span class="s2">&quot;MACEWrapper.from_checkpoint&quot;</span>
@@ -924,9 +1500,10 @@ document.write(`
             <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">)</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">mace.calculators.foundations_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">download_mace_mp_checkpoint</span>
 
+        <span class="n">target_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="n">cached_path</span> <span class="o">=</span> <span class="n">download_mace_mp_checkpoint</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">)</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
-            <span class="n">cached_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span>
+            <span class="n">cached_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">target_device</span>
         <span class="p">)</span>
 
         <span class="c1"># Step 1: dtype conversion.</span>
@@ -935,28 +1512,65 @@ document.write(`
 
         <span class="c1"># Step 2: cuEq conversion.</span>
         <span class="k">if</span> <span class="n">enable_cueq</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="kn">import</span><span class="w"> </span><span class="nn">cuequivariance</span>  <span class="c1"># noqa: F401</span>
-            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                    <span class="s2">&quot;cuequivariance is required for enable_cueq=True. &quot;</span>
-                    <span class="s2">&quot;Install it with: pip install &#39;nvalchemi-toolkit[mace]&#39;&quot;</span>
-                <span class="p">)</span>
+            <span class="n">_cueq</span> <span class="o">=</span> <span class="s2">&quot;MACEWrapper.from_checkpoint(enable_cueq=True)&quot;</span>
+            <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">CUEQUIVARIANCE</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">CUEQUIVARIANCE</span><span class="o">.</span><span class="n">_raise_error</span><span class="p">(</span><span class="n">_cueq</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># ``cuequivariance-torch`` alone is not enough: the fused kernels come</span>
+            <span class="c1"># from the CUDA-version-specific ``cuequivariance-ops-torch`` (cu12 /</span>
+            <span class="c1"># cu13 groups). Fail fast with the install guidance rather than deep in</span>
+            <span class="c1"># the forward when ``torch.ops.cuequivariance.*`` turns out unregistered.</span>
+            <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">CUEQUIVARIANCE_OPS</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">OptionalDependency</span><span class="o">.</span><span class="n">CUEQUIVARIANCE_OPS</span><span class="o">.</span><span class="n">_raise_error</span><span class="p">(</span><span class="n">_cueq</span><span class="p">)</span>
+            <span class="p">)</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">mace.cli.convert_e3nn_cueq</span><span class="w"> </span><span class="kn">import</span> <span class="n">run</span> <span class="k">as</span> <span class="n">_convert_mace_weights</span>
 
-            <span class="n">model</span> <span class="o">=</span> <span class="n">_convert_mace_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">return_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">target_device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;nvalchemi Toolkit MACE cuEquivariance conversion requires &quot;</span>
+                    <span class="s2">&quot;a CUDA device.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">target_device</span><span class="p">):</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">_convert_mace_weights</span><span class="p">(</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">return_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
 
-        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target_device</span><span class="p">)</span>
 
-        <span class="c1"># Step 3: torch.compile — inference-only after this point.</span>
+        <span class="n">atomic_energy_overrides</span> <span class="o">=</span> <span class="n">_load_atomic_energies</span><span class="p">(</span>
+            <span class="n">atomic_energies</span><span class="p">,</span> <span class="n">atomic_energies_path</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">atomic_energy_overrides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_apply_atomic_energies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">atomic_energy_overrides</span><span class="p">)</span>
+
+        <span class="c1"># Step 3: torch.compile the model for single-process inference —</span>
+        <span class="c1"># inference-only after this point.</span>
         <span class="k">if</span> <span class="n">compile_model</span><span class="p">:</span>
+            <span class="c1"># Apply the e3nn compile-compat shim before tracing. (It is also</span>
+            <span class="c1"># applied idempotently in __init__, but compile runs first here.)</span>
             <span class="n">_patch_e3nn_irrep_len_for_compile</span><span class="p">()</span>
             <span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
                 <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">compile_kwargs</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec</span>
+
+        <span class="n">checkpoint_spec</span> <span class="o">=</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">,</span>
+            <span class="n">checkpoint_path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">),</span>
+            <span class="n">enable_cueq</span><span class="o">=</span><span class="n">enable_cueq</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">compile_model</span><span class="o">=</span><span class="n">compile_model</span><span class="p">,</span>
+            <span class="n">atomic_energies</span><span class="o">=</span><span class="n">atomic_energies</span><span class="p">,</span>
+            <span class="n">atomic_energies_path</span><span class="o">=</span><span class="n">atomic_energies_path</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">compile_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">wrapper</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">reconstruction_spec</span><span class="o">=</span><span class="n">checkpoint_spec</span><span class="p">)</span>
+        <span class="n">wrapper</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">wrapper</span></div>
 
 
     <span class="c1"># ------------------------------------------------------------------</span>

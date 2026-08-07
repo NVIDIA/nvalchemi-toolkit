@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.data
 
+
 .. autoclass:: Batch
     :members:
+
 
 .. raw:: html
 

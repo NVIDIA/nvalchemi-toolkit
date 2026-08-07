@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Overview: module code &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Overview: module code &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/index';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -403,19 +406,41 @@ document.write(`
                 <article class="bd-article">
                   
   <h1>All modules for which code is available</h1>
-<ul><li><a href="nvalchemi/_typing.html">nvalchemi._typing</a></li>
+<ul><li><a href="nvalchemi/_serialization.html">nvalchemi._serialization</a></li>
+<li><a href="nvalchemi/_typing.html">nvalchemi._typing</a></li>
 <li><a href="nvalchemi/data/atomic_data.html">nvalchemi.data.atomic_data</a></li>
 <li><a href="nvalchemi/data/batch.html">nvalchemi.data.batch</a></li>
 <li><a href="nvalchemi/data/datapipes/backends/base.html">nvalchemi.data.datapipes.backends.base</a></li>
 <li><a href="nvalchemi/data/datapipes/backends/zarr.html">nvalchemi.data.datapipes.backends.zarr</a></li>
 <li><a href="nvalchemi/data/datapipes/dataloader.html">nvalchemi.data.datapipes.dataloader</a></li>
 <li><a href="nvalchemi/data/datapipes/dataset.html">nvalchemi.data.datapipes.dataset</a></li>
-<li><a href="nvalchemi/dynamics/base.html">nvalchemi.dynamics.base</a></li>
+<li><a href="nvalchemi/data/datapipes/in_memory_dataset.html">nvalchemi.data.datapipes.in_memory_dataset</a></li>
+<li><a href="nvalchemi/data/datapipes/multidataset.html">nvalchemi.data.datapipes.multidataset</a></li>
+<li><a href="nvalchemi/data/datapipes/samplers.html">nvalchemi.data.datapipes.samplers</a></li>
+<li><a href="nvalchemi/distributed.html">nvalchemi.distributed</a></li>
+<ul><li><a href="nvalchemi/distributed/_core/adapter.html">nvalchemi.distributed._core.adapter</a></li>
+<li><a href="nvalchemi/distributed/_core/context.html">nvalchemi.distributed._core.context</a></li>
+<li><a href="nvalchemi/distributed/_core/enums.html">nvalchemi.distributed._core.enums</a></li>
+<li><a href="nvalchemi/distributed/_core/halo_types.html">nvalchemi.distributed._core.halo_types</a></li>
+<li><a href="nvalchemi/distributed/_core/reshard.html">nvalchemi.distributed._core.reshard</a></li>
+<li><a href="nvalchemi/distributed/_core/spec.html">nvalchemi.distributed._core.spec</a></li>
+<li><a href="nvalchemi/distributed/_runtime.html">nvalchemi.distributed._runtime</a></li>
+<li><a href="nvalchemi/distributed/config.html">nvalchemi.distributed.config</a></li>
+<li><a href="nvalchemi/distributed/distributed_model.html">nvalchemi.distributed.distributed_model</a></li>
+<li><a href="nvalchemi/distributed/distributed_pipeline.html">nvalchemi.distributed.distributed_pipeline</a></li>
+<li><a href="nvalchemi/distributed/domain_parallel.html">nvalchemi.distributed.domain_parallel</a></li>
+<li><a href="nvalchemi/distributed/graph_padder.html">nvalchemi.distributed.graph_padder</a></li>
+<li><a href="nvalchemi/distributed/helpers.html">nvalchemi.distributed.helpers</a></li>
+<li><a href="nvalchemi/distributed/output_kinds.html">nvalchemi.distributed.output_kinds</a></li>
+<li><a href="nvalchemi/distributed/partitioner.html">nvalchemi.distributed.partitioner</a></li>
+<li><a href="nvalchemi/distributed/sharded_batch.html">nvalchemi.distributed.sharded_batch</a></li>
+<li><a href="nvalchemi/distributed/spec.html">nvalchemi.distributed.spec</a></li>
+<li><a href="nvalchemi/distributed/validate.html">nvalchemi.distributed.validate</a></li>
+</ul><li><a href="nvalchemi/dynamics/base.html">nvalchemi.dynamics.base</a></li>
 <li><a href="nvalchemi/dynamics/demo.html">nvalchemi.dynamics.demo</a></li>
 <li><a href="nvalchemi/dynamics/hooks/freeze.html">nvalchemi.dynamics.hooks.freeze</a></li>
 <li><a href="nvalchemi/dynamics/hooks/logging.html">nvalchemi.dynamics.hooks.logging</a></li>
 <li><a href="nvalchemi/dynamics/hooks/monitors.html">nvalchemi.dynamics.hooks.monitors</a></li>
-<li><a href="nvalchemi/dynamics/hooks/profiling.html">nvalchemi.dynamics.hooks.profiling</a></li>
 <li><a href="nvalchemi/dynamics/hooks/safety.html">nvalchemi.dynamics.hooks.safety</a></li>
 <li><a href="nvalchemi/dynamics/hooks/snapshot.html">nvalchemi.dynamics.hooks.snapshot</a></li>
 <li><a href="nvalchemi/dynamics/sampler.html">nvalchemi.dynamics.sampler</a></li>
@@ -426,6 +451,17 @@ document.write(`
 <li><a href="nvalchemi/hooks/bias.html">nvalchemi.hooks.bias</a></li>
 <li><a href="nvalchemi/hooks/neighbor_list.html">nvalchemi.hooks.neighbor_list</a></li>
 <li><a href="nvalchemi/hooks/periodic.html">nvalchemi.hooks.periodic</a></li>
+<li><a href="nvalchemi/hooks/physicsnemo_profiling.html">nvalchemi.hooks.physicsnemo_profiling</a></li>
+<li><a href="nvalchemi/hooks/reporting/_orchestrator.html">nvalchemi.hooks.reporting._orchestrator</a></li>
+<li><a href="nvalchemi/hooks/reporting/_protocol.html">nvalchemi.hooks.reporting._protocol</a></li>
+<li><a href="nvalchemi/hooks/reporting/_rich.html">nvalchemi.hooks.reporting._rich</a></li>
+<li><a href="nvalchemi/hooks/reporting/_scalars.html">nvalchemi.hooks.reporting._scalars</a></li>
+<li><a href="nvalchemi/hooks/reporting/_state.html">nvalchemi.hooks.reporting._state</a></li>
+<li><a href="nvalchemi/hooks/reporting/_tensorboard.html">nvalchemi.hooks.reporting._tensorboard</a></li>
+<li><a href="nvalchemi/hooks/reporting/layouts/base.html">nvalchemi.hooks.reporting.layouts.base</a></li>
+<li><a href="nvalchemi/hooks/reporting/layouts/dynamics.html">nvalchemi.hooks.reporting.layouts.dynamics</a></li>
+<li><a href="nvalchemi/hooks/reporting/layouts/train.html">nvalchemi.hooks.reporting.layouts.train</a></li>
+<li><a href="nvalchemi/hooks/stage_timing.html">nvalchemi.hooks.stage_timing</a></li>
 <li><a href="nvalchemi/models/aimnet2.html">nvalchemi.models.aimnet2</a></li>
 <li><a href="nvalchemi/models/base.html">nvalchemi.models.base</a></li>
 <li><a href="nvalchemi/models/demo.html">nvalchemi.models.demo</a></li>
@@ -435,6 +471,36 @@ document.write(`
 <li><a href="nvalchemi/models/mace.html">nvalchemi.models.mace</a></li>
 <li><a href="nvalchemi/models/pipeline.html">nvalchemi.models.pipeline</a></li>
 <li><a href="nvalchemi/models/pme.html">nvalchemi.models.pme</a></li>
+<li><a href="nvalchemi/models/uma.html">nvalchemi.models.uma</a></li>
+<li><a href="nvalchemi/training/_checkpoint.html">nvalchemi.training._checkpoint</a></li>
+<li><a href="nvalchemi/training/_spec.html">nvalchemi.training._spec</a></li>
+<li><a href="nvalchemi/training/_validation.html">nvalchemi.training._validation</a></li>
+<li><a href="nvalchemi/training/finetune.html">nvalchemi.training.finetune</a></li>
+<li><a href="nvalchemi/training/hooks/checkpoint.html">nvalchemi.training.hooks.checkpoint</a></li>
+<li><a href="nvalchemi/training/hooks/ddp.html">nvalchemi.training.hooks.ddp</a></li>
+<li><a href="nvalchemi/training/hooks/ema.html">nvalchemi.training.hooks.ema</a></li>
+<li><a href="nvalchemi/training/hooks/finetune.html">nvalchemi.training.hooks.finetune</a></li>
+<li><a href="nvalchemi/training/hooks/mixed_precision.html">nvalchemi.training.hooks.mixed_precision</a></li>
+<li><a href="nvalchemi/training/hooks/update.html">nvalchemi.training.hooks.update</a></li>
+<li><a href="nvalchemi/training/losses/base.html">nvalchemi.training.losses.base</a></li>
+<li><a href="nvalchemi/training/losses/composition.html">nvalchemi.training.losses.composition</a></li>
+<li><a href="nvalchemi/training/losses/reductions.html">nvalchemi.training.losses.reductions</a></li>
+<li><a href="nvalchemi/training/losses/schedules.html">nvalchemi.training.losses.schedules</a></li>
+<li><a href="nvalchemi/training/losses/terms.html">nvalchemi.training.losses.terms</a></li>
+<li><a href="nvalchemi/training/optimizers.html">nvalchemi.training.optimizers</a></li>
+<li><a href="nvalchemi/training/strategy.html">nvalchemi.training.strategy</a></li>
+<li><a href="nvalchemiops/dynamics/integrators/langevin.html">nvalchemiops.dynamics.integrators.langevin</a></li>
+<li><a href="nvalchemiops/dynamics/integrators/nose_hoover.html">nvalchemiops.dynamics.integrators.nose_hoover</a></li>
+<li><a href="nvalchemiops/dynamics/integrators/npt.html">nvalchemiops.dynamics.integrators.npt</a></li>
+<li><a href="nvalchemiops/dynamics/integrators/velocity_rescaling.html">nvalchemiops.dynamics.integrators.velocity_rescaling</a></li>
+<li><a href="nvalchemiops/dynamics/integrators/velocity_verlet.html">nvalchemiops.dynamics.integrators.velocity_verlet</a></li>
+<li><a href="nvalchemiops/dynamics/optimizers/fire.html">nvalchemiops.dynamics.optimizers.fire</a></li>
+<li><a href="nvalchemiops/interactions/lj.html">nvalchemiops.interactions.lj</a></li>
+<li><a href="nvalchemiops/torch/fire2.html">nvalchemiops.torch.fire2</a></li>
+<li><a href="nvalchemiops/torch/interactions/dispersion/_dftd3.html">nvalchemiops.torch.interactions.dispersion._dftd3</a></li>
+<li><a href="nvalchemiops/torch/interactions/electrostatics/ewald.html">nvalchemiops.torch.interactions.electrostatics.ewald</a></li>
+<li><a href="nvalchemiops/torch/spline.html">nvalchemiops.torch.spline</a></li>
+<li><a href="physicsnemo/distributed/manager.html">physicsnemo.distributed.manager</a></li>
 </ul>
 
                 </article>

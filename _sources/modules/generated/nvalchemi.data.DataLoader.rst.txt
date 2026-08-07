@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.data
 
+
 .. autoclass:: DataLoader
     :members:
+
 
 .. raw:: html
 

@@ -1,0 +1,1378 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Fine-Tuning Pretrained Models &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/finetuning';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Serialization and Reproducibility" href="serialization.html" />
+    <link rel="prev" title="Losses" href="losses.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="training_finetuning.html" class="nav-link">Training &amp; Fine-tuning</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Fine-Tuning...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="fine-tuning-pretrained-models">
+<span id="finetuning-guide"></span><h1>Fine-Tuning Pretrained Models<a class="headerlink" href="#fine-tuning-pretrained-models" title="Link to this heading">#</a></h1>
+<p>Fine-tuning is the art of adapting a pretrained model to a new dataset
+and/or domain, typically with access to less data and/or computational
+resources than the original training run. The NVIDIA ALCHEMI Toolkit
+provides a fine-tuning API that closely resembles regular training,
+and provides a few functions that make the fine-tuning experience more
+turn-key for non-experts and experts alike to help make productionizing
+the model products more seamless.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-fine-tuning</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on configuring
+fine-tuning workflows and adapting pretrained checkpoints.</p>
+</div>
+<p>This documentation is roughly broken up into two parts: an introduction
+to the command-line interface which is designed for a more “on-the-rails”
+experience to fine-tuning and training, and the core fine-tuning API
+details for developers and ML engineers who need a better understanding
+of the internals.</p>
+<p>This guide assumes that you already have:</p>
+<ul class="simple">
+<li><p>a pretrained model wrapped with
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>;</p></li>
+<li><p>a dataset or dataloader that yields <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> objects;</p></li>
+<li><p>target tensors whose keys match the configured losses.</p></li>
+</ul>
+<p>For those prerequisites, see <a class="reference internal" href="models.html#models-guide"><span class="std std-ref">Models: Wrapping ML Interatomic Potentials</span></a>, <a class="reference internal" href="data.html#data-guide"><span class="std std-ref">AtomicData and Batch</span></a>,
+<a class="reference internal" href="datapipes.html#datapipes-guide"><span class="std std-ref">Data Loading Pipeline</span></a>, and <a class="reference internal" href="losses.html#losses-guide"><span class="std std-ref">Losses</span></a>.</p>
+<section id="training-cli">
+<h2>Training CLI<a class="headerlink" href="#training-cli" title="Link to this heading">#</a></h2>
+<p>The simplest and quickest way to get started with launching training
+and fine-tuning experiments is through the command-line interface (CLI) available
+after installing NVIDIA ALCHEMI Toolkit, via <code class="docutils literal notranslate"><span class="pre">nvalchemi-training</span></code>. The main
+features of this CLI is the ability to generate, review, and run experiments
+directly from JSON configuration files - you do not need an intricate knowledge
+of the full training API (although we highly suggest that you do!) in order to
+get started.</p>
+<section id="representative-workflow-fine-tuning-a-mace-checkpoint">
+<h3>Representative workflow: fine-tuning a MACE checkpoint<a class="headerlink" href="#representative-workflow-fine-tuning-a-mace-checkpoint" title="Link to this heading">#</a></h3>
+<p>To give an overview of the CLI, we can look at fine-tuning a pre-trained MACE model
+on your new dataset. Under the hood, the CLI effectively makes use of the fine-tuning
+and training APIs so you don’t have to build a script yourself, although we recommend
+power users to do so for more flexibility.</p>
+<p>The first step in the CLI workflow is to generate a reference JSON configuration
+if you don’t already have one. The JSON schema is tailored specifically for the CLI,
+but its contents are used to subsequently construct the same objects as you would
+if you were to write a script. The <code class="docutils literal notranslate"><span class="pre">nvalchemi-training</span> <span class="pre">finetune</span></code> group contains the
+command to initialize a configuration for a given architecture, as well as an existing
+public checkpoint:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># multiple datasets can be specified together</span>
+nvalchemi-training<span class="w"> </span>finetune<span class="w"> </span>init<span class="w"> </span>mace<span class="w"> </span>small-0b<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dataset<span class="w"> </span>data/domain-a.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dataset<span class="w"> </span>data/domain-b.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--output-dir<span class="w"> </span>runs/mace-ft<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>mace-ft.json
+
+<span class="c1"># get options printed out</span>
+nvalchemi-training<span class="w"> </span>finetune<span class="w"> </span>init<span class="w"> </span>mace<span class="w"> </span>--help
+</pre></div>
+</div>
+<p>We request a MACE model starting from the <code class="docutils literal notranslate"><span class="pre">small-0b</span></code> public checkpoint, and the
+expected training outputs will go into <code class="docutils literal notranslate"><span class="pre">runs/mace-ft</span></code>. The configuration file
+will be written out to <code class="docutils literal notranslate"><span class="pre">mace-ft.json</span></code> in the current working directory. You
+can then make edits directly to <code class="docutils literal notranslate"><span class="pre">mace-ft.json</span></code> to match your requirements.</p>
+<p>One important feature of the CLI is the ability to provide direct feedback
+and validate your configuration <em>before</em> you allocate/launch the compute;
+this is particularly handy so you do not need to wait for your GPU job
+to queue, only to find out that you have a mistake in your dataset path or
+something minor:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>report<span class="w"> </span>mace-ft.json
+</pre></div>
+</div>
+<p>This will create a terminal-based report that lets you review your intentions:
+everything from batch size, dataset choice, and learning rate schedule, and for
+supported models, specific hyperparameters like the <code class="docutils literal notranslate"><span class="pre">E0</span></code> values for MACE. Some
+<code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> specific diagnostics are also included, such as what hooks are configured
+and when they are expected to fire, and in the case of fine-tuning, which parameters
+are expected to actually be updated via the <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> regular expressions.
+Users should also pay close attention to the “Warnings” section of the report, which
+will provide important heuristics for catching common mistakes.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">nvalchemi-training</span> <span class="pre">spec</span> <span class="pre">report</span> <span class="pre">&lt;config&gt;.json</span> <span class="pre">--json</span></code> to have the result dumped
+to a JSON file, as opposed to just being in the terminal. This can be helpful for
+bookkeeping, or for use with agents.</p>
+</div>
+<p>The base configuration will be missing some elements like hooks, which modify the
+runtime behavior. An essential one for a graph-based model like MACE is the neighbor
+list, which can be configured below:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;hooks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.hooks.neighbor_list.NeighborListHook&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;cutoff&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">6.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;coo&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;half_list&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;skin&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;BEFORE_FORWARD&quot;</span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The configuration specifies a COO neighbor list with a cutoff radius of 6.0, and the
+hook will fire at the <code class="docutils literal notranslate"><span class="pre">TrainingStage.BEFORE_FORWARD</span></code> stage. Other hooks can be
+arbitrarily specified in the same way. Other useful hooks include <code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointHook</span></code>,
+and <a class="reference internal" href="../modules/generated/nvalchemi.hooks.ReportingOrchestrator.html#nvalchemi.hooks.ReportingOrchestrator" title="nvalchemi.hooks.ReportingOrchestrator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReportingOrchestrator</span></code></a> - the former will create
+regular training checkpoints that we can resume from (more on that later),
+and the latter will provide metric logging utilities.</p>
+<div class="hint admonition">
+<p class="admonition-title">Checkpoint and tensorboard configuration</p>
+<p>The configuration can be copy-pasted into a separate JSON config file.
+If you have <code class="docutils literal notranslate"><span class="pre">jq</span></code> installed, you can merge multiple JSON files together
+using <code class="docutils literal notranslate"><span class="pre">jq</span> <span class="pre">-s</span> <span class="pre">'add'</span> <span class="pre">file1.json</span> <span class="pre">file2.json</span> <span class="pre">&gt;</span> <span class="pre">combined.json</span></code>!</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;hooks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.hooks.CheckpointHook&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;checkpoint_dir&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;training-output/checkpoints&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;step_interval&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1000</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.hooks.ReportingOrchestrator&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;reporters&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">              </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.hooks.TensorBoardReporter&quot;</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">&quot;log_dir&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;training-outputs/tensorboard&quot;</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">&quot;include_losses&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">&quot;include_optimizer_lrs&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">&quot;tag_prefix&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;train&quot;</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">&quot;flush&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;frequency&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span><span class="p">]</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<p>Other settings you should consider modifying are the batch size and the number of steps.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">--loss-dtype-policy</span></code> flag controls how the loss function handles dtype
+mismatches between predictions and targets. Accepted values are <code class="docutils literal notranslate"><span class="pre">strict</span></code>,
+<code class="docutils literal notranslate"><span class="pre">prediction_to_target</span></code>, and <code class="docutils literal notranslate"><span class="pre">target_to_prediction</span></code>. The value is stored in
+<code class="docutils literal notranslate"><span class="pre">strategy.loss_fn_spec.dtype_policy</span></code>, reflected in <code class="docutils literal notranslate"><span class="pre">spec</span> <span class="pre">report</span></code>, and applied
+at <code class="docutils literal notranslate"><span class="pre">spec</span> <span class="pre">run</span></code> time.</p>
+<p>Once your configuration is satisfactory, you can execute the training/fine-tuning:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>run<span class="w"> </span>mace-ft.json
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Distributed runs can simply be wrapped with <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>, i.e.
+<code class="docutils literal notranslate"><span class="pre">torchrun</span> <span class="pre">--nproc_per_node=4</span> <span class="pre">-m</span> <span class="pre">nvalchemi.training.cli</span> <span class="pre">spec</span> <span class="pre">run</span> <span class="pre">...</span></code></p>
+</div>
+<p>For whatever reason, if your fine-tuning run was interrupted, you can easily
+continue from the same session:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>resume<span class="w"> </span>training-outputs/checkpoints<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--spec<span class="w"> </span>mace-ft.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--checkpoint_index<span class="w"> </span><span class="m">5</span>
+</pre></div>
+</div>
+<p>This will resume training at an arbitrary checkpoint index (in this case, the <em>6th</em> checkpoint
+since we zero index).</p>
+<p>Once you’re done with your fine-tuning, you can access the model within Python simply
+by using the <a class="reference internal" href="../modules/training/generated/nvalchemi.training.load_checkpoint.html#nvalchemi.training.load_checkpoint" title="nvalchemi.training.load_checkpoint"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_checkpoint()</span></code></a> method:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_checkpoint</span>
+
+<span class="n">checkpoint_data</span> <span class="o">=</span> <span class="n">load_checkpoint</span><span class="p">(</span>
+  <span class="s2">&quot;training-output/checkpoints&quot;</span><span class="p">,</span>
+  <span class="n">checkpoint_index</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># load the last checkpoint</span>
+  <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>  <span class="c1"># or CPU, depending on your use case</span>
+<span class="p">)</span>
+<span class="c1"># the hierarchy corresponds to: access the &#39;main&#39; model within the</span>
+<span class="c1"># checkpoint, and the &#39;model&#39; key within &#39;main&#39; yields the instance</span>
+<span class="c1"># of MACEWrapper</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">checkpoint_data</span><span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">][</span><span class="s2">&quot;main&quot;</span><span class="p">][</span><span class="s2">&quot;model&quot;</span><span class="p">]</span>
+<span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The loaded model will then be usable like any other <a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a>;
+you will be able to run batched dynamics, etc. to evaluate the behavior of your model.</p>
+</section>
+</section>
+<section id="fine-tuning-api">
+<h2>Fine-tuning API<a class="headerlink" href="#fine-tuning-api" title="Link to this heading">#</a></h2>
+<p>In this section, we go into detail about the core fine-tuning API within
+<code class="docutils literal notranslate"><span class="pre">nvalchemi-toolki</span></code>, providing sufficient detail for users and developers to
+build with and on top of the fine-tuning specific components.</p>
+<p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a> is the Python entry point
+for the fine-tuning abstraction: it inherits from <a class="reference internal" href="../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a>,
+and therefore re-uses many of the same systems, configurations, etc. but
+specializes it for fine-tuning workflows by being more opinionated on
+some default values such as learning rate, and adding more API entry points
+like the ability to add and modify existing layers, etc. For the general
+training topics we refer the reader to <a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a>.</p>
+<section id="simple-full-model-fine-tuning">
+<h3>Simple full-model fine-tuning<a class="headerlink" href="#simple-full-model-fine-tuning" title="Link to this heading">#</a></h3>
+<p>The most straightforward entry point is to load a pretrained model and continue
+training all of its parameters on your new dataset. Every weight is free to
+adapt, which gives the model maximum flexibility — but it is also the most
+likely workflow to cause <em>catastrophic forgetting</em>, where the model drifts
+toward the new domain while losing accuracy on the distribution it was
+pretrained on. A small learning rate and early stopping on a held-out
+validation set can go a long way toward mitigating this.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnergyMSELoss</span><span class="p">,</span>
+    <span class="n">FineTuningStrategy</span><span class="p">,</span>
+    <span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="n">OptimizerConfig</span><span class="p">,</span>
+    <span class="n">default_training_fn</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">load_my_pretrained_model</span><span class="p">()</span>
+<span class="n">train_loader</span> <span class="o">=</span> <span class="n">make_my_batch_loader</span><span class="p">()</span>
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">loss_fn</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="o">=</span> <span class="s2">&quot;prediction_to_target&quot;</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)],</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The loss and training function conventions here are the same as in regular
+training — see <a class="reference internal" href="losses.html#losses-guide"><span class="std std-ref">Losses</span></a> and <a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a> for details on
+operator-composed losses, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code>, and how <code class="docutils literal notranslate"><span class="pre">default_training_fn</span></code> maps
+output keys.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If your pretrained model comes from an existing <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code> checkpoint,
+you can omit <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code> entirely and pass <code class="docutils literal notranslate"><span class="pre">use_original_loss=True</span></code> to
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint.html#nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint" title="nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pretrained_checkpoint()</span></code></a>
+instead. This reuses the loss function that was serialized into the checkpoint,
+saving you from having to reconstruct it manually. See
+<a class="reference internal" href="#checkpoint-workflows"><span class="std std-ref">Checkpoint workflows</span></a> for details.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Full-model fine-tuning updates every optimizer-visible parameter. Use a
+small learning rate, early stopping, validation on the original domain, or a
+frozen-base workflow when preserving pretrained behavior matters.</p>
+</div>
+</section>
+<section id="fine-tuning-modifications">
+<h3>Fine-tuning modifications<a class="headerlink" href="#fine-tuning-modifications" title="Link to this heading">#</a></h3>
+<p>The additions specific to fine-tuning (over regular training) are three arguments
+to <a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a> that apply modifications to
+the architecture and weight update methodology before the optimizer is constructed:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">module_patches</span></code></strong> : swap or graft <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> children in the model tree,
+so the optimizer sees the updated architecture from the start.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> / <code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code></strong> : glob-based allow and deny
+lists that control which parameters enter the optimizer. Every unmatched
+parameter is excluded from optimization and, by default, has
+<code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> set to <code class="docutils literal notranslate"><span class="pre">False</span></code> for the duration of the run.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">freeze_mode</span></code></strong> : whether “excluded” means removed from the optimizer only,
+or also <code class="docutils literal notranslate"><span class="pre">requires_grad=False</span></code>.</p></li>
+</ul>
+<p>The following sections cover each mechanism in turn, starting with how to
+discover the parameter names that all three rely on.</p>
+</section>
+<section id="inspecting-names-for-patches-and-filters">
+<h3>Inspecting names for patches and filters<a class="headerlink" href="#inspecting-names-for-patches-and-filters" title="Link to this heading">#</a></h3>
+<p>All three modification mechanisms reference model components by their
+fully-qualified names, so the first step before using any of them is to know
+what those names are and ensure that the user-specified patterns will catch them.
+The <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code> validates every pattern at startup and
+raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> if any of them match zero parameters — catching typos
+and model-version drift before a run begins.</p>
+<p>All fine-tuning fields use names prefixed with the model key. When you pass a
+single model as <code class="docutils literal notranslate"><span class="pre">models=pretrained_model</span></code>, the strategy stores it under the key
+<code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code> (or if you provide a dictionary of models, their corresponding key),
+so every module and parameter name gains a prefix.
+Everything after that prefix is determined by the model’s own module hierarchy
+— it depends entirely on how the wrapper and its children are laid out. The
+only reliable way to discover the correct names is to print them before writing
+your configuration:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># note this is outside of the strategy wrapping</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+    <span class="c1"># &#39;main.&#39; prefix depends on the key and is the default;</span>
+    <span class="c1"># if you pass a dict of models, substitute &#39;main&#39; with the</span>
+    <span class="c1"># corresponding key</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;main.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;main.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">parameter</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Reading the output tells you exactly what names and types are available, so you
+can write patterns against what the model actually exposes rather than guessing
+at the hierarchy.</p>
+</section>
+<section id="freezing-the-base-model">
+<h3>Freezing the base model<a class="headerlink" href="#freezing-the-base-model" title="Link to this heading">#</a></h3>
+<p>With the parameter names in hand, the most common modification is to restrict
+which of them are trained. <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> acts as an explicit allow-list:
+only parameters whose fully-qualified names match at least one glob pattern are
+passed to the optimizer. All others are temporarily marked <code class="docutils literal notranslate"><span class="pre">requires_grad=False</span></code>
+for the duration of <code class="docutils literal notranslate"><span class="pre">run</span></code>. Freezing the pretrained body and updating only the
+output head or a narrow set of domain-specific layers tends to converge faster,
+require less data, and cause less catastrophic forgetting than full-model
+fine-tuning.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="c1"># only allow readout layers to be updated</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">2_000</span><span class="p">,</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)],</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Only the readout layer’s parameters enter the optimizer; the rest of the
+pretrained body is frozen.</p>
+<p>When the intent is easier to express as “freeze this broad region, then
+carve out exceptions”, combine <code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code> and <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>:
+<code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code> excludes a broad set, and <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> re-admits a
+subset of those exclusions.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Every pattern — in either field — must match at least one parameter. This
+safety check catches typos and model-version drift before a long run begins.</p>
+<p>Because patterns are plain strings, they can be generated programmatically
+from <code class="docutils literal notranslate"><span class="pre">named_parameters()</span></code> output — for example, to implement progressive
+unfreezing by running <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code> in stages, each starting from the
+previous stage’s checkpoint via <code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code> and widening
+<code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> to include the next layer group.</p>
+</section>
+<section id="choosing-a-freeze-mode">
+<h3>Choosing a freeze mode<a class="headerlink" href="#choosing-a-freeze-mode" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">freeze_mode</span></code> argument controls what “frozen” means at the PyTorch level. The two
+options trade memory efficiency against gradient visibility.</p>
+<p>The default <code class="docutils literal notranslate"><span class="pre">freeze_mode=&quot;requires_grad&quot;</span></code> sets <code class="docutils literal notranslate"><span class="pre">requires_grad=False</span></code> on
+frozen parameters for the duration of <code class="docutils literal notranslate"><span class="pre">run</span></code> and removes them from the
+optimizer. PyTorch does not allocate gradient buffers for them, which reduces
+peak memory. This is the right choice for almost all transfer learning
+workflows.</p>
+<p><code class="docutils literal notranslate"><span class="pre">freeze_mode=&quot;optimizer_only&quot;</span></code> keeps <code class="docutils literal notranslate"><span class="pre">requires_grad=True</span></code>, so gradients are
+still computed and held in memory, but the optimizer never updates frozen
+parameters. This is useful when a hook or regularizer needs access to the
+gradient of a frozen layer — for example, to monitor how much the frozen base
+is being “pulled” by the new data as a domain-mismatch signal.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">freeze_mode</span><span class="o">=</span><span class="s2">&quot;optimizer_only&quot;</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Because <code class="docutils literal notranslate"><span class="pre">optimizer_only</span></code> keeps gradient buffers allocated for frozen
+parameters, it uses more memory than the default. Prefer <code class="docutils literal notranslate"><span class="pre">&quot;requires_grad&quot;</span></code>
+unless you have a specific reason to inspect those gradients.</p>
+<p><code class="docutils literal notranslate"><span class="pre">freeze_mode=&quot;optimizer_only&quot;</span></code> is specifically designed as an extension seam
+for hooks that need gradient information from the frozen base. A hook firing at
+<code class="docutils literal notranslate"><span class="pre">AFTER_BACKWARD</span></code> can read <code class="docutils literal notranslate"><span class="pre">.grad</span></code> directly from any frozen parameter — useful
+for gradient-based regularizers such as elastic weight consolidation, or for
+diagnostic logging that tracks how strongly the frozen base is being “pulled”
+by the new domain. See <a class="reference internal" href="../modules/training/hooks.html#training-hooks"><span class="std std-ref">Training update hooks</span></a> for how to write and register
+such a hook.</p>
+</section>
+<section id="adding-or-replacing-an-output-head">
+<h3>Adding or replacing an output head<a class="headerlink" href="#adding-or-replacing-an-output-head" title="Link to this heading">#</a></h3>
+<p>Parameter filtering controls which weights get updated, but sometimes the
+pretrained output head itself is the wrong shape for the new task — for
+example, the source model predicts energy per atom and the target task adds a
+band gap property. <code class="docutils literal notranslate"><span class="pre">module_patches</span></code> lets you swap or graft <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> children
+before the optimizer is built, so the rest of the configuration sees the
+updated model tree as if it were always there.</p>
+<p>Each entry in <code class="docutils literal notranslate"><span class="pre">module_patches</span></code> maps a fully-qualified child path to a new
+module. Use <a class="reference internal" href="../modules/training/generated/nvalchemi.training.create_model_spec.html#nvalchemi.training.create_model_spec" title="nvalchemi.training.create_model_spec"><code class="xref py py-func docutils literal notranslate"><span class="pre">create_model_spec()</span></code></a> to describe the
+replacement declaratively — this keeps the patch serializable through
+<code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> and round-trippable via JSON. The first argument can be any
+<code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> subclass, including ones defined in your own codebase; the spec
+stores the fully-qualified class path and constructor arguments, so custom
+architectures serialize exactly like built-in ones.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;main.model.readout&quot;</span><span class="p">:</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">,</span>
+            <span class="n">in_features</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+            <span class="n">out_features</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The patch replaces <code class="docutils literal notranslate"><span class="pre">main.model.readout</span></code> with a fresh <code class="docutils literal notranslate"><span class="pre">Linear</span></code> layer while
+leaving the rest of the body frozen. Because the replacement is randomly
+initialized, the learning rate can be higher than for a full-model run.</p>
+<p>An important constraint to this approach: while replacing an existing layer
+doesn’t require further modification, if layers are <em>added</em> then the training
+function must be modified from the default, so that the workflow knows to
+actually use the new layer. To do so, pass a custom <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> — a callable
+with the same signature as <a class="reference internal" href="../modules/training/generated/nvalchemi.training.default_training_fn.html#nvalchemi.training.default_training_fn" title="nvalchemi.training.default_training_fn"><code class="xref py py-func docutils literal notranslate"><span class="pre">default_training_fn()</span></code></a>
+— that calls the new head explicitly and returns a prediction key your loss can
+consume:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">train_energy_and_band_gap</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+    <span class="n">embeddings</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">compute_embeddings</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># compute the outputs manually</span>
+    <span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;predicted_band_gap&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">band_gap_head</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+    <span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">readout</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">outputs</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;main.model.band_gap_head&quot;</span><span class="p">:</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">,</span>
+            <span class="n">in_features</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+            <span class="n">out_features</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+    <span class="c1"># only have the newly added head trainable</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.band_gap_head.*&quot;</span><span class="p">,),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">train_energy_and_band_gap</span><span class="p">,</span>
+    <span class="c1"># add an MSE loss based on the band gap</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="p">(</span>
+        <span class="n">EnergyMSELoss</span><span class="p">()</span>
+        <span class="o">+</span> <span class="n">YourMSELoss</span><span class="p">(</span><span class="n">prediction_key</span><span class="o">=</span><span class="s2">&quot;predicted_band_gap&quot;</span><span class="p">,</span> <span class="n">target_key</span><span class="o">=</span><span class="s2">&quot;band_gap&quot;</span><span class="p">)</span>
+    <span class="p">),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>In this example, the new <code class="docutils literal notranslate"><span class="pre">train_energy_and_band_gap</span></code> method replaces the regular
+<code class="docutils literal notranslate"><span class="pre">default_training_fn</span></code>, where we route the embeddings manually to the band gap
+and readout heads to obtain the energy and band gap values. The loss function
+is then composed of the regular <a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMSELoss.html#nvalchemi.training.EnergyMSELoss" title="nvalchemi.training.losses.terms.EnergyMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></a>
+and a custom (fictitious) <code class="docutils literal notranslate"><span class="pre">YourMSELoss</span></code> to compute against the band gap and provide
+the key/value mapping out of the returned predictions dictionary from the training
+function. By specifying the <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, only the new band gap head will
+receive weight updates from the optimizer.</p>
+</section>
+<section id="adding-or-replacing-an-embedding-table">
+<h3>Adding or replacing an embedding table<a class="headerlink" href="#adding-or-replacing-an-embedding-table" title="Link to this heading">#</a></h3>
+<p>A related scenario arises when the target dataset contains atomic species that
+the pretrained model did not see during pretraining, or saw only rarely.
+Replacing the embedding table — while keeping the pretrained message-passing
+and readout layers frozen — adapts the model’s input representation without
+discarding the learned body.</p>
+<p>The declarative approach via <code class="docutils literal notranslate"><span class="pre">create_model_spec</span></code> works the same way as for
+output heads:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;main.model.atomic_embedding&quot;</span><span class="p">:</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">,</span>
+            <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="c1"># if you do not want to modify the remainder</span>
+            <span class="c1"># of the model, keep this dimensionality the same</span>
+            <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">&quot;main.model.atomic_embedding.*&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">5e-4</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">create_model_spec</span></code> initializes the replacement table from scratch. When you
+want to warm-start the new table from the existing weights — copying rows for
+species the model already knew and randomly initializing the rest — build the
+replacement yourself and pass the live module instance directly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">old</span> <span class="o">=</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">atomic_embedding</span>
+<span class="n">replacement</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">old</span><span class="o">.</span><span class="n">embedding_dim</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+    <span class="n">replacement</span><span class="o">.</span><span class="n">weight</span><span class="p">[:</span> <span class="n">old</span><span class="o">.</span><span class="n">num_embeddings</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">old</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="n">replacement</span><span class="o">.</span><span class="n">weight</span><span class="p">[</span><span class="n">old</span><span class="o">.</span><span class="n">num_embeddings</span> <span class="p">:],</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;main.model.atomic_embedding&quot;</span><span class="p">:</span> <span class="n">replacement</span><span class="p">},</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.atomic_embedding.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Passing a live module instance is runtime-only — it cannot be serialized
+through <code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> because the construction code and copied weights are
+not captured in the spec and so this is not the recommended approach, however
+is possible. As described earlier, use <code class="docutils literal notranslate"><span class="pre">create_model_spec</span></code> for patches so
+they can actually be JSON round-trippable.</p>
+</section>
+<section id="multi-model-fine-tuning">
+<h3>Multi-model fine-tuning<a class="headerlink" href="#multi-model-fine-tuning" title="Link to this heading">#</a></h3>
+<p>All of the examples above pass a single model to <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code>, which
+stores it internally under the key <code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code>. You can also pass a dictionary of
+models when your workflow involves more than one — for example, a student and a
+frozen teacher used as a reference:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;student&quot;</span><span class="p">:</span> <span class="n">student_model</span><span class="p">,</span> <span class="s2">&quot;teacher&quot;</span><span class="p">:</span> <span class="n">teacher_model</span><span class="p">},</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;student.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;student&quot;</span><span class="p">:</span> <span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">)},</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">my_distillation_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">my_distillation_loss</span><span class="p">,</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">2_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>There are two sharp edges to be aware of.</p>
+<p><strong>Pattern and patch names must use your model keys, not <code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code>.</strong> Every
+<code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> glob, <code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code> glob, and <code class="docutils literal notranslate"><span class="pre">module_patches</span></code> key
+must be prefixed with the corresponding dict key. In the example above, patterns
+target <code class="docutils literal notranslate"><span class="pre">&quot;student.*&quot;</span></code> — writing <code class="docutils literal notranslate"><span class="pre">&quot;main.*&quot;</span></code> would raise a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> at startup
+because no model is stored under <code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code> in a multi-model strategy.</p>
+<p><strong>Partial pattern coverage is not validated.</strong> The strategy only checks that
+each pattern matches at least one parameter somewhere across all models. It does
+not warn if your patterns leave an entire model’s parameters untouched. In the
+example above, <code class="docutils literal notranslate"><span class="pre">&quot;teacher.*&quot;</span></code> has no optimizer config and no trainable patterns,
+which is intentional — the teacher is used as a frozen reference. But if you
+accidentally wrote <code class="docutils literal notranslate"><span class="pre">&quot;student.model.readuot.*&quot;</span></code> (typo) instead, the teacher’s
+parameters would be the only match, and the student would train nothing without
+any error. Print the matched parameter names after constructing the strategy to
+verify coverage before committing to a long run.</p>
+<p><strong>Differential learning rates across models.</strong> When you provide <code class="docutils literal notranslate"><span class="pre">optimizer_configs</span></code>
+as a dict keyed by model name, each participating model gets its own optimizer
+and learning rate. Only include entries for models you actually want to update
+— the teacher in a distillation setup needs no optimizer config at all, since
+it is never updated. This is also the right pattern for two-stage
+teacher-student workflows where the student’s backbone and head are trained at
+different rates: split the student’s parameters across two optimizer groups using
+the <a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a> parameter-group API, or run separate strategies in
+sequence via <code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code>.</p>
+</section>
+</section>
+<section id="checkpoint-workflows">
+<span id="id1"></span><h2>Checkpoint workflows<a class="headerlink" href="#checkpoint-workflows" title="Link to this heading">#</a></h2>
+<p>Fine-tuning has two distinct checkpoint situations that call for different
+APIs: resuming an interrupted run versus starting a fresh experiment from
+prior model weights. Using the wrong one can silently discard optimizer state
+or inherit unwanted settings from the source run.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Goal</p></th>
+<th class="head"><p>API</p></th>
+<th class="head"><p>Restores optimizer/scheduler/counters?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Resume an interrupted fine-tuning run</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FineTuningStrategy.load_checkpoint(...)</span></code></p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p>Start a new fine-tuning run from prior model weights</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FineTuningStrategy.from_pretrained_checkpoint(...)</span></code></p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p>Fine-tune a model you loaded yourself</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FineTuningStrategy(models=...)</span></code></p></td>
+<td><p>No</p></td>
+</tr>
+</tbody>
+</table>
+<section id="resuming-an-interrupted-run">
+<h3>Resuming an interrupted run<a class="headerlink" href="#resuming-an-interrupted-run" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">load_checkpoint</span></code> is for when a job was killed or preempted and you want to
+continue exactly where it stopped. It restores the complete saved strategy
+state — model weights, optimizer state, scheduler state, runtime counters,
+checkpointable hook state, and the serialized fine-tuning configuration — so
+the resumed run is indistinguishable from one that never stopped.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resumed</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="o">.</span><span class="n">load_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/domain-ft/checkpoints&quot;</span><span class="p">,</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">resumed</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The path is the checkpoint directory written by
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.CheckpointHook.html#nvalchemi.training.hooks.CheckpointHook" title="nvalchemi.training.hooks.CheckpointHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointHook</span></code></a>. The most recent
+checkpoint is selected automatically; pass <code class="docutils literal notranslate"><span class="pre">checkpoint_index</span></code> to pin a
+specific one.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>This approach is what is used by the <code class="docutils literal notranslate"><span class="pre">resume</span></code> function in the training
+CLI.</p>
+</div>
+</section>
+<section id="branching-a-new-run-from-existing-weights">
+<h3>Branching a new run from existing weights<a class="headerlink" href="#branching-a-new-run-from-existing-weights" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code> is for starting a fresh experiment whose model
+weights are initialized from a prior checkpoint — for example, branching from
+a general-purpose pretrained model to fine-tune on a new domain, or iterating
+on learning rate without retraining from scratch. It loads the checkpoint
+model set for initialization, then builds entirely new optimizers, schedulers,
+counters, losses, module patches, and parameter filters from the arguments you
+supply. Nothing from the source run’s optimizer state, epoch limits, hooks, or
+validation settings carry over by default.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="o">.</span><span class="n">from_pretrained_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/pretrain/checkpoints&quot;</span><span class="p">,</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">2_000</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Two convenience flags let you reuse parts of the source run explicitly.
+<code class="docutils literal notranslate"><span class="pre">use_original_loss=True</span></code> copies the checkpointed loss when <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code> is
+not provided, which means that the fine-tuning run will use the same
+method for computing the loss as the pretrained model, which is a particularly
+desirable approach for continuity.</p>
+<p>Another flag, <code class="docutils literal notranslate"><span class="pre">use_original_opt_class=True</span></code> copies the optimizer and scheduler
+class when <code class="docutils literal notranslate"><span class="pre">optimizer_configs</span></code> is omitted which similarly means that users
+do not need to explicitly set the same optimizer class manually. For the
+purposes of fine-tuning, however, we do set the lower learning rate
+of <code class="docutils literal notranslate"><span class="pre">1e-5</span></code> — pass <code class="docutils literal notranslate"><span class="pre">optimizer_lr=None</span></code> to suppress this and use the source
+learning rate unchanged.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="o">.</span><span class="n">from_pretrained_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/pretrain/checkpoints&quot;</span><span class="p">,</span>
+    <span class="c1"># use the same loss function and optimizer class as the</span>
+    <span class="c1"># original pretraining recipe</span>
+    <span class="n">use_original_loss</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">use_original_opt_class</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="c1"># override the reused optimizer LR with a conservative 1e-5;</span>
+    <span class="c1"># pass optimizer_lr=None instead to keep the checkpoint&#39;s LR</span>
+    <span class="n">optimizer_lr</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">2_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code> is also the natural building block for
+<strong>progressive unfreezing</strong>: after each stage completes and writes a checkpoint,
+the next stage calls <code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code> on that checkpoint with a
+broader set of <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, gradually opening up more of the model
+without ever managing weights manually between stages.</p>
+</section>
+</section>
+<section id="hooks-in-fine-tuning">
+<h2>Hooks in fine-tuning<a class="headerlink" href="#hooks-in-fine-tuning" title="Link to this heading">#</a></h2>
+<p>The hook system in <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code> is the same as in
+<code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> — see <a class="reference internal" href="../modules/training/hooks.html#training-hooks"><span class="std std-ref">Training update hooks</span></a> for the full hook lifecycle,
+available stages, and how to write custom hooks.</p>
+<p>One ordering detail is specific to fine-tuning: the strategy internally
+registers a <a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a> and a
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a> before any hooks
+you supply via <code class="docutils literal notranslate"><span class="pre">hooks=</span></code>. This means your custom hooks always observe the
+already-patched module tree and the already-filtered optimizer parameter
+groups. If a hook inspects which parameters are in the optimizer, it will see
+the post-filter state.</p>
+<p>For per-batch policies — mixed precision, gradient clipping, custom scheduler
+stepping — use <a class="reference internal" href="../modules/training/hooks.html#training-update-hooks"><span class="std std-ref">Training update hooks</span></a> rather than registration-time
+hooks.</p>
+</section>
+<section id="notes-on-fine-tuning-models">
+<h2>Notes on fine-tuning models<a class="headerlink" href="#notes-on-fine-tuning-models" title="Link to this heading">#</a></h2>
+<section id="mace">
+<h3>MACE<a class="headerlink" href="#mace" title="Link to this heading">#</a></h3>
+<p>When loading a MACE checkpoint for fine-tuning, make sure the model is in a
+trainable form before passing it to <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code>.
+<a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.from_checkpoint" title="nvalchemi.models.mace.MACEWrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.models.mace.MACEWrapper.from_checkpoint()</span></code></a> returns an
+eval-mode wrapper by default; the training strategy switches it to train mode
+during <code class="docutils literal notranslate"><span class="pre">run</span></code>, so that part is handled for you. The one flag to watch is
+<code class="docutils literal notranslate"><span class="pre">compile_model</span></code>: setting it to <code class="docutils literal notranslate"><span class="pre">True</span></code> is inference-only because it freezes
+parameters before <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>. Always use <code class="docutils literal notranslate"><span class="pre">compile_model=False</span></code> for
+fine-tuning:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <span class="n">MACEWrapper</span>
+
+<span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/pretrain/checkpoints&quot;</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
+    <span class="o">...</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>If a compiled model is passed, the trainable parameter filter will match
+nothing and the strategy will raise an error before the run begins.</p>
+</section>
+</section>
+<section id="api-reference">
+<h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h2>
+<p>See <a class="reference internal" href="../modules/training/finetuning.html#training-finetuning-api"><span class="std std-ref">Fine-tuning API</span></a> for the API reference for
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a>, and
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a>.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="losses.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Losses</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="serialization.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Serialization and Reproducibility</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#training-cli">Training CLI</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#representative-workflow-fine-tuning-a-mace-checkpoint">Representative workflow: fine-tuning a MACE checkpoint</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fine-tuning-api">Fine-tuning API</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-full-model-fine-tuning">Simple full-model fine-tuning</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fine-tuning-modifications">Fine-tuning modifications</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inspecting-names-for-patches-and-filters">Inspecting names for patches and filters</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#freezing-the-base-model">Freezing the base model</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-a-freeze-mode">Choosing a freeze mode</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-or-replacing-an-output-head">Adding or replacing an output head</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-or-replacing-an-embedding-table">Adding or replacing an embedding table</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-model-fine-tuning">Multi-model fine-tuning</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpoint-workflows">Checkpoint workflows</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resuming-an-interrupted-run">Resuming an interrupted run</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#branching-a-new-run-from-existing-weights">Branching a new run from existing weights</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks-in-fine-tuning">Hooks in fine-tuning</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-fine-tuning-models">Notes on fine-tuning models</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mace">MACE</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-reference">API reference</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/finetuning.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,9 +55,10 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/02_distributed_monitoring';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="API Reference" href="../../modules/index.html" />
+    <link rel="next" title="MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging" href="03_mace_nvt_distributed.html" />
     <link rel="prev" title="Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin" href="01_distributed_pipeline.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -378,6 +381,8 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -389,11 +394,18 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Pipeline Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
 </ul>
 </li>
 </ul>
@@ -437,7 +449,7 @@ document.write(`
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
     
     
-    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Distributed Pipeline Examples</a></li>
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Distributed Examples</a></li>
     
     <li class="breadcrumb-item active" aria-current="page">Monitoring...</li>
   </ul>
@@ -466,9 +478,9 @@ to download the full example code.</p>
 <p>Building on <a class="reference internal" href="01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</span></a>, this example adds
 comprehensive observability to the FIRE → NVTLangevin topology:</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> on each rank, writing
+<li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> on each rank, writing
 per-graph scalars (energy, fmax, temperature) to rank-specific CSV files.</p></li>
-<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> on each rank, recording
+<li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook" title="nvalchemi.dynamics.hooks.StageTimingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code></a> on each rank, recording
 step timings to rank-specific CSV files.</p></li>
 <li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a> sink on the Langevin ranks
 instead of HostMemory — completed trajectories are persisted to disk.</p></li>
@@ -500,21 +512,21 @@ to produce a unified summary.</p></li>
     <span class="n">ConvergenceHook</span><span class="p">,</span>
     <span class="n">DistributedPipeline</span><span class="p">,</span>
     <span class="n">NVTLangevin</span><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a></a></a></a></a></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a><span class="p">,</span>
     <span class="n">ZarrData</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BufferConfig</span><span class="p">,</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergedSnapshotHook</span><span class="p">,</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">ProfilerHook</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a></a></a></a></a></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a></a></a></a></a></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergedSnapshotHook</span><span class="p">,</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">StageTimingHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
 
-<span class="c1"># When run outside ``torchrun`` (e.g. during a Sphinx docs build), the</span>
-<span class="c1"># distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.</span>
-<span class="c1"># We detect this and skip the pipeline launch so the example renders in</span>
-<span class="c1"># the gallery without requiring multiple GPUs.</span>
+<span class="c1"># Distributed examples are launcher-only. Sphinx sets this flag during docs</span>
+<span class="c1"># builds, and torchrun sets rank/world-size variables during real launches.</span>
+<span class="n">_DOCS_BUILD</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_SPHINX_BUILD&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
 <span class="n">_DISTRIBUTED_ENV</span> <span class="o">=</span> <span class="s2">&quot;RANK&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="s2">&quot;WORLD_SIZE&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
+<span class="n">_RUN_DISTRIBUTED_EXAMPLE</span> <span class="o">=</span> <span class="n">_DISTRIBUTED_ENV</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_DOCS_BUILD</span>
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
 <span class="c1"># Helpers (identical to 01_distributed_pipeline)</span>
@@ -525,9 +537,9 @@ to produce a unified summary.</p></li>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an ASE Atoms object to AtomicData with dynamics fields.&quot;&quot;&quot;</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
     <span class="n">n</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span>
-    <span class="n">data</span><span class="o">.</span><span class="n">forces</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a></a></a></a></a></a><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-    <span class="n">data</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a></a></a></a></a></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a></a></a></a></a></a><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">forces</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">data</span>
 
 
@@ -553,9 +565,7 @@ to produce a unified summary.</p></li>
 <span class="k">class</span><span class="w"> </span><span class="nc">DownstreamDoneHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Set ``stage.done = True`` after *patience* consecutive idle steps.</span>
 
-<span class="sd">    Because :class:`~nvalchemi.hooks.HookContext` does not carry a</span>
-<span class="sd">    reference to the dynamics engine, the ``dynamics`` attribute must</span>
-<span class="sd">    be set after the engine is constructed (see ``make_langevin``).</span>
+<span class="sd">    The dispatching dynamics engine is available as ``ctx.workflow``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
@@ -564,15 +574,14 @@ to produce a unified summary.</p></li>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="o">=</span> <span class="n">patience</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage_</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage_</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="kc">True</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">build_dataset</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]:</span>
@@ -590,15 +599,14 @@ to produce a unified summary.</p></li>
 <h2>Per-rank logging and profiling hooks<a class="headerlink" href="#per-rank-logging-and-profiling-hooks" title="Link to this heading">#</a></h2>
 <p>Each rank writes its observability data to separate files named after
 the rank, avoiding any filesystem contention between processes.</p>
-<p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records per-graph scalar
+<p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records per-graph scalar
 observables (energy, fmax, temperature) at a configurable step interval.
-<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> records wall-clock time
+<a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook" title="nvalchemi.dynamics.hooks.StageTimingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code></a> records wall-clock time
 between hook stages, optionally with NVTX annotations for Nsight Systems.</p>
-<p>Both hooks are created <em>inside</em> the stage factory functions so that the
-rank number — obtained via <code class="docutils literal notranslate"><span class="pre">dist.get_rank()</span></code> after the process group is
-initialised — is available at construction time.  The hooks are used as
-context managers via <code class="docutils literal notranslate"><span class="pre">with</span></code> to guarantee that background I/O threads are
-flushed and file handles are closed when the pipeline exits.</p>
+<p>Both hooks are created after <code class="docutils literal notranslate"><span class="pre">dist.get_rank()</span></code> is available so each rank can
+write separate files. <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> is entered as a context manager for its
+background writer; <code class="docutils literal notranslate"><span class="pre">StageTimingHook</span></code> is closed explicitly after the run so
+its CSV handle is flushed.</p>
 </section>
 <section id="zarrdata-sink-for-persistent-storage">
 <h2>ZarrData sink for persistent storage<a class="headerlink" href="#zarrdata-sink-for-persistent-storage" title="Link to this heading">#</a></h2>
@@ -613,14 +621,14 @@ exceeded before the run ends.</p>
 <section id="stage-construction-with-monitoring">
 <h2>Stage construction with monitoring<a class="headerlink" href="#stage-construction-with-monitoring" title="Link to this heading">#</a></h2>
 <p>The stage factories are extended from example 01 to accept and attach
-<code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> and <code class="docutils literal notranslate"><span class="pre">ProfilerHook</span></code> instances.  The hooks are passed in
-as context managers so the <code class="docutils literal notranslate"><span class="pre">with</span></code> block in <code class="docutils literal notranslate"><span class="pre">main()</span></code> can flush and close
-them after <code class="docutils literal notranslate"><span class="pre">pipeline.run()</span></code> returns.</p>
+<code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> and <code class="docutils literal notranslate"><span class="pre">StageTimingHook</span></code> instances.  The stage receives both
+hooks in its normal hook list; lifecycle management happens around
+<code class="docutils literal notranslate"><span class="pre">pipeline.run()</span></code> in <code class="docutils literal notranslate"><span class="pre">main()</span></code>.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_fire</span><span class="p">(</span>
-    <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a></a></a></a></a></a><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a><span class="p">,</span>
     <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">logging_hook</span><span class="p">:</span> <span class="n">LoggingHook</span><span class="p">,</span>
-    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">ProfilerHook</span><span class="p">,</span>
+    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">StageTimingHook</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FIRE</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a FIRE optimiser stage with logging and profiling.&quot;&quot;&quot;</span>
@@ -644,11 +652,11 @@ them after <code class="docutils literal notranslate"><span class="pre">pipeline
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">make_langevin</span><span class="p">(</span>
-    <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a></a></a></a></a></a><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a><span class="p">,</span>
     <span class="n">sink</span><span class="p">:</span> <span class="n">ZarrData</span><span class="p">,</span>
     <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">logging_hook</span><span class="p">:</span> <span class="n">LoggingHook</span><span class="p">,</span>
-    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">ProfilerHook</span><span class="p">,</span>
+    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">StageTimingHook</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NVTLangevin</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an NVTLangevin MD stage with snapshot, logging, and profiling hooks.&quot;&quot;&quot;</span>
@@ -677,7 +685,6 @@ them after <code class="docutils literal notranslate"><span class="pre">pipeline
         <span class="p">),</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">done_hook</span><span class="o">.</span><span class="n">dynamics</span> <span class="o">=</span> <span class="n">stage</span>
     <span class="k">return</span> <span class="n">stage</span>
 </pre></div>
 </div>
@@ -690,7 +697,7 @@ hook context managers are entered before calling <code class="docutils literal n
 that CUDA streams and thread pool executors are live throughout the run.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch two monitored FIRE -&gt; Langevin pipelines on 4 GPUs.&quot;&quot;&quot;</span>
-    <span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a></a></a></a></a></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a></a></a></a></a></a><span class="p">())</span>
+    <span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a><span class="p">())</span>
 
     <span class="c1"># Dataset (only used by ranks 0 and 2)</span>
     <span class="n">all_data</span> <span class="o">=</span> <span class="n">build_dataset</span><span class="p">()</span>
@@ -698,13 +705,13 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
     <span class="n">dataset_a</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span><span class="n">all_data</span><span class="p">[:</span><span class="n">mid</span><span class="p">])</span>
     <span class="n">dataset_b</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span><span class="n">all_data</span><span class="p">[</span><span class="n">mid</span><span class="p">:])</span>
 
-    <span class="n">sampler_a</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a></a></a></a></a></a><span class="p">(</span>
+    <span class="n">sampler_a</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a><span class="p">(</span>
         <span class="n">dataset</span><span class="o">=</span><span class="n">dataset_a</span><span class="p">,</span>
         <span class="n">max_atoms</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
         <span class="n">max_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">max_batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">sampler_b</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a></a></a></a></a></a><span class="p">(</span>
+    <span class="n">sampler_b</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Sampler" title="torch.utils.data.Sampler" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SizeAwareSampler</span></a><span class="p">(</span>
         <span class="n">dataset</span><span class="o">=</span><span class="n">dataset_b</span><span class="p">,</span>
         <span class="n">max_atoms</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
         <span class="n">max_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -713,7 +720,7 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
 
     <span class="n">buffer_cfg</span> <span class="o">=</span> <span class="n">BufferConfig</span><span class="p">(</span><span class="n">num_systems</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_nodes</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">num_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">_DISTRIBUTED_ENV</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_RUN_DISTRIBUTED_EXAMPLE</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">&quot;Not running under torchrun — skipping pipeline launch. &quot;</span>
             <span class="s2">&quot;Run with: torchrun --nproc_per_node=4 &quot;</span>
@@ -726,22 +733,17 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
     <span class="n">sink_a</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="s2">&quot;trajectories_rank1.zarr&quot;</span><span class="p">,</span> <span class="n">capacity</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
     <span class="n">sink_b</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="s2">&quot;trajectories_rank3.zarr&quot;</span><span class="p">,</span> <span class="n">capacity</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
 
-    <span class="c1"># Hooks — created before pipeline initialisation so that rank is known</span>
-    <span class="c1"># after dist.init_process_group fires inside DistributedPipeline.__enter__.</span>
-    <span class="c1"># We defer rank resolution to inside the ``with pipeline:`` block by</span>
-    <span class="c1"># building stages lazily after the context manager is entered.</span>
-
-    <span class="c1"># DistributedPipeline.__enter__ calls dist.init_process_group, so we</span>
-    <span class="c1"># build the stages dict inside the ``with`` block to ensure dist is live.</span>
     <span class="n">pipeline_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">debug_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="c1"># Build stages inside the context manager so dist.get_rank() is valid.</span>
-    <span class="c1"># We create a thin wrapper that defers stage construction.</span>
     <span class="k">class</span><span class="w"> </span><span class="nc">_DeferredMain</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Helper that constructs stages after the process group is ready.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the stages, then run the pipeline.&quot;&quot;&quot;</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">rank</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.get_rank" title="torch.distributed.get_rank" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span></a></a></a></a></a></a><span class="p">()</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.is_initialized" title="torch.distributed.is_initialized" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span></a></a></a></a></a></a><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">StageTimingHook</span><span class="p">,</span> <span class="n">StageTimingHook</span><span class="p">]:</span>
+            <span class="c1"># torchrun sets RANK in the environment before the process group is</span>
+            <span class="c1"># up, so per-rank CSV filenames are correct without dist being live.</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;RANK&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 
             <span class="c1"># Per-rank hook instances — each rank writes to its own files.</span>
             <span class="n">fire_logger</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
@@ -749,18 +751,20 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
                 <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;fire_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_log.csv&quot;</span><span class="p">,</span>
                 <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">fire_profiler</span> <span class="o">=</span> <span class="n">ProfilerHook</span><span class="p">(</span>
+            <span class="n">fire_profiler</span> <span class="o">=</span> <span class="n">StageTimingHook</span><span class="p">(</span>
                 <span class="s2">&quot;step&quot;</span><span class="p">,</span>
                 <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;fire_profile_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">,</span>
+                <span class="n">show_console</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">langevin_logger</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
                 <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span>
                 <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;langevin_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_log.csv&quot;</span><span class="p">,</span>
                 <span class="n">frequency</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">langevin_profiler</span> <span class="o">=</span> <span class="n">ProfilerHook</span><span class="p">(</span>
+            <span class="n">langevin_profiler</span> <span class="o">=</span> <span class="n">StageTimingHook</span><span class="p">(</span>
                 <span class="s2">&quot;step&quot;</span><span class="p">,</span>
                 <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;langevin_profile_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">,</span>
+                <span class="n">show_console</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="p">)</span>
 
             <span class="n">stages</span> <span class="o">=</span> <span class="p">{</span>
@@ -809,9 +813,17 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
             <span class="p">}</span>
 
             <span class="n">pipeline</span> <span class="o">=</span> <span class="n">DistributedPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="o">**</span><span class="n">pipeline_kwargs</span><span class="p">)</span>
-            <span class="k">with</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">:</span>
-                <span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>
-                    <span class="n">pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+            <span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">:</span>
+                        <span class="n">pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="n">fire_profiler</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                    <span class="n">langevin_profiler</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+                <span class="c1"># Keep the process group alive until every rank has flushed its</span>
+                <span class="c1"># CSV files; rank 0 reads them after the context exits.</span>
+                <a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><span class="n">dist</span><span class="o">.</span><span class="n">barrier</span></a><span class="p">()</span>
 
             <span class="k">return</span> <span class="n">rank</span><span class="p">,</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">,</span> <span class="n">fire_profiler</span><span class="p">,</span> <span class="n">langevin_profiler</span>
 
@@ -832,10 +844,6 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
     <span class="c1"># ``fmax``.  We aggregate the mean step time per rank from the profiler</span>
     <span class="c1"># CSV files as well.</span>
     <span class="c1">#</span>
-    <span class="c1"># A barrier ensures all ranks have finished writing their CSV files</span>
-    <span class="c1"># before rank 0 reads them.</span>
-    <a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><a href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="torch.distributed.barrier" class="sphx-glr-backref-module-torch-distributed sphx-glr-backref-type-py-function"><span class="n">dist</span><span class="o">.</span><span class="n">barrier</span></a></a></a></a></a></a><span class="p">()</span>
-
     <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">_print_post_run_summary</span><span class="p">(</span><span class="n">num_ranks</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
 
@@ -894,8 +902,9 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
     <span class="nb">print</span><span class="p">()</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Rank&#39;</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Profile rows&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Mean step time (s)&#39;</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">44</span><span class="p">)</span>
+    <span class="n">profile_prefix</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;fire&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;langevin&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;fire&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;langevin&quot;</span><span class="p">}</span>
     <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_ranks</span><span class="p">):</span>
-        <span class="n">profile_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;profile_rank</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">.csv&quot;</span>
+        <span class="n">profile_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">profile_prefix</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="si">}</span><span class="s2">_profile_rank</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">.csv&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">profile_path</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
                 <span class="n">reader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
@@ -903,7 +912,7 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;0&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="k">continue</span>
-            <span class="c1"># ProfilerHook CSV rows contain a &quot;delta_s&quot; column for elapsed time.</span>
+            <span class="c1"># StageTimingHook CSV rows contain a &quot;delta_s&quot; column for elapsed time.</span>
             <span class="n">deltas</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;delta_s&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span> <span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;delta_s&quot;</span><span class="p">)]</span>
             <span class="n">mean_delta</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span> <span class="k">if</span> <span class="n">deltas</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">mean_delta</span><span class="si">:</span><span class="s2">&lt;22.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -939,7 +948,7 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
     <span class="n">main</span><span class="p">()</span>
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.011 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.006 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-distributed-02-distributed-monitoring-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/0a32780e36786a824fe5d77d58489acc/02_distributed_monitoring.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">02_distributed_monitoring.ipynb</span></code></a></p>
@@ -975,11 +984,11 @@ that CUDA streams and thread pool executors are live throughout the run.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../../modules/index.html"
+       href="03_mace_nvt_distributed.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">API Reference</p>
+        <p class="prev-next-title">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

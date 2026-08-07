@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Data Sinks &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Data Sinks &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,9 +55,10 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_sinks';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Zarr Compression Tuning" href="zarr_compression.html" />
+    <link rel="next" title="Distributed Simulations" href="distributed.html" />
     <link rel="prev" title="Optimization and Integrators" href="dynamics_simulations.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,16 +379,33 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -483,8 +504,8 @@ different performance and persistence trade-off:</p>
 <section id="how-sinks-integrate-with-hooks">
 <h2>How sinks integrate with hooks<a class="headerlink" href="#how-sinks-integrate-with-hooks" title="Link to this heading">#</a></h2>
 <p>Sinks do not run on their own — they are consumed by snapshot hooks. When a
-<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> or
-<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a> fires, it writes the
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> or
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a> fires, it writes the
 current batch state into its associated sink. The hook controls <em>when</em> data is
 captured; the sink controls <em>where</em> it goes.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SnapshotHook</span><span class="p">,</span> <span class="n">ConvergedSnapshotHook</span>
@@ -498,7 +519,7 @@ captured; the sink controls <em>where</em> it goes.</p>
 
 <span class="c1"># Capture only converged structures in a GPU buffer</span>
 <span class="n">converged_hook</span> <span class="o">=</span> <span class="n">ConvergedSnapshotHook</span><span class="p">(</span>
-    <span class="n">sink</span><span class="o">=</span><span class="n">GPUBuffer</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">256</span><span class="p">),</span>
+    <span class="n">sink</span><span class="o">=</span><span class="n">GPUBuffer</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">max_atoms</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">max_edges</span><span class="o">=</span><span class="mi">4096</span><span class="p">),</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -596,7 +617,7 @@ aspects of the simulation:</p>
         <span class="c1"># Full trajectory to disk every 50 steps</span>
         <span class="n">SnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/traj.zarr&quot;</span><span class="p">),</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
         <span class="c1"># Converged frames to GPU for downstream consumption</span>
-        <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">GPUBuffer</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">256</span><span class="p">)),</span>
+        <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">GPUBuffer</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">max_atoms</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">max_edges</span><span class="o">=</span><span class="mi">4096</span><span class="p">)),</span>
     <span class="p">],</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
@@ -640,11 +661,11 @@ your workload.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="zarr_compression.html"
+       href="distributed.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Zarr Compression Tuning</p>
+        <p class="prev-next-title">Distributed Simulations</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

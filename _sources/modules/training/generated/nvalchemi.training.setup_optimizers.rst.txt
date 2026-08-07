@@ -1,0 +1,6 @@
+﻿nvalchemi.training.setup\_optimizers
+====================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: setup_optimizers

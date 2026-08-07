@@ -64,7 +64,7 @@ Applications
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import NVTLangevin
     from nvalchemi.dynamics.base import DynamicsStage
-    from nvalchemi.hooks import BiasedPotentialHook, HookContext
+    from nvalchemi.hooks import BiasedPotentialHook, DynamicsContext
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -300,7 +300,7 @@ restoring force at the temperatures we are simulating (300 K ≈ 0.026 eV).
         def __init__(self, storage: list) -> None:
             self.storage = storage
 
-        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
             # Accumulate on GPU; defer .cpu() to post-run analysis to avoid
             # a GPU sync every frequency steps.
             self.storage.append(ctx.batch.positions.mean(dim=0).detach())
@@ -442,7 +442,7 @@ Sphinx-gallery will capture it automatically.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.643 seconds)
+   **Total running time of the script:** (0 minutes 0.222 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_01_biased_potential.py:

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.scatter\_to\_owners
+=========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: scatter_to_owners

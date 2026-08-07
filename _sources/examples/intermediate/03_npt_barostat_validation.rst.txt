@@ -317,22 +317,14 @@ Run both simulations
 
  .. code-block:: none
 
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_dynamo/variables/functions.py:1946: UserWarning: Dynamo does not know how to trace the builtin `_ctypes.sizeof.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+    /home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_dynamo/variables/functions.py:2431: UserWarning: Dynamo does not know how to trace the builtin `_ctypes.sizeof.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
     If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
     If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
       torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_dynamo/variables/functions.py:1946: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.Structure.__new__.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+    /home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_dynamo/variables/functions.py:2431: UserWarning: Dynamo does not know how to trace the builtin `_hashlib.openssl_sha256.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
     If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
     If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
       torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_inductor/lowering.py:1904: FutureWarning: `torch._prims_common.check` is deprecated and will be removed in the future. Please use `torch._check*` functions instead.
-      check(
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_inductor/lowering.py:1904: FutureWarning: `torch._prims_common.check` is deprecated and will be removed in the future. Please use `torch._check*` functions instead.
-      check(
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_inductor/lowering.py:1904: FutureWarning: `torch._prims_common.check` is deprecated and will be removed in the future. Please use `torch._check*` functions instead.
-      check(
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/_inductor/lowering.py:1904: FutureWarning: `torch._prims_common.check` is deprecated and will be removed in the future. Please use `torch._check*` functions instead.
-      check(
 
 
 
@@ -436,7 +428,7 @@ converging from opposite sides toward the zero-pressure equilibrium.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 43.872 seconds)
+   **Total running time of the script:** (0 minutes 18.255 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_03_npt_barostat_validation.py:

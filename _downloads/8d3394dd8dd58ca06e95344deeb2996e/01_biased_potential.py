@@ -55,7 +55,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import BiasedPotentialHook, HookContext
+from nvalchemi.hooks import BiasedPotentialHook, DynamicsContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -239,7 +239,7 @@ class _COMRecorder:
     def __init__(self, storage: list) -> None:
         self.storage = storage
 
-    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
         # Accumulate on GPU; defer .cpu() to post-run analysis to avoid
         # a GPU sync every frequency steps.
         self.storage.append(ctx.batch.positions.mean(dim=0).detach())

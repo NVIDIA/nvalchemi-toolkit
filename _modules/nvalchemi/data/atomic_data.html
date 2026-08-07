@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.atomic_data &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.data.atomic_data &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/atomic_data';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -488,57 +491,107 @@ document.write(`
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">zs</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">atomic_number</span><span class="p">)</span>
 
 
+<span class="n">_DEFAULT_MASS_TABLE</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_mass_table</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cached ``periodictable`` mass lookup indexed by atomic number ``Z``</span>
+<span class="sd">    (0..118; index 0 is the neutron, matching ``pt.elements[0]``).</span>
+
+<span class="sd">    Lets :meth:`AtomicData.use_default_masses` fill masses with a single</span>
+<span class="sd">    vectorized gather (``table[atomic_numbers]``) instead of a per-atom Python</span>
+<span class="sd">    loop that called ``int(n)`` on each element — i.e. one device→host sync per</span>
+<span class="sd">    atom on every ``AtomicData`` construction.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_DEFAULT_MASS_TABLE</span>
+    <span class="k">if</span> <span class="n">_DEFAULT_MASS_TABLE</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_DEFAULT_MASS_TABLE</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">pt</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">z</span><span class="p">]</span><span class="o">.</span><span class="n">mass</span> <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">119</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_DEFAULT_MASS_TABLE</span>
+
+
 <div class="viewcode-block" id="AtomicData">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">AtomicData</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">DataMixin</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Atomic data structure for molecular systems.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Graph-structured container for a single atomic system.</span>
 
-<span class="sd">    Represents molecular systems as graphs with atomic properties and interactions.</span>
-<span class="sd">    Uses Pydantic for validation and serialization, with DataMixin for graph functionality.</span>
+<span class="sd">    ``AtomicData`` is the core input/output record throughout nvalchemi: a</span>
+<span class="sd">    molecule, cluster, or periodic cell represented as a graph whose nodes are</span>
+<span class="sd">    atoms and whose (optional) edges encode pairwise interactions. It is a</span>
+<span class="sd">    :class:`pydantic.BaseModel`, so every tensor field is type- and</span>
+<span class="sd">    shape-validated on construction, and it mixes in</span>
+<span class="sd">    :class:`~nvalchemi.data.data.DataMixin` for graph conveniences</span>
+<span class="sd">    (indexing, device movement, property grouping, serialization).</span>
 
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    atomic_numbers : torch.Tensor</span>
-<span class="sd">        Atomic numbers of each atom [n_nodes]</span>
-<span class="sd">    positions : torch.Tensor</span>
-<span class="sd">        Cartesian coordinates [n_nodes, 3]</span>
-<span class="sd">    atomic_masses : torch.Tensor</span>
-<span class="sd">        Atomic masses [n_nodes]</span>
-<span class="sd">    neighbor_list : torch.Tensor</span>
-<span class="sd">        Neighbor list [n_edges, 2]</span>
-<span class="sd">    node_attrs : torch.Tensor</span>
-<span class="sd">        Node attributes [n_nodes, n_node_feats]</span>
-<span class="sd">    shifts : torch.Tensor</span>
-<span class="sd">        Cartesian displacement vectors for each edge [n_edges, 3],</span>
-<span class="sd">        computed as ``neighbor_list_shifts @ cell``.</span>
-<span class="sd">    neighbor_list_shifts : torch.Tensor</span>
-<span class="sd">        Integer lattice image indices for periodic edges [n_edges, 3].</span>
-<span class="sd">    neighbor_matrix : torch.Tensor</span>
-<span class="sd">        Dense neighbor matrix [n_nodes, max_neighbors]</span>
-<span class="sd">    neighbor_matrix_shifts : torch.Tensor</span>
-<span class="sd">        Periodic shifts for the dense neighbor matrix [n_nodes, max_neighbors, 3]</span>
-<span class="sd">    num_neighbors : torch.Tensor</span>
-<span class="sd">        Number of valid neighbors per atom [n_nodes]</span>
-<span class="sd">    cell : torch.Tensor</span>
-<span class="sd">        Unit cell vectors [3, 3]</span>
-<span class="sd">    pbc : torch.Tensor</span>
-<span class="sd">        Periodic boundary conditions [3]</span>
-<span class="sd">    forces : torch.Tensor</span>
-<span class="sd">        Atomic forces [n_nodes, 3]</span>
-<span class="sd">    energy : torch.Tensor</span>
-<span class="sd">        Total energy [1]</span>
-<span class="sd">    stress : torch.Tensor</span>
-<span class="sd">        Stress tensor [1, 3, 3]</span>
-<span class="sd">    virial : torch.Tensor</span>
-<span class="sd">        Virial tensor [1, 3, 3]</span>
-<span class="sd">    dipole : torch.Tensor</span>
-<span class="sd">        Dipole moment [1, 3]</span>
-<span class="sd">    charges : torch.Tensor</span>
-<span class="sd">        Partial atomic charges [n_nodes]</span>
-<span class="sd">    charge : torch.Tensor</span>
-<span class="sd">        Total system charge [1]</span>
-<span class="sd">    info : dict</span>
-<span class="sd">        Additional information about the system</span>
+<span class="sd">    The only required fields are ``positions`` (``[V, 3]``) and</span>
+<span class="sd">    ``atomic_numbers`` (``[V]``); everything else — neighbor lists, cell/PBC,</span>
+<span class="sd">    labels such as ``energy``/``forces``/``stress``, velocities — is optional</span>
+<span class="sd">    and defaults to ``None``. Fields are organized into node-, edge-, and</span>
+<span class="sd">    system-level groups (see :attr:`node_properties`, :attr:`edge_properties`,</span>
+<span class="sd">    :attr:`system_properties`), and custom keys can be attached at runtime via</span>
+<span class="sd">    :meth:`add_node_property`, :meth:`add_edge_property`, and</span>
+<span class="sd">    :meth:`add_system_property` (``extra=&quot;allow&quot;`` on the model config permits</span>
+<span class="sd">    these). To collate many systems into one GPU-friendly graph, pass a list of</span>
+<span class="sd">    ``AtomicData`` to :class:`~nvalchemi.data.Batch`.</span>
+
+<span class="sd">    Beyond the plain constructor, build instances from common toolkits with the</span>
+<span class="sd">    :meth:`from_atoms` (ASE ``Atoms``) and :meth:`from_structure` (pymatgen</span>
+<span class="sd">    ``Structure``/``Molecule``) classmethods. Several ``model_validator`` hooks</span>
+<span class="sd">    run after construction and shape the resulting object: node/edge tensor</span>
+<span class="sd">    counts are checked for consistency against ``atomic_numbers`` /</span>
+<span class="sd">    ``neighbor_list``; all floating-point tensors are cast to the dtype of</span>
+<span class="sd">    ``positions`` (emitting a :class:`UserWarning` when a cast happens);</span>
+<span class="sd">    ``atomic_masses`` are auto-filled from ``periodictable`` when omitted; and</span>
+<span class="sd">    all tensors are moved onto a single consistent device.</span>
+
+<span class="sd">    Each field below is validated by its type. Field shapes use jaxtyping axis</span>
+<span class="sd">    labels: ``V`` atoms/nodes, ``E`` edges, ``B`` graphs (batch), ``H`` features.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Minimal construction requires only positions and atomic numbers:</span>
+
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data import AtomicData</span>
+<span class="sd">    &gt;&gt;&gt; positions = torch.randn(4, 3)</span>
+<span class="sd">    &gt;&gt;&gt; atomic_numbers = torch.tensor([1, 6, 6, 1], dtype=torch.long)</span>
+<span class="sd">    &gt;&gt;&gt; data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)</span>
+<span class="sd">    &gt;&gt;&gt; data.num_nodes</span>
+<span class="sd">    4</span>
+
+<span class="sd">    Attach edges (a neighbor list of ``[source, target]`` pairs) and</span>
+<span class="sd">    system-level labels for a periodic cell:</span>
+
+<span class="sd">    &gt;&gt;&gt; neighbor_list = torch.tensor([[0, 1], [1, 0], [1, 2], [2, 1]])</span>
+<span class="sd">    &gt;&gt;&gt; data = AtomicData(</span>
+<span class="sd">    ...     positions=positions,</span>
+<span class="sd">    ...     atomic_numbers=atomic_numbers,</span>
+<span class="sd">    ...     neighbor_list=neighbor_list,</span>
+<span class="sd">    ...     energy=torch.tensor([[0.5]]),</span>
+<span class="sd">    ...     cell=torch.eye(3).unsqueeze(0),</span>
+<span class="sd">    ...     pbc=torch.tensor([[True, True, True]]),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; data.num_edges</span>
+<span class="sd">    4</span>
+
+<span class="sd">    Interoperate with ASE and batch several systems together:</span>
+
+<span class="sd">    &gt;&gt;&gt; from ase.build import molecule</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data import Batch</span>
+<span class="sd">    &gt;&gt;&gt; water = AtomicData.from_atoms(molecule(&quot;H2O&quot;))</span>
+<span class="sd">    &gt;&gt;&gt; batch = Batch.from_data_list([data, water])</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    - ``atomic_masses`` is optional but never stays ``None``: when omitted it is</span>
+<span class="sd">      populated from :mod:`periodictable` using ``atomic_numbers``.</span>
+<span class="sd">    - Floating-point fields are coerced to the dtype of ``positions``; passing a</span>
+<span class="sd">      ``float64`` label alongside ``float32`` positions triggers a cast and a</span>
+<span class="sd">      :class:`UserWarning`. Pass matching dtypes to silence it.</span>
+<span class="sd">    - ``validate_assignment=True`` means re-assigning a field re-runs validation;</span>
+<span class="sd">      use :meth:`add_node_property` and friends (not raw attribute assignment) to</span>
+<span class="sd">      register new custom keys so they are tracked in the correct property group.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># Required fields</span>
@@ -631,13 +684,13 @@ document.write(`
 
     <span class="n">energy</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="n">t</span><span class="o">.</span><span class="n">Energy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Total energy [1]&quot;</span><span class="p">),</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Total energy [1, 1]&quot;</span><span class="p">),</span>
         <span class="n">PlainSerializer</span><span class="p">(</span><span class="n">_tensor_serialization</span><span class="p">,</span> <span class="n">when_used</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">),</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">stress</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="n">t</span><span class="o">.</span><span class="n">Stress</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Cauchy stress W/V (eV/A^3) [1, 3, 3]&quot;</span><span class="p">),</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Tensile-positive Cauchy stress (eV/A^3) [1, 3, 3]&quot;</span><span class="p">),</span>
         <span class="n">PlainSerializer</span><span class="p">(</span><span class="n">_tensor_serialization</span><span class="p">,</span> <span class="n">when_used</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">),</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -661,7 +714,7 @@ document.write(`
 
     <span class="n">charge</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="n">t</span><span class="o">.</span><span class="n">GraphCharges</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Total system charge [1]&quot;</span><span class="p">),</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Total system charge [1, 1]&quot;</span><span class="p">),</span>
         <span class="n">PlainSerializer</span><span class="p">(</span><span class="n">_tensor_serialization</span><span class="p">,</span> <span class="n">when_used</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">),</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -737,7 +790,10 @@ document.write(`
         <span class="n">PlainSerializer</span><span class="p">(</span><span class="n">_tensor_serialization</span><span class="p">,</span> <span class="n">when_used</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">),</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="n">info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Additional unstructured information about the system.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="c1"># &quot;Node key&quot; means dim(0) == num_nodes; tensors may have any rank.</span>
     <span class="n">_default_node_keys</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
         <span class="p">{</span>
@@ -781,8 +837,6 @@ document.write(`
         <span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">validate_assignment</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;allow&quot;</span>
     <span class="p">)</span>
 
-<div class="viewcode-block" id="AtomicData.model_post_init">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.model_post_init">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">model_post_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">__context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create per-instance mutable copies of the key sets.</span>
 
@@ -808,11 +862,8 @@ document.write(`
         <span class="p">)</span>
         <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;__system_keys__&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_system_keys</span><span class="p">)</span> <span class="o">|</span> <span class="n">existing_system</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
 
-
-<div class="viewcode-block" id="AtomicData.check_node_consistency">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.check_node_consistency">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">check_node_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all node-level properties have consistent atom counts.</span>
@@ -840,11 +891,8 @@ document.write(`
                         <span class="sa">f</span><span class="s2">&quot;Inconsistent number of atoms in </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;expected </span><span class="si">{</span><span class="n">num_atoms</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.check_edge_consistency">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.check_edge_consistency">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">check_edge_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all edge-level properties have consistent atom counts.</span>
@@ -875,11 +923,8 @@ document.write(`
                         <span class="sa">f</span><span class="s2">&quot;Inconsistent number of edges in </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;expected </span><span class="si">{</span><span class="n">num_edges</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.check_fp_dtype_consistency">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.check_fp_dtype_consistency">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">check_fp_dtype_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -908,11 +953,8 @@ document.write(`
                 <span class="ne">UserWarning</span><span class="p">,</span>
                 <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.use_default_masses">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.use_default_masses">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">use_default_masses</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -925,18 +967,14 @@ document.write(`
 <span class="sd">            Returns self if validation passes.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atomic_masses</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">masses_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">pt</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span><span class="o">.</span><span class="n">mass</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">]</span>
-            <span class="c1"># skip re-validation</span>
-            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;atomic_masses&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
-                <span class="n">masses_list</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="c1"># Vectorized table gather — no per-atom ``int(n)`` device→host sync.</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">_default_mass_table</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+            <span class="c1"># skip re-validation</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;atomic_masses&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.use_default_categories">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.use_default_categories">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">use_default_categories</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -957,11 +995,8 @@ document.write(`
             <span class="bp">self</span><span class="o">.</span><span class="n">atom_categories</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
                 <span class="p">[</span><span class="n">cat</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_categories</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.use_default_velocities">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.use_default_velocities">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">use_default_velocities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -975,11 +1010,8 @@ document.write(`
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># skip re-validation</span>
             <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;velocities&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
+        <span class="k">return</span> <span class="bp">self</span>
 
-
-<div class="viewcode-block" id="AtomicData.enforce_device_consistency">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.enforce_device_consistency">[docs]</a>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">enforce_device_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1027,8 +1059,7 @@ document.write(`
                 <span class="p">):</span>
                     <span class="c1"># using __dict__ to avoid re-validation</span>
                     <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span></div>
-
+        <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
@@ -1061,31 +1092,28 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the system properties of the graph.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">include</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__system_keys__</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<div class="viewcode-block" id="AtomicData.add_node_property">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.add_node_property">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">add_node_property</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">node_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a node property to the graph.&quot;&quot;&quot;</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__node_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+        <span class="c1"># Bypass ``validate_assignment``: it re-runs every model validator on</span>
+        <span class="c1"># each call (a hot-path op in halo exchange + migration), and for an</span>
+        <span class="c1"># enum-union field (e.g. ``atom_categories``) Pydantic&#39;s failed coercion</span>
+        <span class="c1"># attempt repr()s the whole tensor -&gt; one device-&gt;host ``.item()`` per</span>
+        <span class="c1"># atom. ``value`` is already a valid tensor, so validation is pure</span>
+        <span class="c1"># overhead. Mirrors the ``self.__dict__[...] = ...`` bypass used above.</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__node_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 
-
-<div class="viewcode-block" id="AtomicData.add_edge_property">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.add_edge_property">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">add_edge_property</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add an edge property to the graph.&quot;&quot;&quot;</span>
         <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__edge_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__edge_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 
-
-<div class="viewcode-block" id="AtomicData.add_system_property">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.add_system_property">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">add_system_property</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a system property to the graph.&quot;&quot;&quot;</span>
         <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__system_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">__system_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">chemical_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -1143,8 +1171,6 @@ document.write(`
             <span class="k">return</span> <span class="kc">False</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">chemical_hash</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">chemical_hash</span>
 
-<div class="viewcode-block" id="AtomicData.from_atoms">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_atoms">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="nd">@OptionalDependency</span><span class="o">.</span><span class="n">ASE</span><span class="o">.</span><span class="n">require</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_atoms</span><span class="p">(</span>
@@ -1345,11 +1371,8 @@ document.write(`
             <span class="n">charges</span><span class="o">=</span><span class="n">node_charges</span><span class="p">,</span>
             <span class="n">charge</span><span class="o">=</span><span class="n">charge</span><span class="p">,</span>
             <span class="n">info</span><span class="o">=</span><span class="n">local_info</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
 
-
-<div class="viewcode-block" id="AtomicData.from_structure">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_structure">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="nd">@OptionalDependency</span><span class="o">.</span><span class="n">PYMATGEN</span><span class="o">.</span><span class="n">require</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_structure</span><span class="p">(</span>
@@ -1377,7 +1400,7 @@ document.write(`
 <span class="sd">        consumed into dedicated fields.  Unsupported types raise</span>
 <span class="sd">        ``TypeError``.</span>
 
-<span class="sd">        Stress and virials accept 3×3 matrices, 6-component Voigt vectors,</span>
+<span class="sd">        Stress and virials accept 3x3 matrices, 6-component Voigt vectors,</span>
 <span class="sd">        or 9-component flat vectors (see :func:`voigt_to_matrix`).</span>
 
 <span class="sd">        Parameters</span>
@@ -1556,8 +1579,7 @@ document.write(`
             <span class="n">charges</span><span class="o">=</span><span class="n">node_charges</span><span class="p">,</span>
             <span class="n">charge</span><span class="o">=</span><span class="n">charge</span><span class="p">,</span>
             <span class="n">info</span><span class="o">=</span><span class="n">local_info</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">num_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.resolve\_cap
+==================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: resolve_cap

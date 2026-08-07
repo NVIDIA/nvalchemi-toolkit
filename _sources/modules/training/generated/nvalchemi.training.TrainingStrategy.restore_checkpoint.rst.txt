@@ -1,0 +1,6 @@
+﻿nvalchemi.training.TrainingStrategy.restore\_checkpoint
+=======================================================
+
+.. currentmodule:: nvalchemi.training
+
+.. automethod:: TrainingStrategy.restore_checkpoint

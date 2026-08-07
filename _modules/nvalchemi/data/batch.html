@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.batch &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.data.batch &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/batch';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -472,6 +475,149 @@ document.write(`
 <span class="n">_OWN_ATTRS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;keys&quot;</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="s2">&quot;_data_class&quot;</span><span class="p">})</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_batch_storage</span><span class="p">(</span>
+    <span class="n">samples</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">node_keys</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">edge_keys</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">system_keys</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="n">validate</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">attr_map</span><span class="p">:</span> <span class="n">LevelSchema</span><span class="p">,</span>
+    <span class="n">field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fallback_level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">MultiLevelStorage</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared batch-construction pipeline for from_data_list / from_raw_dicts.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    samples : Iterator</span>
+<span class="sd">        Yields ``(key_value_pairs, num_nodes, num_edges)`` per sample.</span>
+<span class="sd">        ``key_value_pairs`` is an iterator of ``(key, tensor)`` pairs.</span>
+<span class="sd">    node_keys, edge_keys, system_keys : set-like</span>
+<span class="sd">        Key sets for level classification.</span>
+<span class="sd">    device : torch.device</span>
+<span class="sd">        Target device for tensors.</span>
+<span class="sd">    validate : bool</span>
+<span class="sd">        Whether to validate storage shapes.</span>
+<span class="sd">    attr_map : LevelSchema</span>
+<span class="sd">        Attribute registry.</span>
+<span class="sd">    field_levels : dict[str, str] or None, default=None</span>
+<span class="sd">        Explicit per-field level overrides (``&quot;atom&quot;`` / ``&quot;edge&quot;`` /</span>
+<span class="sd">        ``&quot;system&quot;``), typically from reader metadata.  Checked for keys</span>
+<span class="sd">        not found in the static key sets.</span>
+<span class="sd">    fallback_level : str or None, default=None</span>
+<span class="sd">        Level to assign keys not in any key set and not in</span>
+<span class="sd">        *field_levels*.  ``&quot;system&quot;`` for raw-dict paths.</span>
+<span class="sd">        ``None`` to silently drop unclassified keys.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[MultiLevelStorage, dict[str, set[str]]]</span>
+<span class="sd">        The constructed storage and tracked key sets.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">node_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">edge_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">system_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">node_counts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">edge_counts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_classify</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">node_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;atom&quot;</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">edge_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;edge&quot;</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">system_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;system&quot;</span>
+        <span class="k">if</span> <span class="n">field_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">field_levels</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">field_levels</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">fallback_level</span>
+
+    <span class="n">node_offset</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">key_value_pairs</span><span class="p">,</span> <span class="n">n_nodes</span><span class="p">,</span> <span class="n">n_edges</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">:</span>
+        <span class="n">node_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_nodes</span><span class="p">)</span>
+        <span class="n">edge_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_edges</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">key_value_pairs</span><span class="p">:</span>
+            <span class="n">level</span> <span class="o">=</span> <span class="n">_classify</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
+                <span class="n">node_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_INDEX_KEYS</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">+</span> <span class="n">node_offset</span>
+                <span class="n">edge_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">system_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">node_offset</span> <span class="o">+=</span> <span class="n">n_nodes</span>
+
+    <span class="n">atoms_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">node_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">edges_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">edge_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">system_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">system_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="n">groups</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">UniformLevelStorage</span> <span class="o">|</span> <span class="n">SegmentedLevelStorage</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">atoms_data</span><span class="p">:</span>
+        <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;atoms&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">atoms_data</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">segment_lengths</span><span class="o">=</span><span class="n">node_counts</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
+            <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">edges_data</span><span class="p">:</span>
+        <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;edges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">edges_data</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">segment_lengths</span><span class="o">=</span><span class="n">edge_counts</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
+            <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">system_data</span><span class="p">:</span>
+        <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">UniformLevelStorage</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">system_data</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
+            <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">storage</span> <span class="o">=</span> <span class="n">MultiLevelStorage</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span> <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">)</span>
+    <span class="n">tracked_keys</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">node_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+        <span class="s2">&quot;edge&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">edge_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+        <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">system_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">storage</span><span class="p">,</span> <span class="n">tracked_keys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">set_transient</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Overlay *value* on *batch* for the duration of a computation.</span>
+
+<span class="sd">    :meth:`Batch.__setattr__` routes a tensor into the batch&#39;s storage, which is</span>
+<span class="sd">    what ``.to()``, gathering and any rebuild of the batch read back. That is the</span>
+<span class="sd">    wrong lifetime for a value a single forward should see and no later reader</span>
+<span class="sd">    should inherit — an affine strain applied for one autograd pass, say, which</span>
+<span class="sd">    a rebuild would otherwise apply a second time on top of the first.</span>
+
+<span class="sd">    This writes an instance attribute instead, which shadows the storage</span>
+<span class="sd">    delegation for attribute reads while leaving the stored tensor untouched.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch to overlay.</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Attribute the computation will read.</span>
+<span class="sd">    value : torch.Tensor</span>
+<span class="sd">        Value to expose.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="Batch">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Batch</span><span class="p">(</span><span class="n">DataMixin</span><span class="p">):</span>
@@ -689,6 +835,7 @@ document.write(`
         <span class="n">skip_validation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">attr_map</span><span class="p">:</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">exclude_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a batch from a list of :class:`AtomicData` objects.</span>
 
@@ -704,6 +851,10 @@ document.write(`
 <span class="sd">            Attribute registry.  Defaults to ``LevelSchema()``.</span>
 <span class="sd">        exclude_keys : list[str], optional</span>
 <span class="sd">            Keys to exclude from batching.</span>
+<span class="sd">        field_levels : dict[str, str], optional</span>
+<span class="sd">            Explicit per-field level map (``&quot;atom&quot;`` / ``&quot;edge&quot;`` /</span>
+<span class="sd">            ``&quot;system&quot;``), typically from :attr:`Reader.field_levels`.</span>
+<span class="sd">            Used to classify custom keys not in the data class key sets.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -721,87 +872,143 @@ document.write(`
 
         <span class="n">representative</span> <span class="o">=</span> <span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">data_cls</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="vm">__class__</span>
-        <span class="n">node_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__node_keys__</span>
-        <span class="n">edge_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__edge_keys__</span>
-        <span class="n">system_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__system_keys__</span>
+        <span class="n">node_key_set</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__node_keys__</span>
+        <span class="n">edge_key_set</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__edge_keys__</span>
+        <span class="n">system_key_set</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__system_keys__</span>
 
         <span class="n">excluded</span> <span class="o">=</span> <span class="n">_EXCLUDED_KEYS</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">exclude_keys</span> <span class="ow">or</span> <span class="p">[])</span>
-        <span class="n">actual_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">excluded</span>
+        <span class="c1"># Iterate keys in dict (= pydantic field declaration) order so that</span>
+        <span class="c1"># downstream insertion order into ``node_tensors`` / ``atoms_data`` is</span>
+        <span class="c1"># deterministic across processes. Using ``set(...)`` here would</span>
+        <span class="c1"># iterate in PYTHONHASHSEED-dependent order, producing rank-divergent</span>
+        <span class="c1"># ``_atoms_group`` dicts that break collective issue ordering in DD.</span>
+        <span class="n">actual_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">k</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excluded</span>
+        <span class="p">]</span>
 
-        <span class="n">node_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
-        <span class="n">edge_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
-        <span class="n">system_tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
-        <span class="n">node_counts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">edge_counts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_iter_samples</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">data_list</span><span class="p">:</span>
+                <span class="n">pairs</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">actual_keys</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">((</span><span class="n">value</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)),</span> <span class="n">Tensor</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">num_edges</span>
 
-        <span class="n">node_offset</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">data_list</span><span class="p">:</span>
-            <span class="n">n_nodes</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span>
-            <span class="n">n_edges</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_edges</span>
-            <span class="n">node_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_nodes</span><span class="p">)</span>
-            <span class="n">edge_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_edges</span><span class="p">)</span>
-
-            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">actual_keys</span><span class="p">:</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
-                    <span class="k">continue</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
-
-                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">node_keys</span><span class="p">:</span>
-                    <span class="n">node_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">edge_keys</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_INDEX_KEYS</span><span class="p">:</span>
-                        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">+</span> <span class="n">node_offset</span>
-                    <span class="n">edge_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">system_keys</span><span class="p">:</span>
-                    <span class="n">system_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-
-            <span class="n">node_offset</span> <span class="o">+=</span> <span class="n">n_nodes</span>
-
-        <span class="n">atoms_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">node_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-        <span class="n">edges_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">edge_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">edges_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">system_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">system_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-
-        <span class="n">validate</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">skip_validation</span>
-        <span class="n">groups</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">UniformLevelStorage</span> <span class="o">|</span> <span class="n">SegmentedLevelStorage</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="n">atoms_data</span><span class="p">:</span>
-            <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;atoms&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
-                <span class="n">data</span><span class="o">=</span><span class="n">atoms_data</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">segment_lengths</span><span class="o">=</span><span class="n">node_counts</span><span class="p">,</span>
-                <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
-                <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">edges_data</span><span class="p">:</span>
-            <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;edges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
-                <span class="n">data</span><span class="o">=</span><span class="n">edges_data</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">segment_lengths</span><span class="o">=</span><span class="n">edge_counts</span><span class="p">,</span>
-                <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
-                <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">system_data</span><span class="p">:</span>
-            <span class="n">groups</span><span class="p">[</span><span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">UniformLevelStorage</span><span class="p">(</span>
-                <span class="n">data</span><span class="o">=</span><span class="n">system_data</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span>
-                <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="n">storage</span> <span class="o">=</span> <span class="n">MultiLevelStorage</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span> <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">)</span>
-
-        <span class="n">tracked_keys</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">node_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-            <span class="s2">&quot;edge&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">edge_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-            <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(</span><span class="n">system_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-        <span class="p">}</span>
+        <span class="n">storage</span><span class="p">,</span> <span class="n">tracked_keys</span> <span class="o">=</span> <span class="n">_build_batch_storage</span><span class="p">(</span>
+            <span class="n">_iter_samples</span><span class="p">(),</span>
+            <span class="n">node_keys</span><span class="o">=</span><span class="n">node_key_set</span><span class="p">,</span>
+            <span class="n">edge_keys</span><span class="o">=</span><span class="n">edge_key_set</span><span class="p">,</span>
+            <span class="n">system_keys</span><span class="o">=</span><span class="n">system_key_set</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="ow">not</span> <span class="n">skip_validation</span><span class="p">,</span>
+            <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
+            <span class="n">field_levels</span><span class="o">=</span><span class="n">field_levels</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">batch</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_construct</span><span class="p">(</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">keys</span><span class="o">=</span><span class="n">tracked_keys</span><span class="p">,</span>
             <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
             <span class="n">data_class</span><span class="o">=</span><span class="n">data_cls</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">batch</span><span class="o">.</span><span class="n">_make_contiguous</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Batch.from_raw_dicts">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_raw_dicts">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_raw_dicts</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">data_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">attr_map</span><span class="p">:</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a batch directly from raw tensor dictionaries.</span>
+
+<span class="sd">        Bypasses :class:`AtomicData` construction and Pydantic validation</span>
+<span class="sd">        entirely, using ``AtomicData._default_*_keys`` for level</span>
+<span class="sd">        classification.  Keys not found in the default key sets are</span>
+<span class="sd">        classified using *field_levels* (e.g. from</span>
+<span class="sd">        :attr:`Reader.field_levels`).  This is significantly faster when</span>
+<span class="sd">        the data is already known to be well-formed (e.g. read from a</span>
+<span class="sd">        validated Zarr store).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data_list : list[dict[str, Tensor]]</span>
+<span class="sd">            Per-sample tensor dictionaries.</span>
+<span class="sd">        device : torch.device | str, optional</span>
+<span class="sd">            Target device.  Inferred from first dict if ``None``.</span>
+<span class="sd">        attr_map : LevelSchema, optional</span>
+<span class="sd">            Attribute registry.  Defaults to ``LevelSchema()``.</span>
+<span class="sd">        exclude_keys : list[str], optional</span>
+<span class="sd">            Keys to exclude from batching.</span>
+<span class="sd">        field_levels : dict[str, str], optional</span>
+<span class="sd">            Explicit per-field level map (``&quot;atom&quot;`` / ``&quot;edge&quot;`` /</span>
+<span class="sd">            ``&quot;system&quot;``), typically from :attr:`Reader.field_levels`.</span>
+<span class="sd">            Used to classify custom keys not in the default key sets.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">data_list</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot create batch from empty data list&quot;</span><span class="p">)</span>
+
+        <span class="n">first</span> <span class="o">=</span> <span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">first</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+                    <span class="n">device</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">device</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">device</span>
+
+        <span class="k">if</span> <span class="n">attr_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">attr_map</span> <span class="o">=</span> <span class="n">LevelSchema</span><span class="p">()</span>
+
+        <span class="n">node_key_set</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_node_keys</span>
+        <span class="n">edge_key_set</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_edge_keys</span>
+        <span class="n">system_key_set</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_system_keys</span>
+
+        <span class="n">excluded</span> <span class="o">=</span> <span class="n">_EXCLUDED_KEYS</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">exclude_keys</span> <span class="ow">or</span> <span class="p">[])</span>
+        <span class="n">actual_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">first</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excluded</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">)</span>
+        <span class="p">]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_iter_samples</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">data_list</span><span class="p">:</span>
+                <span class="n">n_nodes</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">nl</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">)</span>
+                <span class="n">n_edges</span> <span class="o">=</span> <span class="n">nl</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">nl</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
+                <span class="n">pairs</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">actual_keys</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">((</span><span class="n">value</span> <span class="o">:=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)),</span> <span class="n">Tensor</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">n_nodes</span><span class="p">,</span> <span class="n">n_edges</span>
+
+        <span class="n">storage</span><span class="p">,</span> <span class="n">tracked_keys</span> <span class="o">=</span> <span class="n">_build_batch_storage</span><span class="p">(</span>
+            <span class="n">_iter_samples</span><span class="p">(),</span>
+            <span class="n">node_keys</span><span class="o">=</span><span class="n">node_key_set</span><span class="p">,</span>
+            <span class="n">edge_keys</span><span class="o">=</span><span class="n">edge_key_set</span><span class="p">,</span>
+            <span class="n">system_keys</span><span class="o">=</span><span class="n">system_key_set</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">,</span>
+            <span class="n">field_levels</span><span class="o">=</span><span class="n">field_levels</span><span class="p">,</span>
+            <span class="n">fallback_level</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_construct</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">keys</span><span class="o">=</span><span class="n">tracked_keys</span><span class="p">,</span>
+            <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
+            <span class="n">data_class</span><span class="o">=</span><span class="n">AtomicData</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">batch</span><span class="o">.</span><span class="n">_make_contiguous</span><span class="p">()</span></div>
 
@@ -1562,14 +1769,14 @@ document.write(`
 <span class="sd">        dtype : torch.dtype, optional</span>
 <span class="sd">            Ignored (present for API compatibility).</span>
 <span class="sd">        non_blocking : bool</span>
-<span class="sd">            Ignored (present for API compatibility).</span>
+<span class="sd">            Whether tensor copies may be asynchronous when supported.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        Batch</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-        <span class="n">new</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">new</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
         <span class="n">new</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">device</span>
         <span class="k">return</span> <span class="n">new</span></div>
 

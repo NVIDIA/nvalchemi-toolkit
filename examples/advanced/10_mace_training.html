@@ -1,0 +1,1016 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>MACE Training with ALCHEMI Training Utilities &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/10_mace_training';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Distributed Examples" href="../distributed/index.html" />
+    <link rel="prev" title="UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics" href="09_uma_nve.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">MACE Training with ALCHEMI Training Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">MACE...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-10-mace-training-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="mace-training-with-alchemi-training-utilities">
+<span id="sphx-glr-examples-advanced-10-mace-training-py"></span><h1>MACE Training with ALCHEMI Training Utilities<a class="headerlink" href="#mace-training-with-alchemi-training-utilities" title="Link to this heading">#</a></h1>
+<p>This example walks through a complete model-training lifecycle on the ALCHEMI
+Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN
+dataset as the reference workflow. The training script run configuration is loaded
+with <a class="reference external" href="https://hydra.cc/">Hydra</a> from <code class="xref download docutils literal notranslate"><span class="pre">10_vanilla_mace.yaml</span></code>.</p>
+<p>At a high level, the ALCHEMI training workflow has the following structure:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Graph Data] -&gt; [Model Architecture] -&gt; [Supervised Objective] -&gt; [Runtime Hooks] -&gt; [TrainingStrategy]
+</pre></div>
+</div>
+<p><strong>Data</strong> — MatPES r2SCAN 2025.2 structures, obtained from
+<a class="reference external" href="https://matpes.ai/">MatPES</a>, are read from ALCHEMI-compatible Zarr splits.
+Each sample contains graph inputs (positions, atom types, periodic boundary
+metadata) and supervised labels (energy, forces, stress).</p>
+<p><strong>Model</strong> — A 9.06M-parameter ScaleShiftMACE model from
+<a class="reference external" href="https://github.com/acesuit/mace">ACEsuit</a> is wrapped with
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a> so it can be used by
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a>. NVIDIA cuEquivariance kernels are
+enabled by default in the Hydra config (<cite>model.cueq.enabled: true</cite>).</p>
+<p><strong>Loss</strong> — Energies, forces, and stresses are fit with a weighted sum of Huber
+losses. <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.PiecewiseWeight.html#nvalchemi.training.PiecewiseWeight" title="nvalchemi.training.PiecewiseWeight"><code class="xref py py-class docutils literal notranslate"><span class="pre">PiecewiseWeight</span></code></a> schedules are used to change
+the loss-term weights at a configured optimizer step for the second training stage.</p>
+<p><strong>Runtime</strong> — Distributed wrapping, EMA, neighbor-list rebuild, gradient
+clipping, metrics logging, and checkpointing are attached through runtime hooks
+rather than being implemented directly in the core trainin loop. Validation
+is configured separately using <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.ValidationConfig.html#nvalchemi.training.ValidationConfig" title="nvalchemi.training.ValidationConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValidationConfig</span></code></a> on
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a>. Validation runs automatically
+during <code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code>.</p>
+<p>Dataset-derived metadata (<cite>E0s</cite>, <cite>avg_num_neighbors</cite>, <cite>atomic_inter_shift</cite> /
+<cite>atomic_inter_scale</cite>), must be precomputed and set in <code class="docutils literal notranslate"><span class="pre">cfg.model</span></code> before
+training. The default YAML includes values computed from the MatPES r2SCAN training
+split.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+GPU information: NVIDIA GB10, 12, 1, 128, 48, 140, 1700
+</pre></div>
+</div>
+<section id="loading-train-and-validation-data">
+<h2>Loading train and validation data<a class="headerlink" href="#loading-train-and-validation-data" title="Link to this heading">#</a></h2>
+<p>The source data is the <a class="reference external" href="https://huggingface.co/datasets/materialyze/matpes">MatPES r2SCAN 2025.2 release</a> on Hugging Face. This
+example expects separate train, validation, and test Zarr stores. Load each
+MatPES split file, for example the train, validation, and test JSON/JSONL files,
+and convert each split independently to an ALCHEMI Zarr store with
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code>.</p>
+<p>A minimal converter for this workflow should map each pymatgen/MSON <code class="docutils literal notranslate"><span class="pre">structure</span></code>
+dictionary to atomic numbers, Cartesian positions, cell, and PBC tensors;
+write <code class="docutils literal notranslate"><span class="pre">energy</span></code> as a system label, <code class="docutils literal notranslate"><span class="pre">forces</span></code> as an atom label, and convert
+Voigt-6 <code class="docutils literal notranslate"><span class="pre">stress</span></code> to a <code class="docutils literal notranslate"><span class="pre">3</span> <span class="pre">x</span> <span class="pre">3</span></code> system tensor.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">periodictable</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">voigt_to_matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">atomic_numbers_from_element_symbols</span><span class="p">(</span><span class="n">sites</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">pt</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">symbol</span><span class="p">(</span><span class="n">site</span><span class="p">[</span><span class="s2">&quot;species&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;element&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">number</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="n">sites</span>
+        <span class="p">],</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;r2scan-2025.2-train.zarr&quot;</span><span class="p">)</span>
+<span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">8192</span>
+<span class="n">chunk</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">jsonl_records</span><span class="p">:</span>
+    <span class="n">structure</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span>
+    <span class="n">chunk</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">AtomicData</span><span class="p">(</span>
+            <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers_from_element_symbols</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;sites&quot;</span><span class="p">]),</span>
+            <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">([</span><span class="n">site</span><span class="p">[</span><span class="s2">&quot;xyz&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="n">structure</span><span class="p">[</span><span class="s2">&quot;sites&quot;</span><span class="p">]]),</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;lattice&quot;</span><span class="p">][</span><span class="s2">&quot;matrix&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="n">pbc</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;lattice&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="p">[</span><span class="kc">True</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">([[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]]]),</span>
+            <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]),</span>
+            <span class="n">stress</span><span class="o">=</span><span class="n">voigt_to_matrix</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">chunk_size</span><span class="p">:</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="k">if</span> <span class="n">initialized</span> <span class="k">else</span> <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+        <span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">chunk</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">chunk</span><span class="p">:</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="k">if</span> <span class="n">initialized</span> <span class="k">else</span> <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This pipeline reads those Zarr splits with
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code>.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">InMemoryDataset</span></code> materializes each split once
+as a <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> on the target device, and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code> selects shuffled or sequential
+batches from that in-memory batch.</p>
+<p>The default configuration uses a per-process training batch size of 256 and a
+validation batch size of 512. Given that the structure sizes in this dataset range from
+1 atom to 240 atoms, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html#nvalchemi.dynamics.SizeAwareSampler" title="nvalchemi.dynamics.sampler.SizeAwareSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SizeAwareSampler</span></code></a> can also be
+used as an alternative to cap the atom count per batch when memory is tight.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span><span class="p">,</span> <span class="n">DataLoader</span><span class="p">,</span> <span class="n">InMemoryDataset</span>
+
+<span class="n">device</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+<span class="n">train_dataset</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">=</span><span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/r2scan-2025.2-train.zarr&quot;</span><span class="p">)),</span>
+    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+    <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">train_batches</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">train_dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">val_dataset</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">=</span><span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/r2scan-2025.2-valid.zarr&quot;</span><span class="p">)),</span>
+    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+    <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">val_batches</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">val_dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The runnable script wraps this pattern in <code class="docutils literal notranslate"><span class="pre">_loader(...)</span></code> so Hydra can supply
+paths, batch sizes, and optional stress scaling transforms.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="building-the-mace-model">
+<h2>Building the MACE model<a class="headerlink" href="#building-the-mace-model" title="Link to this heading">#</a></h2>
+<p>The default configuration trains ScaleShiftMACE to predict energy, force, and
+stress. Any model object passed to <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a>
+must follow <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>.
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a> handles input adaptation,
+neighbor-list metadata, and routes model outputs for MACE model variants.</p>
+<p>Before building the model, populate the Hydra config with dataset-derived
+metadata: <code class="docutils literal notranslate"><span class="pre">E0s</span></code> (from structure-energy regression or isolated-atom DFT),
+<code class="docutils literal notranslate"><span class="pre">avg_num_neighbors</span></code>, and the ScaleShiftMACE pair <code class="docutils literal notranslate"><span class="pre">atomic_inter_shift</span></code> /
+<code class="docutils literal notranslate"><span class="pre">atomic_inter_scale</span></code>. The default YAML includes values precomputed from the
+training split.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mace.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScaleShiftMACE</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a>
+
+<span class="n">mace_model</span> <span class="o">=</span> <span class="n">ScaleShiftMACE</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="p">(</span><span class="n">mace_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+<span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>The runnable script reads architecture hyperparameters from Hydra and builds
+the wrapped model through <code class="docutils literal notranslate"><span class="pre">_build_model(cfg,</span> <span class="pre">device)</span></code>, which calls
+<code class="xref py py-func docutils literal notranslate"><span class="pre">build_training_mace_model()</span></code> to set
+<code class="docutils literal notranslate"><span class="pre">active_outputs</span></code> and attach a checkpointable model spec.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="defining-the-loss">
+<h2>Defining the loss<a class="headerlink" href="#defining-the-loss" title="Link to this heading">#</a></h2>
+<p>The default configuration fits energies, forces, and stresses. The loss is a
+weighted sum of Huber terms composed with <code class="docutils literal notranslate"><span class="pre">+</span></code> and <code class="docutils literal notranslate"><span class="pre">*</span></code> into a
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction" title="nvalchemi.training.ComposedLossFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code></a>. Stage-one weights hold until
+<code class="docutils literal notranslate"><span class="pre">stage_two_start</span></code>, then switch (for example <code class="docutils literal notranslate"><span class="pre">1/10/100</span></code> to <code class="docutils literal notranslate"><span class="pre">10/1/10</span></code> at
+step 54,400 of 68,000).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ComposedLossFunction</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnergyHuberLoss</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ForceHuberLoss</span></a><span class="p">,</span>
+    <span class="n">PiecewiseWeight</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StressHuberLoss</span></a><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">stage_two_start</span> <span class="o">=</span> <span class="mi">54_400</span>
+
+<span class="n">loss_fn</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ComposedLossFunction</span></a> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">PiecewiseWeight</span><span class="p">(</span>
+        <span class="n">boundaries</span><span class="o">=</span><span class="p">(</span><span class="n">stage_two_start</span><span class="p">,),</span>
+        <span class="n">values</span><span class="o">=</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">),</span>
+        <span class="n">per_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnergyHuberLoss</span></a><span class="p">(</span><span class="n">per_atom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+    <span class="o">+</span> <span class="n">PiecewiseWeight</span><span class="p">(</span>
+        <span class="n">boundaries</span><span class="o">=</span><span class="p">(</span><span class="n">stage_two_start</span><span class="p">,),</span>
+        <span class="n">values</span><span class="o">=</span><span class="p">(</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="n">per_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ForceHuberLoss</span></a><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+    <span class="o">+</span> <span class="n">PiecewiseWeight</span><span class="p">(</span>
+        <span class="n">boundaries</span><span class="o">=</span><span class="p">(</span><span class="n">stage_two_start</span><span class="p">,),</span>
+        <span class="n">values</span><span class="o">=</span><span class="p">(</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">),</span>
+        <span class="n">per_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StressHuberLoss</span></a><span class="p">(</span><span class="n">delta</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">loss_fn</span><span class="o">.</span><span class="n">normalize_weights</span> <span class="o">=</span> <span class="kc">False</span>
+</pre></div>
+</div>
+<p>The runnable script builds the same composition from <code class="docutils literal notranslate"><span class="pre">cfg.training.loss</span></code>
+through <code class="docutils literal notranslate"><span class="pre">_build_mace_huber_loss(cfg.training.loss)</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="configuring-the-optimizer-and-scheduler">
+<h2>Configuring the optimizer and scheduler<a class="headerlink" href="#configuring-the-optimizer-and-scheduler" title="Link to this heading">#</a></h2>
+<p>Schedulers are attached through <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.OptimizerConfig.html#nvalchemi.training.OptimizerConfig" title="nvalchemi.training.OptimizerConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptimizerConfig</span></code></a>. The
+runnable example uses
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TwoStageCosineConstantLR</span></code> —
+cosine annealing for stage one, then a constant stage-two learning rate; any
+<code class="docutils literal notranslate"><span class="pre">torch.optim.lr_scheduler.LRScheduler</span></code> subclass can be passed via
+<code class="docutils literal notranslate"><span class="pre">scheduler_cls</span></code> and <code class="docutils literal notranslate"><span class="pre">scheduler_kwargs</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">_mace_training_helpers</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.SequentialLR.html#torch.optim.lr_scheduler.SequentialLR" title="torch.optim.lr_scheduler.SequentialLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class"><span class="n">TwoStageCosineConstantLR</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptimizerConfig</span>
+
+<span class="n">optimizer_config</span> <span class="o">=</span> <span class="n">OptimizerConfig</span><span class="p">(</span>
+    <span class="n">optimizer_cls</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.AdamW.html#torch.optim.AdamW" title="torch.optim.AdamW" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span></a><span class="p">,</span>
+    <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">5.0e-3</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">scheduler_cls</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.SequentialLR.html#torch.optim.lr_scheduler.SequentialLR" title="torch.optim.lr_scheduler.SequentialLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class"><span class="n">TwoStageCosineConstantLR</span></a><span class="p">,</span>
+    <span class="n">scheduler_kwargs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;first_stage_steps&quot;</span><span class="p">:</span> <span class="mi">54_400</span><span class="p">,</span>
+        <span class="s2">&quot;second_stage_lr&quot;</span><span class="p">:</span> <span class="mf">1.0e-3</span><span class="p">,</span>
+        <span class="s2">&quot;eta_min&quot;</span><span class="p">:</span> <span class="mf">1.0e-3</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Hydra supplies learning-rate and schedule values; <code class="docutils literal notranslate"><span class="pre">_optimizer(cfg)</span></code> maps them
+onto <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.OptimizerConfig.html#nvalchemi.training.OptimizerConfig" title="nvalchemi.training.OptimizerConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptimizerConfig</span></code></a>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="adding-runtime-hooks">
+<h2>Adding runtime hooks<a class="headerlink" href="#adding-runtime-hooks" title="Link to this heading">#</a></h2>
+<p>Hooks extend the core training loop without embedding that logic in the loop
+itself. For example, <code class="xref py py-class docutils literal notranslate"><span class="pre">DDPHook</span></code> wraps the model in
+DDP at the <code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStage</span></code> <code class="docutils literal notranslate"><span class="pre">SETUP</span></code> stage when
+<code class="docutils literal notranslate"><span class="pre">training.distributed.enabled</span></code> is true.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">EMAHook</span></code> maintains shadow weights for validation at
+<code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code>, and <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> rebuilds
+the interaction graph at <code class="docutils literal notranslate"><span class="pre">BEFORE_FORWARD</span></code> before every forward pass.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">_mace_training_helpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">GradientClipHook</span><span class="p">,</span>
+    <span class="n">TrainingMetricsLogger</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CheckpointHook</span><span class="p">,</span>
+    <span class="n">DDPHook</span><span class="p">,</span>
+    <span class="n">EMAHook</span><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">hooks</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">DDPHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">sampler_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;seed&quot;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}),</span>
+    <span class="n">EMAHook</span><span class="p">(</span><span class="n">model_key</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span> <span class="n">decay</span><span class="o">=</span><span class="mf">0.995</span><span class="p">),</span>
+    <span class="n">GradientClipHook</span><span class="p">(</span><span class="n">max_norm</span><span class="o">=</span><span class="mf">2.0</span><span class="p">),</span>
+    <span class="n">NeighborListHook</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+        <span class="n">max_neighbors</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+        <span class="n">method</span><span class="o">=</span><span class="s2">&quot;batch_naive_tile&quot;</span><span class="p">,</span>
+        <span class="n">stage</span><span class="o">=</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">TrainingMetricsLogger</span><span class="p">(</span><span class="n">every</span><span class="o">=</span><span class="mi">100</span><span class="p">),</span>
+    <span class="n">CheckpointHook</span><span class="p">(</span>
+        <span class="n">checkpoint_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;outputs/checkpoints&quot;</span><span class="p">),</span>
+        <span class="n">step_interval</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">GradientClipHook</span></code> and <code class="docutils literal notranslate"><span class="pre">TrainingMetricsLogger</span></code> are implemented in this example’s
+helper module. The other hooks shown above are public ALCHEMI training APIs. The runnable
+script assembles the full hook list from Hydra through <code class="docutils literal notranslate"><span class="pre">_hooks(cfg,</span> <span class="pre">model)</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="configuring-validation">
+<h2>Configuring validation<a class="headerlink" href="#configuring-validation" title="Link to this heading">#</a></h2>
+<p>Validation is configured with <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.ValidationConfig.html#nvalchemi.training.ValidationConfig" title="nvalchemi.training.ValidationConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValidationConfig</span></code></a>. The
+configuration specifies the validation data, validation function, loss function,
+evaluation cadence, and whether to use EMA weights. During
+<code class="xref py py-class docutils literal notranslate"><span class="pre">run</span></code>, the strategy evaluates validation
+at this cadence and once more at the end of training. The latest validation
+summary is stored on <code class="docutils literal notranslate"><span class="pre">strategy.last_validation</span></code>.</p>
+<p>In multi-GPU runs, each rank evaluates a disjoint validation shard through a
+DistributedSampler. The runnable script builds this configuration with
+<code class="docutils literal notranslate"><span class="pre">_build_validation_config(...)</span></code> after the validation loader and loss function
+have been constructed.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationConfig</span><span class="p">,</span> <span class="n">default_training_fn</span>
+
+<span class="n">validation_config</span> <span class="o">=</span> <span class="n">ValidationConfig</span><span class="p">(</span>
+    <span class="n">validation_data</span><span class="o">=</span><span class="n">val_batches</span><span class="p">,</span>
+    <span class="n">validation_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">every_n_steps</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">grad_mode</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">use_ema</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="running-trainingstrategy">
+<h2>Running TrainingStrategy<a class="headerlink" href="#running-trainingstrategy" title="Link to this heading">#</a></h2>
+<p>The final step is to assemble the objects created above and hand them to
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a>, which runs the training loop.
+On each step, it calls the training function, steps the optimizer and scheduler,
+invokes hooks at their registered stages, runs validation when configured, and
+tracks checkpointable training state.</p>
+<p><a class="reference internal" href="../../modules/generated/nvalchemi.distributed.DistributedManager.html#nvalchemi.distributed.DistributedManager" title="nvalchemi.distributed.DistributedManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedManager</span></code></a> provides distributed
+runtime information such as rank, local rank, world size, and device placement.
+The same code path works for single-GPU and multi-GPU launches. In distributed
+runs, <code class="xref py py-class docutils literal notranslate"><span class="pre">DDPHook</span></code> uses the distributed manager to wrap
+the model and coordinate rank-specific behavior.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStrategy</span><span class="p">,</span> <span class="n">default_training_fn</span>
+
+<span class="n">DistributedManager</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+<span class="n">manager</span> <span class="o">=</span> <span class="n">DistributedManager</span><span class="p">()</span>
+<span class="n">device</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="n">manager</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">optimizer_config</span><span class="p">,</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">68_000</span><span class="p">,</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="n">device</span><span class="p">],</span>
+    <span class="n">distributed_manager</span><span class="o">=</span><span class="n">manager</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
+    <span class="n">validation_config</span><span class="o">=</span><span class="n">validation_config</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Run the Hydra entrypoint on one or more GPUs:</p>
+<p>Single GPU:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>mace<span class="w"> </span>python<span class="w"> </span>examples/advanced/10_mace_training.py
+</pre></div>
+</div>
+<p>Multi-GPU:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>mace<span class="w"> </span>torchrun<span class="w"> </span>--standalone<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>examples/advanced/10_mace_training.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--config-name<span class="o">=</span>10_vanilla_mace<span class="w"> </span>distributed.enabled<span class="o">=</span><span class="nb">true</span>
+</pre></div>
+</div>
+<p>The commands above use <code class="docutils literal notranslate"><span class="pre">--extra</span> <span class="pre">cu12</span></code>; change <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--extra</span> <span class="pre">cuXX</span></code> to match
+your NVIDIA driver / CUDA toolkit availability (for example, <code class="docutils literal notranslate"><span class="pre">cu13</span></code> on CUDA 13.x).</p>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">training.batch_size</span></code> is the per-process batch size. The global batch size
+is therefore <code class="docutils literal notranslate"><span class="pre">training.batch_size</span> <span class="pre">*</span> <span class="pre">nproc_per_node</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Skipping Hydra training during docs build. Run with:
+uv run --extra cu12 --extra mace python examples/advanced/10_mace_training.py
+(use --extra cu13 instead depending on your CUDA availability)
+</pre></div>
+</div>
+</section>
+<section id="validation-curves-and-reference-results">
+<h2>Validation curves and reference results<a class="headerlink" href="#validation-curves-and-reference-results" title="Link to this heading">#</a></h2>
+<p>The figure below shows validation Huber losses from a full default-config run
+on 1× H100 GPU, which took about 80 minutes of wall time. Actual wall time may
+differ depending on system configuration, hardware, and software stack.
+The sharp transition near step 54,400 marks the stage-two loss-weight schedule
+configured by <code class="docutils literal notranslate"><span class="pre">training.loss.stage_two.start_step</span></code>.</p>
+<a class="reference internal image-reference" href="examples/_static/vanilla_mace_validation_metrics_260701.png"><img alt="examples/_static/vanilla_mace_validation_metrics_260701.png" class="align-center" src="examples/_static/vanilla_mace_validation_metrics_260701.png" style="width: 70%;" />
+</a>
+<p>With this default config (68,000 optimizer steps, about 50 epochs on the MatPES r2SCAN
+train set), the trained model reaches held-out test MAEs of energy 25.5 meV/atom,
+forces 145 meV/Å, and stress 0.703 GPa. These values are comparable to the
+MatPES r2SCAN benchmarks reported in
+<a class="reference external" href="https://arxiv.org/pdf/2503.04070">the MatPES paper</a> and to training with the
+<a class="reference external" href="https://github.com/acesuit/mace">MACE CLI</a>.</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.149 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-10-mace-training-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/ddf8e1730e0201c2f8fb633e6c97dd9d/10_mace_training.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">10_mace_training.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/0ad1d870082e90ef7a80eb46e5426043/10_mace_training.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">10_mace_training.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/d74a5c9739b0a2488d4c8d5db3308e80/10_mace_training.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">10_mace_training.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="09_uma_nve.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../distributed/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed Examples</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-train-and-validation-data">Loading train and validation data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-the-mace-model">Building the MACE model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#defining-the-loss">Defining the loss</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-the-optimizer-and-scheduler">Configuring the optimizer and scheduler</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-runtime-hooks">Adding runtime hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-validation">Configuring validation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-trainingstrategy">Running TrainingStrategy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-curves-and-reference-results">Validation curves and reference results</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/10_mace_training.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

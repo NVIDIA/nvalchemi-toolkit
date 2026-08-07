@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_DFTD3\_HALO
+============================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_DFTD3_HALO

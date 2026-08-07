@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.base
 
-.. autoclass:: ModelConfig
+
+.. autopydantic_model:: ModelConfig
     :members:
+
 
 .. raw:: html
 

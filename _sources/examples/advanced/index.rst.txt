@@ -30,6 +30,14 @@ the ``+`` operator; PipelineModelWrapper for dependent pipelines.
 **08 — AIMNet2 + Ewald Pipeline**: Composing AIMNet2 with Ewald
 electrostatics and DFTD3 dispersion in a multi-group pipeline.
 
+**09 — UMA NVE/NVT**: Driving the fairchem UMA foundation model through
+NVE / NVT dynamics with energy-drift tracking; OMat crystals and OMol
+molecules via task selection on ``UMAWrapper.from_checkpoint``.
+
+**10 — MACE Training**: Training a ScaleShiftMACE model with the ALCHEMI
+training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
+validation, and distributed launch patterns.
+
 
 
 .. raw:: html
@@ -159,7 +167,7 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — the most powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — a powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters.">
 
 .. only:: html
 
@@ -171,6 +179,40 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AIMNet2 + Ewald Pipeline Geometry Optimization</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="UMA (Universal Models for Atoms, from fairchem-core) is a multi-task foundation model: a single checkpoint ships heads for molecules (OMol), bulk crystals (OMat), catalysis (OC20), direct air capture (ODAC), and molecular crystals (OMC).  UMAWrapper exposes one task head at a time and computes conservative forces (and, for periodic tasks, stress) via autograd.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_09_uma_nve_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/09_uma_nve`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example walks through a complete model-training lifecycle on the ALCHEMI Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN dataset as the reference workflow. The training script run configuration is loaded with Hydra from 10_vanilla_mace.yaml.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_10_mace_training_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/10_mace_training`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MACE Training with ALCHEMI Training Utilities</div>
     </div>
 
 
@@ -192,4 +234,6 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
    /examples/advanced/06_ewald_electrostatics
    /examples/advanced/07_composable_model_composition
    /examples/advanced/08_aimnet2_ewald_pipeline
+   /examples/advanced/09_uma_nve
+   /examples/advanced/10_mace_training
 

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Supported Models &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Supported Models &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'models/index';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Examples" href="../examples/index.html" />
-    <link rel="prev" title="Zarr Compression Tuning" href="../userguide/zarr_compression.html" />
+    <link rel="prev" title="Agent Skills" href="../userguide/agent_skills.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -474,7 +477,17 @@ mechanical reference data.</p>
 <td><p>charge</p></td>
 <td><p>MATRIX</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper" title="nvalchemi.models.demo.DemoModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoModelWrapper</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper" title="nvalchemi.models.uma.UMAWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">UMAWrapper</span></code></a></p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>charge, spin</p></td>
+<td><p>COO</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper" title="nvalchemi.models.demo.DemoModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoModelWrapper</span></code></a></p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
@@ -543,7 +556,7 @@ functional forms.</p>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
-<td><p>node_charges</p></td>
+<td><p>charges</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.ewald.EwaldModelWrapper.html#nvalchemi.models.ewald.EwaldModelWrapper" title="nvalchemi.models.ewald.EwaldModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">EwaldModelWrapper</span></code></a></p></td>
@@ -553,7 +566,7 @@ functional forms.</p>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
-<td><p>node_charges</p></td>
+<td><p>charges</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 </tbody>
@@ -581,7 +594,8 @@ See <a class="reference internal" href="../userguide/models.html#models-guide"><
 
 <span class="n">pipe</span> <span class="o">=</span> <span class="n">PipelineModelWrapper</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="p">[</span>
     <span class="n">PipelineGroup</span><span class="p">(</span>
-        <span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">(</span><span class="n">aimnet2</span><span class="p">,</span> <span class="n">wire</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;charges&quot;</span><span class="p">:</span> <span class="s2">&quot;node_charges&quot;</span><span class="p">}),</span> <span class="n">ewald</span><span class="p">],</span>
+        <span class="c1"># AIMNet2 outputs &quot;charges&quot;; Ewald requires &quot;charges&quot; — auto-wired.</span>
+        <span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">aimnet2</span><span class="p">,</span> <span class="n">ewald</span><span class="p">],</span>
         <span class="n">use_autograd</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">),</span>
     <span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">dftd3</span><span class="p">]),</span>
@@ -645,7 +659,7 @@ Gitterpotentiale.” <em>Ann. Phys.</em> <strong>369</strong> (3), 253–287, 19
 </tr>
 <tr class="row-odd"><td><p><strong>Particle Mesh Ewald</strong></p></td>
 <td><p>Darden, T., York, D. &amp; Pedersen, L. “Particle mesh Ewald: An
-N*log(N) method for Ewald sums in large systems.”
+<code class="docutils literal notranslate"><span class="pre">N*log(N)</span></code> method for Ewald sums in large systems.”
 <em>J. Chem. Phys.</em> <strong>98</strong> (12), 10089–10092, 1993.
 <a class="reference external" href="https://doi.org/10.1063/1.464397">doi:10.1063/1.464397</a></p></td>
 </tr>
@@ -665,12 +679,12 @@ N*log(N) method for Ewald sums in large systems.”
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../userguide/zarr_compression.html"
+       href="../userguide/agent_skills.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Zarr Compression Tuning</p>
+        <p class="prev-next-title">Agent Skills</p>
       </div>
     </a>
     <a class="right-next"

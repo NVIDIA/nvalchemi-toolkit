@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.data
 
+
 .. autoclass:: AtomicDataZarrWriter
     :members:
+
 
 .. raw:: html
 

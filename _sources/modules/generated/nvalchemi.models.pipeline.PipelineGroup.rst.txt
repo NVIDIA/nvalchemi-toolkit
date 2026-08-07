@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.pipeline
 
+
 .. autoclass:: PipelineGroup
     :members:
+
 
 .. raw:: html
 

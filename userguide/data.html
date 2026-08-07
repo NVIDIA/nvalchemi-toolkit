@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>AtomicData and Batch &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>AtomicData and Batch &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/data';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Data Loading Pipeline" href="datapipes.html" />
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
@@ -468,6 +488,7 @@ as <code class="docutils literal notranslate"><span class="pre">shifts</span></c
 <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> (integer lattice indices) for periodicity.</p></li>
 <li><p><strong>Optional system-level</strong>: <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code>, <code class="docutils literal notranslate"><span class="pre">virial</span></code>, etc.</p></li>
 </ul>
+<p>For stress, virial, and pressure sign conventions, see <a class="reference internal" href="about/conventions.html#conventions"><span class="std std-ref">Conventions</span></a>.</p>
 <p>All tensor fields use PyTorch tensors, so you can move them to GPU with <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> or
 use the mixin method <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.data.DataMixin.to()</span></code> for device/dtype changes.</p>
 <p>Example:</p>
@@ -651,7 +672,7 @@ you call <code class="xref py py-meth docutils literal notranslate"><span class=
 <section id="neighbor-list-formats">
 <h2>Neighbor list formats<a class="headerlink" href="#neighbor-list-formats" title="Link to this heading">#</a></h2>
 <p>The framework supports two neighbor list representations, configured via
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code> and populated by
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.NeighborConfig.html#nvalchemi.models.base.NeighborConfig" title="nvalchemi.models.base.NeighborConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code></a> and populated by
 <a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> at the <code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code>
 stage.</p>
 <table class="table">
@@ -708,7 +729,7 @@ on demand via the <a class="reference internal" href="../modules/generated/nvalc
 <p>Both formats are populated automatically by
 <a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>.  The format is controlled
 by the <code class="docutils literal notranslate"><span class="pre">format</span></code> field in the model’s
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code>.</p>
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.NeighborConfig.html#nvalchemi.models.base.NeighborConfig" title="nvalchemi.models.base.NeighborConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code></a>.</p>
 </section>
 <section id="pre-allocated-batches-and-the-buffer-api">
 <h2>Pre-allocated batches and the buffer API<a class="headerlink" href="#pre-allocated-batches-and-the-buffer-api" title="Link to this heading">#</a></h2>
@@ -785,7 +806,7 @@ The toolkit provides a conversion path so you can move data between ASE and ALCH
 seamlessly.</p>
 <section id="converting-ase-atoms-to-atomicdata">
 <h3>Converting ASE Atoms to AtomicData<a class="headerlink" href="#converting-ase-atoms-to-atomicdata" title="Link to this heading">#</a></h3>
-<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_atoms" title="nvalchemi.data.AtomicData.from_atoms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData.from_atoms()</span></code></a> accepts an <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> object and
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData.from_atoms()</span></code> accepts an <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> object and
 returns an <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
@@ -868,7 +889,7 @@ naming conventions in your ASE dataset.</p>
 <p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> has an optional <code class="docutils literal notranslate"><span class="pre">atom_categories</span></code> field
 (shape <code class="docutils literal notranslate"><span class="pre">[n_nodes]</span></code>) that classifies atoms using the
 <code class="xref py py-class docutils literal notranslate"><span class="pre">AtomCategory</span></code> enum. This is used by dynamics hooks
-such as <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>, which freezes atoms
+such as <a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>, which freezes atoms
 marked as <code class="docutils literal notranslate"><span class="pre">AtomCategory.SPECIAL</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">from_atoms</span></code> does <strong>not</strong> set <code class="docutils literal notranslate"><span class="pre">atom_categories</span></code> automatically — you assign it after
 construction based on your specific workflow. For example, in a slab+adsorbate
@@ -941,6 +962,10 @@ entries then.</p>
 (<code class="docutils literal notranslate"><span class="pre">basic/01_data_structures.py</span></code>) for a runnable script.</p></li>
 <li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code> for the full API of AtomicData, Batch, and the
 zarr-based reader/writer and dataloader.</p></li>
+<li><p><strong>Transforms</strong>: See the <a class="reference internal" href="datapipes.html#datapipes-guide"><span class="std std-ref">Transforms section</span></a> of the Data
+Loading Pipeline guide for how to hook per-sample and per-batch transforms
+into <a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader" title="nvalchemi.data.datapipes.dataloader.DataLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>.</p></li>
 </ul>
 </section>
 </section>

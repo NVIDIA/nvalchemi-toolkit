@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.data
 
-.. autoclass:: AtomicData
+
+.. autopydantic_model:: AtomicData
     :members:
+
 
 .. raw:: html
 

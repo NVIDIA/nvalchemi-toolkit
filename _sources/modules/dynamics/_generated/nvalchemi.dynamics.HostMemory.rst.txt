@@ -1,35 +1,18 @@
-﻿nvalchemi.dynamics.HostMemory
-=============================
+﻿..
+    The empty line below should not be removed. It is added such that the `rst_prolog`
+    is added before the :mod: directive. Otherwise, the rendering will show as a
+    paragraph instead of a header.
+
+:mod:`nvalchemi.dynamics`.HostMemory
+===========================================
 
 .. currentmodule:: nvalchemi.dynamics
 
+
 .. autoclass:: HostMemory
+    :members:
 
-   
-   .. automethod:: __init__
 
-   
-   .. rubric:: Methods
+.. raw:: html
 
-   .. autosummary::
-   
-      ~HostMemory.__init__
-      ~HostMemory.drain
-      ~HostMemory.read
-      ~HostMemory.write
-      ~HostMemory.zero
-   
-   
-
-   
-   
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~HostMemory.capacity
-      ~HostMemory.global_rank
-      ~HostMemory.is_full
-      ~HostMemory.local_rank
-   
-   
+    <div class="clearer"></div>

@@ -60,7 +60,7 @@ for custom hook and integrator patterns.
     from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
     from nvalchemi.dynamics.hooks import LoggingHook
     from nvalchemi.dynamics.sinks import HostMemory
-    from nvalchemi.hooks import HookContext
+    from nvalchemi.hooks import DynamicsContext
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -140,7 +140,7 @@ for custom hook and integrator patterns.
             self._t0 = time.monotonic()
             self._n_transitions = 0
 
-        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
             self._n_transitions += 1
             if self._n_transitions % self.frequency != 0:
                 return
@@ -426,7 +426,7 @@ metrics like the status distribution or the mean energy.
             self._print_count = 0
             self._max_steps = max_steps
 
-        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
             if self._print_count >= self._max_steps:
                 return
             if ctx.step_count % self.frequency != 0:
@@ -486,7 +486,7 @@ metrics like the status distribution or the mean energy.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.527 seconds)
+   **Total running time of the script:** (0 minutes 1.095 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_01_multistage_pipeline.py:

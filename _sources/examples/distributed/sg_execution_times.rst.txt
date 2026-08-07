@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.341** total execution time for 2 files **from examples/distributed**:
+**00:03.789** total execution time for 7 files **from examples/distributed**:
 
 .. container::
 
@@ -32,9 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``01_distributed_pipeline.py``)
-     - 00:00.341
+   * - :ref:`sphx_glr_examples_distributed_04_byo_pytorch_mpnn.py` (``04_byo_pytorch_mpnn.py``)
+     - 00:01.974
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_05_byo_graph_transformer.py` (``05_byo_graph_transformer.py``)
+     - 00:01.798
      - 0.0
    * - :ref:`sphx_glr_examples_distributed_02_distributed_monitoring.py` (``02_distributed_monitoring.py``)
-     - 00:00.000
+     - 00:00.006
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``01_distributed_pipeline.py``)
+     - 00:00.005
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_07_fire_nvt_dd.py` (``07_fire_nvt_dd.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_03_mace_nvt_distributed.py` (``03_mace_nvt_distributed.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_06_mace_npt_distributed.py` (``06_mace_npt_distributed.py``)
+     - 00:00.002
      - 0.0

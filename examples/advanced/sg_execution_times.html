@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Computation times &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Computation times &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/sg_execution_times';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -409,7 +412,7 @@ document.write(`
                   
   <section id="computation-times">
 <span id="sphx-glr-examples-advanced-sg-execution-times"></span><h1>Computation times<a class="headerlink" href="#computation-times" title="Link to this heading">#</a></h1>
-<p><strong>00:04.384</strong> total execution time for 8 files <strong>from examples/advanced</strong>:</p>
+<p><strong>00:14.630</strong> total execution time for 10 files <strong>from examples/advanced</strong>:</p>
 <div class="docutils container">
 <style scoped>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
@@ -430,35 +433,43 @@ $(document).ready( function () {
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="04_mace_nvt.html#sphx-glr-examples-advanced-04-mace-nvt-py"><span class="std std-ref">NVT MD with MACE (with LJ Fallback)</span></a> (<code class="docutils literal notranslate"><span class="pre">04_mace_nvt.py</span></code>)</p></td>
-<td><p>00:04.384</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="01_biased_potential.html#sphx-glr-examples-advanced-01-biased-potential-py"><span class="std std-ref">Biased Sampling with BiasedPotentialHook</span></a> (<code class="docutils literal notranslate"><span class="pre">01_biased_potential.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="02_custom_hook.html#sphx-glr-examples-advanced-02-custom-hook-py"><span class="std std-ref">Writing a Custom Hook: Radial Distribution Function</span></a> (<code class="docutils literal notranslate"><span class="pre">02_custom_hook.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="03_custom_convergence.html#sphx-glr-examples-advanced-03-custom-convergence-py"><span class="std std-ref">Multi-Criteria Convergence with Custom Operators</span></a> (<code class="docutils literal notranslate"><span class="pre">03_custom_convergence.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="05_custom_integrator.html#sphx-glr-examples-advanced-05-custom-integrator-py"><span class="std std-ref">Building a Custom Integrator by Subclassing BaseDynamics</span></a> (<code class="docutils literal notranslate"><span class="pre">05_custom_integrator.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="08_aimnet2_ewald_pipeline.html#sphx-glr-examples-advanced-08-aimnet2-ewald-pipeline-py"><span class="std std-ref">AIMNet2 + Ewald Pipeline Geometry Optimization</span></a> (<code class="docutils literal notranslate"><span class="pre">08_aimnet2_ewald_pipeline.py</span></code>)</p></td>
+<td><p>00:07.131</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="06_ewald_electrostatics.html#sphx-glr-examples-advanced-06-ewald-electrostatics-py"><span class="std std-ref">Long-Range Electrostatics with Ewald Summation</span></a> (<code class="docutils literal notranslate"><span class="pre">06_ewald_electrostatics.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
+<td><p>00:03.497</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="10_mace_training.html#sphx-glr-examples-advanced-10-mace-training-py"><span class="std std-ref">MACE Training with ALCHEMI Training Utilities</span></a> (<code class="docutils literal notranslate"><span class="pre">10_mace_training.py</span></code>)</p></td>
+<td><p>00:01.149</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="02_custom_hook.html#sphx-glr-examples-advanced-02-custom-hook-py"><span class="std std-ref">Writing a Custom Hook: Radial Distribution Function</span></a> (<code class="docutils literal notranslate"><span class="pre">02_custom_hook.py</span></code>)</p></td>
+<td><p>00:01.094</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="07_composable_model_composition.html#sphx-glr-examples-advanced-07-composable-model-composition-py"><span class="std std-ref">Additive Model Composition (LJ + Ewald)</span></a> (<code class="docutils literal notranslate"><span class="pre">07_composable_model_composition.py</span></code>)</p></td>
-<td><p>00:00.000</p></td>
+<td><p>00:00.834</p></td>
 <td><p>0.0</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="08_aimnet2_ewald_pipeline.html#sphx-glr-examples-advanced-08-aimnet2-ewald-pipeline-py"><span class="std std-ref">AIMNet2 + Ewald Pipeline Geometry Optimization</span></a> (<code class="docutils literal notranslate"><span class="pre">08_aimnet2_ewald_pipeline.py</span></code>)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="04_mace_nvt.html#sphx-glr-examples-advanced-04-mace-nvt-py"><span class="std std-ref">NVT MD with MACE (with LJ Fallback)</span></a> (<code class="docutils literal notranslate"><span class="pre">04_mace_nvt.py</span></code>)</p></td>
+<td><p>00:00.299</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="05_custom_integrator.html#sphx-glr-examples-advanced-05-custom-integrator-py"><span class="std std-ref">Building a Custom Integrator by Subclassing BaseDynamics</span></a> (<code class="docutils literal notranslate"><span class="pre">05_custom_integrator.py</span></code>)</p></td>
+<td><p>00:00.241</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="01_biased_potential.html#sphx-glr-examples-advanced-01-biased-potential-py"><span class="std std-ref">Biased Sampling with BiasedPotentialHook</span></a> (<code class="docutils literal notranslate"><span class="pre">01_biased_potential.py</span></code>)</p></td>
+<td><p>00:00.222</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="03_custom_convergence.html#sphx-glr-examples-advanced-03-custom-convergence-py"><span class="std std-ref">Multi-Criteria Convergence with Custom Operators</span></a> (<code class="docutils literal notranslate"><span class="pre">03_custom_convergence.py</span></code>)</p></td>
+<td><p>00:00.164</p></td>
+<td><p>0.0</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="09_uma_nve.html#sphx-glr-examples-advanced-09-uma-nve-py"><span class="std std-ref">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</span></a> (<code class="docutils literal notranslate"><span class="pre">09_uma_nve.py</span></code>)</p></td>
 <td><p>00:00.000</p></td>
 <td><p>0.0</p></td>
 </tr>

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.reshard\_by\_destination
+==============================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: reshard_by_destination

@@ -1,0 +1,1326 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.spec &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/spec';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.spec</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Distribution spec — each model&#39;s declaration of what the distributed</span>
+<span class="sd">framework must provide for it.</span>
+
+<span class="sd">Two layers:</span>
+
+<span class="sd">* :class:`DistributionSpec` (in ``_core/spec.py``) carries the</span>
+<span class="sd">  framework-generic fields: a :class:`StoragePolicy`</span>
+<span class="sd">  (:class:`HaloStoragePolicy`, or ``None`` for the local case) plus the</span>
+<span class="sd">  ``custom_ops`` and ``third_party_helpers`` tuples.</span>
+<span class="sd">* :class:`MLIPSpec` (this module) wraps it and adds output-classification</span>
+<span class="sd">  sets (``owned_only_outputs``, ``all_reduce_outputs``).</span>
+
+<span class="sd">:class:`MLIPSpec` is the public spec. The recommended form declares each</span>
+<span class="sd">output once via ``outputs={name: OutputSpec(kind, reduce)}``; the parallel</span>
+<span class="sd">``owned_only_outputs`` / ``all_reduce_outputs`` / ``output_kinds`` sets remain</span>
+<span class="sd">for serialization. Models declare their spec via</span>
+<span class="sd">``BaseModelMixin.distribution_spec``; the ``SPEC_*_HALO`` presets cover the</span>
+<span class="sd">model families we target. See :meth:`MLIPSpec.to_dict` /</span>
+<span class="sd">:meth:`MLIPSpec.from_dict` for the JSON wire format.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AdapterRegistry</span><span class="p">,</span>
+    <span class="n">FunctionAdapter</span><span class="p">,</span>
+    <span class="n">JitAdapter</span><span class="p">,</span>
+    <span class="n">MethodAdapter</span><span class="p">,</span>
+    <span class="n">OpAdapter</span><span class="p">,</span>
+    <span class="n">PythonAdapter</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributionSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.storage_policy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">GraphParallelPolicy</span><span class="p">,</span>
+    <span class="n">HaloStoragePolicy</span><span class="p">,</span>
+    <span class="n">StoragePolicy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.graph_padder</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphPadder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.output_kinds</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputKind</span><span class="p">,</span> <span class="n">OutputSpec</span><span class="p">,</span> <span class="n">Reduce</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DistributionSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OpAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;JitAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PythonAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;FunctionAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MethodAdapter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AdapterRegistry&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OutputKind&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OutputSpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Reduce&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;CompilePolicy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ForceStrategy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;GraphPadder&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;replace_policy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_MPNN_HALO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_MPNN_GP&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_UMA_HALO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_LJ_HALO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_EWALD_HALO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_PME_HALO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SPEC_DFTD3_HALO&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_merge_policies</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">StoragePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">StoragePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Combine two storage policies into one that subsumes both.</span>
+
+<span class="sd">    ``None`` (local) is the identity. Two halo policies keep halo and pick the</span>
+<span class="sd">    more permissive scatter/gather mode. Same-class merges keep the class.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">a</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">b</span>
+    <span class="k">if</span> <span class="n">b</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">a</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">HaloStoragePolicy</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">HaloStoragePolicy</span><span class="p">):</span>
+        <span class="n">scatter_order</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="s2">&quot;halo_correction&quot;</span><span class="p">)</span>
+        <span class="n">gather_order</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="s2">&quot;halo_read&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">HaloStoragePolicy</span><span class="p">(</span>
+            <span class="n">scatter_mode</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">scatter_mode</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">scatter_mode</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">scatter_order</span><span class="o">.</span><span class="n">index</span><span class="p">),</span>
+            <span class="n">gather_mode</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">gather_mode</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">gather_mode</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">gather_order</span><span class="o">.</span><span class="n">index</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">type</span><span class="p">(</span><span class="n">b</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">a</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Cannot merge storage policies </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> and &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: halo is the only cross-rank storage policy.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_merge_compile_policies</span><span class="p">(</span>
+    <span class="n">a</span><span class="p">:</span> <span class="s2">&quot;CompilePolicy | None&quot;</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="s2">&quot;CompilePolicy | None&quot;</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CompilePolicy | None&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two models&#39; compile policies for a composed pipeline.</span>
+
+<span class="sd">    A composed spec is compile-capable only when *both* sides declare a</span>
+<span class="sd">    :class:`CompilePolicy` with a compatible contract — the same</span>
+<span class="sd">    ``force_strategy`` and ``static_shapes`` intent (``graph_padder`` is per-model</span>
+<span class="sd">    and not required to match, since the pipeline compiles each sub-model with its</span>
+<span class="sd">    own spec). Any mismatch, or only one side declaring compile, yields ``None``</span>
+<span class="sd">    (non-compilable) with a warning rather than silently dropping the policy.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">a</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">b</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">a</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">b</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;MLIPSpec.merge: only one side declares a CompilePolicy; the &quot;</span>
+                <span class="s2">&quot;merged spec is treated as non-compilable. Compile each sub-model &quot;</span>
+                <span class="s2">&quot;via its own spec.&quot;</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">a</span><span class="o">.</span><span class="n">force_strategy</span> <span class="o">!=</span> <span class="n">b</span><span class="o">.</span><span class="n">force_strategy</span> <span class="ow">or</span> <span class="n">a</span><span class="o">.</span><span class="n">static_shapes</span> <span class="o">!=</span> <span class="n">b</span><span class="o">.</span><span class="n">static_shapes</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;MLIPSpec.merge: incompatible CompilePolicies (force_strategy &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">force_strategy</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">force_strategy</span><span class="si">}</span><span class="s2">, static_shapes &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">static_shapes</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">static_shapes</span><span class="si">}</span><span class="s2">); merged spec is non-compilable.&quot;</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">a</span>
+
+
+<span class="c1"># Map ``replace_policy``&#39;s short kwargs onto policy field names.</span>
+<span class="n">_POLICY_FIELD_ALIASES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;scatter&quot;</span><span class="p">:</span> <span class="s2">&quot;scatter_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;gather&quot;</span><span class="p">:</span> <span class="s2">&quot;gather_mode&quot;</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">replace_policy</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">changes</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a new ``MLIPSpec`` with the storage policy&#39;s fields replaced.</span>
+
+<span class="sd">    Convenience for wrapper-level overrides (e.g. UMA sets the gather mode to</span>
+<span class="sd">    skip halo correction)::</span>
+
+<span class="sd">        new_spec = replace_policy(spec, scatter=&quot;local&quot;)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    spec : MLIPSpec</span>
+<span class="sd">        The spec whose storage policy is being overridden.</span>
+<span class="sd">    **changes : Any</span>
+<span class="sd">        Field overrides. The short names ``scatter`` / ``gather`` map onto the</span>
+<span class="sd">        policy&#39;s ``scatter_mode`` / ``gather_mode``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    MLIPSpec</span>
+<span class="sd">        A new spec with the policy fields replaced.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the spec has no storage policy to modify (a local ``None`` policy).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">policy</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;replace_policy: spec has no storage policy to modify.&quot;</span><span class="p">)</span>
+    <span class="n">mapped</span> <span class="o">=</span> <span class="p">{</span><span class="n">_POLICY_FIELD_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">changes</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">new_policy</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="o">**</span><span class="n">mapped</span><span class="p">)</span>
+    <span class="n">new_core</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">distribution</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">new_policy</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">distribution</span><span class="o">=</span><span class="n">new_core</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_decode_output_kinds</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputKind</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decode the ``output_kinds`` slot from a serialized v2 dict.</span>
+
+<span class="sd">    Accepts both the canonical sorted ``[[key, kind_value], ...]`` list-of-pairs</span>
+<span class="sd">    and a plain ``{key: kind_value}`` dict. Unknown kind values raise so typos</span>
+<span class="sd">    surface at load time rather than degrading to UNKNOWN later.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">raw</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+    <span class="n">items</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">items</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">items</span> <span class="o">=</span> <span class="n">raw</span>  <span class="c1"># iterable of [key, kind_value]</span>
+    <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputKind</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">OutputKind</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;MLIPSpec.from_dict: unknown OutputKind value </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2"> for &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;output </span><span class="si">{</span><span class="n">k</span><span class="si">!r}</span><span class="s2">; expected one of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">[</span><span class="n">k_</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k_</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">OutputKind</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compile_policy_to_dict</span><span class="p">(</span><span class="n">cp</span><span class="p">:</span> <span class="s2">&quot;CompilePolicy | None&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;dict[str, Any] | None&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encode a :class:`CompilePolicy` for the JSON wire format.</span>
+
+<span class="sd">    ``graph_padder`` is a live object with model-specific construction and has</span>
+<span class="sd">    no wire representation, so it is not carried; a spec that declared one warns</span>
+<span class="sd">    on the way out rather than losing it silently.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cp : CompilePolicy or None</span>
+<span class="sd">        The policy to encode.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict or None</span>
+<span class="sd">        JSON-friendly mapping, or ``None`` when no policy was declared.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">cp</span><span class="o">.</span><span class="n">graph_padder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;MLIPSpec.to_dict: CompilePolicy.graph_padder is not serializable; &quot;</span>
+            <span class="s2">&quot;the reloaded spec will use the default padder. Pass the spec object &quot;</span>
+            <span class="s2">&quot;directly for compiled distributed runs.&quot;</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;static_shapes&quot;</span><span class="p">:</span> <span class="n">cp</span><span class="o">.</span><span class="n">static_shapes</span><span class="p">,</span>
+        <span class="s2">&quot;force_strategy&quot;</span><span class="p">:</span> <span class="n">cp</span><span class="o">.</span><span class="n">force_strategy</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+        <span class="s2">&quot;stress_via_strain&quot;</span><span class="p">:</span> <span class="n">cp</span><span class="o">.</span><span class="n">stress_via_strain</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compile_policy_from_dict</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span> <span class="s2">&quot;Any&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CompilePolicy | None&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Inverse of :func:`_compile_policy_to_dict`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    raw : Any</span>
+<span class="sd">        The encoded mapping, or ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CompilePolicy or None</span>
+<span class="sd">        The decoded policy, or ``None`` when none was encoded.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">raw</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">CompilePolicy</span><span class="p">(</span>
+        <span class="n">static_shapes</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;static_shapes&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+        <span class="n">force_strategy</span><span class="o">=</span><span class="n">ForceStrategy</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">&quot;force_strategy&quot;</span><span class="p">]),</span>
+        <span class="n">stress_via_strain</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stress_via_strain&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="ForceStrategy">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ForceStrategy.html#nvalchemi.distributed.ForceStrategy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ForceStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How a model&#39;s forces are produced under a distributed forward.</span>
+
+<span class="sd">    A single named choice from which the framework derives</span>
+<span class="sd">    :attr:`CompilePolicy.forces_via_autograd` /</span>
+<span class="sd">    :attr:`~CompilePolicy.consolidate_node_energy` /</span>
+<span class="sd">    :attr:`~CompilePolicy.energy_output` — so a model declares intent once and</span>
+<span class="sd">    cannot express an invalid combination.</span>
+
+<span class="sd">    Members</span>
+<span class="sd">    -------</span>
+<span class="sd">    MODEL_INTERNAL</span>
+<span class="sd">        The model computes forces inside its own forward; the framework runs the</span>
+<span class="sd">        wrapper as-is and consolidates its outputs. E.g. UMA.</span>
+<span class="sd">    FRAMEWORK_FROM_NODE_ENERGY</span>
+<span class="sd">        The framework drives an energy-only forward returning per-node</span>
+<span class="sd">        ``&quot;atomic_energies&quot;``, does the owned-only per-graph sum + cross-rank</span>
+<span class="sd">        all-reduce, and takes ``forces = -dE/dx`` via autograd. The MACE pattern.</span>
+<span class="sd">    FRAMEWORK_FROM_GLOBAL_ENERGY</span>
+<span class="sd">        Same autograd force path, but the model consolidates the per-system</span>
+<span class="sd">        ``&quot;energy&quot;`` inside its forward and the framework differentiates it</span>
+<span class="sd">        as-is. The AIMNet2 pattern.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">MODEL_INTERNAL</span> <span class="o">=</span> <span class="s2">&quot;model_internal&quot;</span>
+    <span class="n">FRAMEWORK_FROM_NODE_ENERGY</span> <span class="o">=</span> <span class="s2">&quot;framework_from_node_energy&quot;</span>
+    <span class="n">FRAMEWORK_FROM_GLOBAL_ENERGY</span> <span class="o">=</span> <span class="s2">&quot;framework_from_global_energy&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="CompilePolicy">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.CompilePolicy.html#nvalchemi.distributed.CompilePolicy">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CompilePolicy</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How a model wants ``torch.compile`` driven under domain decomposition.</span>
+
+<span class="sd">    ``static_shapes`` requests fixed-shape (capped) compilation so a compiled MD</span>
+<span class="sd">    trajectory stays compiled across steps — the framework pads the graph to</span>
+<span class="sd">    stable per-rank capacities. ``graph_padder`` is the</span>
+<span class="sd">    :class:`GraphPadder` used for that padding; when ``None`` the framework uses</span>
+<span class="sd">    the built-in COO ``edge_index`` padder (:class:`COOPadder`), so a standard</span>
+<span class="sd">    MPNN declares nothing. ``force_strategy`` declares how forces are produced</span>
+<span class="sd">    (see :class:`ForceStrategy`); the derived :attr:`forces_via_autograd` /</span>
+<span class="sd">    :attr:`consolidate_node_energy` / :attr:`energy_output` properties follow</span>
+<span class="sd">    from it.</span>
+
+<span class="sd">    The policy is only the contract. Whether and how to compile is owned by</span>
+<span class="sd">    :class:`DistributedModel` (constructed with ``compile=True`` /</span>
+<span class="sd">    ``compile_kwargs=...``); the policy carries no compile switch of its own.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">static_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">graph_padder</span><span class="p">:</span> <span class="s2">&quot;GraphPadder | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">force_strategy</span><span class="p">:</span> <span class="n">ForceStrategy</span> <span class="o">=</span> <span class="n">ForceStrategy</span><span class="o">.</span><span class="n">MODEL_INTERNAL</span>
+    <span class="c1"># Opt in to framework-computed stress on the compiled energy-autograd path:</span>
+    <span class="c1"># the framework strains positions + cell and takes ``virial = dE/d(strain)``.</span>
+    <span class="c1"># Correct only when the model&#39;s FULL cell-dependence is differentiable (e.g.</span>
+    <span class="c1"># MACE). NOT safe for models with cached/non-differentiable cell terms — the</span>
+    <span class="c1"># electrostatics reciprocal space (Ewald cached k-vectors; PME FFT custom op</span>
+    <span class="c1"># with no cell-strain backward) needs dedicated work first, so they leave this</span>
+    <span class="c1"># False and emit no compiled-DD stress rather than a wrong one.</span>
+    <span class="n">stress_via_strain</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forces_via_autograd</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;True when the framework owns the energy-only forward + force autograd</span>
+<span class="sd">        (any ``FRAMEWORK_FROM_*`` strategy).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">ForceStrategy</span><span class="o">.</span><span class="n">MODEL_INTERNAL</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">consolidate_node_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;True when the model returns un-reduced per-node energy and the</span>
+<span class="sd">        framework does the owned-only per-graph sum + all-reduce</span>
+<span class="sd">        (``FRAMEWORK_FROM_NODE_ENERGY``).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_strategy</span> <span class="ow">is</span> <span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_NODE_ENERGY</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy_output</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The ``active_outputs`` key driven for the energy-only forward:</span>
+<span class="sd">        ``&quot;atomic_energies&quot;`` for the per-node strategy, else ``&quot;energy&quot;``.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_strategy</span> <span class="ow">is</span> <span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_NODE_ENERGY</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;atomic_energies&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;energy&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="MLIPSpec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MLIPSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;What an MLIP needs from the distributed framework.</span>
+
+<span class="sd">    Wraps a :class:`DistributionSpec` and adds output-classification sets keyed</span>
+<span class="sd">    by output name (``&quot;forces&quot;``, ``&quot;stress&quot;``, etc.). The framework reads it via</span>
+<span class="sd">    ``BaseModelMixin.distribution_spec``.</span>
+
+<span class="sd">    The recommended construction declares each output once via ``outputs=``::</span>
+
+<span class="sd">        MLIPSpec(</span>
+<span class="sd">            distribution=DistributionSpec(</span>
+<span class="sd">                policy=HaloStoragePolicy(),</span>
+<span class="sd">                custom_ops=(...),</span>
+<span class="sd">            ),</span>
+<span class="sd">            outputs={</span>
+<span class="sd">                &quot;energy&quot;: OutputSpec(OutputKind.PER_GRAPH),</span>
+<span class="sd">                &quot;forces&quot;: OutputSpec(OutputKind.PER_NODE),</span>
+<span class="sd">                &quot;stress&quot;: OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),</span>
+<span class="sd">            },</span>
+<span class="sd">        )</span>
+
+<span class="sd">    ``outputs`` is lowered in ``__post_init__`` onto the canonical fields</span>
+<span class="sd">    (``output_kinds`` / ``owned_only_outputs`` / ``all_reduce_outputs``), which</span>
+<span class="sd">    are what consolidation and serialization read.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    distribution</span>
+<span class="sd">        Required. A :class:`DistributionSpec` carrying the</span>
+<span class="sd">        :class:`StoragePolicy` and escape-hatch tuples.</span>
+<span class="sd">    owned_only_outputs</span>
+<span class="sd">        Output keys whose per-atom values are already globally-correct on every</span>
+<span class="sd">        rank (e.g. forces computed from replicated global state like Ewald/PME</span>
+<span class="sd">        reciprocal ``S(k)``). Consolidation slices these to ``[:n_owned]`` rather</span>
+<span class="sd">        than halo-reverse-summing.</span>
+<span class="sd">    all_reduce_outputs</span>
+<span class="sd">        Output keys whose value on each rank is a partial contribution that must</span>
+<span class="sd">        be summed across the mesh to give the globally-correct value.</span>
+<span class="sd">    output_kinds</span>
+<span class="sd">        Per-output classification (:class:`OutputKind`) consumed by output</span>
+<span class="sd">        consolidation. Outputs missing from this dict fall back to a shape-based</span>
+<span class="sd">        heuristic (``shape[0] == n_padded`` ⇒ per-atom) and emit a one-shot</span>
+<span class="sd">        warning.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">distribution</span><span class="p">:</span> <span class="n">DistributionSpec</span>
+    <span class="n">owned_only_outputs</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">)</span>
+    <span class="n">all_reduce_outputs</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">)</span>
+    <span class="n">output_kinds</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputKind</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="c1"># Whether per-system reductions (``mol_sum``-style scatters into</span>
+    <span class="c1"># ``(n_systems, *F)`` accumulators) route through ``per_system_reduce``.</span>
+    <span class="n">system_reductions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="c1"># Name of a per-node energy output the framework reduces, owned-aware, into</span>
+    <span class="c1"># the per-system ``&quot;energy&quot;`` on the eager halo path (owned-slice + per-graph</span>
+    <span class="c1"># scatter + all-reduce). For electrostatics/dispersion wrappers (PME, Ewald,</span>
+    <span class="c1"># DFTD3) whose per-atom energies are plain tensors that can&#39;t route through</span>
+    <span class="c1"># ``per_system_reduce``: they emit raw per-atom energies under this key plus</span>
+    <span class="c1"># a plain ``&quot;energy&quot;`` for the non-distributed case, and the framework</span>
+    <span class="c1"># overrides ``&quot;energy&quot;`` with the owned-aware sum under decomposition.</span>
+    <span class="c1"># ``None`` (default) means the wrapper owns its own per-system energy. The</span>
+    <span class="c1"># compiled path does the same via</span>
+    <span class="c1"># ``CompilePolicy.force_strategy=FRAMEWORK_FROM_NODE_ENERGY``.</span>
+    <span class="n">node_energy_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Name of a per-node virial output (``(n_nodes, 3, 3)``, energy units) the</span>
+    <span class="c1"># framework reduces, owned-aware, into the per-system ``&quot;stress&quot;`` on the</span>
+    <span class="c1"># eager halo path. For analytic-kernel-virial wrappers (LJ, DFTD3) whose</span>
+    <span class="c1"># kernel returns a per-system virial summed over all local (owned + ghost)</span>
+    <span class="c1"># atoms — wrong under decomposition and not owned-maskable once collapsed:</span>
+    <span class="c1"># they instead emit a per-atom virial under this key, and the framework</span>
+    <span class="c1"># sums it owned-only + all-reduces (each pair counted once by its owner),</span>
+    <span class="c1"># then converts to tensile-positive Cauchy stress ``-W/V`` using the cell</span>
+    <span class="c1"># volume, overriding the wrapper&#39;s all-local ``&quot;stress&quot;``. ``None`` (default)</span>
+    <span class="c1"># means the wrapper owns its own per-system stress.</span>
+    <span class="n">node_virial_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Graph-parallel only: the model&#39;s neighbour kernel indexes the position array</span>
+    <span class="c1"># (dense ``neighbor_matrix`` receivers = rows of ``positions``, e.g. PME&#39;s</span>
+    <span class="c1"># fused real-space+reciprocal kernel), so it needs the FULL replicated node set</span>
+    <span class="c1"># as rows rather than owned rows plus a wrapper-side ``refresh_neighbors``</span>
+    <span class="c1"># gather. When True the framework runs the wrapper on the all-gathered geometry</span>
+    <span class="c1"># with the dense neighbour matrix masked to this rank&#39;s owned receivers</span>
+    <span class="c1"># (owned real-space; the reciprocal reads the full charge set), reduces the</span>
+    <span class="c1"># owned per-node energy (``node_energy_key``), and takes forces by autograd over</span>
+    <span class="c1"># the full-position leaf + cross-rank sum, sliced to owned. Default False =</span>
+    <span class="c1"># the owned-rows dense/COO path (toy, MACE, AIMNet2 conv).</span>
+    <span class="n">gp_replicate_geometry</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># ``outputs`` is the recommended declaration form (lowered onto the canonical</span>
+    <span class="c1"># fields in ``__post_init__``); ``compile`` carries the :class:`CompilePolicy`</span>
+    <span class="c1"># read by :class:`DistributedModel`. Both are excluded from eq/hash/serialization</span>
+    <span class="c1"># — the canonical fields are the serialized source of truth, so a spec built</span>
+    <span class="c1"># either way round-trips equal.</span>
+    <span class="n">outputs</span><span class="p">:</span> <span class="s2">&quot;dict[str, OutputSpec] | None&quot;</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">hash</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="nb">compile</span><span class="p">:</span> <span class="s2">&quot;CompilePolicy | None&quot;</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">hash</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Lower ``outputs`` onto the three canonical fields additively, so</span>
+        <span class="c1"># ``dataclasses.replace(preset, outputs={override})`` composes with the</span>
+        <span class="c1"># preset&#39;s existing classification.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="n">owned</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+                <span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">reduce</span> <span class="ow">is</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">OWNED_ONLY</span>
+            <span class="p">)</span>
+            <span class="n">all_reduce</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+                <span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">reduce</span> <span class="ow">is</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">ALL_REDUCE</span>
+            <span class="p">)</span>
+            <span class="n">kinds</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_kinds</span><span class="p">)</span>
+            <span class="n">kinds</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="n">n</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">kind</span>
+                    <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">UNKNOWN</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;owned_only_outputs&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">owned_only_outputs</span> <span class="o">|</span> <span class="n">owned</span>
+            <span class="p">)</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;all_reduce_outputs&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_reduce_outputs</span> <span class="o">|</span> <span class="n">all_reduce</span>
+            <span class="p">)</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;output_kinds&quot;</span><span class="p">,</span> <span class="n">kinds</span><span class="p">)</span>
+            <span class="c1"># Clear ``outputs`` once consumed: the canonical fields are the truth.</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MLIPSpec.merge">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.merge">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Merge two specs for a composed pipeline.</span>
+
+<span class="sd">        Storage policy: merged via :func:`_merge_policies` (two halo policies</span>
+<span class="sd">        keep halo and take the more permissive scatter/gather mode).</span>
+<span class="sd">        Output-classification sets: union. Escape-hatch tuples: concatenated.</span>
+<span class="sd">        ``system_reductions``: logical OR. ``compile``: kept only when both sides</span>
+<span class="sd">        declare a compatible :class:`CompilePolicy` (see</span>
+<span class="sd">        :func:`_merge_compile_policies`), else ``None`` with a warning.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">merged_policy</span> <span class="o">=</span> <span class="n">_merge_policies</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">policy</span>
+        <span class="p">)</span>
+        <span class="n">merged_core</span> <span class="o">=</span> <span class="n">DistributionSpec</span><span class="p">(</span>
+            <span class="n">policy</span><span class="o">=</span><span class="n">merged_policy</span><span class="p">,</span>
+            <span class="n">custom_ops</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">custom_ops</span> <span class="o">+</span> <span class="n">other</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">custom_ops</span><span class="p">,</span>
+            <span class="n">third_party_helpers</span><span class="o">=</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">third_party_helpers</span>
+                <span class="o">+</span> <span class="n">other</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">third_party_helpers</span>
+            <span class="p">),</span>
+            <span class="c1"># Union: the composed model promotes whatever either side promotes.</span>
+            <span class="n">shard_fields</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span>
+                <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">shard_fields</span> <span class="o">+</span> <span class="n">other</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">shard_fields</span>
+                <span class="p">)</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="n">merged_core</span><span class="p">,</span>
+            <span class="n">owned_only_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">owned_only_outputs</span> <span class="o">|</span> <span class="n">other</span><span class="o">.</span><span class="n">owned_only_outputs</span><span class="p">,</span>
+            <span class="n">all_reduce_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">all_reduce_outputs</span> <span class="o">|</span> <span class="n">other</span><span class="o">.</span><span class="n">all_reduce_outputs</span><span class="p">,</span>
+            <span class="n">system_reductions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">system_reductions</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">system_reductions</span><span class="p">,</span>
+            <span class="n">node_energy_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_energy_key</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">node_energy_key</span><span class="p">,</span>
+            <span class="n">node_virial_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_virial_key</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">node_virial_key</span><span class="p">,</span>
+            <span class="nb">compile</span><span class="o">=</span><span class="n">_merge_compile_policies</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">compile</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.with_outputs">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.with_outputs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">with_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputSpec</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a copy with ``outputs`` layered over the declared ones.</span>
+
+<span class="sd">        Composes additively, like :meth:`with_adapters`: keys given here replace</span>
+<span class="sd">        their counterparts and every other classification is carried through.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outputs : dict[str, OutputSpec]</span>
+<span class="sd">            Classifications to override.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MLIPSpec</span>
+<span class="sd">            The spec with those outputs reclassified.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="o">=</span><span class="n">outputs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.with_adapters">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.with_adapters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">with_adapters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">adapters</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a copy with ``adapters`` added to the distribution.</span>
+
+<span class="sd">        Each adapter is lowered onto ``custom_ops`` (``OpAdapter``) or</span>
+<span class="sd">        ``third_party_helpers`` (everything else), composing with whatever the</span>
+<span class="sd">        spec already declares. Lets a model take a preset and attach</span>
+<span class="sd">        model-discovered adapters without rebuilding the spec by hand. All other</span>
+<span class="sd">        settings are carried unchanged.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">adapters</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span>
+        <span class="n">new_core</span> <span class="o">=</span> <span class="n">DistributionSpec</span><span class="p">(</span>
+            <span class="n">policy</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+            <span class="n">custom_ops</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">custom_ops</span><span class="p">,</span>
+            <span class="n">third_party_helpers</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">third_party_helpers</span><span class="p">,</span>
+            <span class="n">shard_fields</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">shard_fields</span><span class="p">,</span>
+            <span class="n">adapters</span><span class="o">=</span><span class="n">adapters</span><span class="p">,</span>  <span class="c1"># lowered onto the split tuples in __post_init__</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="n">new_core</span><span class="p">,</span>
+            <span class="n">owned_only_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">owned_only_outputs</span><span class="p">,</span>
+            <span class="n">all_reduce_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">all_reduce_outputs</span><span class="p">,</span>
+            <span class="n">output_kinds</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_kinds</span><span class="p">),</span>
+            <span class="n">system_reductions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">system_reductions</span><span class="p">,</span>
+            <span class="n">node_energy_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_energy_key</span><span class="p">,</span>
+            <span class="n">node_virial_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_virial_key</span><span class="p">,</span>
+            <span class="nb">compile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.with_compile">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.with_compile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">with_compile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="s2">&quot;CompilePolicy&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a copy with the :class:`CompilePolicy` set (replacing any</span>
+<span class="sd">        existing one). All other settings are carried unchanged.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="p">,</span>
+            <span class="n">owned_only_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">owned_only_outputs</span><span class="p">,</span>
+            <span class="n">all_reduce_outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">all_reduce_outputs</span><span class="p">,</span>
+            <span class="n">output_kinds</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_kinds</span><span class="p">),</span>
+            <span class="n">system_reductions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">system_reductions</span><span class="p">,</span>
+            <span class="n">node_energy_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_energy_key</span><span class="p">,</span>
+            <span class="n">node_virial_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">node_virial_key</span><span class="p">,</span>
+            <span class="nb">compile</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Serialization.</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="MLIPSpec.to_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize to a JSON-friendly dict.</span>
+
+<span class="sd">        Schema::</span>
+
+<span class="sd">            {</span>
+<span class="sd">              &quot;version&quot;: 2,</span>
+<span class="sd">              &quot;core&quot;: &lt;DistributionSpec.to_dict()&gt;,</span>
+<span class="sd">              &quot;system_reductions&quot;: bool,</span>
+<span class="sd">              &quot;owned_only_outputs&quot;: [...],</span>
+<span class="sd">              &quot;all_reduce_outputs&quot;: [...],</span>
+<span class="sd">              &quot;output_kinds&quot;: [[key, kind], ...]</span>
+<span class="sd">            }</span>
+
+<span class="sd">        Op handles are encoded as ``&quot;&lt;namespace&gt;::&lt;name&gt;&quot;`` strings, resolved at</span>
+<span class="sd">        load time provided the registering module has been imported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;core&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span>
+            <span class="s2">&quot;system_reductions&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_reductions</span><span class="p">,</span>
+            <span class="s2">&quot;node_energy_key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_energy_key</span><span class="p">,</span>
+            <span class="s2">&quot;node_virial_key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_virial_key</span><span class="p">,</span>
+            <span class="s2">&quot;gp_replicate_geometry&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">gp_replicate_geometry</span><span class="p">,</span>
+            <span class="s2">&quot;owned_only_outputs&quot;</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">owned_only_outputs</span><span class="p">),</span>
+            <span class="s2">&quot;all_reduce_outputs&quot;</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">all_reduce_outputs</span><span class="p">),</span>
+            <span class="c1"># Per-output classification, stored as a sorted list of</span>
+            <span class="c1"># [key, kind_value] pairs so the JSON dump is deterministic and the</span>
+            <span class="c1"># value side is a stable string rather than the OutputKind repr.</span>
+            <span class="s2">&quot;output_kinds&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_kinds</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_kinds</span><span class="p">)</span>
+            <span class="p">],</span>
+            <span class="c1"># Dropping this silently would hand the loader a spec whose forces</span>
+            <span class="c1"># are computed by the model instead of the framework, which for a</span>
+            <span class="c1"># ``forces_via_autograd`` model scales them by the world size.</span>
+            <span class="s2">&quot;compile&quot;</span><span class="p">:</span> <span class="n">_compile_policy_to_dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile</span><span class="p">),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.from_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.from_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverse of :meth:`to_dict`.</span>
+
+<span class="sd">        Resolves op qualnames — the caller must ensure the relevant</span>
+<span class="sd">        op-registering modules have been imported first.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">version</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">version</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+                <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;core&quot;</span><span class="p">]),</span>
+                <span class="n">system_reductions</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;system_reductions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+                <span class="n">node_energy_key</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_energy_key&quot;</span><span class="p">),</span>
+                <span class="n">node_virial_key</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_virial_key&quot;</span><span class="p">),</span>
+                <span class="n">gp_replicate_geometry</span><span class="o">=</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;gp_replicate_geometry&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+                <span class="n">owned_only_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;owned_only_outputs&quot;</span><span class="p">,</span> <span class="p">[])),</span>
+                <span class="n">all_reduce_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;all_reduce_outputs&quot;</span><span class="p">,</span> <span class="p">[])),</span>
+                <span class="n">output_kinds</span><span class="o">=</span><span class="n">_decode_output_kinds</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;output_kinds&quot;</span><span class="p">,</span> <span class="p">[])),</span>
+                <span class="nb">compile</span><span class="o">=</span><span class="n">_compile_policy_from_dict</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;compile&quot;</span><span class="p">)),</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;MLIPSpec.from_dict: unsupported version </span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;this build understands version=2.&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.save">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.save">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="s2">&quot;str | Any&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write the spec to ``path`` as JSON.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="MLIPSpec.load">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec.load">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="s2">&quot;str | Any&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a spec previously saved via :meth:`save`.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()))</span></div>
+</div>
+
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Presets — one-liners for the model families we target directly.</span>
+<span class="c1"># ======================================================================</span>
+
+
+<span class="n">_HALO_MLIP_POLICY</span> <span class="o">=</span> <span class="n">HaloStoragePolicy</span><span class="p">(</span>
+    <span class="n">scatter_mode</span><span class="o">=</span><span class="s2">&quot;halo_correction&quot;</span><span class="p">,</span>
+    <span class="n">gather_mode</span><span class="o">=</span><span class="s2">&quot;halo_read&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="c1"># Standard per-output declarations for any MLIP wrapper. PER_NODE = per-atom</span>
+<span class="c1"># (forces, atomic_energies); PER_GRAPH = per-system (energy, stress); the default</span>
+<span class="c1"># ``reduce=Reduce.NONE`` takes the per-kind consolidation. A wrapper with an extra</span>
+<span class="c1"># output adds another ``OutputSpec``; one needing a cross-rank combine sets</span>
+<span class="c1"># ``reduce=`` (e.g. UMA stress: ``OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)``).</span>
+<span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputSpec</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">),</span>
+    <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">),</span>
+    <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">),</span>
+    <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="n">SPEC_MPNN_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Scatter-heavy MPNNs: MACE, NequIP, Allegro, ORB. Every edge-level update is a</span>
+<span class="sd">``scatter_sum`` into per-atom features (the halo-correction handler keeps halo</span>
+<span class="sd">rows in sync), plus a final per-graph ``scatter_sum`` on node energies (the</span>
+<span class="sd">:func:`per_system_reduce` handler drops halo rows and all-reduces across ranks),</span>
+<span class="sd">so stock ``model.forward`` produces globally-correct energy + forces with no</span>
+<span class="sd">wrapper-side post-processing.&quot;&quot;&quot;</span>
+
+
+<span class="c1"># Graph-parallel outputs differ from the halo set only in their per-atom</span>
+<span class="c1"># reduction: the per-layer node all-gather&#39;s reduce-scatter adjoint already sums</span>
+<span class="c1"># each owned atom&#39;s cross-rank gradient, so forces come out globally-correct on</span>
+<span class="c1"># their owning rank — passed through (``OWNED_ONLY``), never halo-reversed or</span>
+<span class="c1"># divided by world size.</span>
+<span class="n">_GP_MLIP_OUTPUTS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputSpec</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">),</span>
+    <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">OWNED_ONLY</span><span class="p">),</span>
+    <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">),</span>
+    <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span> <span class="n">OutputSpec</span><span class="p">(</span><span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">OWNED_ONLY</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="n">SPEC_MPNN_GP</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span>
+        <span class="n">policy</span><span class="o">=</span><span class="n">GraphParallelPolicy</span><span class="p">(),</span>
+        <span class="n">shard_fields</span><span class="o">=</span><span class="p">(),</span>
+    <span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_GP_MLIP_OUTPUTS</span><span class="p">),</span>
+    <span class="c1"># The model returns a differentiable per-graph energy and the framework owns</span>
+    <span class="c1"># the force autograd over the owned-position leaf (the per-layer node-gather&#39;s</span>
+    <span class="c1"># reduce-scatter adjoint routes each owned atom&#39;s cross-rank gradient back).</span>
+    <span class="c1"># A model that computes its own forces internally (e.g. UMA) leaves this at</span>
+    <span class="c1"># the ``MODEL_INTERNAL`` default and takes the node-partition internal path.</span>
+    <span class="nb">compile</span><span class="o">=</span><span class="n">CompilePolicy</span><span class="p">(</span><span class="n">force_strategy</span><span class="o">=</span><span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_GLOBAL_ENERGY</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Scatter-heavy MPNNs under the graph-parallel strategy: atoms split by a</span>
+<span class="sd">balanced index range (no spatial halo), each rank owning the edges into its</span>
+<span class="sd">nodes. The plain-interior promotion set (``shard_fields=()``) keeps the model on</span>
+<span class="sd">plain owned-row tensors; per message-passing layer the framework all-gathers the</span>
+<span class="sd">node features to a replicated tensor (reduce-scatter on the backward) so every</span>
+<span class="sd">edge sees its source, and the final per-graph node-energy sum drops to owners and</span>
+<span class="sd">all-reduces. The complement of :data:`SPEC_MPNN_HALO`: index-balanced and</span>
+<span class="sd">locality-blind, it avoids the ghost overhead halo pays when the box approaches the</span>
+<span class="sd">cutoff, at the cost of a full node all-gather each layer.&quot;&quot;&quot;</span>
+
+
+<span class="n">SPEC_UMA_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="c1"># UMA&#39;s Triton edge-permute kernels are registered at runtime by</span>
+    <span class="c1"># UMAWrapper.distribution_spec; the module-level preset stays empty so</span>
+    <span class="c1"># importers don&#39;t depend on fairchem.</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;UMA (eSCN-family) via the halo storage policy, with fairchem graph parallel</span>
+<span class="sd">disabled.</span>
+
+<span class="sd">Each rank holds ``owned + halo`` rows and runs a standard full forward over them.</span>
+<span class="sd">``UMAWrapper.distribution_spec`` layers in OpAdapters for the fused Triton</span>
+<span class="sd">edge-permute kernels (edge→node aggregation gets per-layer halo correction); the</span>
+<span class="sd">per-system reductions route through :func:`per_system_reduce`, and forces/stress</span>
+<span class="sd">flow through plain autograd.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="n">SPEC_LJ_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Lennard-Jones pair potential. Halo storage serves cross-rank neighbor pairs</span>
+<span class="sd">from local halo copies after one halo exchange; forces come from direct</span>
+<span class="sd">Warp-kernel writes (no autograd). The wrapper ends its forward with a</span>
+<span class="sd">``scatter_add_`` aggregating per-atom energies to per-system totals — like</span>
+<span class="sd">MACE&#39;s final ``scatter_sum`` — which ``system_reductions=True`` routes through</span>
+<span class="sd">:func:`per_system_reduce` (slices halo rows off the source and all-reduces).&quot;&quot;&quot;</span>
+
+
+<span class="n">SPEC_EWALD_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+    <span class="c1"># Reciprocal-stage-1 ops (partial structure factors) need owned-slice +</span>
+    <span class="c1"># all-reduce; populated lazily in ``EwaldModelWrapper.distribution_spec`` to</span>
+    <span class="c1"># avoid a warp import at spec-module load time.</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Ewald summation: halo storage. Real-space pair interactions on halo-padded</span>
+<span class="sd">inputs follow the standard halo path. Reciprocal-space dispatch is declarative</span>
+<span class="sd">via ``custom_ops``: stage 1&#39;s handler does owned-slice + all-reduce so the</span>
+<span class="sd">wrapper&#39;s ``forward`` stays distribution-agnostic. Per-atom energy scatter to</span>
+<span class="sd">per-system totals routes through :func:`per_system_reduce`.&quot;&quot;&quot;</span>
+
+
+<span class="n">SPEC_PME_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+    <span class="c1"># Charge-spreading needs owned-slice + all-reduce so halo atoms don&#39;t</span>
+    <span class="c1"># double-count the per-rank partial mesh. Custom_ops populated lazily in</span>
+    <span class="c1"># ``PMEModelWrapper.distribution_spec``.</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;PME (Particle Mesh Ewald): halo storage. Real-space pair interactions on</span>
+<span class="sd">halo-padded inputs follow the standard halo path; charge spreading gets an</span>
+<span class="sd">owned-slice + all-reduce handler. Post-spread stages (FFT, Green&#39;s function,</span>
+<span class="sd">IFFT, spline_gather, corrections) are replicated across ranks — they operate on</span>
+<span class="sd">the all-reduced global mesh, so no dispatch is needed. Caveat: single-system</span>
+<span class="sd">halo (``batch_idx=None``) hits a plain ``charges.sum()`` in</span>
+<span class="sd">``pme_energy_corrections`` that double-counts halo rows; batched halo works</span>
+<span class="sd">correctly via ``scatter_add_`` dispatch through :func:`per_system_reduce`.&quot;&quot;&quot;</span>
+
+
+<span class="n">SPEC_DFTD3_HALO</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">_HALO_MLIP_POLICY</span><span class="p">),</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">_STANDARD_MLIP_OUTPUTS</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;DFT-D3(BJ) dispersion: halo storage, no global coupling. Coordination numbers,</span>
+<span class="sd">C6 interpolation, and the two-body dispersion sum are all within-cutoff, so like</span>
+<span class="sd">Lennard-Jones DFTD3 needs no cross-rank collective. The wrapper localizes</span>
+<span class="sd">ShardTensor inputs for the Warp kernel, emits per-atom dispersion energies, and</span>
+<span class="sd">reduces them with owned-slice + all-reduce; forces are direct per-atom.</span>
+<span class="sd">One subtlety vs LJ: a ghost atom&#39;s coordination number (and its force term)</span>
+<span class="sd">depend on the ghost&#39;s own neighbors, which reach a few angstrom beyond the</span>
+<span class="sd">dispersion cutoff — so exact forces need a halo deeper than the cutoff</span>
+<span class="sd">(``ghost_width &gt;= cutoff + CN_counting_range``, set via ``skin``).&quot;&quot;&quot;</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

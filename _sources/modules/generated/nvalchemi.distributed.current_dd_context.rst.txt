@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.current\_dd\_context
+==========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: current_dd_context

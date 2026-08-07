@@ -62,8 +62,8 @@ This example:
 * Combines a Lennard-Jones short-range model with an Ewald long-range model
   using the ``+`` operator.
 * Demonstrates :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
-  which returns the single hook needed for the composite model (using the
-  maximum cutoff across all sub-models).
+  which returns the neighbor hook or hooks needed by the pipeline's
+  cutoff-adaptation plan.
 * Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.
 
 Key concepts demonstrated
@@ -74,10 +74,9 @@ Key concepts demonstrated
 * ``a + b + c`` chains — flattens into a single pipeline with one group
   per model.
 * :meth:`~nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks` —
-  returns a list with one correctly-configured
-  :class:`~nvalchemi.hooks.NeighborListHook`.
+  returns all neighbor-list hooks required by a model or composed pipeline.
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-93
+.. GENERATED FROM PYTHON SOURCE LINES 74-92
 
 .. code-block:: Python
 
@@ -106,7 +105,7 @@ Key concepts demonstrated
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-106
+.. GENERATED FROM PYTHON SOURCE LINES 93-105
 
 Building the composite model
 -----------------------------
@@ -121,7 +120,7 @@ model), representing hard-core repulsion at short range.
 cutoff must be the same for both models (or the Ewald cutoff may be larger);
 the pipeline wrapper automatically takes the maximum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 106-139
+.. GENERATED FROM PYTHON SOURCE LINES 105-138
 
 .. code-block:: Python
 
@@ -173,7 +172,7 @@ the pipeline wrapper automatically takes the maximum.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-145
+.. GENERATED FROM PYTHON SOURCE LINES 139-144
 
 System: primitive electrolyte on a cubic lattice
 -------------------------------------------------
@@ -181,7 +180,7 @@ Place N_SIDE³ ions on a simple-cubic lattice, alternating +1 / −1 charges
 (like NaCl but with identical mass and LJ parameters for both species).
 The system is charge-neutral by construction (equal number of each sign).
 
-.. GENERATED FROM PYTHON SOURCE LINES 145-198
+.. GENERATED FROM PYTHON SOURCE LINES 144-197
 
 .. code-block:: Python
 
@@ -252,19 +251,16 @@ The system is charge-neutral by construction (equal number of each sign).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-208
+.. GENERATED FROM PYTHON SOURCE LINES 198-204
 
 NVT simulation with the composite model
 -----------------------------------------
 :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
-returns a list containing exactly one
-:class:`~nvalchemi.hooks.NeighborListHook` configured for the
-combined model's effective cutoff (max of all sub-model cutoffs).
-Registering this single hook is all that is needed — the neighbor data
-is shared between both sub-models via
-:func:`~nvalchemi.models._ops.neighbor_filter.prepare_neighbors_for_model`.
+returns every hook required by the pipeline's neighbor-list plan.  With the
+default ``neighbor_adaptation="auto"``, similar cutoffs can share a source
+list, while very different cutoffs get separate source lists.
 
-.. GENERATED FROM PYTHON SOURCE LINES 208-222
+.. GENERATED FROM PYTHON SOURCE LINES 204-218
 
 .. code-block:: Python
 
@@ -289,12 +285,12 @@ is shared between both sub-models via
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 223-225
+.. GENERATED FROM PYTHON SOURCE LINES 219-221
 
 Running and logging
 --------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-234
+.. GENERATED FROM PYTHON SOURCE LINES 221-230
 
 .. code-block:: Python
 
@@ -321,12 +317,12 @@ Running and logging
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 235-237
+.. GENERATED FROM PYTHON SOURCE LINES 231-233
 
 Results — combined energy and temperature
 -------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 237-257
+.. GENERATED FROM PYTHON SOURCE LINES 233-253
 
 .. code-block:: Python
 
@@ -361,21 +357,21 @@ Results — combined energy and temperature
 
       step     energy (eV)   temperature (K)
     ------------------------------------------
-         0       -303.1091            331.67
+         0       -303.1090            331.67
         20       -303.0791            251.31
-        40       -303.0557            281.06
+        40       -303.0556            281.06
         60       -303.0457            330.49
         80       -303.0424            289.04
        100       -303.0304            339.98
        120       -303.0308            324.50
        140       -303.0172            276.73
-       160       -303.0211            274.19
+       160       -303.0210            274.19
        180       -302.9941            289.33
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 258-292
+.. GENERATED FROM PYTHON SOURCE LINES 254-297
 
 Extending the composition
 --------------------------
@@ -400,7 +396,7 @@ explicit :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` constructor::
     pipe = PipelineModelWrapper(groups=[
         PipelineGroup(
             steps=[
-                PipelineStep(aimnet2, wire={"charges": "node_charges"}),
+                aimnet2,  # outputs ``charges``; Ewald consumes it (auto-wired)
                 ewald,
             ],
             use_autograd=True,   # shared autograd over summed energy
@@ -408,16 +404,25 @@ explicit :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` constructor::
         PipelineGroup(steps=[dftd3]),
     ])
 
-A single call to ``combined.make_neighbor_hooks()`` returns the one hook
-needed for the combined system, automatically choosing the maximum cutoff
-and the most general neighbor format (MATRIX if any sub-model requires it).
+``make_neighbor_hooks()`` is the right registration point for composed
+models.  The pipeline decides whether to share one source list or build
+multiple source lists from the configured adaptation policy::
 
-.. GENERATED FROM PYTHON SOURCE LINES 294-296
+    pipe = PipelineModelWrapper(
+        groups=[PipelineGroup(steps=[short_range_model, long_range_model])],
+        neighbor_adaptation="auto",  # default
+        max_cutoff_ratio=1.5,
+    )
+
+Use ``neighbor_adaptation="always"`` to build one max-cutoff source list,
+or ``"never"`` to build exact cutoff source groups without cutoff filtering.
+
+.. GENERATED FROM PYTHON SOURCE LINES 299-301
 
 Optional plot — energy vs step
 --------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 296-324
+.. GENERATED FROM PYTHON SOURCE LINES 301-329
 
 .. code-block:: Python
 
@@ -470,7 +475,7 @@ Optional plot — energy vs step
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.276 seconds)
+   **Total running time of the script:** (0 minutes 0.834 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_07_composable_model_composition.py:

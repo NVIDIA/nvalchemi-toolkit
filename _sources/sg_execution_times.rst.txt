@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.372** total execution time for 20 files **from all galleries**:
+**00:44.284** total execution time for 29 files **from all galleries**:
 
 .. container::
 
@@ -32,63 +32,90 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_intermediate_02_trajectory_zarr_io.py` (``../examples/intermediate/02_trajectory_zarr_io.py``)
-     - 00:04.514
-     - 0.0
-   * - :ref:`sphx_glr_examples_intermediate_04_inflight_batching.py` (``../examples/intermediate/04_inflight_batching.py``)
-     - 00:00.516
-     - 0.0
-   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``../examples/distributed/01_distributed_pipeline.py``)
-     - 00:00.341
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``../examples/advanced/01_biased_potential.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``../examples/advanced/02_custom_hook.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``../examples/advanced/03_custom_convergence.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``../examples/advanced/04_mace_nvt.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``../examples/advanced/05_custom_integrator.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``../examples/advanced/06_ewald_electrostatics.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``../examples/advanced/07_composable_model_composition.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_intermediate_03_npt_barostat_validation.py` (``../examples/intermediate/03_npt_barostat_validation.py``)
+     - 00:18.255
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_08_aimnet2_ewald_pipeline.py` (``../examples/advanced/08_aimnet2_ewald_pipeline.py``)
-     - 00:00.000
+     - 00:07.131
      - 0.0
-   * - :ref:`sphx_glr_examples_basic_01_data_structures.py` (``../examples/basic/01_data_structures.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``../examples/advanced/06_ewald_electrostatics.py``)
+     - 00:03.497
      - 0.0
-   * - :ref:`sphx_glr_examples_basic_02_geometry_optimization.py` (``../examples/basic/02_geometry_optimization.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_distributed_04_byo_pytorch_mpnn.py` (``../examples/distributed/04_byo_pytorch_mpnn.py``)
+     - 00:01.974
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_05_byo_graph_transformer.py` (``../examples/distributed/05_byo_graph_transformer.py``)
+     - 00:01.798
      - 0.0
    * - :ref:`sphx_glr_examples_basic_03_ase_integration.py` (``../examples/basic/03_ase_integration.py``)
-     - 00:00.000
+     - 00:01.473
      - 0.0
-   * - :ref:`sphx_glr_examples_basic_04_nve_energy_conservation.py` (``../examples/basic/04_nve_energy_conservation.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_intermediate_04_inflight_batching.py` (``../examples/intermediate/04_inflight_batching.py``)
+     - 00:01.360
      - 0.0
-   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``../examples/basic/05_nvt_langevin.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_examples_distributed_02_distributed_monitoring.py` (``../examples/distributed/02_distributed_monitoring.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_advanced_10_mace_training.py` (``../examples/advanced/10_mace_training.py``)
+     - 00:01.149
      - 0.0
    * - :ref:`sphx_glr_examples_intermediate_01_multistage_pipeline.py` (``../examples/intermediate/01_multistage_pipeline.py``)
-     - 00:00.000
+     - 00:01.095
      - 0.0
-   * - :ref:`sphx_glr_examples_intermediate_03_npt_barostat_validation.py` (``../examples/intermediate/03_npt_barostat_validation.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``../examples/advanced/02_custom_hook.py``)
+     - 00:01.094
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_02_trajectory_zarr_io.py` (``../examples/intermediate/02_trajectory_zarr_io.py``)
+     - 00:00.882
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``../examples/advanced/07_composable_model_composition.py``)
+     - 00:00.834
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_02_geometry_optimization.py` (``../examples/basic/02_geometry_optimization.py``)
+     - 00:00.802
      - 0.0
    * - :ref:`sphx_glr_examples_intermediate_05_safety_and_monitoring.py` (``../examples/intermediate/05_safety_and_monitoring.py``)
+     - 00:00.636
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_04_nve_energy_conservation.py` (``../examples/basic/04_nve_energy_conservation.py``)
+     - 00:00.549
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_01_data_structures.py` (``../examples/basic/01_data_structures.py``)
+     - 00:00.412
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``../examples/basic/05_nvt_langevin.py``)
+     - 00:00.392
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``../examples/advanced/04_mace_nvt.py``)
+     - 00:00.299
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``../examples/advanced/05_custom_integrator.py``)
+     - 00:00.241
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``../examples/advanced/01_biased_potential.py``)
+     - 00:00.222
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``../examples/advanced/03_custom_convergence.py``)
+     - 00:00.164
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_07_rich_training_reporting.py` (``../examples/intermediate/07_rich_training_reporting.py``)
+     - 00:00.006
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_02_distributed_monitoring.py` (``../examples/distributed/02_distributed_monitoring.py``)
+     - 00:00.006
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``../examples/distributed/01_distributed_pipeline.py``)
+     - 00:00.005
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_07_fire_nvt_dd.py` (``../examples/distributed/07_fire_nvt_dd.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_06_ddp_mlp_training.py` (``../examples/intermediate/06_ddp_mlp_training.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_03_mace_nvt_distributed.py` (``../examples/distributed/03_mace_nvt_distributed.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_06_mace_npt_distributed.py` (``../examples/distributed/06_mace_npt_distributed.py``)
+     - 00:00.002
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_09_uma_nve.py` (``../examples/advanced/09_uma_nve.py``)
      - 00:00.000
      - 0.0

@@ -1,0 +1,1422 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.sharded_batch &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/sharded_batch';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.sharded_batch</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;ShardedBatch: user-facing distributed counterpart to ``Batch``.</span>
+
+<span class="sd">Per-atom fields (positions, velocities, forces, atomic_numbers, atomic_masses)</span>
+<span class="sd">are stored as ``ShardTensor`` with ``Shard(0)`` placement (uneven across ranks);</span>
+<span class="sd">per-system fields (cell, pbc) are replicated.</span>
+
+<span class="sd">``ShardedBatch`` is what the user hands to ``DistributedModel``; the adapter</span>
+<span class="sd">pulls ``.local_batch`` out per call to drive the halo-padded forward.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.collection</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardedCollection</span><span class="p">,</span> <span class="n">_global_src</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.gather_primitives</span><span class="w"> </span><span class="kn">import</span> <span class="n">mesh_group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.storage_policy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PlainShard</span><span class="p">,</span>
+    <span class="n">StoragePolicy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.partitioner</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpatialPartitioner</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeviceMesh</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.particle_halo</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParticleHaloMetadata</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># Per-atom fields that must exist on the source batch. The rest of the</span>
+<span class="c1"># atoms-group is discovered dynamically (see ``_discover_atom_schema``).</span>
+<span class="n">_REQUIRED_ATOM_FIELDS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;positions&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;atomic_masses&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Atoms-group fields that are neighbor-list artifacts — rebuilt per-rank</span>
+<span class="c1"># on the halo-padded block by ``compute_neighbors``, never scattered.</span>
+<span class="n">_NL_ATOM_FIELDS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+
+<span class="c1"># Fields whose dtype we pin regardless of what the source batch holds</span>
+<span class="c1"># (keeps downstream consumers — integer sentinels, index kernels —</span>
+<span class="c1"># honest across checkpoint formats).</span>
+<span class="n">_ATOM_FIELD_DTYPE_OVERRIDES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># Float dtypes we can broadcast across the mesh. Positions (and every</span>
+<span class="c1"># field that inherits their precision) must pick one of these. Single source</span>
+<span class="c1"># of truth for the int code &lt;-&gt; dtype mapping used by the broadcast.</span>
+<span class="n">_FLOAT_DTYPE_CODES</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">_FLOAT_DTYPE_TO_CODE</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">dt</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">_FLOAT_DTYPE_CODES</span><span class="p">)</span>
+<span class="p">}</span>
+
+
+<span class="c1"># Per-system fields the scatter broadcasts explicitly; discovery skips them.</span>
+<span class="n">_EXPLICIT_SYSTEM_FIELDS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_discover_system_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate replicated per-system fields on *batch*.</span>
+
+<span class="sd">    Reads the system group directly so graph-level model inputs the producer</span>
+<span class="sd">    attached (total ``charge``, ``spin`` multiplicity, custom user fields via</span>
+<span class="sd">    ``add_system_property``) reach every rank. Without them a wrapper falls back</span>
+<span class="sd">    to its neutral defaults and computes a different physical system.</span>
+<span class="sd">    ``cell`` / ``pbc`` are excluded because the scatter broadcasts them ahead of</span>
+<span class="sd">    the partitioner build.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Source batch on the scatter rank.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[dict]</span>
+<span class="sd">        One entry per field with ``name``, ``dtype`` and ``shape``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">system</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">_system_group</span>
+    <span class="k">if</span> <span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_EXPLICIT_SYSTEM_FIELDS</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_discover_atom_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerate scatter-eligible per-atom fields on *batch*.</span>
+
+<span class="sd">    Reads the atoms group directly so every per-atom field the producer</span>
+<span class="sd">    attached (charges, momenta, node_attrs, custom user fields via</span>
+<span class="sd">    ``add_node_property``) is carried through — no hand-maintained</span>
+<span class="sd">    allowlist to drift out of sync with model wrapper requirements.</span>
+<span class="sd">    Neighbor-list artifacts are excluded because they&#39;re rebuilt</span>
+<span class="sd">    per-rank on the halo-padded block.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">atoms</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">_atoms_group</span>
+    <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;ShardedBatch.from_batch requires a Batch with an atoms group.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">atoms</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_NL_ATOM_FIELDS</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">schema</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+                <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">_ATOM_FIELD_DTYPE_OVERRIDES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
+                <span class="s2">&quot;trailing_shape&quot;</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">schema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_has_field</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if a batch has a non-None field.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_broadcast_float_dtype</span><span class="p">(</span>
+    <span class="n">src_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="n">src</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">group</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Broadcast a float dtype from ``src`` to every rank as an int code</span>
+<span class="sd">    and decode back to a ``torch.dtype``. Non-src ranks pass ``None``.</span>
+
+<span class="sd">    ``src`` is group-local; it is mapped to a global rank for the collective</span>
+<span class="sd">    (which takes a global ``src=`` regardless of ``group``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">src_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">src_dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_FLOAT_DTYPE_TO_CODE</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;ShardedBatch positions dtype </span><span class="si">{</span><span class="n">src_dtype</span><span class="si">}</span><span class="s2"> not supported; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;must be one of </span><span class="si">{</span><span class="n">_FLOAT_DTYPE_CODES</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">code</span> <span class="o">=</span> <span class="n">_FLOAT_DTYPE_TO_CODE</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">src_dtype</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">src_dtype</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">code_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">code</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">code_t</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">_global_src</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">),</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_FLOAT_DTYPE_CODES</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">code_t</span><span class="o">.</span><span class="n">item</span><span class="p">())]</span>
+
+
+<div class="viewcode-block" id="ShardedBatch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ShardedBatch</span><span class="p">(</span><span class="n">ShardedCollection</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A ``Batch`` distributed across a 1-D ``DeviceMesh``.</span>
+
+<span class="sd">    The chemistry-specific subclass of</span>
+<span class="sd">    :class:`~nvalchemi.distributed._core.collection.ShardedCollection`: it</span>
+<span class="sd">    supplies the atomic-data field-&gt;policy map (per-atom fields -&gt;</span>
+<span class="sd">    :class:`PlainShard`; ``cell`` / ``pbc`` are replicated side metadata) and</span>
+<span class="sd">    the ``Batch``-packing logic. The generic scatter / local / gather machinery</span>
+<span class="sd">    lives on the base.</span>
+
+<span class="sd">    Per-atom fields are ``ShardTensor(Shard(0))`` of global shape</span>
+<span class="sd">    ``(n_global, ...)`` with each rank physically holding ``n_owned``</span>
+<span class="sd">    rows. Per-system fields (``cell``, ``pbc``, and everything else in the</span>
+<span class="sd">    batch&#39;s system group, e.g. ``charge`` / ``spin``) are replicated.</span>
+
+<span class="sd">    Obtained via :meth:`from_batch` (scatter from the source rank) and</span>
+<span class="sd">    consumed by :class:`~nvalchemi.distributed.distributed_model.DistributedModel`</span>
+<span class="sd">    via :attr:`local_batch`. :meth:`full_batch` / :meth:`to_global_batch`</span>
+<span class="sd">    gather back when the user wants a whole-system view.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mesh</span><span class="p">:</span> <span class="n">DeviceMesh</span><span class="p">,</span>
+        <span class="n">atom_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">n_global</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">partition_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;spatial&quot;</span><span class="p">,</span>
+        <span class="n">system_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">mesh</span><span class="p">,</span>
+            <span class="n">atom_fields</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policies_for</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">atom_fields</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cell</span> <span class="o">=</span> <span class="n">cell</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span> <span class="o">=</span> <span class="n">pbc</span>
+        <span class="c1"># Replicated per-system inputs beyond cell/pbc (total charge, spin</span>
+        <span class="c1"># multiplicity, custom system properties). Every rank holds all systems.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">system_fields</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_global</span> <span class="o">=</span> <span class="n">n_global</span>
+        <span class="c1"># Storage flavour. ``&quot;spatial&quot;`` / ``&quot;contiguous_block&quot;`` both use</span>
+        <span class="c1"># ShardTensor with ``Shard(0)`` placement (per-rank ``n_owned`` rows);</span>
+        <span class="c1"># they differ only in how the rank assignment is computed. The</span>
+        <span class="c1"># spatial-halo layout (ghost padding, partitioner) is the concern of the</span>
+        <span class="c1"># :class:`HaloShardState` subclass, not this generic base.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_partition_mode</span> <span class="o">=</span> <span class="n">partition_mode</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_policies_for</span><span class="p">(</span><span class="n">field_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StoragePolicy</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map per-atom fields to a storage policy.</span>
+
+<span class="sd">        Both partition modes (``&quot;spatial&quot;`` / ``&quot;contiguous_block&quot;``) store</span>
+<span class="sd">        per-atom fields as :class:`PlainShard` (each rank holds its ``n_owned``</span>
+<span class="sd">        rows as a ``Shard(0)`` ShardTensor); they differ only in *how* the rank</span>
+<span class="sd">        assignment is computed upstream, not in the storage policy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">PlainShard</span><span class="p">()</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">field_names</span><span class="p">}</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Properties</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">positions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">velocities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forces</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">charges</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;charges&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">atomic_numbers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">atomic_masses</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;atomic_masses&quot;</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_owned</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of atoms owned by this rank — the local shard size,</span>
+<span class="sd">        ``len(positions.to_local())`` (both ``spatial`` and</span>
+<span class="sd">        ``contiguous_block`` modes store ``Shard(0)`` per-rank rows).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_local</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_global</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Total number of atoms across the mesh.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_global</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">partition_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;``&quot;spatial&quot;`` / ``&quot;contiguous_block&quot;``.</span>
+
+<span class="sd">        Set at :meth:`from_batch` time. Both shard per-atom fields ``Shard(0)``</span>
+<span class="sd">        (each rank holds ``n_owned`` rows); they differ only in how the rank</span>
+<span class="sd">        assignment is computed (spatial decomposition vs contiguous blocks).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partition_mode</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_graphs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of graphs (systems) — replicated across ranks. Currently</span>
+<span class="sd">        inferred as 1 for the single-system domain-decomposition case.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rank_assignment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;``(n_global,)`` int64 tensor: ``rank_assignment[g]`` is the rank</span>
+<span class="sd">        that owns global sharded-atom ``g``.</span>
+
+<span class="sd">        Atoms are in rank-contiguous order after :meth:`from_batch`&#39;s</span>
+<span class="sd">        scatter-sort, so this is a block tensor with each rank&#39;s block</span>
+<span class="sd">        sized by that rank&#39;s ``n_owned``. Built by all-gathering per-rank</span>
+<span class="sd">        sizes in a single shot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_local</span><span class="p">()</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_global</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Single all_gather into a flat (world_size,) tensor, one sync.</span>
+        <span class="n">n_owned_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">n_owned</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">sizes_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_gather_into_tensor</span><span class="p">(</span><span class="n">sizes_t</span><span class="p">,</span> <span class="n">n_owned_t</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">mesh_group</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="p">))</span>
+
+        <span class="c1"># Build the block-constant assignment via repeat_interleave — no</span>
+        <span class="c1"># per-rank Python loop or slicing.</span>
+        <span class="n">ranks</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ranks</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">sizes_t</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ShardedBatch.atom_fields">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.atom_fields">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">atom_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a shallow copy of the atom-field ShardTensor dict.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Construction: scatter from src</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ShardedBatch.from_batch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.from_batch">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_batch</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mesh</span><span class="p">:</span> <span class="n">DeviceMesh</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">DomainConfig</span><span class="p">,</span>
+        <span class="n">src</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">partition_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;spatial&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShardedBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Scatter a full ``Batch`` from *src* rank across *mesh*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch</span>
+<span class="sd">            Full-system batch on *src*; ``None`` elsewhere.</span>
+<span class="sd">        mesh</span>
+<span class="sd">            1-D device mesh for domain parallelism.</span>
+<span class="sd">        config</span>
+<span class="sd">            Domain-decomposition config. Its ``mesh`` / ``cutoff`` /</span>
+<span class="sd">            ``grid_dims`` drive the :class:`SpatialPartitioner` built</span>
+<span class="sd">            internally.</span>
+<span class="sd">        src</span>
+<span class="sd">            The global rank that holds the full batch (default 0).</span>
+<span class="sd">        partition_mode</span>
+<span class="sd">            How to assign atoms to ranks.</span>
+
+<span class="sd">            * ``&quot;spatial&quot;`` (default) — :class:`SpatialPartitioner`,</span>
+<span class="sd">              required by halo exchange so a rank&#39;s owned atoms&#39; neighbors</span>
+<span class="sd">              live in adjacent ranks.</span>
+<span class="sd">            * ``&quot;contiguous_block&quot;`` — atoms ``0..N/W-1`` to rank 0,</span>
+<span class="sd">              ``N/W..2N/W-1`` to rank 1, and so on. Avoids degenerate</span>
+<span class="sd">              partitions on geometries spatial would choke on (1D chains,</span>
+<span class="sd">              perfectly cubic lattices on partition boundaries, clusters in</span>
+<span class="sd">              oversized cells).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ShardedBatch</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Atoms are scattered honoring the chosen partitioner&#39;s rank assignment</span>
+<span class="sd">        verbatim (a per-rank point-to-point scatter), not by an even</span>
+<span class="sd">        ``Shard(0)`` split of ``batch.positions``. A balanced split would</span>
+<span class="sd">        silently override the partitioner whenever the assignment isn&#39;t already</span>
+<span class="sd">        balanced (e.g. a cluster not centered in the box), placing atoms on</span>
+<span class="sd">        ranks that don&#39;t own their spatial domain so halo exchange can&#39;t reach</span>
+<span class="sd">        their real neighbors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">partition_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;spatial&quot;</span><span class="p">,</span> <span class="s2">&quot;contiguous_block&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;partition_mode must be &#39;spatial&#39; or &#39;contiguous_block&#39;; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">partition_mode</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">local_rank</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">get_local_rank</span><span class="p">()</span>
+        <span class="c1"># All scatter broadcasts run on the mesh&#39;s own group (the domain sub-mesh&#39;s</span>
+        <span class="c1"># group when this is a sliced sub-mesh of a larger pipeline x domain mesh),</span>
+        <span class="c1"># with the group-local ``src`` mapped to its global rank for the collective.</span>
+        <span class="c1"># 1-D whole-mesh: group is the world group and the map is the identity.</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="n">mesh_group</span><span class="p">(</span><span class="n">mesh</span><span class="p">)</span>
+
+        <span class="c1"># --- Resolve device ---</span>
+        <span class="c1"># Non-src ranks have no batch to read the device from. The mesh&#39;s device</span>
+        <span class="c1"># type is what the collectives below run on, so preferring CUDA here</span>
+        <span class="c1"># would put them on a different device than a CPU-mesh src rank and</span>
+        <span class="c1"># deadlock the first broadcast.</span>
+        <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="s2">&quot;device_type&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+        <span class="c1"># --- Broadcast positions dtype first so cell can match ---</span>
+        <span class="n">pos_dtype</span> <span class="o">=</span> <span class="n">_broadcast_float_dtype</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span> <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># --- Broadcast cell + pbc + n_global from src ---</span>
+        <span class="c1"># Cell matches the positions dtype so ``sharded.cell.dtype ==</span>
+        <span class="c1"># sharded.positions.dtype`` for any downstream op that mixes them.</span>
+        <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cell</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">pos_dtype</span><span class="p">)</span>
+            <span class="n">pbc</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">_has_field</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">n_global_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">pos_dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">pbc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">n_global_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">global_src</span> <span class="o">=</span> <span class="n">_global_src</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">global_src</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">pbc</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">global_src</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">n_global_t</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">global_src</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">n_global</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_global_t</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+        <span class="c1"># --- Build partitioner from broadcast geometry + config ---</span>
+        <span class="c1"># Spatial (halo) mode only: the ghost partition + skin/migration tracking</span>
+        <span class="c1"># live on the returned :class:`HaloShardState`. ``contiguous_block``</span>
+        <span class="c1"># (graph parallel) is geometry-free and never consults a partitioner.</span>
+        <span class="n">partitioner</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">SpatialPartitioner</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">cell_matrix</span><span class="o">=</span><span class="n">cell</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="n">pbc</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">partition_mode</span> <span class="o">==</span> <span class="s2">&quot;spatial&quot;</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+        <span class="c1"># --- Chemistry prep on src: assign atoms to ranks, order the</span>
+        <span class="c1"># per-atom fields to match, declare each field&#39;s storage policy.</span>
+        <span class="c1"># The generic broadcast/slice/wrap mechanics are delegated to</span>
+        <span class="c1"># ``ShardedCollection.scatter`` below — this is the only chemistry-</span>
+        <span class="c1"># aware part of constructing the distributed collection. ---</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="n">mesh</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="s2">&quot;size&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+        <span class="n">sizes_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">source</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">local_rank</span> <span class="o">==</span> <span class="n">src</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;batch must be provided on src rank&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_REQUIRED_ATOM_FIELDS</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_field</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;ShardedBatch.from_batch requires &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; on the &quot;</span>
+                        <span class="s2">&quot;source batch.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">n_atoms_src</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">partition_mode</span> <span class="o">==</span> <span class="s2">&quot;spatial&quot;</span><span class="p">:</span>
+                <span class="n">rank_assignment</span> <span class="o">=</span> <span class="n">partitioner</span><span class="o">.</span><span class="n">assign_atoms_to_ranks</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+                <span class="p">)</span>
+                <span class="c1"># Stable sort so atoms within a rank keep their original order.</span>
+                <span class="n">sorted_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">rank_assignment</span><span class="p">,</span> <span class="n">stable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># contiguous_block</span>
+                <span class="c1"># ``arange(N) // (N // W)`` with clamp so the last rank absorbs</span>
+                <span class="c1"># any remainder.</span>
+                <span class="n">per_rank</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">n_atoms_src</span> <span class="o">//</span> <span class="n">world_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">rank_assignment</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_atoms_src</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">//</span> <span class="n">per_rank</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="n">world_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">sorted_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">rank_assignment</span><span class="p">,</span> <span class="n">stable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">sorted_assignment</span> <span class="o">=</span> <span class="n">rank_assignment</span><span class="p">[</span><span class="n">sorted_idx</span><span class="p">]</span>
+            <span class="n">sizes_list</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="nb">int</span><span class="p">((</span><span class="n">sorted_assignment</span> <span class="o">==</span> <span class="n">r</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>
+            <span class="p">]</span>
+
+            <span class="c1"># Discover every per-atom field (positions, atomic_numbers, masses,</span>
+            <span class="c1"># forces, velocities, charges, momenta, custom user fields via</span>
+            <span class="c1"># ``add_node_property``, …), order it by the rank assignment, and</span>
+            <span class="c1"># apply any dtype override. One pass; no hand-maintained allowlist.</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">_discover_atom_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])[</span><span class="n">sorted_idx</span><span class="p">]</span>
+                <span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">])</span>
+                <span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">schema</span>
+            <span class="p">}</span>
+
+        <span class="c1"># --- Broadcast the field order so every rank can build the policy</span>
+        <span class="c1"># map keyed by field name, then delegate the scatter. ---</span>
+        <span class="n">names_holder</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast_object_list</span><span class="p">(</span>
+                <span class="n">names_holder</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">_global_src</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">),</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span>
+            <span class="p">)</span>
+        <span class="n">field_names</span> <span class="o">=</span> <span class="n">names_holder</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">field_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># noqa: S101</span>
+
+        <span class="n">policies</span> <span class="o">=</span> <span class="n">ShardedBatch</span><span class="o">.</span><span class="n">_policies_for</span><span class="p">(</span><span class="n">field_names</span><span class="p">)</span>
+        <span class="n">coll</span> <span class="o">=</span> <span class="n">ShardedCollection</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+            <span class="n">source</span><span class="p">,</span>
+            <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">,</span>
+            <span class="n">policies</span><span class="o">=</span><span class="n">policies</span><span class="p">,</span>
+            <span class="n">sizes</span><span class="o">=</span><span class="n">sizes_list</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># --- Replicate the remaining per-system fields (charge, spin, custom</span>
+        <span class="c1"># system properties) so every rank models the same physical system. ---</span>
+        <span class="n">system_fields</span> <span class="o">=</span> <span class="n">ShardedBatch</span><span class="o">.</span><span class="n">_broadcast_system_fields</span><span class="p">(</span>
+            <span class="n">batch</span> <span class="k">if</span> <span class="n">local_rank</span> <span class="o">==</span> <span class="n">src</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Each strategy gets its natural ShardState: the spatial-halo layout</span>
+        <span class="c1"># carries the partitioner + ghost view (:class:`HaloShardState`); graph</span>
+        <span class="c1"># parallel gets the generic base (no halo baggage).</span>
+        <span class="n">common</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">,</span>
+            <span class="n">atom_fields</span><span class="o">=</span><span class="n">coll</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">cell</span><span class="p">,</span>
+            <span class="n">pbc</span><span class="o">=</span><span class="n">pbc</span><span class="p">,</span>
+            <span class="n">n_global</span><span class="o">=</span><span class="n">n_global</span><span class="p">,</span>
+            <span class="n">partition_mode</span><span class="o">=</span><span class="n">partition_mode</span><span class="p">,</span>
+            <span class="n">system_fields</span><span class="o">=</span><span class="n">system_fields</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">partition_mode</span> <span class="o">==</span> <span class="s2">&quot;spatial&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">HaloShardState</span><span class="p">(</span><span class="n">partitioner</span><span class="o">=</span><span class="n">partitioner</span><span class="p">,</span> <span class="o">**</span><span class="n">common</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ShardedBatch</span><span class="p">(</span><span class="o">**</span><span class="n">common</span><span class="p">)</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_broadcast_system_fields</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">src</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replicate *batch*&#39;s per-system fields from *src* onto every rank.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch | None</span>
+<span class="sd">            Source batch on the scatter rank; ``None`` elsewhere.</span>
+<span class="sd">        device : torch.device</span>
+<span class="sd">            Device to allocate the replicated tensors on.</span>
+<span class="sd">        src : int</span>
+<span class="sd">            Group-local source rank.</span>
+<span class="sd">        group : Any</span>
+<span class="sd">            Process group to broadcast over.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, torch.Tensor]</span>
+<span class="sd">            Field name -&gt; replicated tensor, identical on every rank.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">schema</span> <span class="o">=</span> <span class="n">_discover_system_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">holder</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">schema</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast_object_list</span><span class="p">(</span><span class="n">holder</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">_global_src</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">),</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">schema</span> <span class="o">=</span> <span class="n">holder</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[]</span>
+
+        <span class="n">fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;shape&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+                <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">_global_src</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">),</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+            <span class="n">fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="k">return</span> <span class="n">fields</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Local view: per-rank owned rows as a plain Batch</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">local_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This rank&#39;s owned atoms as a plain ``Batch``.</span>
+
+<span class="sd">        Calls ``.to_local()`` on each ShardTensor field (no communication,</span>
+<span class="sd">        no copy — the returned tensors share storage with the shards).</span>
+<span class="sd">        In-place mutations on the returned batch&#39;s tensors propagate back</span>
+<span class="sd">        to the ``ShardTensor`` automatically; for non-in-place</span>
+<span class="sd">        replacements, call :meth:`update_from_batch` to sync.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_batch_with_edges</span><span class="p">()</span>
+
+<div class="viewcode-block" id="ShardedBatch.local_batch_with_edges">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.local_batch_with_edges">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">local_batch_with_edges</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">edge_properties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">node_properties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This rank&#39;s owned atoms as a plain ``Batch``, optionally carrying</span>
+<span class="sd">        prepared per-edge and/or per-node routing properties.</span>
+
+<span class="sd">        The graph-parallel path uses this to hand the wrapper an owned-row batch</span>
+<span class="sd">        whose neighbour data the framework prepared: for COO models a</span>
+<span class="sd">        ``&quot;neighbor_list&quot;`` edge property whose senders are global ids and</span>
+<span class="sd">        receivers owned-local; for dense-``neighbor_matrix`` models the per-node</span>
+<span class="sd">        ``&quot;neighbor_matrix&quot;`` / ``&quot;num_neighbors&quot;`` / ``&quot;neighbor_matrix_shifts&quot;``</span>
+<span class="sd">        (owned receiver rows, global sender ids into the all-gathered node set).</span>
+<span class="sd">        Otherwise identical to :attr:`local_batch`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span> <span class="k">as</span> <span class="n">BatchCls</span>
+
+        <span class="c1"># Per-field local view via each field&#39;s policy (PlainShard -&gt;</span>
+        <span class="c1"># ``to_local()`` owned rows).</span>
+        <span class="n">locals_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span><span class="p">()</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">locals_</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="c1"># Hot-path construction: bypass pydantic validation via</span>
+        <span class="c1"># ``model_construct``. AtomicData&#39;s ``atom_categories`` Enum-coercion</span>
+        <span class="c1"># path calls ``repr`` on each tensor, which on CUDA syncs per element</span>
+        <span class="c1"># — hundreds of host syncs per forward. Skipping validation is safe</span>
+        <span class="c1"># here because ``self.fields`` holds tensors already validated at</span>
+        <span class="c1"># scatter time and the per-forward Batch is internal.</span>
+        <span class="n">ctor_known</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">model_fields</span><span class="p">)</span>
+        <span class="n">ctor_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cell</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s2">&quot;pbc&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">extras</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">locals_</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">ctor_known</span><span class="p">:</span>
+                <span class="n">ctor_kwargs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">extras</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="n">system_extras</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_fields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">ctor_known</span><span class="p">:</span>
+                <span class="n">ctor_kwargs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">system_extras</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">model_construct</span><span class="p">(</span><span class="o">**</span><span class="n">ctor_kwargs</span><span class="p">)</span>
+        <span class="c1"># Custom fields (not on the model) still need add_node_property</span>
+        <span class="c1"># for the level_storage bookkeeping. Those don&#39;t carry the</span>
+        <span class="c1"># Enum-coercion bug because the slow path is in the model&#39;s</span>
+        <span class="c1"># own field-validator chain, which extras bypass entirely.</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">extras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">system_extras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">node_properties</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">node_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">edge_properties</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">edge_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">add_edge_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">BatchCls</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Gathering: local shards → full Batch</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ShardedBatch.full_batch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.full_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">full_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gather all shards into a full ``Batch`` on rank *dst*.</span>
+
+<span class="sd">        All ranks must call this — the underlying send/recv is collective.</span>
+<span class="sd">        Returns ``None`` on ranks other than *dst*.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">gathered</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="n">dst</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">gathered</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_batch_from_tensors</span><span class="p">(</span><span class="n">gathered</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ShardedBatch.to_global_batch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.to_global_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_global_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gather all shards into a full ``Batch`` on **every** rank.&quot;&quot;&quot;</span>
+        <span class="n">gathered</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">gathered</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># dst=None populates every rank  # noqa: S101</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_batch_from_tensors</span><span class="p">(</span><span class="n">gathered</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_batch_from_tensors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span> <span class="k">as</span> <span class="n">BatchCls</span>
+
+        <span class="n">tensors</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="c1"># Hot-path construction: bypass pydantic validation via</span>
+        <span class="c1"># ``model_construct`` (the gathered tensors were validated at scatter</span>
+        <span class="c1"># time). The validating ``AtomicData(...)`` path runs the</span>
+        <span class="c1"># ``atom_categories`` Enum-coercion, which calls ``repr`` on CUDA tensors</span>
+        <span class="c1"># — hundreds of host syncs per gather. Mirrors ``local_batch_with_edges``.</span>
+        <span class="n">known</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">model_fields</span><span class="p">)</span>
+        <span class="n">ctor</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="s2">&quot;pbc&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">clone</span><span class="p">()}</span>
+        <span class="n">extras</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="p">(</span><span class="n">ctor</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">known</span> <span class="k">else</span> <span class="n">extras</span><span class="p">)[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="n">system_extras</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_fields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">known</span><span class="p">:</span>
+                <span class="n">ctor</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">system_extras</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">model_construct</span><span class="p">(</span><span class="o">**</span><span class="n">ctor</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">extras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">system_extras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">BatchCls</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Syncing back: replaced tensors → ShardTensor storage</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_cell_synced</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hook after :meth:`update_from_batch` refreshes ``self.cell``. No-op on</span>
+<span class="sd">        the generic base; :class:`HaloShardState` re-tracks its partitioner.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ShardedBatch.update_from_batch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ShardedBatch.html#nvalchemi.distributed.ShardedBatch.update_from_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_from_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sync non-in-place tensor replacements from *batch* back into</span>
+<span class="sd">        the ``ShardTensor`` backing storage.</span>
+
+<span class="sd">        In-place mutations are already reflected automatically because</span>
+<span class="sd">        ``to_local()`` returns the backing storage. This method rewraps</span>
+<span class="sd">        any per-atom field whose identity has changed on the plain batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed.tensor</span><span class="w"> </span><span class="kn">import</span> <span class="n">Shard</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core._st_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardTensor</span>
+
+        <span class="c1"># Sync the per-graph cell back too: a barostat (NPT/NPH) mutates</span>
+        <span class="c1"># ``batch.cell`` each step, and the persistent ShardedBatch&#39;s cell drives</span>
+        <span class="c1"># both the gathered/global batch and downstream halo/neighbor builds. Left</span>
+        <span class="c1"># stale at the partition-time value, the gather would report the initial</span>
+        <span class="c1"># cell and the compute would use the wrong PBC box.</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cell</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="c1"># Halo tracks the deformed box on its partitioner (see</span>
+            <span class="c1"># :meth:`HaloShardState._on_cell_synced`); the generic base no-ops.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_cell_synced</span><span class="p">()</span>
+
+        <span class="c1"># Atom migration can change this rank&#39;s local row count, invalidating</span>
+        <span class="c1"># the old ``sharding_shapes``. Whether n_owned drifted is per-rank</span>
+        <span class="c1"># state, so gating the all_gather on a local check would fire</span>
+        <span class="c1"># asymmetrically across ranks and diverge collective order. Always</span>
+        <span class="c1"># all_gather (one int per rank) to keep every rank in lockstep.</span>
+        <span class="n">sizes_dim0_cached</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_field</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">batch_tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">sizes_dim0_cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_gather_n_owned</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">batch_tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="k">break</span>
+
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_field</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">batch_tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">st</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">batch_tensor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">st</span><span class="o">.</span><span class="n">to_local</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">sizes_dim0_cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">sizes_dim0</span> <span class="o">=</span> <span class="n">sizes_dim0_cached</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">old_shapes_by_dim</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">_spec</span><span class="o">.</span><span class="n">sharding_shapes</span><span class="p">()</span>
+                    <span class="n">sizes_dim0</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">old_shapes_by_dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+                <span class="n">new_trailing</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">batch_tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                <span class="n">new_shapes</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="mi">0</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="n">s</span><span class="p">,)</span> <span class="o">+</span> <span class="n">new_trailing</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sizes_dim0</span><span class="p">)</span>
+                <span class="p">}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ShardTensor</span><span class="o">.</span><span class="n">from_local</span><span class="p">(</span>
+                    <span class="n">batch_tensor</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">Shard</span><span class="p">(</span><span class="mi">0</span><span class="p">),),</span>
+                    <span class="n">sharding_shapes</span><span class="o">=</span><span class="n">new_shapes</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_all_gather_n_owned</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">my_n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;All-gather per-rank ``n_owned`` so every rank knows the full</span>
+<span class="sd">        post-migration layout. Cheap (one int per rank); skipped when</span>
+<span class="sd">        single-process.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">my_n</span><span class="p">]</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="n">mesh_group</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span>
+            <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_backend</span><span class="p">(</span><span class="n">group</span><span class="p">)</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span>
+            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">my_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">my_n</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_gather_into_tensor</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">my_t</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">tolist</span><span class="p">()]</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">HaloShardState</span><span class="p">(</span><span class="n">ShardedBatch</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Spatial-halo :class:`ShardedBatch`: owned rows + a ghost-padded view.</span>
+
+<span class="sd">    The concretion the :class:`~nvalchemi.distributed.strategy.HaloStrategy`</span>
+<span class="sd">    produces. It adds the halo-specific state on top of the generic base: the</span>
+<span class="sd">    :class:`~nvalchemi.distributed.partitioner.SpatialPartitioner` (rank</span>
+<span class="sd">    assignment + skin/migration tracking), and the per-rank ``padded_batch`` /</span>
+<span class="sd">    ``halo_meta`` populated by</span>
+<span class="sd">    :func:`~nvalchemi.distributed.particle_halo.halo_exchange`. Graph-parallel</span>
+<span class="sd">    strategies use the plain base and never carry any of this.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mesh</span><span class="p">:</span> <span class="n">DeviceMesh</span><span class="p">,</span>
+        <span class="n">atom_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">n_global</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">partitioner</span><span class="p">:</span> <span class="n">SpatialPartitioner</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">partition_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;spatial&quot;</span><span class="p">,</span>
+        <span class="n">system_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">,</span>
+            <span class="n">atom_fields</span><span class="o">=</span><span class="n">atom_fields</span><span class="p">,</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">cell</span><span class="p">,</span>
+            <span class="n">pbc</span><span class="o">=</span><span class="n">pbc</span><span class="p">,</span>
+            <span class="n">n_global</span><span class="o">=</span><span class="n">n_global</span><span class="p">,</span>
+            <span class="n">partition_mode</span><span class="o">=</span><span class="n">partition_mode</span><span class="p">,</span>
+            <span class="n">system_fields</span><span class="o">=</span><span class="n">system_fields</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Spatial decomposition built from the broadcast geometry during</span>
+        <span class="c1"># :meth:`ShardedBatch.from_batch`. Cached so downstream consumers</span>
+        <span class="c1"># (``DomainParallel`` migration, ``DistributedModel`` halo config)</span>
+        <span class="c1"># don&#39;t re-build it from the same inputs.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_partitioner</span> <span class="o">=</span> <span class="n">partitioner</span>
+        <span class="c1"># Per-rank local padded view (owned + halo rows). Populated by</span>
+        <span class="c1"># :func:`nvalchemi.distributed.particle_halo.halo_exchange`. Holds plain</span>
+        <span class="c1"># tensors packed into a standard ``Batch`` — models consume it via</span>
+        <span class="c1"># ``DistributedModel`` exactly like a single-system Batch, and</span>
+        <span class="c1"># ``compute_neighbors`` / ``NeighborListHook`` operate on it unchanged.</span>
+        <span class="c1"># ``None`` until ``halo_exchange`` runs.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padded_batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">halo_meta</span><span class="p">:</span> <span class="n">ParticleHaloMetadata</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Owned-shape autograd leaves, by per-atom field name, shared by every</span>
+        <span class="c1"># halo built while set. ``halo_exchange`` otherwise mints a fresh</span>
+        <span class="c1"># ``positions`` leaf per call and gathers other fields through a plain</span>
+        <span class="c1"># collective, so two halos over one owned set land in disjoint graphs</span>
+        <span class="c1"># and non-position fields carry no gradient at all. A pinned field is</span>
+        <span class="c1"># instead gathered through the autograd-aware primitive, which routes</span>
+        <span class="c1"># each ghost row&#39;s gradient back to the owning rank. Set for the</span>
+        <span class="c1"># duration of such a caller&#39;s forward and cleared after.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Symmetric per-system strain leaves ``(positions, cell)`` applied to</span>
+        <span class="c1"># the padded view by every halo built while set, so a caller taking</span>
+        <span class="c1"># ``d(energy)/d(strain)`` for the virial keeps them across the model&#39;s</span>
+        <span class="c1"># own halo refreshes. ``None`` leaves the geometry unstrained.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_strain</span><span class="p">:</span> <span class="s2">&quot;tuple[torch.Tensor, torch.Tensor] | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">partitioner</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SpatialPartitioner</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Spatial decomposition built from the broadcast geometry during</span>
+<span class="sd">        :meth:`ShardedBatch.from_batch`. ``None`` when constructed outside</span>
+<span class="sd">        ``from_batch`` (e.g. gloo-harness helpers); consumers then rebuild it</span>
+<span class="sd">        from ``config`` + ``self.cell`` / ``pbc``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitioner</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_cell_synced</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># A barostat deforms the box, so the partitioner (used by halo exchange</span>
+        <span class="c1"># + migration) must track it — else ghost regions and rank assignment</span>
+        <span class="c1"># use the stale partition-time cell.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partitioner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_partitioner</span><span class="o">.</span><span class="n">update_cell</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cell</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">invalidate_padded_view</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the cached padded view and halo metadata. Called after atom</span>
+<span class="sd">        migration or any operation that changes which atoms are owned by which</span>
+<span class="sd">        rank. Next ``halo_exchange`` will repopulate.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padded_batch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">halo_meta</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">pad_padded_view_to_caps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_pad_max</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">e_max</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pad the halo-padded view to fixed shapes for ``torch.compile``.</span>
+
+<span class="sd">        Pads per-atom fields to ``n_pad_max`` atoms and per-edge fields to</span>
+<span class="sd">        ``e_max`` edges on the generic Batch storage, so the compiled DD graph</span>
+<span class="sd">        sees static atom/edge counts across steps (otherwise per-step migration</span>
+<span class="sd">        / NL-rebuild vary the counts and trigger per-rank recompiles). A thin</span>
+<span class="sd">        delegator to :func:`~nvalchemi.distributed.graph_padder._pad_coo_to_caps`</span>
+<span class="sd">        for callers that hold a ``HaloShardState`` and have resolved explicit</span>
+<span class="sd">        caps; no-op until the padded view exists.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.graph_padder</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+            <span class="n">_pad_coo_to_caps</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">padded_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">_pad_coo_to_caps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padded_batch</span><span class="p">,</span> <span class="n">n_pad_max</span><span class="p">,</span> <span class="n">e_max</span><span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

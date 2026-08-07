@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.autograd\_target
+======================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: autograd_target

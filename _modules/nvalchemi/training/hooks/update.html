@@ -1,0 +1,1015 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.hooks.update &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/hooks/update';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.hooks.update</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Training-update hook base class and orchestrator.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">TracebackType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.optimizers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_is_metric_driven</span><span class="p">,</span>
+    <span class="n">step_lr_schedulers</span><span class="p">,</span>
+    <span class="n">step_optimizers</span><span class="p">,</span>
+    <span class="n">zero_gradients</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+
+<span class="n">_TRAINING_UPDATE_STAGES</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TrainingStage</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_BATCH</span><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="o">.</span><span class="n">DO_BACKWARD</span><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="o">.</span><span class="n">DO_OPTIMIZER_STEP</span><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_OPTIMIZER_STEP</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="n">_MULTIPLE_ORCHESTRATOR_MSG</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;Only one TrainingUpdateOrchestrator is allowed; compose update hooks &quot;</span>
+    <span class="s2">&quot;with `+` before registration.&quot;</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_hook_claims_stage</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return True if hook fires on stage (mirrors _registry._call_hooks dispatch).&quot;&quot;&quot;</span>
+    <span class="n">runs_on_stage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;_runs_on_stage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">runs_on_stage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">runs_on_stage</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;stage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="n">stage</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fold_training_update_hooks</span><span class="p">(</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fold TrainingUpdateHook/Orchestrator instances into a single orchestrator.&quot;&quot;&quot;</span>
+    <span class="n">others</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">update_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">update_insertion_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">n_orch</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hooks</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">update_insertion_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">update_insertion_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">others</span><span class="p">)</span>
+            <span class="n">update_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+            <span class="n">n_orch</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">TrainingUpdateHook</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">update_insertion_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">update_insertion_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">others</span><span class="p">)</span>
+            <span class="n">update_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">others</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">update_hooks</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">hooks</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n_orch</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">_MULTIPLE_ORCHESTRATOR_MSG</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">update_hooks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">update_hooks</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">TrainingUpdateOrchestrator</span>
+    <span class="p">):</span>
+        <span class="n">folded</span> <span class="o">=</span> <span class="n">update_hooks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">folded</span> <span class="o">=</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">(</span><span class="o">*</span><span class="n">update_hooks</span><span class="p">)</span>
+    <span class="n">insert_at</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">update_insertion_index</span> <span class="k">if</span> <span class="n">update_insertion_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">others</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">result</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">others</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">insert_at</span><span class="p">,</span> <span class="n">folded</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_veto</span><span class="p">(</span><span class="n">decision</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate that ``__call__`` returned a strict ``bool`` for ``proceed``.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">decision</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__call__(stage=</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">) must return &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(bool, Tensor | None); proceed got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">decision</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="s2">&quot;Return True to proceed or False to skip.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_loss</span><span class="p">(</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``loss`` or raise a stage-specific error for missing losses.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">loss</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> did not provide a Tensor loss for &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">; got None.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">loss</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_scaler_scale</span><span class="p">(</span><span class="n">scaler</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the scaler scale as ``float`` when the scaler exposes one.&quot;&quot;&quot;</span>
+    <span class="n">get_scale</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">scaler</span><span class="p">,</span> <span class="s2">&quot;get_scale&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">get_scale</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">get_scale</span><span class="p">())</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grad_scaler_step_skipped</span><span class="p">(</span>
+    <span class="n">grad_scaler</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">opt</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether ``grad_scaler.step(opt)`` skipped the optimizer step.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">found_inf</span> <span class="o">=</span> <span class="n">grad_scaler</span><span class="o">.</span><span class="n">_found_inf_per_device</span><span class="p">(</span><span class="n">opt</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">found_inf</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_step_optimizers_with_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">TrainContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Step optimizers/schedulers and return whether optimizer stepping ran.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">step_optimizers</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">optimizers</span><span class="p">)</span>
+        <span class="n">step_lr_schedulers</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">lr_schedulers</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">lr_schedulers</span> <span class="ow">or</span> <span class="nb">all</span><span class="p">(</span><span class="n">sched</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">sched</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">lr_schedulers</span><span class="p">):</span>
+        <span class="n">pre_scale</span> <span class="o">=</span> <span class="n">_get_scaler_scale</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">optimizers</span><span class="p">:</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">opt</span><span class="p">)</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+        <span class="n">post_scale</span> <span class="o">=</span> <span class="n">_get_scaler_scale</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="kc">True</span> <span class="k">if</span> <span class="n">pre_scale</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">post_scale</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">post_scale</span> <span class="o">&gt;=</span> <span class="n">pre_scale</span>
+        <span class="p">)</span>
+
+    <span class="n">skipped_flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">optimizers</span><span class="p">:</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">opt</span><span class="p">)</span>
+        <span class="n">skipped_flags</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_grad_scaler_step_skipped</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="p">,</span> <span class="n">opt</span><span class="p">))</span>
+
+    <span class="n">need_fallback</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">flag</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="n">skipped_flags</span><span class="p">)</span>
+    <span class="n">pre_scale</span> <span class="o">=</span> <span class="n">_get_scaler_scale</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="p">)</span> <span class="k">if</span> <span class="n">need_fallback</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+    <span class="n">post_scale</span> <span class="o">=</span> <span class="n">_get_scaler_scale</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">grad_scaler</span><span class="p">)</span> <span class="k">if</span> <span class="n">need_fallback</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">fallback_skipped</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">need_fallback</span>
+        <span class="ow">and</span> <span class="n">pre_scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">post_scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">post_scale</span> <span class="o">&lt;</span> <span class="n">pre_scale</span>
+    <span class="p">)</span>
+    <span class="n">schedulers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">lr_schedulers</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">schedulers</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">skipped_flags</span><span class="p">):</span>
+        <span class="n">schedulers</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">skipped_flags</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">schedulers</span><span class="p">)))</span>
+    <span class="n">step_skipped_flags</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">skipped</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="p">(</span><span class="n">fallback_skipped</span> <span class="ow">and</span> <span class="n">skipped</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">skipped</span> <span class="ow">in</span> <span class="n">skipped_flags</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">step_skipped_flags</span><span class="p">):</span>
+        <span class="n">step_lr_schedulers</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">lr_schedulers</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">for</span> <span class="n">sched</span><span class="p">,</span> <span class="n">step_skipped</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">schedulers</span><span class="p">,</span> <span class="n">step_skipped_flags</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sched</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">_is_metric_driven</span><span class="p">(</span><span class="n">sched</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">step_skipped</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">sched</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<div class="viewcode-block" id="TrainingUpdateHook">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateHook.html#nvalchemi.training.hooks.TrainingUpdateHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TrainingUpdateHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for hooks that customize training-update phases.</span>
+
+<span class="sd">    Subclasses override :meth:`__call__` and dispatch on ``stage`` to</span>
+<span class="sd">    handle one or more claimed stages: ``BEFORE_BATCH``, ``DO_BACKWARD``,</span>
+<span class="sd">    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.</span>
+<span class="sd">    Compose via ``+`` to build a :class:`TrainingUpdateOrchestrator`.</span>
+<span class="sd">    See :ref:`training-update-hooks` for the stage contract and restrictions</span>
+<span class="sd">    each update hook must follow.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    priority : int</span>
+<span class="sd">        Dispatch order within an orchestrator; lower runs first. Canonical</span>
+<span class="sd">        buckets: 10 = gradient accumulation, 20 = mixed precision,</span>
+<span class="sd">        30 = gradient clipping, 40 = spike skipping. Default 50.</span>
+<span class="sd">    _exclusive_update_key : str | None</span>
+<span class="sd">        Optional key for hook families that must appear at most once inside</span>
+<span class="sd">        an orchestrator.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``TrainingUpdateHook`` is NOT directly compatible with the standard</span>
+<span class="sd">    :class:`Hook` Protocol -- its ``__call__`` signature includes a</span>
+<span class="sd">    ``will_skip`` argument and returns ``(bool, torch.Tensor | None)`` rather</span>
+<span class="sd">    than the Protocol&#39;s ``__call__(ctx, stage) -&gt; None``. This is</span>
+<span class="sd">    intentional: ``Hook`` is a structural Protocol so domain-specific</span>
+<span class="sd">    hook families can use signatures suited to their semantics. Bare</span>
+<span class="sd">    instances must be composed via ``+`` or wrapped by a</span>
+<span class="sd">    :class:`TrainingUpdateOrchestrator` (the strategy auto-wraps lone</span>
+<span class="sd">    hooks); the orchestrator owns Protocol compliance.</span>
+
+<span class="sd">    ``will_skip`` is a stage-local cumulative veto signal. It is ``True`` when</span>
+<span class="sd">    an earlier, higher-priority hook has already requested that the current</span>
+<span class="sd">    stage&#39;s gated operation be skipped. The orchestrator still calls later</span>
+<span class="sd">    hooks after a veto so they can observe the decision, update bookkeeping, or</span>
+<span class="sd">    emit diagnostics, but those hooks should avoid side effects that assume the</span>
+<span class="sd">    gated operation will run. A hook may also return ``False`` to veto the</span>
+<span class="sd">    operation for lower-priority hooks.</span>
+
+<span class="sd">    This signal is intended for composable pipeline behavior. For example, a</span>
+<span class="sd">    gradient-accumulation hook can veto ``DO_OPTIMIZER_STEP`` on non-step</span>
+<span class="sd">    microbatches; later hooks then receive ``will_skip=True`` and can skip</span>
+<span class="sd">    work such as gradient clipping, scaler updates, or expensive parameter</span>
+<span class="sd">    scans. ``will_skip`` is reset for each stage dispatch and should not be</span>
+<span class="sd">    interpreted as a global training-step status unless the orchestrator also</span>
+<span class="sd">    records that state on ``ctx``.</span>
+
+<span class="sd">    Each ``__call__`` returns ``(proceed, loss)``:</span>
+
+<span class="sd">    - ``proceed`` is a strict ``bool`` (``int``/``None`` raise</span>
+<span class="sd">      ``TypeError``). On ``BEFORE_BATCH`` and ``DO_OPTIMIZER_STEP`` the</span>
+<span class="sd">      orchestrator applies any-veto-wins composition: if any hook returns</span>
+<span class="sd">      ``False`` the gated operation (``zero_gradients`` or</span>
+<span class="sd">      ``optimizer/scheduler.step``) is skipped. On ``DO_BACKWARD`` and</span>
+<span class="sd">      ``AFTER_OPTIMIZER_STEP`` the value is unused; return ``True``.</span>
+<span class="sd">    - ``loss`` is the loss tensor the hook would use, transformed or not.</span>
+<span class="sd">      Default is ``ctx.loss`` unchanged. The orchestrator threads it</span>
+<span class="sd">      through hooks in priority order during ``DO_BACKWARD`` so each hook</span>
+<span class="sd">      sees its predecessor&#39;s transform; ``backward()`` runs once on the</span>
+<span class="sd">      final loss. Hooks that run on stages other than ``DO_BACKWARD`` may</span>
+<span class="sd">      return ``None`` for ``loss`` because the orchestrator ignores it</span>
+<span class="sd">      there.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training._stages import TrainingStage</span>
+<span class="sd">    &gt;&gt;&gt; class ClipGrads(TrainingUpdateHook):</span>
+<span class="sd">    ...     priority = 30</span>
+<span class="sd">    ...     def __init__(self, max_norm):</span>
+<span class="sd">    ...         self.max_norm = max_norm</span>
+<span class="sd">    ...     def __call__(self, ctx, stage, will_skip):</span>
+<span class="sd">    ...         match stage:</span>
+<span class="sd">    ...             case TrainingStage.DO_OPTIMIZER_STEP:</span>
+<span class="sd">    ...                 if not will_skip:</span>
+<span class="sd">    ...                     for opt in ctx.optimizers:</span>
+<span class="sd">    ...                         params = (p for g in opt.param_groups for p in g[&quot;params&quot;])</span>
+<span class="sd">    ...                         torch.nn.utils.clip_grad_norm_(params, self.max_norm)</span>
+<span class="sd">    ...                 return True, ctx.loss</span>
+<span class="sd">    ...             case _:</span>
+<span class="sd">    ...                 return True, ctx.loss</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span>
+    <span class="n">_exclusive_update_key</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` for stages a training-update hook claims.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">_TRAINING_UPDATE_STAGES</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">TrainContext</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">,</span>
+        <span class="n">will_skip</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the hook for an update stage.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx : TrainContext</span>
+<span class="sd">            Mutable training context shared by all hooks during the current</span>
+<span class="sd">            stage dispatch.</span>
+<span class="sd">        stage : TrainingStage</span>
+<span class="sd">            Update stage currently being dispatched.</span>
+<span class="sd">        will_skip : bool</span>
+<span class="sd">            ``True`` when an earlier, higher-priority hook has already vetoed</span>
+<span class="sd">            the gated operation for ``stage``. Hooks should use this to skip</span>
+<span class="sd">            side effects that only make sense when the operation will run,</span>
+<span class="sd">            while still performing any bookkeeping that must happen on every</span>
+<span class="sd">            dispatch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[bool, torch.Tensor | None]</span>
+<span class="sd">            ``(proceed, loss)``. ``proceed`` controls the skip signal passed</span>
+<span class="sd">            to subsequent hooks: ``True`` keeps the pipeline proceeding,</span>
+<span class="sd">            while ``False`` causes later hooks to receive ``will_skip=True``</span>
+<span class="sd">            and skips the gated operation for ``stage``. ``loss`` is the loss</span>
+<span class="sd">            tensor to pass to subsequent hooks; return ``ctx.loss`` unchanged</span>
+<span class="sd">            when the hook does not transform the loss.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">loss</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose this hook with another update hook or orchestrator.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        other : TrainingUpdateHook | TrainingUpdateOrchestrator</span>
+<span class="sd">            Hook or orchestrator to compose with this hook.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        TrainingUpdateOrchestrator</span>
+<span class="sd">            Orchestrator containing this hook and ``other``. Hook execution</span>
+<span class="sd">            order is determined by ``priority`` after composition.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="p">(</span><span class="n">TrainingUpdateHook</span><span class="p">,</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="bp">NotImplemented</span>
+        <span class="k">return</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="TrainingUpdateOrchestrator">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateOrchestrator.html#nvalchemi.training.hooks.TrainingUpdateOrchestrator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TrainingUpdateOrchestrator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Composes :class:`TrainingUpdateHook` instances and drives updates.</span>
+
+<span class="sd">    Claims the training-update stages ``BEFORE_BATCH``, ``DO_BACKWARD``,</span>
+<span class="sd">    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. The strategy also calls</span>
+<span class="sd">    the orchestrator during ``SETUP`` so child hooks can initialize runtime</span>
+<span class="sd">    state before the first batch. Per-stage behavior is</span>
+<span class="sd">    selected by direct :class:`TrainingStage` comparisons to avoid per-batch</span>
+<span class="sd">    multiple-dispatch overhead.</span>
+<span class="sd">    See :ref:`training-update-hooks` for the stage contract enforced by the</span>
+<span class="sd">    orchestrator.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    *hooks : TrainingUpdateHook or TrainingUpdateOrchestrator</span>
+<span class="sd">        Hooks to compose. Any orchestrator argument is flattened into its</span>
+<span class="sd">        children. Members are sorted by ``priority`` ascending; ties</span>
+<span class="sd">        preserve insertion order (Python&#39;s stable sort).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    frequency : int</span>
+<span class="sd">        Required by the :class:`Hook` Protocol; always ``1``.</span>
+<span class="sd">    stage : None</span>
+<span class="sd">        Set to ``None`` so the registry consults ``_runs_on_stage``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If any positional argument is not a ``TrainingUpdateHook`` or</span>
+<span class="sd">        ``TrainingUpdateOrchestrator``.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``TrainingUpdateOrchestrator`` IS compatible with the standard</span>
+<span class="sd">    :class:`Hook` Protocol -- it is the registry-facing wrapper around</span>
+<span class="sd">    one or more :class:`TrainingUpdateHook` instances. Concrete training</span>
+<span class="sd">    update hooks (``EMAHook``, ``GradientClipHook``, etc.) are</span>
+<span class="sd">    NOT directly Protocol-compliant on their own; they must be composed</span>
+<span class="sd">    into an orchestrator before registration. The training strategy</span>
+<span class="sd">    auto-wraps a bare :class:`TrainingUpdateHook` for convenience.</span>
+
+<span class="sd">    On ``DO_BACKWARD`` each hook returns ``(_, loss)``; the orchestrator</span>
+<span class="sd">    assigns ``ctx.loss = loss`` between hooks so the next hook sees the</span>
+<span class="sd">    transformed value. ``backward()`` is called once on the final</span>
+<span class="sd">    ``ctx.loss``. Example: a ``*0.5`` hook followed by a ``*2.0`` hook</span>
+<span class="sd">    leaves ``ctx.loss`` equal to the original loss before backward.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">hooks</span><span class="p">:</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">flattened</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TrainingUpdateHook</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">h</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">hooks</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">):</span>
+                <span class="n">flattened</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">_hooks</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">TrainingUpdateHook</span><span class="p">):</span>
+                <span class="n">flattened</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;argument </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> must be TrainingUpdateHook or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;TrainingUpdateOrchestrator; got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">h</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;If you have an iterable, call &quot;</span>
+                    <span class="s2">&quot;TrainingUpdateOrchestrator(*hooks).&quot;</span>
+                <span class="p">)</span>
+        <span class="n">flattened</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">h</span><span class="p">:</span> <span class="n">h</span><span class="o">.</span><span class="n">priority</span><span class="p">)</span>
+        <span class="n">exclusive_hooks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TrainingUpdateHook</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">flattened</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">hook</span><span class="o">.</span><span class="n">_exclusive_update_key</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">exclusive_hooks</span><span class="p">:</span>
+                <span class="n">first</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">exclusive_hooks</span><span class="p">[</span><span class="n">key</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span>
+                <span class="n">second</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Only one update hook with exclusive key </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> may be &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;registered; got </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">second</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">exclusive_hooks</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TrainingUpdateHook</span><span class="p">]</span> <span class="o">=</span> <span class="n">flattened</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_skipped</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` for the stages this orchestrator claims.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">_TRAINING_UPDATE_STAGES</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enter lifecycle contexts owned by child update hooks.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span>
+            <span class="n">enter</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">enter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">enter</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">exc_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="ne">BaseException</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exc</span><span class="p">:</span> <span class="ne">BaseException</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tb</span><span class="p">:</span> <span class="n">TracebackType</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exit or close lifecycle contexts owned by child update hooks.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">):</span>
+            <span class="n">exit_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">exit_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">exit_</span><span class="p">(</span><span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">tb</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">close</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">close</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="TrainingUpdateOrchestrator.close">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateOrchestrator.html#nvalchemi.training.hooks.TrainingUpdateOrchestrator.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Close child update hooks that expose ``close``.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">):</span>
+            <span class="n">close</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">close</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">close</span><span class="p">()</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">optimizer_step_skipped</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the most recent optimizer-step stage was vetoed.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_skipped</span>
+
+<div class="viewcode-block" id="TrainingUpdateOrchestrator.iter_hooks">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateOrchestrator.html#nvalchemi.training.hooks.TrainingUpdateOrchestrator.iter_hooks">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iter_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TrainingUpdateHook</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield child update hooks in orchestrator dispatch order.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_should_run_gated_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">TrainContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run all hooks for a gated stage and return the any-veto-wins decision.&quot;&quot;&quot;</span>
+        <span class="n">should_run</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span>
+            <span class="n">proceed</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="ow">not</span> <span class="n">should_run</span><span class="p">)</span>
+            <span class="n">_check_veto</span><span class="p">(</span><span class="n">proceed</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+            <span class="n">should_run</span> <span class="o">=</span> <span class="n">proceed</span> <span class="ow">and</span> <span class="n">should_run</span>
+        <span class="k">return</span> <span class="n">should_run</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">TrainContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run orchestrator logic for ``stage`` when it is an update stage.&quot;&quot;&quot;</span>
+        <span class="k">match</span> <span class="n">stage</span><span class="p">:</span>
+            <span class="k">case</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">SETUP</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="k">case</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_BATCH</span><span class="p">:</span>
+                <span class="c1"># situation where this may skip is gradient accumulation; otherwise</span>
+                <span class="c1"># the typical workflow would be to actually zero gradients</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_run_gated_stage</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>
+                    <span class="n">zero_gradients</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">optimizers</span><span class="p">)</span>
+                    <span class="n">clear_filtered</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                        <span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_zero_optimizer_filtered_gradients&quot;</span><span class="p">,</span> <span class="kc">None</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">clear_filtered</span><span class="p">):</span>
+                        <span class="n">clear_filtered</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">optimizers</span><span class="p">)</span>
+            <span class="k">case</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">DO_BACKWARD</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span>
+                    <span class="n">_</span><span class="p">,</span> <span class="n">loss</span> <span class="o">=</span> <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+                    <span class="n">ctx</span><span class="o">.</span><span class="n">loss</span> <span class="o">=</span> <span class="n">_require_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+                <span class="n">_require_loss</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+            <span class="k">case</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">DO_OPTIMIZER_STEP</span><span class="p">:</span>
+                <span class="c1"># situation where this might be skipped is during gradient</span>
+                <span class="c1"># accumulation, or perhaps spike skipping</span>
+                <span class="n">should_run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_run_gated_stage</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">should_run</span><span class="p">:</span>
+                    <span class="n">should_run</span> <span class="o">=</span> <span class="n">_step_optimizers_with_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_skipped</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">should_run</span>
+            <span class="k">case</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_OPTIMIZER_STEP</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="p">:</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_skipped</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implements the syntactic sugar to compose multiple update hooks together&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="p">(</span><span class="n">TrainingUpdateHook</span><span class="p">,</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="bp">NotImplemented</span>
+        <span class="k">return</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

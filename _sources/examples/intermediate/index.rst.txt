@@ -7,7 +7,9 @@ Intermediate Examples
 
 These examples assume familiarity with the basic tier and introduce
 the storage layer, performance monitoring, and more complex pipeline
-patterns.
+patterns. Training examples are labeled explicitly in this list; if the
+collection grows further, split training workflows into a dedicated examples
+section so inference, dynamics, and training entry points remain easy to scan.
 
 **01 — Multi-Stage Pipeline**: FusedStage composition, LoggingHook CSV output,
 step-budget migration, fused hooks for global status monitoring.
@@ -22,7 +24,15 @@ LJ stress computation, cell fluctuation monitoring.
 system_id tracking, ConvergedSnapshotHook collecting results.
 
 **05 — Safety and Monitoring**: NaNDetectorHook, MaxForceClampHook,
-EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
+EnergyDriftMonitorHook, StageTimingHook — defensive MD patterns.
+
+**06 — DDP MLP Training**: DDPHook with a simple MLP, dummy AtomicData,
+single-node ``torchrun`` launch, and ``auto``/``gloo``/``nccl`` backend
+selection.
+
+**07 — Rich Training Reporting**: Live Rich dashboard driven by synthetic
+training losses, validation metrics, progress counters, and learning-rate
+scheduler values.
 
 
 
@@ -117,6 +127,40 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example trains a small MLP on synthetic per-system energy labels and uses DDPHook to configure torch.nn.parallel.DistributedDataParallel. The dataset is intentionally small and generated on the fly so the example focuses on the distributed training wiring rather than model quality.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_06_ddp_mlp_training_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/06_ddp_mlp_training`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Distributed Training: DDPHook with a Dummy MLP</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example shows how the hook-native reporting API turns training state into Rich terminal dashboards. It uses synthetic losses instead of a real model so that the moving parts are visible: a workflow emits a TrainContext, a ReportingOrchestrator decides when reporting runs, and RichReporter renders the scalar snapshot.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_07_rich_training_reporting_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/07_rich_training_reporting`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Rich Training Reporting</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -132,4 +176,6 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
    /examples/intermediate/03_npt_barostat_validation
    /examples/intermediate/04_inflight_batching
    /examples/intermediate/05_safety_and_monitoring
+   /examples/intermediate/06_ddp_mlp_training
+   /examples/intermediate/07_rich_training_reporting
 

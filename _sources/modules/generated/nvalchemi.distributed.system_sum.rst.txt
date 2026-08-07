@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.system\_sum
+=================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: system_sum

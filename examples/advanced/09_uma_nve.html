@@ -1,0 +1,992 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/09_uma_nve';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="MACE Training with ALCHEMI Training Utilities" href="10_mace_training.html" />
+    <link rel="prev" title="AIMNet2 + Ewald Pipeline Geometry Optimization" href="08_aimnet2_ewald_pipeline.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">UMA...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-09-uma-nve-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="uma-foundation-model-nve-nvt-npt-molecular-dynamics">
+<span id="sphx-glr-examples-advanced-09-uma-nve-py"></span><h1>UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics<a class="headerlink" href="#uma-foundation-model-nve-nvt-npt-molecular-dynamics" title="Link to this heading">#</a></h1>
+<p>UMA (Universal Models for Atoms, from fairchem-core) is a multi-task
+foundation model: a single checkpoint ships heads for molecules (OMol),
+bulk crystals (OMat), catalysis (OC20), direct air capture (ODAC), and
+molecular crystals (OMC).  <a class="reference internal" href="../../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper" title="nvalchemi.models.uma.UMAWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">UMAWrapper</span></code></a>
+exposes one task head at a time and computes conservative forces (and,
+for periodic tasks, stress) via autograd.</p>
+<p>This example drives UMA through nvalchemi’s velocity-Verlet (NVE), BAOAB
+Langevin (NVT), or Martyna-Tobias-Klein (NPT) integrator.  Observation is
+delegated to built-in hooks: <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> logs potential energy,
+temperature, and max force, while <code class="docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code> checks NVE
+energy conservation.  Energy drift under NVE is the standard check that
+the conservative-force path is wired correctly end-to-end; the NPT mode
+additionally exercises the <strong>stress</strong> path (the barostat couples the
+cell to the model’s stress tensor).</p>
+<section id="key-concepts-demonstrated">
+<h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Loading a UMA checkpoint and selecting a task head via
+<code class="docutils literal notranslate"><span class="pre">UMAWrapper.from_checkpoint(...,</span> <span class="pre">task_name=...)</span></code>.</p></li>
+<li><p>Reaching fairchem’s <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> path through the
+<code class="docutils literal notranslate"><span class="pre">inference_settings</span></code> argument (<code class="docutils literal notranslate"><span class="pre">&quot;turbo&quot;</span></code>).</p></li>
+<li><p>Driving energy/force dynamics (NVE/NVT) and stress-coupled dynamics
+(NPT, periodic <code class="docutils literal notranslate"><span class="pre">omat</span></code> head) from the same wrapper.</p></li>
+<li><p>Evolving a <strong>batch</strong> of replicas (perturbed starts) in a single shared
+forward pass per step.</p></li>
+<li><p>That UMA needs <strong>no</strong> <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> — the
+predict unit builds its own graph internally, so the wrapper plugs
+straight into an integrator.</p></li>
+<li><p>Observing a run with built-in
+<a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> and
+<a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a> instead of a
+hand-rolled callback.</p></li>
+</ul>
+</section>
+<section id="setting-up-uma">
+<h2>Setting up UMA<a class="headerlink" href="#setting-up-uma" title="Link to this heading">#</a></h2>
+<p>UMA checkpoints live in the <strong>gated</strong> <code class="docutils literal notranslate"><span class="pre">facebook/UMA</span></code> HuggingFace repo.
+To run this example end-to-end:</p>
+<ol class="arabic">
+<li><p>Install the optional dependency (its torch pin conflicts with the
+<code class="docutils literal notranslate"><span class="pre">mace</span></code> / <code class="docutils literal notranslate"><span class="pre">cuXX</span></code> extras, so use a dedicated environment):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">venv</span> <span class="o">.</span><span class="n">venv</span><span class="o">-</span><span class="n">uma</span> <span class="o">&amp;&amp;</span> <span class="n">uv</span> <span class="n">sync</span> <span class="o">--</span><span class="n">extra</span> <span class="n">uma</span>
+<span class="c1"># or, with pip:  pip install &#39;nvalchemi-toolkit[uma]&#39;</span>
+</pre></div>
+</div>
+</li>
+<li><p>Request access at <a class="reference external" href="https://huggingface.co/facebook/UMA">https://huggingface.co/facebook/UMA</a> (one-time
+approval).</p></li>
+<li><p>Create a read token at <a class="reference external" href="https://huggingface.co/settings/tokens">https://huggingface.co/settings/tokens</a> and
+authenticate, either with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">huggingface</span><span class="o">-</span><span class="n">cli</span> <span class="n">login</span>
+</pre></div>
+</div>
+<p>or by exporting it for the shell session:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">HF_TOKEN</span><span class="o">=</span><span class="n">hf_xxx</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<p>The first <a class="reference internal" href="../../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper.from_checkpoint" title="nvalchemi.models.uma.UMAWrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_checkpoint()</span></code></a> call
+downloads and caches the checkpoint (under <code class="docutils literal notranslate"><span class="pre">~/.cache/fairchem</span></code>);
+subsequent runs reuse the cache.  If the checkpoint cannot be loaded
+(no access, missing token, or <code class="docutils literal notranslate"><span class="pre">fairchem-core</span></code> not installed) the
+example prints guidance and skips the trajectory so it stays safe to run
+in a documentation build.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">bulk</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">atomic_masses</span> <span class="k">as</span> <span class="n">ASE_ATOMIC_MASSES</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyDriftMonitorHook</span><span class="p">,</span> <span class="n">LoggingHook</span>
+
+<span class="c1"># KB_EV is an internal helper used here only to set MB velocities.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.integrators.npt</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPT</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.integrators.nve</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.integrators.nvt_langevin</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.uma</span><span class="w"> </span><span class="kn">import</span> <span class="n">UMAWrapper</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># 1 GPa in nvalchemi&#39;s internal pressure unit (eV/Å³), matching the eV / Å</span>
+<span class="c1"># energy / length convention used for stress.</span>
+<span class="n">_GPA_TO_EV_PER_A3</span> <span class="o">=</span> <span class="mf">6.241509074e-3</span>
+</pre></div>
+</div>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>Edit these constants to explore different checkpoints, tasks, systems,
+and ensembles.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">CHECKPOINT</span></code> — <code class="docutils literal notranslate"><span class="pre">uma-s-1p1</span></code> / <code class="docutils literal notranslate"><span class="pre">uma-s-1p2</span></code> (small) or <code class="docutils literal notranslate"><span class="pre">uma-m-1p1</span></code>
+(medium).  See <code class="docutils literal notranslate"><span class="pre">fairchem.core.calculate.pretrained_mlip.available_models</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TASK</span></code> — which task head to expose: <code class="docutils literal notranslate"><span class="pre">omat</span></code> (crystals), <code class="docutils literal notranslate"><span class="pre">omol</span></code>
+(molecules), <code class="docutils literal notranslate"><span class="pre">oc20</span></code>, <code class="docutils literal notranslate"><span class="pre">odac</span></code>, <code class="docutils literal notranslate"><span class="pre">omc</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">INFERENCE_SETTINGS</span></code> — <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;turbo&quot;</span></code>.  <code class="docutils literal notranslate"><span class="pre">&quot;turbo&quot;</span></code>
+enables fairchem’s <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> + TF32 + MoLE merge; it is faster
+after a one-time compilation but assumes a <strong>fixed atomic composition</strong>
+for the whole run (true for MD) and shifts numerics slightly.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">N_REPLICAS</span></code> — how many copies of the system to evolve <strong>in one batch</strong>.
+Replicas start from slightly perturbed positions + independent velocities,
+so their trajectories diverge while sharing a single batched forward pass.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">CHECKPOINT</span> <span class="o">=</span> <span class="s2">&quot;uma-s-1p1&quot;</span>
+<span class="n">TASK</span> <span class="o">=</span> <span class="s2">&quot;omat&quot;</span>  <span class="c1"># omat | omol | oc20 | odac | omc</span>
+<span class="n">SYSTEM</span> <span class="o">=</span> <span class="s2">&quot;bcc-fe&quot;</span>  <span class="c1"># bcc-fe | diamond | propane</span>
+<span class="n">ENSEMBLE</span> <span class="o">=</span> <span class="s2">&quot;nve&quot;</span>  <span class="c1"># nve | nvt | npt</span>
+<span class="n">INFERENCE_SETTINGS</span> <span class="o">=</span> <span class="s2">&quot;turbo&quot;</span>  <span class="c1"># &quot;default&quot; | &quot;turbo&quot;</span>
+<span class="n">N_REPLICAS</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">N_STEPS</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="n">DT_FS</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">TEMPERATURE_K</span> <span class="o">=</span> <span class="mf">300.0</span>
+<span class="n">FRICTION</span> <span class="o">=</span> <span class="mf">0.01</span>  <span class="c1"># 1/fs — NVT Langevin only</span>
+<span class="n">PRESSURE_GPA</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># target pressure — NPT only</span>
+<span class="n">BAROSTAT_TIME_FS</span> <span class="o">=</span> <span class="mf">1000.0</span>  <span class="c1"># τ_P cell-coupling time — NPT only</span>
+<span class="n">THERMOSTAT_TIME_FS</span> <span class="o">=</span> <span class="mf">100.0</span>  <span class="c1"># τ_T — NVT Nosé-Hoover (inside NPT) only</span>
+<span class="n">SEED</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="n">LOG_EVERY</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">DEVICE</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+<span class="c1"># Molecular systems need the OMol head — force it if a periodic task was left set.</span>
+<span class="k">if</span> <span class="n">SYSTEM</span> <span class="o">==</span> <span class="s2">&quot;propane&quot;</span> <span class="ow">and</span> <span class="n">TASK</span> <span class="o">!=</span> <span class="s2">&quot;omol&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[info] forcing TASK=&#39;omol&#39; for SYSTEM=</span><span class="si">{</span><span class="n">SYSTEM</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">TASK</span> <span class="o">=</span> <span class="s2">&quot;omol&quot;</span>
+
+<span class="c1"># NPT couples the cell to the stress tensor, so it needs a periodic system and</span>
+<span class="c1"># a task head that produces stress (the periodic tasks, e.g. ``omat``).</span>
+<span class="k">if</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;npt&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">SYSTEM</span> <span class="o">==</span> <span class="s2">&quot;propane&quot;</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;[info] NPT needs a periodic system — switching SYSTEM=&#39;bcc-fe&#39;&quot;</span><span class="p">)</span>
+        <span class="n">SYSTEM</span> <span class="o">=</span> <span class="s2">&quot;bcc-fe&quot;</span>
+    <span class="k">if</span> <span class="n">TASK</span> <span class="o">==</span> <span class="s2">&quot;omol&quot;</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;[info] NPT needs a stress-producing task — switching TASK=&#39;omat&#39;&quot;</span><span class="p">)</span>
+        <span class="n">TASK</span> <span class="o">=</span> <span class="s2">&quot;omat&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="build-the-batch">
+<h2>Build the batch<a class="headerlink" href="#build-the-batch" title="Link to this heading">#</a></h2>
+<p>Each replica is the same system with Maxwell-Boltzmann velocities at
+<code class="docutils literal notranslate"><span class="pre">TEMPERATURE_K</span></code> (zero net momentum). Replica 0 is the unperturbed
+reference; the rest get a small position jitter and an independent velocity
+seed, so the batched trajectories diverge. <code class="docutils literal notranslate"><span class="pre">Batch.from_data_list</span></code> packs
+them into one graph batch that shares a single model forward each step.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">_PROPANE_POSITIONS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">[</span><span class="mf">0.0000</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">1.5260</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">2.0330</span><span class="p">,</span> <span class="mf">1.4360</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">0.5093</span><span class="p">,</span> <span class="mf">1.0222</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">0.5093</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5111</span><span class="p">,</span> <span class="mf">0.8853</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">0.5093</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5111</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8853</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">2.0319</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5111</span><span class="p">,</span> <span class="mf">0.8853</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">2.0319</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5111</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8853</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">3.1193</span><span class="p">,</span> <span class="mf">1.4360</span><span class="p">,</span> <span class="mf">0.0000</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">1.6763</span><span class="p">,</span> <span class="mf">1.9471</span><span class="p">,</span> <span class="mf">0.8853</span><span class="p">],</span>
+        <span class="p">[</span><span class="mf">1.6763</span><span class="p">,</span> <span class="mf">1.9471</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8853</span><span class="p">],</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">_PROPANE_NUMBERS</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_ase_atoms</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Atoms</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an ASE ``Atoms`` object for the requested benchmark system.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">system</span> <span class="o">==</span> <span class="s2">&quot;bcc-fe&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">bulk</span><span class="p">(</span><span class="s2">&quot;Fe&quot;</span><span class="p">,</span> <span class="s2">&quot;bcc&quot;</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mf">2.87</span><span class="p">,</span> <span class="n">cubic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">system</span> <span class="o">==</span> <span class="s2">&quot;diamond&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">bulk</span><span class="p">(</span><span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="s2">&quot;diamond&quot;</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mf">3.567</span><span class="p">,</span> <span class="n">cubic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">system</span> <span class="o">==</span> <span class="s2">&quot;propane&quot;</span><span class="p">:</span>
+        <span class="n">atoms</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span><span class="n">numbers</span><span class="o">=</span><span class="n">_PROPANE_NUMBERS</span><span class="p">,</span> <span class="n">positions</span><span class="o">=</span><span class="n">_PROPANE_POSITIONS</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">atoms</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;charge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">atoms</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;spin&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">atoms</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown system </span><span class="si">{</span><span class="n">system</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">replica_data</span><span class="p">(</span>
+    <span class="n">atoms</span><span class="p">:</span> <span class="n">Atoms</span><span class="p">,</span> <span class="n">temperature_k</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">jitter</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One replica: positions optionally jittered, fresh MB velocities.&quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+    <span class="n">numbers_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">get_atomic_numbers</span><span class="p">())</span>
+    <span class="n">numbers</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span><span class="n">numbers_np</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">masses</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span>
+        <span class="n">ASE_ATOMIC_MASSES</span><span class="p">[</span><span class="n">numbers_np</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+    <span class="p">)</span>
+
+    <span class="n">g</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="torch.Generator" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">Generator</span></a><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">pos</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">positions</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">jitter</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">jitter</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="n">pos</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">pos</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># Maxwell-Boltzmann velocities (sigma = sqrt(kB T / m)), zero net momentum.</span>
+    <span class="n">sigma</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.sqrt.html#torch.sqrt" title="torch.sqrt" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span><span class="n">KB_EV</span> <span class="o">*</span> <span class="n">temperature_k</span><span class="p">)</span> <span class="o">/</span> <span class="n">masses</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span>
+    <span class="n">vel</span> <span class="o">=</span> <span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span> <span class="o">*</span> <span class="n">sigma</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">vel</span> <span class="o">-=</span> <span class="n">vel</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">pos</span><span class="p">,</span>
+        <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span>
+        <span class="s2">&quot;atomic_masses&quot;</span><span class="p">:</span> <span class="n">masses</span><span class="p">,</span>
+        <span class="s2">&quot;velocities&quot;</span><span class="p">:</span> <span class="n">vel</span><span class="p">,</span>
+        <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">pos</span><span class="p">),</span>
+        <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">pbc</span><span class="p">)):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cell&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">array</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;pbc&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">pbc</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="c1"># Stress placeholder: the dynamics loop copy_()s model outputs into</span>
+        <span class="c1"># existing batch fields, so NPT&#39;s barostat needs this slot up front.</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">AtomicData</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="n">atoms</span> <span class="o">=</span> <span class="n">build_ase_atoms</span><span class="p">(</span><span class="n">SYSTEM</span><span class="p">)</span>
+<span class="c1"># Replica 0 is unperturbed; replicas 1..N-1 get a small position jitter so the</span>
+<span class="c1"># batched trajectories diverge from independent starts.</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">replica_data</span><span class="p">(</span>
+            <span class="n">atoms</span><span class="p">,</span> <span class="n">TEMPERATURE_K</span><span class="p">,</span> <span class="n">DEVICE</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">SEED</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="n">jitter</span><span class="o">=</span><span class="mf">0.0</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.05</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_REPLICAS</span><span class="p">)</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">n_per</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span> <span class="o">//</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;UMA </span><span class="si">{</span><span class="n">ENSEMBLE</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2"> | system=</span><span class="si">{</span><span class="n">SYSTEM</span><span class="si">}</span><span class="s2"> | task=</span><span class="si">{</span><span class="n">TASK</span><span class="si">}</span><span class="s2"> | &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;checkpoint=</span><span class="si">{</span><span class="n">CHECKPOINT</span><span class="si">}</span><span class="s2"> | inference_settings=</span><span class="si">{</span><span class="n">INFERENCE_SETTINGS</span><span class="si">}</span><span class="s2"> | &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;device=</span><span class="si">{</span><span class="n">DEVICE</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Batch: </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> replicas × </span><span class="si">{</span><span class="n">n_per</span><span class="si">}</span><span class="s2"> atoms = </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="si">}</span><span class="s2"> total, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;pbc=</span><span class="si">{</span><span class="nb">bool</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.any.html#torch.any" title="torch.any" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">any</span></a><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">pbc</span><span class="p">))</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">batch</span><span class="o">.</span><span class="n">pbc</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="kc">False</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="load-the-uma-model">
+<h2>Load the UMA model<a class="headerlink" href="#load-the-uma-model" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">from_checkpoint</span></code> resolves the registered name, downloads the checkpoint
+via HuggingFace Hub (gated — see the setup notes above), and pins the task
+head.  <code class="docutils literal notranslate"><span class="pre">inference_settings=&quot;turbo&quot;</span></code> routes through fairchem’s
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> path.  If the checkpoint can’t be loaded we exit early with
+the setup hint, so the rest of the script needn’t be guarded.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
+    <span class="n">load_t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">UMAWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+        <span class="n">CHECKPOINT</span><span class="p">,</span>
+        <span class="n">task_name</span><span class="o">=</span><span class="n">TASK</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">),</span>
+        <span class="n">inference_settings</span><span class="o">=</span><span class="n">INFERENCE_SETTINGS</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># noqa: BLE001</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Could not load UMA (</span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">). Install &#39;nvalchemi-toolkit[uma]&#39;, request &quot;</span>
+        <span class="s2">&quot;access to the gated &#39;facebook/UMA&#39; repo, and authenticate via &quot;</span>
+        <span class="s2">&quot;&#39;huggingface-cli login&#39; or HF_TOKEN.&quot;</span>
+    <span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Loaded UMAWrapper in </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">load_t0</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;(cutoff=</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> Å)&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="run-with-built-in-observation-drift-monitor-hooks">
+<h2>Run with built-in observation + drift-monitor hooks<a class="headerlink" href="#run-with-built-in-observation-drift-monitor-hooks" title="Link to this heading">#</a></h2>
+<p>Rather than hand-rolling observation, register two built-in hooks:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> — logs per-step potential
+energy, temperature, and max force; here a custom writer prints them.</p></li>
+<li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a> — for NVE, warns
+when total-energy drift exceeds the per-atom-per-step budget.</p></li>
+</ul>
+<p>No neighbor-list hook is needed (UMA builds its own graph). NPT couples the
+cell to the model’s <strong>stress</strong> tensor, exercising the periodic stress path.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;nve&quot;</span><span class="p">:</span>
+    <span class="n">integrator</span> <span class="o">=</span> <span class="n">NVE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">DT_FS</span><span class="p">)</span>
+<span class="k">elif</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;nvt&quot;</span><span class="p">:</span>
+    <span class="n">integrator</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="n">DT_FS</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="n">TEMPERATURE_K</span><span class="p">,</span>
+        <span class="n">friction</span><span class="o">=</span><span class="n">FRICTION</span><span class="p">,</span>
+        <span class="n">random_seed</span><span class="o">=</span><span class="n">SEED</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>  <span class="c1"># npt — needs forces + stress from the model</span>
+    <span class="n">integrator</span> <span class="o">=</span> <span class="n">NPT</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="n">DT_FS</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="n">TEMPERATURE_K</span><span class="p">,</span>
+        <span class="n">pressure</span><span class="o">=</span><span class="n">PRESSURE_GPA</span> <span class="o">*</span> <span class="n">_GPA_TO_EV_PER_A3</span><span class="p">,</span>
+        <span class="n">barostat_time</span><span class="o">=</span><span class="n">BAROSTAT_TIME_FS</span><span class="p">,</span>
+        <span class="n">thermostat_time</span><span class="o">=</span><span class="n">THERMOSTAT_TIME_FS</span><span class="p">,</span>
+        <span class="n">pressure_coupling</span><span class="o">=</span><span class="s2">&quot;isotropic&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="c1"># LoggingHook emits one row per replica (graph) at each logged step; the</span>
+<span class="c1"># custom writer prints energy / temperature / fmax with the replica index.</span>
+<span class="n">header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;step&#39;</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;rep&#39;</span><span class="si">:</span><span class="s2">&gt;4</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;PE(eV)&#39;</span><span class="si">:</span><span class="s2">&gt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;T(K)&#39;</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;fmax(eV/Å)&#39;</span><span class="si">:</span><span class="s2">&gt;12</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="n">log_hook</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;custom&quot;</span><span class="p">,</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="n">LOG_EVERY</span><span class="p">,</span>
+    <span class="n">writer_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">step</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span>
+        <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">step</span><span class="si">:</span><span class="s2">6d</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s1">&#39;graph_idx&#39;</span><span class="p">])</span><span class="si">:</span><span class="s2">4d</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">16.6f</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">9.2f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s1">&#39;fmax&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">12.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span>
+        <span class="p">)</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">integrator</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">log_hook</span><span class="p">)</span>
+
+<span class="c1"># Drift is only meaningful under NVE (NVT/NPT exchange energy by design).</span>
+<span class="k">if</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;nve&quot;</span><span class="p">:</span>
+    <span class="n">integrator</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span>
+        <span class="n">EnergyDriftMonitorHook</span><span class="p">(</span>
+            <span class="n">threshold</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;per_atom_per_step&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;warn&quot;</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+<span class="c1"># NPT evolves the cell; record per-replica volumes up front (always periodic).</span>
+<span class="n">vol_initial</span> <span class="o">=</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.det.html#torch.det" title="torch.det" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">det</span></a><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span> <span class="k">if</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;npt&quot;</span> <span class="k">else</span> <span class="kc">None</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Running </span><span class="si">{</span><span class="n">N_STEPS</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">ENSEMBLE</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2"> steps …&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">DEVICE</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.synchronize.html#torch.cuda.synchronize" title="torch.cuda.synchronize" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span></a><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+<span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<span class="k">with</span> <span class="n">log_hook</span><span class="p">:</span>  <span class="c1"># context manager flushes the async logging stream on exit</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">integrator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">N_STEPS</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">DEVICE</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.synchronize.html#torch.cuda.synchronize" title="torch.cuda.synchronize" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span></a><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+<span class="n">wall_s</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span>
+</pre></div>
+</div>
+</section>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">wall time     : </span><span class="si">{</span><span class="n">wall_s</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s (</span><span class="si">{</span><span class="n">wall_s</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">N_STEPS</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms/step)&quot;</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;nve&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="s2">&quot;drift         : monitored by EnergyDriftMonitorHook (warns above 1e-4 eV/atom/step)&quot;</span>
+    <span class="p">)</span>
+<span class="k">elif</span> <span class="n">ENSEMBLE</span> <span class="o">==</span> <span class="s2">&quot;nvt&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;drift         : not gated for NVT (thermostat absorbs drift)&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>  <span class="c1"># npt — per-replica cell response confirms the stress path ran</span>
+    <span class="n">vol_final</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.det.html#torch.det" title="torch.det" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">det</span></a><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+    <span class="n">pct</span> <span class="o">=</span> <span class="p">(</span><span class="mf">100.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">vol_final</span> <span class="o">-</span> <span class="n">vol_initial</span><span class="p">)</span> <span class="o">/</span> <span class="n">vol_initial</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;cell volume   : mean </span><span class="si">{</span><span class="n">vol_initial</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> → </span><span class="si">{</span><span class="n">vol_final</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Å³ &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;@ </span><span class="si">{</span><span class="n">PRESSURE_GPA</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> GPa target&quot;</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;per-replica Δ : &quot;</span> <span class="o">+</span> <span class="s2">&quot;  &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">p</span><span class="si">:</span><span class="s2">+.2f</span><span class="si">}</span><span class="s2">%&quot;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">pct</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-09-uma-nve-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/1b54f372c9ec81d55d0e920fa8e48421/09_uma_nve.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">09_uma_nve.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/8df6332c8c9d9d7f7f99dab135c226b0/09_uma_nve.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">09_uma_nve.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/14c81d5a9bc45944bfb37a890fbcc3d4/09_uma_nve.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">09_uma_nve.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="08_aimnet2_ewald_pipeline.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">AIMNet2 + Ewald Pipeline Geometry Optimization</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="10_mace_training.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MACE Training with ALCHEMI Training Utilities</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-concepts-demonstrated">Key concepts demonstrated</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setting-up-uma">Setting up UMA</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-the-batch">Build the batch</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-the-uma-model">Load the UMA model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-with-built-in-observation-drift-monitor-hooks">Run with built-in observation + drift-monitor hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#summary">Summary</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/09_uma_nve.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

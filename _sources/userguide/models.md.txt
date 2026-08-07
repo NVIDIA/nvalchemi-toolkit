@@ -35,11 +35,185 @@ potentials:
 |---|---|---|
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
-| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace-torch` optional dependency |
+| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
+| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
 
-{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` and {py:class}`~nvalchemi.models.mace.MACEWrapper`
+{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
+and {py:class}`~nvalchemi.models.uma.UMAWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not
 break other imports.
+
+````{note}
+**UMA resolves to a different torch than the `cu12` / `cu13` GPU stack.**
+`fairchem-core` caps torch below 2.9 (`fairchem-core>=2.8` requires
+`torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
+`nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
+`uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
+and `mace`, and `uv sync --extra uma` forks a standalone resolution that
+installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
+`cuXX` build. Keep UMA in its own environment, e.g.:
+
+```bash
+uv venv .venv-uma && uv sync --extra uma           # UMA (fairchem's torch)
+uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
+```
+
+The core `nvalchemi-toolkit-ops` package (and its Warp kernels) is still
+installed in the UMA environment --- only the `cuXX` GPU-acceleration
+extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
+none of which UMA uses, since it builds its neighbor graph inside
+fairchem. The toolkit-ops `torch-cuXX` extras pin `torch>=2.11`, but that
+tracks the `cuXX` wheel builds rather than a toolkit-ops API requirement
+--- the base package already declares `torch>=2.8`, so the Warp path is
+expected to work against the ~2.8 torch in the UMA environment.
+````
+
+### MACE checkpoints in training
+
+When starting from an existing MACE checkpoint, prefer
+{py:meth}`~nvalchemi.models.mace.MACEWrapper.from_checkpoint` over manually
+loading the underlying MACE module and wrapping it. The wrapper records a
+factory-based reconstruction spec that strategy checkpoints can use later.
+This matters for optimized variants such as cuEquivariance, where the live
+transformed module is not reliably reconstructible from its Python constructor.
+
+```python
+import torch
+
+from nvalchemi.models.mace import MACEWrapper
+from nvalchemi.training import EMAHook, TrainingStrategy
+
+model = MACEWrapper.from_checkpoint(
+    "small-0b",
+    device=torch.device("cuda"),
+    dtype=torch.float32,
+    enable_cueq=True,
+)
+
+ema = EMAHook(model_key="main", decay=0.999)
+strategy = TrainingStrategy(
+    models=model,
+    ...,
+    hooks=[ema],
+)
+strategy.save_checkpoint(checkpoint_dir)
+
+restored_ema = EMAHook(model_key="main", decay=0.999)
+restored = TrainingStrategy.load_checkpoint(
+    checkpoint_dir,
+    map_location=torch.device("cuda"),
+    hooks=[restored_ema],
+    training_fn=training_fn,
+)
+```
+
+Avoid saving only `ema.state_dict()` for MACE training restarts. Strategy
+checkpoints preserve the model reconstruction recipe, model weights, optimizer
+state, runtime counters, and checkpointable hook state together.
+
+### Repairing methods on EMA copies
+
+{py:class}`~nvalchemi.training.hooks.EMAHook` uses
+{py:class}`torch.optim.swa_utils.AveragedModel`, which deep-copies the live model
+when constructing its averaged copy. Most wrappers require no special handling.
+If a third-party model attaches runtime methods that do not survive
+`deepcopy`, its wrapper can optionally implement `modify_ema_methods()`:
+
+```python
+class MyPotentialWrapper(nn.Module, BaseModelMixin):
+    def modify_ema_methods(self) -> None:
+        """Restore runtime methods on this EMA model copy."""
+        my_method_to_patch_runtime_methods()
+```
+
+The hook calls this method once on the copied wrapper immediately after EMA
+construction and before applying any pending EMA checkpoint weights. The method
+must modify only `self`, must not change parameters or buffers, and should be
+safe when called on a freshly copied model.
+
+```{tip}
+{py:class}`~nvalchemi.models.mace.MACEWrapper` implements this
+interface to restore cuEquivariance's fused convolution method.
+Take a look at the `MACEWrapper.modify_ema_methods` to see
+how this is done.
+```
+
+### Using UMA (fairchem-core)
+
+UMA (Universal Models for Atoms) is a multi-task foundation model: one
+checkpoint ships task heads for molecules (`omol`), bulk crystals (`omat`),
+catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
+(`omc`). {py:class}`~nvalchemi.models.uma.UMAWrapper` pins a single task at
+construction; `active_outputs` is `{energy, forces}` for molecular tasks and
+`{energy, forces, stress}` for periodic ones.
+
+**1. Install the optional dependency** (in its own environment, per the note
+above):
+
+```bash
+uv venv .venv-uma && uv sync --extra uma
+# or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+```
+
+**2. Get HuggingFace access.** UMA checkpoints live in the **gated**
+[`facebook/UMA`](https://huggingface.co/facebook/UMA) repository, so a (free)
+HuggingFace account and a one-time access approval are required:
+
+1. Sign in and click **"Agree and access repository"** on the
+   [model page](https://huggingface.co/facebook/UMA).
+2. Create a **read** token at
+   <https://huggingface.co/settings/tokens>.
+3. Make the token available to your shell, either by logging in once (it is
+   cached under `~/.cache/huggingface`):
+
+   ```bash
+   huggingface-cli login
+   ```
+
+   or by exporting it for the session:
+
+   ```bash
+   export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+**3. Load a checkpoint.** The first call downloads and caches the weights
+(under `~/.cache/fairchem`); later calls reuse the cache and need no network:
+
+```python
+from nvalchemi.models.uma import UMAWrapper
+
+# Molecular potential (OMol head)
+mol = UMAWrapper.from_checkpoint("uma-s-1p1", task_name="omol", device="cuda")
+
+# Bulk-crystal potential (OMat head, same checkpoint family)
+mat = UMAWrapper.from_checkpoint("uma-m-1p1", task_name="omat", device="cuda")
+```
+
+Registered checkpoint names (see
+`fairchem.core.calculate.pretrained_mlip.available_models` for the full list):
+
+| Checkpoint | Size | Notes |
+|---|---|---|
+| `uma-s-1p1` | small | Default in the examples / tests |
+| `uma-s-1p2` | small | Updated small release |
+| `uma-m-1p1` | medium | Higher accuracy, larger / slower |
+
+**`torch.compile` / turbo.** `UMAWrapper` does not add a `compile_model`
+flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
+internally as a field on its `InferenceSettings`. Reach it through
+`from_checkpoint`'s `inference_settings` argument --- pass `"turbo"` for
+fairchem's compiled preset (`torch.compile` + TF32 + MoLE merge, for runs
+with fixed atomic composition), or an `InferenceSettings` instance for finer
+control:
+
+```python
+fast = UMAWrapper.from_checkpoint(
+    "uma-s-1p1", task_name="omat", device="cuda", inference_settings="turbo"
+)
+```
+
+See {doc}`the UMA NVE/NVT example </examples/advanced/09_uma_nve>` for a
+runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
 
@@ -53,24 +227,16 @@ subclass provides the forward pass, while
 digraph model_inheritance {
     rankdir=BT
     compound=true
-    fontname="Helvetica"
-    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
-    edge [fontname="Helvetica" fontsize=10]
 
     YourModel [
         label="YourModel(nn.Module)\l- forward()\l- your layers\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
     ]
     BaseModelMixin [
         label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
     ]
     YourModelWrapper [
         label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
-        fillcolor="#D5E8D4"
-        color="#82B366"
+        fillcolor="#26351d"
     ]
 
     YourModelWrapper -> YourModel
@@ -211,7 +377,7 @@ will raise ``TypeError`` at instantiation if missing:
 | `adapt_input()` | No (has default) | Override to collect model-specific inputs |
 | `adapt_output()` | No (has default) | Override to map raw outputs |
 | `forward()` | No (inherit from nn.Module) | Implement the three-step pipeline |
-| `export_model()` | No (has default) | Override if needed |
+| `export_model()` | No (base default raises `NotImplementedError`) | Override to enable export |
 
 For classical potentials with no learned embeddings, stub both embedding
 methods:
@@ -343,7 +509,7 @@ The standard output shapes are:
 | `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessians` | `[V, 3, 3]` | Per-atom Hessian |
+| `hessian` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
 
@@ -616,12 +782,20 @@ For total control, write a custom `nn.Module, BaseModelMixin` subclass and
 use the utility functions in {py:mod}`nvalchemi.models._utils`:
 
 ```python
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, prepare_strain, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+    sum_outputs,
+)
 ```
 
 * `autograd_forces(energy, positions)` --- compute forces as `-dE/dr`.
+* `autograd_forces_and_stresses(energy, positions, displacement, cell, num_graphs)`
+  --- compute forces and stresses from one autograd call.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
-  stresses as `-1/V * dE/d(strain)`.
+  tensile-positive Cauchy stresses as `1/V * dE/d(strain)`.
 * `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
   trick for autograd stress computation (see below).
 * `sum_outputs(*outputs)` --- element-wise sum on additive keys (energies,
@@ -674,7 +848,7 @@ displacement tensor.  The
 {py:func}`~nvalchemi.models._utils.prepare_strain` helper handles this:
 
 ```python
-from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models._utils import autograd_forces_and_stresses, prepare_strain
 
 def forward(self, data, **kwargs):
     compute_stresses = "stress" in self.model_config.active_outputs
@@ -690,21 +864,23 @@ def forward(self, data, **kwargs):
 
     result = {"energy": energy.unsqueeze(-1)}
 
-    if "forces" in self.model_config.active_outputs:
-        positions_for_grad = scaled_pos if compute_stresses else data.positions
+    if "forces" in self.model_config.active_outputs and compute_stresses:
+        result["forces"], result["stress"] = autograd_forces_and_stresses(
+            energy, scaled_pos, displacement, data.cell, data.num_graphs
+        )
+    elif "forces" in self.model_config.active_outputs:
         result["forces"] = -torch.autograd.grad(
-            energy, positions_for_grad,
+            energy, data.positions,
             grad_outputs=torch.ones_like(energy),
-            retain_graph=compute_stresses,
         )[0]
 
-    if compute_stresses:
+    if compute_stresses and "stress" not in result:
         grad = torch.autograd.grad(
             energy, displacement,
             grad_outputs=torch.ones_like(energy),
         )[0]
         volume = torch.det(data.cell).abs().view(-1, 1, 1)
-        result["stress"] = -grad.view(data.num_graphs, 3, 3) / volume
+        result["stress"] = grad.view(data.num_graphs, 3, 3) / volume
 
     return self.adapt_output(result, data)
 ```
@@ -713,6 +889,9 @@ You don't *have* to use ``prepare_strain`` --- it's a convenience.  MACE
 uses its own internal displacement trick via ``compute_displacement=True``.
 The only requirement is that your ``forward()`` returns the requested
 outputs.
+
+See {doc}`about/conventions` for the project-wide virial, stress, and pressure
+sign conventions.
 
 #### Example: Hessians and Jacobians
 
@@ -821,18 +1000,51 @@ control.  If you want stresses, use
 
 ### Neighbor list handling and `make_neighbor_hooks()`
 
-All composition tiers handle neighbor lists transparently:
+All composition tiers handle neighbor lists centrally:
 
-1. The pipeline (or `+` result) synthesizes a single
-   {py:class}`~nvalchemi.models.base.NeighborConfig` at the **maximum
-   cutoff** across all sub-models, using MATRIX format if any sub-model
-   needs it.
-2. `make_neighbor_hooks()` returns **one**
-   {py:class}`~nvalchemi.hooks.NeighborListHook` at that max
-   cutoff.
-3. Each sub-model's `adapt_input()` calls `prepare_neighbors_for_model()`
-   which filters the max-cutoff neighbor list down to the model's own
-   cutoff and converts formats as needed.
+1. The pipeline (or `+` result) builds a private neighbor-list plan from
+   sub-model `NeighborConfig` values.
+2. By default (`neighbor_adaptation="auto"`), a source neighbor list can serve
+   a smaller target cutoff only when
+   `source_cutoff <= target_cutoff * max_cutoff_ratio`. The default ratio is
+   `1.5`.
+3. If the cutoff gap is larger, the pipeline creates a separate source list
+   for that cutoff group.
+4. `make_neighbor_hooks()` returns all hooks needed by the plan. This is the
+   recommended registration API for composed models.
+5. Before each sub-model call, the pipeline temporarily shadows the selected
+   neighbor tensors onto the batch and filters/converts them only when the
+   step plan requires it.
+
+`neighbor_adaptation` accepts:
+
+- `"auto"`: default. Adapt only when the source cutoff is at most
+  `max_cutoff_ratio` times the target cutoff; otherwise build another source
+  list.
+- `"always"`: build one max-cutoff source and adapt every tighter model from it.
+- `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
+  source groups. Runtime format conversion is still allowed.
+
+```python
+pipe = PipelineModelWrapper(
+    groups=[PipelineGroup(steps=[short_range, long_range])],
+    neighbor_adaptation="auto",
+    max_cutoff_ratio=1.5,
+)
+
+for hook in pipe.make_neighbor_hooks():
+    dynamics.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+```
+
+Compile behavior: exact source lists use the same `NeighborListHook`
+preallocation model as single-model dynamics. First use, shape changes, and
+K resizing may allocate; steady-state rebuilds reuse persistent buffers.
+Runtime cutoff filtering and MATRIX/COO conversion still use the existing
+adapter utilities and may allocate intermediate tensors.
+
+The pipeline synthesizes one or more source lists according to
+`neighbor_adaptation`. `model_config.neighbor_config` exposes the largest
+(default) source for compatibility.
 
 **Choosing a registration pattern:**
 
@@ -857,12 +1069,13 @@ dynamics.register_hook(
 ```
 
 For **composed models** (pipeline), `composed.make_neighbor_hooks()`
-reads the already-synthesized maximum cutoff from the pipeline's
-`model_config.neighbor_config`.  Manual construction from
-`composed.model_config.neighbor_config` is equally valid.
+returns every hook required by the pipeline's neighbor-list plan.
+Manual construction from `composed.model_config.neighbor_config` only
+covers the largest/default source and is not sufficient when the plan
+builds multiple source lists.
 
-Hooks returned by `make_neighbor_hooks()` have `stage=None` by default —
-provide the stage when registering.
+Hooks returned by `make_neighbor_hooks()` are configured for
+`DynamicsStage.BEFORE_COMPUTE`, matching the usual dynamics registration stage.
 
 ## How models integrate with dynamics
 

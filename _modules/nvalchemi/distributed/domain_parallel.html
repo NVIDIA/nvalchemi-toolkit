@@ -1,0 +1,1412 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.domain_parallel &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/domain_parallel';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.domain_parallel</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Domain-parallel dynamics wrapper.</span>
+
+<span class="sd">Holds a :class:`ShardedBatch` across the step loop and delegates the</span>
+<span class="sd">per-step model call to a :class:`DistributedModel` — the adapter owns</span>
+<span class="sd">halo exchange, neighbor-list rebuild, and output consolidation. This</span>
+<span class="sd">class contributes the orchestration: partition, pre/post-update, atom</span>
+<span class="sd">migration, and trajectory gather.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.gather_primitives</span><span class="w"> </span><span class="kn">import</span> <span class="n">mesh_group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._dynamics_coordinator</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DynamicsDistributionCoordinator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainConfig</span><span class="p">,</span> <span class="n">HookScope</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.strategy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MigrationPlan</span><span class="p">,</span>
+    <span class="n">ParallelizationStrategy</span><span class="p">,</span>
+    <span class="n">strategy_for_policy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.sharded_batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardedBatch</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DomainParallel">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DomainParallel</span><span class="p">(</span><span class="n">BaseDynamics</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wraps any :class:`BaseDynamics` subclass with spatial domain</span>
+<span class="sd">    decomposition.</span>
+
+<span class="sd">    Flow per step:</span>
+
+<span class="sd">    1. Outer BEFORE_STEP hooks on owned batch.</span>
+<span class="sd">    2. Inner dynamics ``pre_update`` (velocity-Verlet half-kick) on owned batch.</span>
+<span class="sd">    3. Wrap positions into the periodic box.</span>
+<span class="sd">    4. Sync the updated positions back into the persistent</span>
+<span class="sd">       :class:`ShardedBatch` (``update_from_batch``).</span>
+<span class="sd">    5. ``DistributedModel(sharded)`` — the adapter rebuilds the halo block,</span>
+<span class="sd">       rebuilds NL, runs the wrapper, consolidates owned-shape outputs.</span>
+<span class="sd">    6. Write the consolidated outputs back to the owned batch in-place.</span>
+<span class="sd">    7. Inner dynamics ``post_update`` (velocity-Verlet finalize) on owned batch.</span>
+<span class="sd">    8. Atom migration (``reshard_by_destination``) for atoms that crossed</span>
+<span class="sd">       domain boundaries.</span>
+<span class="sd">    9. Outer AFTER_STEP hooks on owned batch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dynamics</span>
+<span class="sd">        The underlying single-GPU dynamics integrator or optimizer.</span>
+<span class="sd">    config</span>
+<span class="sd">        Domain decomposition configuration.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Forwarded to ``BaseDynamics.__init__`` (``hooks``, ``n_steps``,</span>
+<span class="sd">        ``device_type``, ...).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">DomainConfig</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">dynamics</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span> <span class="o">=</span> <span class="n">dynamics</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">:</span> <span class="n">DomainConfig</span> <span class="o">=</span> <span class="n">config</span>
+
+        <span class="c1"># Globalizes thermodynamic state for NHC/NPT/NPH; inert for NVE/Langevin</span>
+        <span class="c1"># and the single-process / world-size-1 paths. Built in partition() once</span>
+        <span class="c1"># the strategy exists (it owns the reductions).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span><span class="p">:</span> <span class="n">DynamicsDistributionCoordinator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Lazy-initialized in partition().</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">:</span> <span class="n">ParallelizationStrategy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">:</span> <span class="n">ShardedBatch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># DistributedModel for an atomic model, or DistributedPipelineModel for a</span>
+        <span class="c1"># composite (PipelineModelWrapper); both share the ShardedBatch-&gt;output +</span>
+        <span class="c1"># close() contract the per-step machinery relies on.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_composite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Runtime state.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_forces_primed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Pipeline-stage state (2D pipeline x domain). A DomainParallel used as a</span>
+        <span class="c1"># DistributedPipeline stage spans a domain sub-mesh; the group lead does</span>
+        <span class="c1"># the cross-stage isend/irecv while the group scatters/gathers the full</span>
+        <span class="c1"># system to/from its sub-mesh (see the comm-override section below). Inert</span>
+        <span class="c1"># unless the pipeline sets prior_rank/next_rank.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_input</span><span class="p">:</span> <span class="s2">&quot;Batch | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># first stage&#39;s seed system</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_first_stage_seeded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sentinel_sent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># Process group for cross-stage hand-offs (the pipeline-dim / leads&#39; group),</span>
+        <span class="c1"># set by DistributedPipeline in grouped mode. ``None`` = default group (the</span>
+        <span class="c1"># single-stage / test paths). Never the world group in a 2-D pipeline —</span>
+        <span class="c1"># NCCL requires consistent op ordering per communicator (see base.py).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pipeline_group</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Deferred-migration state. The strategy issues an async consensus</span>
+        <span class="c1"># all_reduce at the END of step N and consumes it at the START of step</span>
+        <span class="c1"># N+1, hiding its latency under the intervening hooks + pre_update.</span>
+        <span class="c1"># Migration ordering is unchanged in physical time: atoms that crossed at</span>
+        <span class="c1"># end-of-N still migrate before any compute in N+1.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span><span class="p">:</span> <span class="n">MigrationPlan</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Rank resolution — prefer mesh, fall back to global dist rank, else 0.</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">get_local_rank</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">elif</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># Register shard wrappers for nvalchemiops kernels.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.shard_wrappers</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_shard_wrappers</span>
+
+        <span class="n">register_shard_wrappers</span><span class="p">()</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Properties delegated to inner dynamics</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__needs_keys__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>  <span class="c1"># type: ignore[override]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">__needs_keys__</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__provides_keys__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>  <span class="c1"># type: ignore[override]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">__provides_keys__</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Partition</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DomainParallel.partition">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.partition">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Scatter the full-system batch across ranks and build the</span>
+<span class="sd">        per-step machinery (:class:`ShardedBatch` + :class:`DistributedModel`).</span>
+
+<span class="sd">        Must be called once before ``run()`` / ``step()``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch</span>
+<span class="sd">            Full-system batch on rank 0; ``None`` elsewhere. In the</span>
+<span class="sd">            single-process fallback (no distributed init), passes through.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            This rank&#39;s owned local batch (per-atom fields are</span>
+<span class="sd">            ``.to_local()`` views of the ShardedBatch&#39;s ShardTensors).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.distributed_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedModel</span>
+
+        <span class="c1"># Single-process fallback — no distribution, just pass through. Gate on</span>
+        <span class="c1"># the default group&#39;s world size too (not just ``is_initialized``) so a</span>
+        <span class="c1"># leaked 1-rank process group (e.g. a session-scoped gloo PG under</span>
+        <span class="c1"># pytest) still takes this path rather than the distributed one.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;batch must be provided in single-process mode&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">batch</span>
+
+        <span class="n">mesh</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">mesh</span>
+
+        <span class="c1"># Adapter around the inner dynamics&#39; model. Owns halo exchange, NL rebuild,</span>
+        <span class="c1"># and output consolidation. An atomic model rides ``DistributedModel``; a</span>
+        <span class="c1"># composite (``PipelineModelWrapper``, e.g. MACE+DFTD3 / AIMNet2+PME) can&#39;t</span>
+        <span class="c1"># (``DistributedModel`` wraps atomic models only), so it rides</span>
+        <span class="c1"># ``DistributedPipelineModel`` — the same ``ShardedBatch``-&gt;output contract,</span>
+        <span class="c1"># doing per-sub-model halo/NL/consolidation internally. Both are halo-based,</span>
+        <span class="c1"># so the strategy is selected from a halo policy either way.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineModelWrapper</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">PipelineModelWrapper</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.storage_policy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+                <span class="n">HaloStoragePolicy</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.distributed_pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+                <span class="n">DistributedPipelineModel</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_composite</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="o">=</span> <span class="n">DistributedPipelineModel</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">,</span> <span class="nb">compile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">compile</span>
+            <span class="p">)</span>
+            <span class="n">policy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">HaloStoragePolicy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_composite</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="o">=</span> <span class="n">DistributedModel</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">,</span>
+                <span class="nb">compile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">compile</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">_spec</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">policy</span>
+
+        <span class="c1"># The parallelization strategy owns data layout, cell tracking,</span>
+        <span class="c1"># migration, and reductions for this run — selected from the (halo)</span>
+        <span class="c1"># storage policy so a new strategy plugs in without a driver type-switch.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">strategy_for_policy</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span><span class="p">)</span>
+
+        <span class="c1"># Coordinator globalizes NHC/NPT/NPH thermodynamic state via the</span>
+        <span class="c1"># strategy&#39;s reductions (integrator declares intent; inert otherwise).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span> <span class="o">=</span> <span class="n">DynamicsDistributionCoordinator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">)</span>
+
+        <span class="c1"># Scatter the full batch across the mesh. The strategy chooses the</span>
+        <span class="c1"># partition layout (spatial for halo, contiguous-block for graph</span>
+        <span class="c1"># parallel); ``from_batch`` broadcasts cell/pbc from src and builds the</span>
+        <span class="c1"># partitioner. The persistent ShardedBatch is shared with the halo config</span>
+        <span class="c1"># so migration and halo exchange can&#39;t disagree on domain boundaries.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mesh</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">n_owned</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">local_batch</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Step</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DomainParallel.step">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute one domain-decomposed dynamics step.&quot;&quot;&quot;</span>
+        <span class="c1"># Single-process fallback — no distribution set up, delegate to</span>
+        <span class="c1"># the inner dynamics&#39; own step (which fires its own hook chain).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># Resolve the previous step&#39;s deferred migrate-or-not decision.</span>
+        <span class="c1"># The async all_reduce was issued at end-of-previous-step; by</span>
+        <span class="c1"># now it has likely completed in the background. Migrating here</span>
+        <span class="c1"># (start of step N) is physically equivalent to migrating at</span>
+        <span class="c1"># end of step N-1 — atoms that crossed at end-of-N-1 still get</span>
+        <span class="c1"># to their owners before any compute in step N.</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_pending_migrate</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forces_primed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prime_forces</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_forces_primed</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># 1. Outer BEFORE_STEP hooks.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+        <span class="n">dyn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_ensure_state_initialized</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="c1"># Globalize per-shard DOF + derived controller masses once the inner</span>
+        <span class="c1"># state exists (no-op for NVE/Langevin and the single-process path).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span><span class="o">.</span><span class="n">globalize_dof</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 2. Pre-update on owned batch (velocity-Verlet half-kick). The reduce</span>
+        <span class="c1"># scope makes NHC/NPT/NPH couple to mesh-global kinetic state.</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span><span class="o">.</span><span class="n">reduce_scope</span><span class="p">():</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">pre_update</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 3. Wrap positions into the periodic box — but ONLY on axes that are</span>
+        <span class="c1"># not spatially partitioned. Wrapping a *partitioned* axis teleports an</span>
+        <span class="c1"># owned atom that has drifted just past the periodic boundary a full box</span>
+        <span class="c1"># length onto the far side, out of its owner&#39;s ghost region, so this</span>
+        <span class="c1"># step computes its force with the wrong (missing) neighbors and injects</span>
+        <span class="c1"># energy (migration only corrects ownership next step). On the</span>
+        <span class="c1"># partitioned axis, migration bounds positions instead; the halo design</span>
+        <span class="c1"># tolerates small unwrapped boundary drift (``keeps_owner``) and the</span>
+        <span class="c1"># neighbor build uses minimum-image PBC. Non-partitioned axes have no</span>
+        <span class="c1"># migration to bound them, so they DO need wrapping (safe there — every</span>
+        <span class="c1"># rank spans the full extent of a non-partitioned axis).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_owned_positions</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 4-6. Compute via DistributedModel. ``_distributed_compute``</span>
+        <span class="c1"># fires the inner BEFORE_COMPUTE / AFTER_COMPUTE hooks on the</span>
+        <span class="c1"># correct view (padded for halo-storage, owned for sharded).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_distributed_compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 7. Post-update (velocity-Verlet finalize).</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span><span class="o">.</span><span class="n">reduce_scope</span><span class="p">():</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">post_update</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="c1"># Keep the replicated controller + cell state byte-identical across ranks.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thermo</span><span class="o">.</span><span class="n">broadcast_state</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 8. Atom migration — DEFERRED. We dispatch the consensus</span>
+        <span class="c1"># all_reduce here (async); the result is consumed at the start</span>
+        <span class="c1"># of the NEXT step in ``_resolve_pending_migrate``. This hides</span>
+        <span class="c1"># the all_reduce latency under the AFTER_STEP hooks + next</span>
+        <span class="c1"># step&#39;s pre_update + halo_exchange instead of forcing a</span>
+        <span class="c1"># CPU↔GPU sync at end-of-step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dispatch_async_migrate_check</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 9. Outer AFTER_STEP hooks.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+        <span class="n">convergence_due</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">convergence_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">dyn</span><span class="o">.</span><span class="n">step_count</span> <span class="o">%</span> <span class="n">dyn</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">step_count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">converged</span> <span class="o">=</span> <span class="n">dyn</span><span class="o">.</span><span class="n">_check_convergence</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="k">if</span> <span class="n">convergence_due</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># Convergence must be a mesh-wide decision: each rank only sees its own</span>
+        <span class="c1"># atoms, so ranks can disagree and take divergent control flow (one stops</span>
+        <span class="c1"># while others continue → collective desync / hang). Every rank reduces</span>
+        <span class="c1"># a per-system mask so an index survives only when every rank reports it.</span>
+        <span class="c1"># DD currently carries one system, but keep this mask per-system so the</span>
+        <span class="c1"># convergence result remains valid if DD later supports batched systems.</span>
+        <span class="k">if</span> <span class="n">convergence_due</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">mesh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">convergence_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">local_indices</span> <span class="o">=</span> <span class="n">converged</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">convergence_mask</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span>
+                <span class="p">)</span>
+                <span class="n">convergence_mask</span><span class="p">[</span><span class="n">local_indices</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span>
+                <span class="n">convergence_mask</span><span class="p">,</span>
+                <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MIN</span><span class="p">,</span>
+                <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">global_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">convergence_mask</span><span class="o">.</span><span class="n">bool</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">converged</span> <span class="o">=</span> <span class="n">global_indices</span> <span class="k">if</span> <span class="n">global_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="n">converged</span>
+        <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">batch</span><span class="p">,</span> <span class="n">converged</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Force priming (initial compute before the first integrator step)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prime_forces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run one compute pass to initialize ``batch.forces`` /</span>
+<span class="sd">        ``batch.energy`` before the first integrator step.</span>
+
+<span class="sd">        Velocity-Verlet&#39;s first half-kick needs ``batch.forces``; if the</span>
+<span class="sd">        caller didn&#39;t supply them, this pass populates them. ``_distributed_compute``</span>
+<span class="sd">        handles halo exchange + hook firing internally.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[rank </span><span class="si">%d</span><span class="s2">] priming forces (initial compute)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_distributed_compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[rank </span><span class="si">%d</span><span class="s2">] force priming complete&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Distributed compute: delegate to DistributedModel</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_distributed_compute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the model via :class:`DistributedModel` and write the</span>
+<span class="sd">        owned-shape outputs back into *batch* in-place.</span>
+
+<span class="sd">        Flow:</span>
+
+<span class="sd">        1. ``update_from_batch`` — sync non-in-place pre_update changes</span>
+<span class="sd">           back into the persistent ``ShardedBatch``.</span>
+<span class="sd">        2. ``halo_exchange`` — populate ``sharded.padded_batch`` with the</span>
+<span class="sd">           refreshed owned + halo atoms.</span>
+<span class="sd">        3. Fire inner ``BEFORE_COMPUTE`` hooks on ``sharded.padded_batch``</span>
+<span class="sd">           — ``NeighborListHook`` et al. see the padded view and write</span>
+<span class="sd">           neighbor data onto it.</span>
+<span class="sd">        4. ``dist_model(sharded)`` — reads the prepared padded batch + NL,</span>
+<span class="sd">           runs the wrapper, consolidates to owned-shape outputs.</span>
+<span class="sd">        5. Fire inner ``AFTER_COMPUTE`` hooks (NaN detectors, etc.).</span>
+<span class="sd">        6. Write outputs back into the owned ``batch`` in-place.</span>
+
+<span class="sd">        Single-process fallback: delegate to ``dyn.compute(batch)`` with</span>
+<span class="sd">        the owned batch — the inner dynamics&#39; own NL hook fires normally.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dyn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span>
+
+        <span class="c1"># Single-process fallback.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># 1. Sync owned state back into the persistent ShardedBatch.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">update_from_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_composite</span><span class="p">:</span>
+            <span class="c1"># Composite adapter (DistributedPipelineModel) owns per-sub-model halo</span>
+            <span class="c1"># exchange, neighbor rebuild, and owned-shape consolidation internally,</span>
+            <span class="c1"># so it runs directly on the ShardedBatch — no external halo_exchange /</span>
+            <span class="c1"># NL hook. Fire the compute hooks on the owned batch (parity with the</span>
+            <span class="c1"># single-process path; the composite builds its own padded views).</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">)</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># 2. Populate sharded.padded_batch. ``halo_exchange`` needs the halo</span>
+            <span class="c1"># config which ``DistributedModel`` builds lazily on first call, so</span>
+            <span class="c1"># prime it here before the external exchange.</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed._core.storage_policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">HaloStoragePolicy</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">_spec</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">HaloStoragePolicy</span>
+            <span class="p">):</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.particle_halo</span><span class="w"> </span><span class="kn">import</span> <span class="n">halo_exchange</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">_ensure_initialized</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">)</span>
+                <span class="n">halo_exchange</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">_halo_config</span><span class="p">,</span>
+                    <span class="n">compute_forces</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">_needs_forces</span><span class="p">(),</span>
+                <span class="p">)</span>
+                <span class="n">compute_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">padded_batch</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">compute_batch</span> <span class="o">=</span> <span class="n">batch</span>
+
+            <span class="c1"># 3. BEFORE_COMPUTE hooks — fire on the view the model will see.</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">compute_batch</span><span class="p">)</span>
+
+            <span class="c1"># 4. Model forward via the adapter.</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">)</span>
+
+            <span class="c1"># 5. AFTER_COMPUTE hooks.</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">compute_batch</span><span class="p">)</span>
+
+        <span class="c1"># 6. Detach all output tensors before writing to the batch and stashing</span>
+        <span class="c1"># on ``dyn._last_outputs`` (mirrors ``BaseDynamics.compute``). Outputs</span>
+        <span class="c1"># may carry a live ``grad_fn`` from the energy backward; without</span>
+        <span class="c1"># detaching, ``_last_outputs`` would pin the whole forward graph until</span>
+        <span class="c1"># the next step, causing multi-x memory bloat per step. Detach + del</span>
+        <span class="c1"># breaks every reference so the next forward starts clean.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span> <span class="k">as</span> <span class="n">_OrderedDict</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">detached</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">detached</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">detached</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">del</span> <span class="n">outputs</span>
+
+        <span class="c1"># Write owned-shape outputs back to the owned batch in-place.</span>
+        <span class="k">for</span> <span class="n">out_key</span><span class="p">,</span> <span class="n">batch_attr</span> <span class="ow">in</span> <span class="n">dyn</span><span class="o">.</span><span class="n">_OUTPUT_KEY_TO_BATCH_ATTR</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">detached</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch_attr</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch_attr</span><span class="p">,</span> <span class="n">value</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">target</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+        <span class="c1"># Clear ``requires_grad`` on batch tensors that the model</span>
+        <span class="c1"># enabled for autograd (a conservative-force model flips</span>
+        <span class="c1"># ``positions.requires_grad_(True)`` per forward); without</span>
+        <span class="c1"># clearing here, the flag stays on across steps and downstream</span>
+        <span class="c1"># in-place ops (velocity-Verlet half-kick on positions) raise.</span>
+        <span class="c1"># Same fix BaseDynamics.compute applies for the single-rank path.</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="n">dyn</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">grad_keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}</span>
+        <span class="n">grad_keys</span> <span class="o">|=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">gradient_keys</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="n">cfg</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="n">grad_keys</span> <span class="o">|=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">autograd_inputs</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">grad_keys</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="n">value</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">dyn</span><span class="o">.</span><span class="n">_last_outputs</span> <span class="o">=</span> <span class="n">detached</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Atom migration</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dispatch_async_migrate_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ask the strategy to decide (async) whether atoms crossed a boundary</span>
+<span class="sd">        this step. The result is consumed at the START of the next step in</span>
+<span class="sd">        :meth:`_resolve_pending_migrate`. No-op for strategies that don&#39;t</span>
+<span class="sd">        migrate (graph parallel).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">plan_migration</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_pending_migrate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Consume the previous step&#39;s deferred migrate-or-not decision and let</span>
+<span class="sd">        the strategy reshard atoms that crossed a boundary. Called at the START</span>
+<span class="sd">        of every step (after the first); a no-op until the first</span>
+<span class="sd">        ``_dispatch_async_migrate_check`` has run and for non-migrating</span>
+<span class="sd">        strategies.</span>
+
+<span class="sd">        The async dispatch was issued at end-of-previous-step, so by the time we</span>
+<span class="sd">        get here the consensus has typically completed in the background while</span>
+<span class="sd">        the CPU ran AFTER_STEP + next-step pre_update hooks — a near-instant</span>
+<span class="sd">        memory fetch, not a forced GPU sync.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span>
+        <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">plan</span><span class="o">.</span><span class="n">is_pending</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">new_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_migration</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">plan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">new_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">batch</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">n_owned</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;[rank </span><span class="si">%d</span><span class="s2">] step </span><span class="si">%d</span><span class="s2">: migrated atoms (deferred consensus)&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_batch</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Position wrapping</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wrap_owned_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrap owned positions into the box on the NON-partitioned PBC axes.</span>
+
+<span class="sd">        Reuses the shared warp-kernel wrapper</span>
+<span class="sd">        :func:`nvalchemi.hooks.periodic.wrap_positions_into_cell` (respects</span>
+<span class="sd">        per-dimension periodicity); the partitioned-axis skip is expressed by</span>
+<span class="sd">        zeroing that axis in the PBC mask, so the partitioned axis is left to</span>
+<span class="sd">        migration (wrapping it teleports owned boundary atoms out of ghost</span>
+<span class="sd">        coverage — see the rationale at the call site in :meth:`step`).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">pbc</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">pbc</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">return</span>
+
+        <span class="n">wrap_pbc</span> <span class="o">=</span> <span class="n">pbc</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">rank_grid</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="p">,</span> <span class="s2">&quot;partitioner&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;rank_grid&quot;</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">rank_grid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># spatial partition: don&#39;t wrap the split axes</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">rank_grid</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">wrap_pbc</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">wrap_pbc</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">return</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks.periodic</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_positions_into_cell</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">batch_idx</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">wrap_positions_into_cell</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">wrap_pbc</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Gather (trajectory output)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DomainParallel.gather">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.gather">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gather</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">local_batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gather the distributed system back into a full :class:`Batch`</span>
+<span class="sd">        on rank *dst*. Returns ``None`` on other ranks.</span>
+
+<span class="sd">        Single-process fallback: returns ``local_batch`` unchanged.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">local_batch</span>
+
+        <span class="c1"># Sync the latest local state into the ShardedBatch before gathering.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">update_from_batch</span><span class="p">(</span><span class="n">local_batch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">full_batch</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="n">dst</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_gather_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">local_batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gather the full system onto **every** rank (for GLOBAL-scope hooks).</span>
+
+<span class="sd">        Single-process fallback returns ``local_batch`` unchanged. The per-system</span>
+<span class="sd">        ``energy`` is already globally reduced + replicated by the forward, so it</span>
+<span class="sd">        is carried through as-is (never re-reduced).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">local_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">update_from_batch</span><span class="p">(</span><span class="n">local_batch</span><span class="p">)</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">to_global_batch</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">local_batch</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">full</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">local_batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">full</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Hook overrides</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HookContext</span><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_context</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">n_owned</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">domain_mesh</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">mesh</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">is_domain_parallel</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">global_cell</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sharded_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ctx</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke hooks respecting their ``HookScope``.</span>
+
+<span class="sd">        - LOCAL: hook sees the per-rank owned batch (no communication).</span>
+<span class="sd">        - GLOBAL: per-system ``energy`` all-reduced before the hook fires.</span>
+<span class="sd">        - RANK_ZERO: system gathered to rank 0; hook runs only there.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_context</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span>
+            <span class="n">runs_on_stage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;_runs_on_stage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">runs_on_stage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">runs_on_stage</span><span class="p">(</span><span class="n">stage</span><span class="p">):</span>
+                    <span class="k">continue</span>
+            <span class="k">elif</span> <span class="n">stage</span> <span class="o">!=</span> <span class="n">hook</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">%</span> <span class="n">hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">scope</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;scope&quot;</span><span class="p">,</span> <span class="n">HookScope</span><span class="o">.</span><span class="n">LOCAL</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">scope</span> <span class="o">==</span> <span class="n">HookScope</span><span class="o">.</span><span class="n">GLOBAL</span><span class="p">:</span>
+                <span class="c1"># GLOBAL means the hook sees the COMPLETE system. Gather the full</span>
+                <span class="c1"># batch onto every rank (not the local shard) and run the hook on</span>
+                <span class="c1"># the gathered batch. Do NOT re-reduce ``energy``: the forward&#39;s</span>
+                <span class="c1"># consolidation already all-reduced it to the global value and</span>
+                <span class="c1"># replicated it per rank, so summing again would multiply it by</span>
+                <span class="c1"># the rank count.</span>
+                <span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gather_all</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="n">ctx_full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_context</span><span class="p">(</span><span class="n">full</span><span class="p">)</span> <span class="k">if</span> <span class="n">full</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ctx</span>
+                <span class="n">hook</span><span class="p">(</span><span class="n">ctx_full</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+
+            <span class="k">elif</span> <span class="n">scope</span> <span class="o">==</span> <span class="n">HookScope</span><span class="o">.</span><span class="n">RANK_ZERO</span><span class="p">:</span>
+                <span class="n">full_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">full_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">ctx_full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_context</span><span class="p">(</span><span class="n">full_batch</span><span class="p">)</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="n">ctx_full</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Run</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DomainParallel.run">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the domain-decomposed simulation for *n_steps* steps.&quot;&quot;&quot;</span>
+        <span class="c1"># Single-process fallback — delegate to the inner dynamics&#39; run.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
+
+        <span class="n">resolved</span> <span class="o">=</span> <span class="n">n_steps</span> <span class="k">if</span> <span class="n">n_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span>
+        <span class="k">if</span> <span class="n">resolved</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;No step count provided. Either pass `n_steps` to run() &quot;</span>
+                <span class="s2">&quot;or set it at construction time.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_open_hooks</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forces_primed</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prime_forces</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_forces_primed</span> <span class="o">=</span> <span class="kc">True</span>
+
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">resolved</span><span class="p">):</span>
+                <span class="n">batch</span><span class="p">,</span> <span class="n">_converged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">_converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">_converged</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+                <span class="p">):</span>
+                    <span class="k">break</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_close_hooks</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">batch</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Pipeline-stage communication (group-aware _CommunicationMixin override)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># A DomainParallel used as a DistributedPipeline stage spans a whole domain</span>
+    <span class="c1"># sub-mesh. The pipeline drives every stage through the identical</span>
+    <span class="c1"># _CommunicationMixin API (_ensure_buffers -&gt; _prestep_sync_buffers -&gt; step -&gt;</span>
+    <span class="c1"># _poststep_sync_buffers, plus done/is_first_stage/is_last_stage); these</span>
+    <span class="c1"># overrides make that API group-aware. The group LEAD (domain-rank 0) performs</span>
+    <span class="c1"># the cross-stage isend/irecv to adjacent stage-groups&#39; leads; the group then</span>
+    <span class="c1"># scatters/gathers the full system to/from its sub-mesh. Non-lead ranks do no</span>
+    <span class="c1"># cross-stage I/O. Granularity: one DD step per pipeline iteration; a system</span>
+    <span class="c1"># graduates on the iteration it finishes (converged, or its step budget spent),</span>
+    <span class="c1"># so a group re-partitions only when a system arrives — never every step.</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_group_lead</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether this rank is its stage-group&#39;s lead (domain-rank 0), the only</span>
+<span class="sd">        rank that transmits full systems across stages.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_domain_rank</span> <span class="o">==</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bcast_group_flag</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flag</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Broadcast a bool from the group lead to the whole domain sub-mesh so all</span>
+<span class="sd">        ranks take the same partition/idle control flow (single-process: identity).&quot;&quot;&quot;</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="n">mesh_group</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">flag</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span> <span class="k">if</span> <span class="n">flag</span> <span class="k">else</span> <span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">get_global_rank</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_system_finished</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">converged</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A resident system leaves this stage when it converges (FIRE) or spends</span>
+<span class="sd">        its per-system step budget (``n_steps``, e.g. an NVT leg).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">converged</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dd_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Emit a stage-transition line — a system arriving, finishing, or being</span>
+<span class="sd">        handed to another GPU/stage — when ``debug_mode`` is on. This is the &quot;where</span>
+<span class="sd">        is each system and when does it change GPUs/stages&quot; trace for 2-D pipelines.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;debug_mode&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">_logger</span>
+
+        <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[DD rank </span><span class="si">{}</span><span class="s2">] </span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">:</span> <span class="s2">&quot;Batch&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op: a DD stage hands off whole systems via ``Batch.send``/``irecv``</span>
+<span class="sd">        (template-driven), not the streaming fixed-capacity send/recv buffers.&quot;&quot;&quot;</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prestep_sync_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pull the next system into this stage when idle (whole-system-in-flight).</span>
+
+<span class="sd">        First stage: seed once from the injected initial batch. Downstream stage:</span>
+<span class="sd">        the lead ``irecv``s the next full system from the prior stage&#39;s lead (a</span>
+<span class="sd">        0-graph sentinel means the upstream is exhausted), then the group</span>
+<span class="sd">        ``partition``s it across the domain sub-mesh.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>  <span class="c1"># still working the current system</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prior_rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># First stage: seed from _pending_input exactly once, then it&#39;s spent.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_first_stage_seeded</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_first_stage_seeded</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">seed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_input</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_group_lead</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_input</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;seeded initial system → scattered across the domain group &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(n_owned=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_send_sentinel</span><span class="p">()</span>  <span class="c1"># tell the next stage no more systems are coming</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span><span class="s2">&quot;first stage exhausted → done (drain signal sent)&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Downstream stage: lead receives the next full system from the prior lead.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+        <span class="n">received</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">got_system</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_group_lead</span><span class="p">:</span>
+            <span class="n">received</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span>
+                <span class="n">src</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prior_rank</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">template</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_template</span><span class="p">,</span>
+                <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipeline_group</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+            <span class="n">got_system</span> <span class="o">=</span> <span class="n">received</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&gt;</span> <span class="mi">0</span>  <span class="c1"># 0-graph sentinel = upstream done</span>
+        <span class="n">got_system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bcast_group_flag</span><span class="p">(</span><span class="n">got_system</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">got_system</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_sentinel</span><span class="p">()</span>  <span class="c1"># forward the drain signal down the chain</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;upstream (rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prior_rank</span><span class="si">}</span><span class="s2">) drained → stage done&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="n">received</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_group_lead</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;received a system from rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prior_rank</span><span class="si">}</span><span class="s2"> → scattered across the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;domain group (n_owned=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_owned</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_send_sentinel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lead sends a one-shot 0-graph batch to the next stage&#39;s lead — the drain</span>
+<span class="sd">        signal that unblocks its ``irecv`` and propagates ``done`` down the chain</span>
+<span class="sd">        (``Batch.isend`` of an empty batch ships only the meta header).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_rank</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_group_lead</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sentinel_sent</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sentinel_sent</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">Batch</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span>
+            <span class="n">dst</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">next_rank</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipeline_group</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_complete_pending_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op: the lead completes its ``irecv`` inline in</span>
+<span class="sd">        :meth:`_prestep_sync_buffers` (nothing is deferred).&quot;&quot;&quot;</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_poststep_sync_buffers</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">converged_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Graduate the resident system when it finishes this stage: gather it to</span>
+<span class="sd">        the group lead, which ``send``s it to the next stage&#39;s lead. The stage then</span>
+<span class="sd">        goes idle so the next system can enter. The last stage (no ``next_rank``)</span>
+<span class="sd">        just retires the finished system — its trajectory is already captured by</span>
+<span class="sd">        hooks/sinks.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system_finished</span><span class="p">(</span><span class="n">converged_indices</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">finished_by_convergence</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">converged_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">converged_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="p">)</span>
+        <span class="n">reason</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;converged&quot;</span>
+            <span class="k">if</span> <span class="n">finished_by_convergence</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;reached its </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span><span class="si">}</span><span class="s2">-step budget&quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span><span class="p">,</span> <span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_group_lead</span> <span class="ow">and</span> <span class="n">full</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">full</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">next_rank</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipeline_group</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;system </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2"> after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span><span class="si">}</span><span class="s2"> steps → gathered + &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;handed off to the next stage&#39;s lead (rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">next_rank</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dd_event</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;system </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2"> after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span><span class="si">}</span><span class="s2"> steps → retired &quot;</span>
+                <span class="s2">&quot;(final stage)&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_batch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_system_step</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Teardown</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DomainParallel.close">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release resources held by the adapter (restores any state its</span>
+<span class="sd">        ``distributed_setup`` mutated on the inner wrapper). Safe to call</span>
+<span class="sd">        multiple times.&quot;&quot;&quot;</span>
+        <span class="c1"># Drain any pending deferred migrate-or-not all_reduce so the</span>
+        <span class="c1"># NCCL work handle doesn&#39;t outlive the process group.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span><span class="o">.</span><span class="n">is_pending</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span><span class="o">.</span><span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># noqa: S110 — teardown best-effort</span>
+                <span class="k">pass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_plan</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dist_model</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DomainParallel&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enter a scope that releases the adapter&#39;s setup on exit.</span>
+
+<span class="sd">        Lets a caller write ``with DomainParallel(...) as dyn: dyn.partition(...);</span>
+<span class="sd">        dyn.run(...)`` so teardown (``close()``) is exception-safe. The process</span>
+<span class="sd">        group / ``DistributedManager`` lifecycle stays at launcher scope.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">exc</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># noqa: S110</span>
+            <span class="k">pass</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

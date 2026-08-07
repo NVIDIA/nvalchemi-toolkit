@@ -1,0 +1,6 @@
+﻿nvalchemi.training.create\_model\_spec\_from\_json
+==================================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: create_model_spec_from_json

@@ -1,0 +1,1103 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Bring Your Own Model: Authoring a Distribution Spec &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed_byo';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Distributed ML Potentials: Design Overview" href="distributed_design.html" />
+    <link rel="prev" title="ShardTensor: How Per-Atom Fields Flow Across Ranks" href="distributed_shardtensor.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Bring Your...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="bring-your-own-model-authoring-a-distribution-spec">
+<span id="distributed-byo-guide"></span><h1>Bring Your Own Model: Authoring a Distribution Spec<a class="headerlink" href="#bring-your-own-model-authoring-a-distribution-spec" title="Link to this heading">#</a></h1>
+<p>This guide walks through deploying a new
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> wrapper under domain
+decomposition. The arc is the same regardless of the model’s internals:</p>
+<ol class="arabic simple">
+<li><p><strong>Wrap the model</strong> with <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> — the standard
+single-process pattern documented in <a class="reference internal" href="models.html"><span class="doc">Models: Wrapping ML Interatomic Potentials</span></a>.</p></li>
+<li><p><strong>Declare or derive a spec.</strong> Most models drop into one of the
+shipped <a class="reference internal" href="../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec" title="nvalchemi.distributed.spec.MLIPSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLIPSpec</span></code></a> presets;
+models with custom kernels need an
+<code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code> declaration.</p></li>
+<li><p><strong>Validate.</strong> Use
+<code class="xref py py-func docutils literal notranslate"><span class="pre">trace_and_validate()</span></code> to
+confirm the multi-rank forward matches single-process to
+tolerance — and, when it doesn’t, get a diagnostic that points at
+the root cause.</p></li>
+<li><p><strong>Persist the spec.</strong> <code class="xref py py-meth docutils literal notranslate"><span class="pre">MLIPSpec.save()</span></code> writes a JSON
+artefact alongside your checkpoint;
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">MLIPSpec.load()</span></code> reads it back. Production wrappers ship
+the saved spec so distributed deployment is a one-line
+construction.</p></li>
+</ol>
+<p>The two runnable walkthroughs in <code class="docutils literal notranslate"><span class="pre">examples/distributed/</span></code>:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Example</p></th>
+<th class="head"><p>Path</p></th>
+<th class="head"><p>Demonstrates</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Pure-PyTorch model</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">04_byo_pytorch_mpnn.py</span></code></p></td>
+<td><p>Behler-Parrinello descriptor, <code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_HALO</span></code> preset, autograd forces</p></td>
+</tr>
+<tr class="row-odd"><td><p>Model with a Warp kernel</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">05_byo_graph_transformer.py</span></code></p></td>
+<td><p>Custom op + <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code> declaration, energy-only validation</p></td>
+</tr>
+</tbody>
+</table>
+<p>This guide stitches the patterns those examples illustrate into a
+reference workflow.</p>
+<section id="step-1-wrap-your-model">
+<h2>Step 1: Wrap your model<a class="headerlink" href="#step-1-wrap-your-model" title="Link to this heading">#</a></h2>
+<p>The wrapper inherits from <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>. It declares a
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a>, translates a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> into the inner model’s kwargs in
+<code class="docutils literal notranslate"><span class="pre">adapt_input</span></code>, and translates the inner model’s return into a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelOutputs</span></code> ordered dict in
+<code class="docutils literal notranslate"><span class="pre">adapt_output</span></code>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The wrapper is <strong>single-process</strong> in design. Domain decomposition is
+opt-in via the spec; the same wrapper runs unchanged whether you
+call it directly or under
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a>. Resist the
+temptation to add halo / mesh awareness to the wrapper body —
+declare it on the spec instead.</p>
+</div>
+<p>The minimal pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span><span class="p">,</span> <span class="n">NeighborConfig</span><span class="p">,</span> <span class="n">NeighborListFormat</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">neighbor_config</span><span class="o">=</span><span class="n">NeighborConfig</span><span class="p">(</span>
+                <span class="n">cutoff</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+        <span class="c1"># Build the inner model&#39;s kwargs from the Batch.</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span> <span class="o">...</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="c1"># Reorder the inner model&#39;s return into a ModelOutputs.</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="models.html"><span class="doc">Models: Wrapping ML Interatomic Potentials</span></a> for the full pattern.</p>
+</section>
+<section id="step-2a-pick-a-spec-preset">
+<h2>Step 2a: Pick a spec preset<a class="headerlink" href="#step-2a-pick-a-spec-preset" title="Link to this heading">#</a></h2>
+<p>If your model fits one of the patterns these presets cover, the
+spec is a single import:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SPEC_MPNN_HALO</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SPEC_MPNN_HALO</span>
+</pre></div>
+</div>
+<p>The shipped presets cover:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_HALO</span></code></strong>: scatter-heavy MPNNs (MACE, NequIP, Allegro,
+ORB, generic message-passing models with autograd forces).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_LJ_HALO</span></code></strong>: pair potentials with kernel-direct forces
+(Lennard-Jones, Buckingham, Morse).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_UMA_HALO</span></code></strong>: UMA-style eSCN backbones — halo storage but
+with <code class="docutils literal notranslate"><span class="pre">scatter=&quot;local&quot;</span></code> because the backbone isn’t halo-aware (it
+computes its own internal full-graph edge index).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_EWALD_HALO</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">SPEC_PME_HALO</span></code></strong>: long-range
+electrostatics with reciprocal-space dispatch via <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code>s.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_DFTD3_HALO</span></code></strong>: DFTD3 dispersion — halo storage with the
+standard energy/force outputs.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_GP</span></code></strong>: MPNNs under graph-parallelism — node-partition
+storage with a per-layer feature all-gather, instead of a spatial halo.</p></li>
+</ul>
+<p>Charge-equilibration networks such as AIMNet2 (global per-system
+reductions) are supported too, but their wrapper builds the spec inline
+rather than exposing a shipped preset.</p>
+<p>If your model is structurally identical to one of these — that’s the
+pedagogical point of declaring presets — you’re done with spec
+authoring. Skip to step 3.</p>
+</section>
+<section id="step-2b-author-a-custom-spec">
+<h2>Step 2b: Author a custom spec<a class="headerlink" href="#step-2b-author-a-custom-spec" title="Link to this heading">#</a></h2>
+<p>Models with non-PyTorch kernels (Warp / Triton / fused CUDA ops) need
+an explicit
+<code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code> declaration on the
+spec. The adapter tells the framework:</p>
+<ul class="simple">
+<li><p>Which op handle to install a handler on
+(<code class="docutils literal notranslate"><span class="pre">torch.ops.&lt;namespace&gt;.&lt;op&gt;.default</span></code>).</p></li>
+<li><p>What pre-processing each input position needs
+(<code class="docutils literal notranslate"><span class="pre">arg_transforms</span></code>).</p></li>
+<li><p>What post-processing each output position needs
+(<code class="docutils literal notranslate"><span class="pre">output_transforms</span></code>).</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">HaloStoragePolicy</span><span class="p">,</span> <span class="n">ScatterOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DistributionSpec</span><span class="p">,</span> <span class="n">MLIPSpec</span><span class="p">,</span> <span class="n">OpAdapter</span><span class="p">,</span> <span class="n">OutputKind</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span>
+                <span class="c1"># The per-field storage layout. HaloStoragePolicy() keeps</span>
+                <span class="c1"># ``[owned | halo]`` rows of every per-atom tensor; its</span>
+                <span class="c1"># scatter_mode/gather_mode default to &quot;halo_correction&quot;/</span>
+                <span class="c1"># &quot;halo_read&quot; (the right choice for an MPNN).</span>
+                <span class="n">policy</span><span class="o">=</span><span class="n">HaloStoragePolicy</span><span class="p">(),</span>
+                <span class="c1"># One OpAdapter per opaque kernel the framework can&#39;t see</span>
+                <span class="c1"># into (Warp / Triton / fused CUDA).</span>
+                <span class="n">custom_ops</span><span class="o">=</span><span class="p">(</span>
+                    <span class="n">OpAdapter</span><span class="p">(</span>
+                        <span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">mymodel</span><span class="o">.</span><span class="n">fused_message</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+                        <span class="n">arg_transforms</span><span class="o">=</span><span class="p">{},</span>  <span class="c1"># inputs already halo-padded</span>
+                        <span class="n">output_transforms</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="n">ScatterOutputs</span><span class="p">()},</span>
+                    <span class="p">),</span>
+                <span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">output_kinds</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">,</span>
+                <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<p>The available transforms (importable from
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.ops</span></code>):</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Transform</p></th>
+<th class="head"><p>Pre/post-kernel action</p></th>
+<th class="head"><p>Use case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GatherInputs</span></code></p></td>
+<td><p>halo-pad owned input to <code class="docutils literal notranslate"><span class="pre">(n_padded,</span> <span class="pre">*F)</span></code></p></td>
+<td><p>Kernel needs neighbour rows but receives an owned-only tensor</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GatherInputsFull</span></code></p></td>
+<td><p>full-gather sharded input to <code class="docutils literal notranslate"><span class="pre">(n_global</span> <span class="pre">+</span> <span class="pre">1,</span> <span class="pre">*F)</span></code></p></td>
+<td><p>Sharded-storage analogue (AIMNet2 conv)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SliceOwned</span></code></p></td>
+<td><p>slice halo-padded input to <code class="docutils literal notranslate"><span class="pre">(n_owned,</span> <span class="pre">*F)</span></code></p></td>
+<td><p>Kernel must integrate over each owned atom exactly once (Ewald stage 1)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ScatterOutputs</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">halo_reverse</span> <span class="pre">+</span> <span class="pre">halo_forward</span></code> on per-atom output</p></td>
+<td><p>Per-receiver scatter from a kernel; halo rows carry partial sums</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AllReduceSum</span></code></p></td>
+<td><p>cross-mesh <code class="docutils literal notranslate"><span class="pre">SUM</span></code> all-reduce</p></td>
+<td><p>Per-rank partial that needs cross-rank summation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SliceOutputsOwned</span></code></p></td>
+<td><p>slice <code class="docutils literal notranslate"><span class="pre">(n_global</span> <span class="pre">+</span> <span class="pre">1,</span> <span class="pre">*F)</span></code> to <code class="docutils literal notranslate"><span class="pre">(n_owned</span> <span class="pre">+</span> <span class="pre">1,</span> <span class="pre">*F)</span></code></p></td>
+<td><p>Sharded-storage analogue of slicing back to per-rank</p></td>
+</tr>
+</tbody>
+</table>
+<p>See <code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code> for a complete
+walkthrough authoring an <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code> for a Warp kernel.</p>
+<section id="output-kinds-explicit-shape-classification">
+<h3><code class="docutils literal notranslate"><span class="pre">output_kinds</span></code>: explicit shape classification<a class="headerlink" href="#output-kinds-explicit-shape-classification" title="Link to this heading">#</a></h3>
+<p>Every spec should declare <code class="docutils literal notranslate"><span class="pre">output_kinds</span></code> for the keys in
+<code class="docutils literal notranslate"><span class="pre">active_outputs</span></code>:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Kind</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PER_NODE</span></code></p></td>
+<td><p>per-atom, shape <code class="docutils literal notranslate"><span class="pre">(n_atoms,</span> <span class="pre">*F)</span></code> (or <code class="docutils literal notranslate"><span class="pre">(n_padded,</span> <span class="pre">*F)</span></code> under halo)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">PER_GRAPH</span></code></p></td>
+<td><p>per-system, shape <code class="docutils literal notranslate"><span class="pre">(n_systems,</span> <span class="pre">*F)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GLOBAL</span></code></p></td>
+<td><p>already globally-correct on every rank; passthrough</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code></p></td>
+<td><p>fall back to the legacy <code class="docutils literal notranslate"><span class="pre">shape[0]</span> <span class="pre">==</span> <span class="pre">n_padded</span></code> heuristic + warn</p></td>
+</tr>
+</tbody>
+</table>
+<p>Declaring the output kind replaces a shape-based heuristic. Always
+declare it explicitly; the heuristic exists for back-compat only.</p>
+</section>
+</section>
+<section id="step-3-validate-with-trace-and-validate">
+<h2>Step 3: Validate with <code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code><a class="headerlink" href="#step-3-validate-with-trace-and-validate" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace_and_validate</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">model_factory</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fresh wrapper instance — called once in the launcher and once per</span>
+<span class="sd">    spawned worker. Workers re-import the launcher&#39;s module, so the</span>
+<span class="sd">    factory must live at module scope (not inside a function or</span>
+<span class="sd">    closure).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MyWrapper</span><span class="p">(</span><span class="n">MyModel</span><span class="p">(</span><span class="o">...</span><span class="p">))</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="n">trace_and_validate</span><span class="p">(</span>
+    <span class="n">model_factory</span><span class="o">=</span><span class="n">model_factory</span><span class="p">,</span>
+    <span class="n">sample_batch</span><span class="o">=</span><span class="n">sample_batch</span><span class="p">,</span>    <span class="c1"># a small representative Batch</span>
+    <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>                 <span class="c1"># virtual ranks on the same GPU</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+    <span class="n">atol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+    <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PASSED in </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">attempts</span><span class="p">)</span><span class="si">}</span><span class="s2"> attempt(s).&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">fix_applied</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;auto-fix: </span><span class="si">{</span><span class="n">report</span><span class="o">.</span><span class="n">fix_applied</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;FAIL — </span><span class="si">{</span><span class="n">report</span><span class="o">.</span><span class="n">next_action</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>What the validator does:</p>
+<ol class="arabic">
+<li><p><strong>Reference run</strong> — single-process forward with
+<code class="docutils literal notranslate"><span class="pre">dispatch_trace</span></code> + <code class="docutils literal notranslate"><span class="pre">helper_trace</span></code> + per-atom NL summary captured.</p></li>
+<li><p><strong>Inferred initial spec</strong> — reads
+<code class="docutils literal notranslate"><span class="pre">wrapper.distribution_spec</span></code>. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, falls back to a halo-storage
+default.</p></li>
+<li><p><strong>Multi-rank validation</strong> — spawns <code class="docutils literal notranslate"><span class="pre">world_size</span></code> workers on the
+same GPU, runs each through
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedModel(spec=spec)</span></code>, compares per-output
+tensors against the reference using a partition-invariant diff
+metric (<code class="docutils literal notranslate"><span class="pre">min(elementwise,</span> <span class="pre">sum,</span> <span class="pre">max-magnitude)</span></code>).</p></li>
+<li><p><strong>Auto-fix</strong> — when the diff exceeds tolerance, tries a small
+corpus of rule-based mutations:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">halo_correction</span> <span class="pre">→</span> <span class="pre">local</span></code>: when a halo-correction handler fired
+and outputs still diverge, try disabling it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">drop_extra_all_reduce</span></code>: when an <code class="docutils literal notranslate"><span class="pre">all_reduce_outputs</span></code> key shows
+a <code class="docutils literal notranslate"><span class="pre">×</span> <span class="pre">world_size</span></code> blow-up, drop it from the set.</p></li>
+</ul>
+<p>The first rule whose result clears tolerance wins. The returned
+<code class="docutils literal notranslate"><span class="pre">report.spec</span></code> is the working spec.</p>
+</li>
+</ol>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceReport</span></code>
+returned by the validator carries:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ok</span></code>: bool — passed or not.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec</span></code>: the working spec (best variant on failure).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">attempts</span></code>: list of every spec tried, with diff metrics +
+helper diagnostics + halo-completeness verdict.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">next_action</span></code>: a one-line guidance string.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fix_applied</span></code>: rule name when auto-fix engaged, else <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
+<section id="when-validation-fails">
+<h3>When validation fails<a class="headerlink" href="#when-validation-fails" title="Link to this heading">#</a></h3>
+<p>The report includes two diagnostic fields that point at common
+failure modes:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">attempts[-1].halo_completeness</span></code></strong>: cross-references each rank’s
+halo-padded NL against single-process’s NL. A mismatch (<code class="docutils literal notranslate"><span class="pre">matches:</span> <span class="pre">False</span></code>) means the partition is dropping edges — the most common
+cause of “model output diverges by a few percent under partial
+halo coverage.” Spec-level fixes can’t recover the missing edges;
+the halo construction or test batch needs changing.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">attempts[-1].helper_diagnostics</span></code></strong>: surfaces helpers that look
+like distribution gaps (per-system reductions whose per-rank
+outputs sum to the reference output but aren’t declared in
+<code class="docutils literal notranslate"><span class="pre">spec.distribution.third_party_helpers</span></code>). This is the AIMNet2 <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code>
+pattern — the diagnostic flags it explicitly.</p></li>
+</ul>
+<p>Failure modes the auto-fix doesn’t cover that you’ll see in the
+report:</p>
+<ul class="simple">
+<li><p><strong>Stress-style residual on energy / forces.</strong> Halo-row partial
+scatter sums weren’t reverse-exchanged. Fix: declare
+<code class="docutils literal notranslate"><span class="pre">output_transforms={0:</span> <span class="pre">ScatterOutputs()}</span></code> on the relevant
+<code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code>.</p></li>
+<li><p><strong>Features collapse / NaN.</strong> Likely an unnecessary
+<code class="docutils literal notranslate"><span class="pre">arg_transforms={0:</span> <span class="pre">GatherInputs()}</span></code> on an already-halo-padded
+input — double-padding produces unexpected shapes. Fix: drop the
+transform.</p></li>
+<li><p><strong>Per-system output is <code class="docutils literal notranslate"><span class="pre">world_size</span> <span class="pre">×</span> <span class="pre">ref</span></code></strong>: the model’s per-system
+scatter is firing per-system-reduce (which all-reduces) AND the
+spec lists the key in <code class="docutils literal notranslate"><span class="pre">all_reduce_outputs</span></code> (which all-reduces
+again). Fix: drop from <code class="docutils literal notranslate"><span class="pre">all_reduce_outputs</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="step-4-persist-load">
+<h2>Step 4: Persist + load<a class="headerlink" href="#step-4-persist-load" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLIPSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="c1"># After validation passes:</span>
+<span class="n">report</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;my_model_spec.json&quot;</span><span class="p">))</span>
+
+<span class="c1"># Later, in production:</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;my_model_spec.json&quot;</span><span class="p">))</span>
+<span class="n">wrapper</span> <span class="o">=</span> <span class="n">MyWrapper</span><span class="p">(</span><span class="n">MyModel</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+<span class="n">domain_cfg</span> <span class="o">=</span> <span class="n">DomainConfig</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="n">wrapper</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">)</span>
+<span class="n">dist_model</span> <span class="o">=</span> <span class="n">DistributedModel</span><span class="p">(</span><span class="n">wrapper</span><span class="p">,</span> <span class="n">domain_cfg</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">)</span>
+<span class="c1"># … integrate dist_model under DomainParallel + an integrator.</span>
+</pre></div>
+</div>
+<p>The JSON format is versioned (<code class="docutils literal notranslate"><span class="pre">&quot;version&quot;:</span> <span class="pre">2</span></code>) and stable across
+nvalchemi-toolkit releases for the same major version. Op handles
+serialise as schema-qualified strings (<code class="docutils literal notranslate"><span class="pre">&quot;&lt;namespace&gt;::&lt;op&gt;&quot;</span></code>) so the
+loader resolves them via <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.ops()</span></code> at load time —
+the registering module must already be imported (typically a
+side-effect of constructing the wrapper).</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Spec JSON files commit cleanly into a model checkpoint repository.
+The convention used by the shipped wrappers (MACE, AIMNet2, UMA) is
+to ship the spec alongside the checkpoint and load it in the
+wrapper’s <code class="docutils literal notranslate"><span class="pre">distribution_spec</span></code> property — so the spec is a
+deployment artefact, not a developer artefact.</p>
+</div>
+</section>
+<section id="common-patterns-by-model-class">
+<h2>Common patterns by model class<a class="headerlink" href="#common-patterns-by-model-class" title="Link to this heading">#</a></h2>
+<section id="pure-pytorch-mpnn-with-autograd-forces">
+<h3>Pure-PyTorch MPNN with autograd forces<a class="headerlink" href="#pure-pytorch-mpnn-with-autograd-forces" title="Link to this heading">#</a></h3>
+<p>This is the easy path. Use <code class="docutils literal notranslate"><span class="pre">SPEC_MPNN_HALO</span></code>. The framework promotes
+<code class="docutils literal notranslate"><span class="pre">data.positions</span></code> to a ShardTensor view; <code class="docutils literal notranslate"><span class="pre">torch.zeros_like(positions)</span></code>
+in the model preserves the subclass; per-layer <code class="docutils literal notranslate"><span class="pre">scatter_add_</span></code> calls
+fire halo-correction. The wrapper’s only distributed-aware code is
+the autograd-leaf walk in <code class="docutils literal notranslate"><span class="pre">adapt_input</span></code> (because
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html#torch.autograd.grad" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.grad()</span></code></a> needs the underlying leaf, not the
+ShardTensor alias).</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">examples/distributed/04_byo_pytorch_mpnn.py</span></code>.</p>
+</section>
+<section id="model-with-a-custom-op-warp-triton">
+<h3>Model with a custom op (Warp / Triton)<a class="headerlink" href="#model-with-a-custom-op-warp-triton" title="Link to this heading">#</a></h3>
+<p>Declare an <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code> on the spec. For each output position the
+kernel writes that the framework needs to reduce, declare the
+transform — typically <code class="docutils literal notranslate"><span class="pre">ScatterOutputs()</span></code> for per-atom outputs and
+<code class="docutils literal notranslate"><span class="pre">AllReduceSum()</span></code> for per-system partials. Inputs usually need no
+transform (the wrapper passes already-halo-padded <code class="docutils literal notranslate"><span class="pre">positions</span></code>).</p>
+<p>If the kernel computes forces internally via a fused gradient,
+register an autograd formula via
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/library.html#torch.library.register_autograd" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.library.register_autograd()</span></code></a> so PyTorch’s autograd can
+backprop through it.</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code>.</p>
+</section>
+<section id="model-with-a-third-party-python-helper-e-g-aimnet2-mol-sum">
+<h3>Model with a third-party Python helper (e.g. AIMNet2 <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code>)<a class="headerlink" href="#model-with-a-third-party-python-helper-e-g-aimnet2-mol-sum" title="Link to this heading">#</a></h3>
+<p>Some models call into third-party Python helpers that aren’t aware
+of distribution — e.g. a <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code> that reads <code class="docutils literal notranslate"><span class="pre">mol_idx[-1]</span> <span class="pre">+</span> <span class="pre">1</span></code> for
+its output size, which is wrong under partition. Declare a
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.PythonAdapter.html#nvalchemi.distributed.PythonAdapter" title="nvalchemi.distributed.PythonAdapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">PythonAdapter</span></code></a> on
+the spec’s <code class="docutils literal notranslate"><span class="pre">third_party_helpers</span></code>. The framework’s
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.AdapterRegistry.html#nvalchemi.distributed.AdapterRegistry" title="nvalchemi.distributed.AdapterRegistry"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdapterRegistry</span></code></a>
+swaps in your distribution-aware replacement on scope-entry and
+restores the original on scope-exit.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonAdapter</span>
+
+<span class="n">PythonAdapter</span><span class="p">(</span>
+    <span class="n">module_path</span><span class="o">=</span><span class="s2">&quot;aimnet.nbops&quot;</span><span class="p">,</span>
+    <span class="n">attr_name</span><span class="o">=</span><span class="s2">&quot;mol_sum&quot;</span><span class="p">,</span>
+    <span class="n">replacement</span><span class="o">=</span><span class="n">_my_distributed_mol_sum</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When the replacement closes over runtime metadata (halo config /
+gather meta), build it inside the wrapper’s <code class="docutils literal notranslate"><span class="pre">distributed_setup(ctx)</span></code>
+hook and install via the adapter’s <code class="docutils literal notranslate"><span class="pre">install()</span></code> method directly — see
+<code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.distributed_setup</span></code> for the canonical pattern.</p>
+</section>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
+<p>All of these import from the public <code class="docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code> surface (or
+its <code class="docutils literal notranslate"><span class="pre">spec</span></code> / <code class="docutils literal notranslate"><span class="pre">ops</span></code> / <code class="docutils literal notranslate"><span class="pre">validate</span></code> submodules) — a BYO model never reaches
+into a private <code class="docutils literal notranslate"><span class="pre">_core</span></code> module.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Symbol</p></th>
+<th class="head"><p>Import from</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">MLIPSpec</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.spec</span></code></p></td>
+<td><p>Top-level spec: distribution, output_kinds, owned_only / all_reduce sets</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DistributionSpec</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.spec</span></code></p></td>
+<td><p>policy + custom_ops + third_party_helpers, no chemistry vocabulary</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">StoragePolicy</span></code> / <code class="docutils literal notranslate"><span class="pre">HaloStoragePolicy</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.ops</span></code></p></td>
+<td><p>Per-field storage layout</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>One custom-op handler declaration</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">MethodAdapter</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>Swap a method on a third-party module for a DD-aware variant</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">JitAdapter</span></code> / <code class="docutils literal notranslate"><span class="pre">PythonAdapter</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>Third-party-helper replacements</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CompilePolicy</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> settings for a compiled DD forward (graph padder, force strategy)</p></td>
+</tr>
+<tr class="row-odd"><td><p>transforms (<code class="docutils literal notranslate"><span class="pre">ScatterOutputs</span></code>, <code class="docutils literal notranslate"><span class="pre">GatherInputs</span></code>, …)</p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.ops</span></code></p></td>
+<td><p>Per-arg / per-output kernel transforms</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">OutputKind</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>Per-output shape classification</p></td>
+</tr>
+<tr class="row-odd"><td><p>intent verbs (<code class="docutils literal notranslate"><span class="pre">to_local</span></code>, <code class="docutils literal notranslate"><span class="pre">system_sum</span></code>, <code class="docutils literal notranslate"><span class="pre">refresh_neighbors</span></code>, <code class="docutils literal notranslate"><span class="pre">scatter_to_owners</span></code>, <code class="docutils literal notranslate"><span class="pre">autograd_target</span></code>)</p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>Chemistry-vocabulary helpers a wrapper or adapter calls inside a DD scope</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">current_dd_context</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code></p></td>
+<td><p>Read the active DD context (owned / padded counts, policy) from inside a forward</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code></p></td>
+<td><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed.validate</span></code></p></td>
+<td><p>Validator entry point</p></td>
+</tr>
+</tbody>
+</table>
+<p>For the architecture behind this workflow — storage policies, the
+ShardTensor dispatch model, and how the framework owns halo exchange,
+caps, and compile — see <a class="reference internal" href="distributed_design.html"><span class="doc">Distributed ML Potentials: Design Overview</span></a>.</p>
+</section>
+<section id="next-steps">
+<h2>Next steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>The runnable walkthroughs:
+<code class="docutils literal notranslate"><span class="pre">examples/distributed/04_byo_pytorch_mpnn.py</span></code> and
+<code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code>.</p></li>
+<li><p>The <a class="reference internal" href="distributed.html"><span class="doc">distributed user guide</span></a> for the full
+per-step architecture.</p></li>
+<li><p>The <a class="reference internal" href="distributed_shardtensor.html"><span class="doc">ShardTensor walkthrough</span></a> for
+the dispatch mechanics behind the spec.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="distributed_shardtensor.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">ShardTensor: How Per-Atom Fields Flow Across Ranks</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed_design.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed ML Potentials: Design Overview</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-wrap-your-model">Step 1: Wrap your model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2a-pick-a-spec-preset">Step 2a: Pick a spec preset</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2b-author-a-custom-spec">Step 2b: Author a custom spec</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#output-kinds-explicit-shape-classification"><code class="docutils literal notranslate"><span class="pre">output_kinds</span></code>: explicit shape classification</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-validate-with-trace-and-validate">Step 3: Validate with <code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#when-validation-fails">When validation fails</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-4-persist-load">Step 4: Persist + load</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-patterns-by-model-class">Common patterns by model class</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pure-pytorch-mpnn-with-autograd-forces">Pure-PyTorch MPNN with autograd forces</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-with-a-custom-op-warp-triton">Model with a custom op (Warp / Triton)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-with-a-third-party-python-helper-e-g-aimnet2-mol-sum">Model with a third-party Python helper (e.g. AIMNet2 <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code>)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference">Reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next steps</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/distributed_byo.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

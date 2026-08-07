@@ -1,0 +1,1833 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.losses.composition &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/losses/composition';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.losses.composition</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Composable :class:`torch.nn.Module`-based loss-function abstractions.</span>
+
+<span class="sd">Leaf loss terms are tensor-to-tensor :class:`BaseLossFunction` instances</span>
+<span class="sd">whose :meth:`~BaseLossFunction.forward` returns the raw, unweighted loss</span>
+<span class="sd">tensor. :class:`ComposedLossFunction` owns the per-component weighting</span>
+<span class="sd">(either floats or :class:`LossWeightSchedule` instances) and, by default,</span>
+<span class="sd">normalizes the resolved weights so they sum to ``1.0`` at every call.</span>
+<span class="sd">This keeps weight scheduling a *relative* knob and leaves the learning</span>
+<span class="sd">rate as the sole *absolute* magnitude control.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypedDict</span><span class="p">,</span> <span class="n">cast</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">_extract_init_kwargs_from_attrs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSpec</span><span class="p">,</span> <span class="n">create_model_spec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossWeightSchedule</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+
+<span class="n">DTypePolicy</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;strict&quot;</span><span class="p">,</span> <span class="s2">&quot;prediction_to_target&quot;</span><span class="p">,</span> <span class="s2">&quot;target_to_prediction&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_dtype_policy</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">DTypePolicy</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DTypePolicy</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a supported dtype-alignment policy or raise ``ValueError``.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;strict&quot;</span><span class="p">,</span> <span class="s2">&quot;prediction_to_target&quot;</span><span class="p">,</span> <span class="s2">&quot;target_to_prediction&quot;</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">&quot;dtype_policy must be one of &#39;strict&#39;, &#39;prediction_to_target&#39;, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;or &#39;target_to_prediction&#39;; got </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_optional_dtype_policy</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">DTypePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DTypePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``None`` or a supported dtype-alignment policy.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">_validate_dtype_policy</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_align_dtypes_for_policy</span><span class="p">(</span>
+    <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">DTypePolicy</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return prediction and target tensors adjusted by ``policy``.&quot;&quot;&quot;</span>
+    <span class="k">match</span> <span class="n">policy</span><span class="p">:</span>
+        <span class="k">case</span> <span class="s2">&quot;strict&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span>
+        <span class="k">case</span> <span class="s2">&quot;prediction_to_target&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pred</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">target</span>
+        <span class="k">case</span> <span class="s2">&quot;target_to_prediction&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">pred</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unhandled dtype_policy=</span><span class="si">{</span><span class="n">policy</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LossTargetAssemblyProtocol</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interface for callables that assemble supervised loss targets.</span>
+
+<span class="sd">    Implementations may read from the configured loss, prediction mapping,</span>
+<span class="sd">    current batch, and optional workflow object. The returned mapping is passed</span>
+<span class="sd">    as the target mapping to :class:`ComposedLossFunction`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span><span class="p">,</span>
+        <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">target_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return targets keyed by component ``target_key`` values.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="ComposedLossOutput">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossOutput.html#nvalchemi.training.ComposedLossOutput">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ComposedLossOutput</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Output returned by :class:`ComposedLossFunction`.</span>
+
+<span class="sd">    This is solely used as a type hint, and not as a concrete data</span>
+<span class="sd">    structure; it&#39;s used to signal to users that the emitted dict</span>
+<span class="sd">    from composed losses will always at least contain the keys within</span>
+<span class="sd">    this ``TypedDict``.</span>
+
+<span class="sd">    The mapping always contains ``total_loss`` and four per-component</span>
+<span class="sd">    sub-mappings keyed by component name. ``per_component_unweighted``</span>
+<span class="sd">    holds each raw component loss before multiplication by its effective</span>
+<span class="sd">    weight. ``per_component_weight`` holds the effective (possibly</span>
+<span class="sd">    normalized) weight actually applied to each component at this call;</span>
+<span class="sd">    ``per_component_raw_weight`` holds the pre-normalization resolved</span>
+<span class="sd">    weight — identical to ``per_component_weight`` when</span>
+<span class="sd">    ``normalize_weights=False`` and useful for logging the underlying</span>
+<span class="sd">    schedule value regardless of normalization. ``per_component_sample``</span>
+<span class="sd">    carries per-component **weighted** per-sample loss tensors of shape</span>
+<span class="sd">    ``(B,)``, detached; see :attr:`BaseLossFunction.per_sample_loss` for</span>
+<span class="sd">    the per-leaf populate-or-skip contract.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">total_loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">per_component_unweighted</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span>
+    <span class="n">per_component_weight</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="n">per_component_raw_weight</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="n">per_component_sample</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">loss_component_to_spec</span><span class="p">(</span><span class="n">component</span><span class="p">:</span> <span class="n">BaseLossFunction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Serialize a leaf loss component to a :class:`BaseSpec`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    component : BaseLossFunction</span>
+<span class="sd">        Loss component to serialize. Constructor attributes are recovered by</span>
+<span class="sd">        signature introspection, and nested weight schedules are serialized as</span>
+<span class="sd">        nested specs when present.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    BaseSpec</span>
+<span class="sd">        JSON-ready spec that rebuilds ``component``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``component`` is a composed loss or is not a leaf</span>
+<span class="sd">        :class:`BaseLossFunction`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;loss_component_to_spec accepts only leaf BaseLossFunction objects; &quot;</span>
+            <span class="s2">&quot;use ComposedLossFunction spec serialization for composed losses.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;loss_component_to_spec accepts only leaf BaseLossFunction objects; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_extract_init_kwargs_from_attrs</span><span class="p">(</span><span class="n">component</span><span class="p">)</span>
+    <span class="n">weight</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;weight&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">weight</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="s2">&quot;model_dump&quot;</span><span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;weight&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">create_model_spec</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">weight</span><span class="p">),</span> <span class="o">**</span><span class="n">weight</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">create_model_spec</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">assert_same_shape</span><span class="p">(</span>
+    <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">prediction_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise :class:`ValueError` when ``pred`` and ``target`` are not compatible.</span>
+
+<span class="sd">    Checks dtype equality first (a dtype mismatch is usually a bug</span>
+<span class="sd">    upstream of shape), then the shape compatibility policy selected by</span>
+<span class="sd">    ``strict``.</span>
+
+<span class="sd">    Shape policy</span>
+<span class="sd">    ------------</span>
+<span class="sd">    ``strict=False`` (default) accepts any pair of shapes that is</span>
+<span class="sd">    broadcast-compatible via :func:`torch.broadcast_shapes`. This is</span>
+<span class="sd">    convenient for custom losses that legitimately broadcast (e.g. a</span>
+<span class="sd">    per-graph scale against a per-component target) but is a trap for</span>
+<span class="sd">    elementwise losses: ``(B, 1)`` vs ``(B, 3)`` passes, and the</span>
+<span class="sd">    subsequent ``pred - target`` silently broadcasts into a ``(B, 3)``</span>
+<span class="sd">    residual — usually not what you intend.</span>
+
+<span class="sd">    ``strict=True`` requires ``pred.shape == target.shape`` exactly. All</span>
+<span class="sd">    built-in leaf losses (:class:`EnergyMSELoss`, :class:`ForceMSELoss`,</span>
+<span class="sd">    :class:`StressMSELoss`) pass ``strict=True`` because their elementwise</span>
+<span class="sd">    arithmetic would otherwise corrupt the scalar loss under a</span>
+<span class="sd">    broadcast-compatible-but-unequal pair. Custom</span>
+<span class="sd">    :class:`BaseLossFunction` subclasses that do elementwise arithmetic</span>
+<span class="sd">    should also pass ``strict=True``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pred : torch.Tensor</span>
+<span class="sd">        Prediction tensor.</span>
+<span class="sd">    target : torch.Tensor</span>
+<span class="sd">        Target tensor whose dtype must equal ``pred``&#39;s and whose shape</span>
+<span class="sd">        must be compatible with ``pred``&#39;s under the selected policy.</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Calling loss-term&#39;s class name, used as a prefix in the error</span>
+<span class="sd">        message (typically ``type(self).__name__``).</span>
+<span class="sd">    prediction_key : str, optional</span>
+<span class="sd">        Key the prediction tensor was pulled from in the composed</span>
+<span class="sd">        mapping. When provided, included in the error message.</span>
+<span class="sd">    target_key : str, optional</span>
+<span class="sd">        Key the target tensor was pulled from in the composed mapping.</span>
+<span class="sd">        When provided, included in the error message.</span>
+<span class="sd">    strict : bool, default False</span>
+<span class="sd">        When ``True``, require ``pred.shape == target.shape``. When</span>
+<span class="sd">        ``False``, only require broadcast compatibility.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``pred.dtype != target.dtype``, or if the shape policy is</span>
+<span class="sd">        violated (broadcast-incompatible for ``strict=False``, unequal</span>
+<span class="sd">        for ``strict=True``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pred_fragment</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;prediction_key=</span><span class="si">{</span><span class="n">prediction_key</span><span class="si">!r}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">prediction_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="s2">&quot;prediction&quot;</span>
+    <span class="p">)</span>
+    <span class="n">target_fragment</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;target_key=</span><span class="si">{</span><span class="n">target_key</span><span class="si">!r}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">target_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;target&quot;</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">pred</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: prediction and target dtype mismatch; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pred_fragment</span><span class="si">}</span><span class="s2"> has dtype </span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target_fragment</span><span class="si">}</span><span class="s2"> has dtype </span><span class="si">{</span><span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pred</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: prediction and target shape must match exactly &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;for elementwise loss; </span><span class="si">{</span><span class="n">pred_fragment</span><span class="si">}</span><span class="s2"> has shape &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">pred</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">target_fragment</span><span class="si">}</span><span class="s2"> has shape &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">broadcast_shapes</span><span class="p">(</span><span class="n">pred</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: prediction and target shape mismatch; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pred_fragment</span><span class="si">}</span><span class="s2"> has shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">pred</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target_fragment</span><span class="si">}</span><span class="s2"> has shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+
+<div class="viewcode-block" id="ReductionContext">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ReductionContext.html#nvalchemi.training.ReductionContext">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReductionContext</span><span class="p">(</span><span class="nb">dict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lightweight metadata bag flowing through the loss template pipeline.</span>
+
+<span class="sd">    A plain ``dict`` subclass used to pass metadata between</span>
+<span class="sd">    :meth:`BaseLossFunction.normalize`, :meth:`~BaseLossFunction.mask`,</span>
+<span class="sd">    and :meth:`~BaseLossFunction.reduce`. Using a bare ``dict`` instead</span>
+<span class="sd">    of ``TypedDict(total=False)`` keeps the type ``torch.compile``-safe</span>
+<span class="sd">    (Dynamo rejects ``TypedDict`` with optional keys).</span>
+
+<span class="sd">    Conventional keys</span>
+<span class="sd">    -----------------</span>
+<span class="sd">    ``&quot;weights&quot;`` : torch.Tensor</span>
+<span class="sd">        Per-sample weights for the final reduction. For energy losses</span>
+<span class="sd">        with ``per_atom=True`` this carries atom counts ``(B, 1)``; for</span>
+<span class="sd">        force losses it may carry per-atom or per-component weights.</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="BaseLossFunction">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseLossFunction</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract :class:`torch.nn.Module` base for ALCHEMI loss functions.</span>
+
+<span class="sd">    ``BaseLossFunction`` implements a **template-method**</span>
+<span class="sd">    :meth:`forward` pipeline that orchestrates five overridable hooks:</span>
+
+<span class="sd">    1. :meth:`validate` — shape / dtype checks.</span>
+<span class="sd">    2. :meth:`normalize` — pre-process ``pred`` and ``target``</span>
+<span class="sd">       (e.g. per-atom energy division) and return a</span>
+<span class="sd">       :class:`ReductionContext` for downstream hooks.</span>
+<span class="sd">    3. :meth:`mask` — produce a boolean validity tensor</span>
+<span class="sd">       (e.g. ``torch.isfinite``, padding masks).</span>
+<span class="sd">    4. :meth:`compute_residual` — **abstract**; the only method every</span>
+<span class="sd">       leaf *must* implement. Receives ``pred``, ``target``, and the</span>
+<span class="sd">       validity ``mask`` produced by step 3.</span>
+<span class="sd">    5. :meth:`reduce` — collapse the residual tensor and validity mask</span>
+<span class="sd">       into a scalar loss and populate :attr:`per_sample_loss`.</span>
+
+<span class="sd">    Loss authors subclass ``BaseLossFunction`` and override</span>
+<span class="sd">    :meth:`compute_residual` at a minimum. Normalization, masking, and</span>
+<span class="sd">    reduction come free via the defaults, or can be overridden</span>
+<span class="sd">    individually for domain-specific behaviour (e.g. per-atom energy</span>
+<span class="sd">    division in :meth:`normalize`, padding-aware force masking in</span>
+<span class="sd">    :meth:`mask`, graph-balanced force reduction in :meth:`reduce`).</span>
+
+<span class="sd">    Leaves are weightless — weighting and scheduling live on</span>
+<span class="sd">    :class:`ComposedLossFunction`. Operator sugar</span>
+<span class="sd">    (``scalar * leaf``, ``leaf + leaf``, ``sum([...])``) produces a</span>
+<span class="sd">    composition; see :class:`ComposedLossFunction` for semantics.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    requires_eval_grad : bool | None</span>
+<span class="sd">        Whether this loss term requires autograd during evaluation. Losses</span>
+<span class="sd">        based on derived outputs such as forces and stress should set this to</span>
+<span class="sd">        ``True``; direct scalar-output losses should set it to ``False``.</span>
+<span class="sd">        ``None`` means callers cannot infer the policy automatically.</span>
+<span class="sd">    dtype_policy : {&quot;strict&quot;, &quot;prediction_to_target&quot;, &quot;target_to_prediction&quot;}</span>
+<span class="sd">        How ``forward`` handles prediction/target dtype mismatches before</span>
+<span class="sd">        validation. ``strict`` preserves both tensors and raises on mismatch.</span>
+<span class="sd">        The other policies cast one tensor to the other&#39;s dtype before the</span>
+<span class="sd">        leaf validates shapes and dtypes.</span>
+<span class="sd">    per_sample_loss : torch.Tensor | None</span>
+<span class="sd">        Detached per-graph loss tensor of shape ``(B,)`` left as a side</span>
+<span class="sd">        effect of the most recent :meth:`forward` call, or ``None`` when</span>
+<span class="sd">        the loss does not naturally compute a per-graph view (or when</span>
+<span class="sd">        ``forward`` has never been called). Intended for logging and</span>
+<span class="sd">        diagnostics only — gradients flow through the scalar returned by</span>
+<span class="sd">        :meth:`forward`, not through this attribute.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">requires_eval_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dtype_policy</span><span class="p">:</span> <span class="n">DTypePolicy</span> <span class="o">=</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the base loss as a stateless :class:`nn.Module`.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="o">=</span> <span class="n">dtype_policy</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DTypePolicy</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dtype alignment policy applied before validation.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype_policy</span>
+
+    <span class="nd">@dtype_policy</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">DTypePolicy</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtype_policy</span> <span class="o">=</span> <span class="n">_validate_dtype_policy</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BaseLossFunction.forward">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Template-method pipeline: validate → normalize → mask → residual → reduce.</span>
+
+<span class="sd">        Subclasses should **not** override this method. Override the</span>
+<span class="sd">        individual hooks instead. Extra keyword arguments (``batch``,</span>
+<span class="sd">        ``batch_idx``, ``num_nodes_per_graph``, etc.) are forwarded to</span>
+<span class="sd">        every hook via ``**kwargs``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">pred</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">align_dtypes</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+        <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_residual</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">valid</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">residual</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.align_dtypes">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.align_dtypes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">align_dtypes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return prediction and target tensors adjusted by ``dtype_policy``.</span>
+
+<span class="sd">        ``strict`` preserves both tensors and leaves dtype mismatches to</span>
+<span class="sd">        :meth:`validate`. ``prediction_to_target`` and ``target_to_prediction``</span>
+<span class="sd">        cast only when needed and preserve the source tensor otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_align_dtypes_for_policy</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.validate">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.validate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check shape and dtype compatibility of ``pred`` and ``target``.</span>
+
+<span class="sd">        Default implementation calls :func:`assert_same_shape` with</span>
+<span class="sd">        ``strict=True`` when ``prediction_key`` / ``target_key``</span>
+<span class="sd">        attributes are present on the instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">assert_same_shape</span><span class="p">(</span>
+            <span class="n">pred</span><span class="p">,</span>
+            <span class="n">target</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="n">prediction_key</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;prediction_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">target_key</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;target_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.normalize">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.normalize">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalize</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">ReductionContext</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pre-process prediction and target before residual computation.</span>
+
+<span class="sd">        Returns a ``(pred, target, ctx)`` triple. The default</span>
+<span class="sd">        implementation is the identity — ``ctx`` is empty.</span>
+
+<span class="sd">        Override to inject per-atom energy division, or any other</span>
+<span class="sd">        pre-processing that should be available to all loss authors as a</span>
+<span class="sd">        composable step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">ReductionContext</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.mask">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.mask">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">ReductionContext</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a boolean validity mask for ``target``.</span>
+
+<span class="sd">        The default implementation returns an all-``True`` mask matching</span>
+<span class="sd">        ``target``&#39;s shape. Override to exclude non-finite entries,</span>
+<span class="sd">        padding, or any other invalid positions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.compute_residual">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.compute_residual">[docs]</a>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_residual</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the per-element residual tensor.</span>
+
+<span class="sd">        This is the only hook that **must** be overridden. The ``valid``</span>
+<span class="sd">        mask (from :meth:`mask`) is provided so the leaf can zero out</span>
+<span class="sd">        invalid positions before computing the residual (important for</span>
+<span class="sd">        operations like ``vector_norm`` where masking after the</span>
+<span class="sd">        reduction would be incorrect).</span>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="BaseLossFunction.reduce">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.reduce">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reduce</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">residual</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">ReductionContext</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collapse a residual tensor to a scalar loss.</span>
+
+<span class="sd">        The default implementation computes a validity-weighted mean:</span>
+<span class="sd">        ``(residual * valid_float).sum() / valid_float.sum()``, where</span>
+<span class="sd">        ``valid_float`` incorporates optional ``ctx[&quot;weights&quot;]``.</span>
+
+<span class="sd">        Override for domain-specific reductions (graph-balanced force</span>
+<span class="sd">        reduction, RMSD, etc.). Implementations should also populate</span>
+<span class="sd">        :attr:`per_sample_loss` with a detached ``(B,)`` tensor when a</span>
+<span class="sd">        per-graph decomposition is available.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;weights&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid_weights</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">residual</span><span class="p">)</span>
+        <span class="n">scalar</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">valid_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">valid_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_populate_per_sample_loss</span><span class="p">(</span><span class="n">residual</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scalar</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_populate_per_sample_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">residual</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set :attr:`per_sample_loss` when the residual has a per-graph shape.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">residual</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">residual</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">residual</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+    <span class="c1"># Arithmetic dunders — return ComposedLossFunction.</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__mul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``ComposedLossFunction([self], weights=[other])``.</span>
+
+<span class="sd">        ``other`` may be a :class:`float`/:class:`int` or a</span>
+<span class="sd">        :class:`LossWeightSchedule`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">match</span> <span class="n">other</span><span class="p">:</span>
+            <span class="k">case</span> <span class="nb">bool</span><span class="p">():</span>
+                <span class="k">return</span> <span class="bp">NotImplemented</span>
+            <span class="k">case</span> <span class="nb">int</span><span class="p">()</span> <span class="o">|</span> <span class="nb">float</span><span class="p">()</span> <span class="o">|</span> <span class="n">LossWeightSchedule</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">([</span><span class="bp">self</span><span class="p">],</span> <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="n">other</span><span class="p">])</span>
+            <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__rmul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mirror of :meth:`__mul__` for ``scalar * loss``.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__mul__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``self + other`` flattening any existing composition.</span>
+
+<span class="sd">        Both operands get weight ``1.0`` unless they are themselves</span>
+<span class="sd">        compositions, in which case their existing weights are preserved.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+                <span class="p">[</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">components</span><span class="p">],</span>
+                <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">_weights</span><span class="p">],</span>
+                <span class="n">normalize_weights</span><span class="o">=</span><span class="n">other</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">,</span>
+                <span class="n">dtype_policy</span><span class="o">=</span><span class="n">other</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">([</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">],</span> <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__radd__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseLossFunction</span> <span class="o">|</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``self`` when seeded with integer ``0`` (for :func:`sum`).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">other</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__add__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_weight</span><span class="p">(</span>
+    <span class="n">weight</span><span class="p">:</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a single weight (float or schedule) to a finite float.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    weight</span>
+<span class="sd">        Either a plain scalar or a :class:`LossWeightSchedule`.</span>
+<span class="sd">    step, epoch</span>
+<span class="sd">        Training counters forwarded to the schedule.</span>
+<span class="sd">    context</span>
+<span class="sd">        Caller-supplied name (typically the component&#39;s class name) used</span>
+<span class="sd">        in error messages.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a ``per_epoch=True`` schedule is evaluated with</span>
+<span class="sd">        ``epoch is None`` or the schedule returns a non-finite value.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If the schedule returns a non-numeric value.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">):</span>
+        <span class="n">coerced</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coerced</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">context</span><span class="si">}</span><span class="s2">: weight </span><span class="si">{</span><span class="n">weight</span><span class="si">!r}</span><span class="s2"> is not finite; &quot;</span>
+                <span class="s2">&quot;weights must be finite floats.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">coerced</span>
+    <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">per_epoch</span> <span class="ow">and</span> <span class="n">epoch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;epoch must be provided when the </span><span class="si">{</span><span class="n">context</span><span class="si">}</span><span class="s2"> loss weight &quot;</span>
+            <span class="s2">&quot;schedule has per_epoch=True. Pass epoch=&lt;current_epoch&gt; to &quot;</span>
+            <span class="s2">&quot;the loss, or set per_epoch=False on the schedule.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">weight</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not satisfy the &quot;</span>
+            <span class="s2">&quot;LossWeightSchedule contract: __call__ must accept &quot;</span>
+            <span class="s2">&quot;(step: int, epoch: int) and return a float.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> returned </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">; &quot;</span>
+            <span class="s2">&quot;LossWeightSchedule.__call__ must return float.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">coerced</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coerced</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="n">context</span><span class="si">}</span><span class="s2"> returned non-finite &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;weight </span><span class="si">{</span><span class="n">coerced</span><span class="si">!r}</span><span class="s2">; schedules must return finite floats.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">coerced</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_component_names</span><span class="p">(</span><span class="n">components</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseLossFunction</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return class names with suffixes applied to duplicate component types.&quot;&quot;&quot;</span>
+    <span class="n">raw_names</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span><span class="p">)</span>
+    <span class="n">counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">raw_names</span><span class="p">:</span>
+        <span class="n">counts</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">next_index</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">raw_names</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">counts</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">next_index</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">next_index</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">names</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ComposedLossFunction">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ComposedLossFunction</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weighted sum of :class:`BaseLossFunction` components.</span>
+
+<span class="sd">    This class owns the per-component weighting — leaves are weightless.</span>
+<span class="sd">    Weights may be plain floats or :class:`LossWeightSchedule` instances;</span>
+<span class="sd">    they are resolved to floats at call time. By default the resolved</span>
+<span class="sd">    weights are normalized to sum to ``1.0`` so scheduling controls</span>
+<span class="sd">    *relative* contributions while the learning rate controls the</span>
+<span class="sd">    absolute loss magnitude. Opt out with ``normalize_weights=False``.</span>
+
+<span class="sd">    Components live in an :class:`torch.nn.ModuleList` for</span>
+<span class="sd">    ``.modules()`` / ``.state_dict()`` / nested-``__repr__`` support.</span>
+<span class="sd">    When a component is itself a :class:`ComposedLossFunction`, its</span>
+<span class="sd">    components and weights are flattened into the parent element-wise so</span>
+<span class="sd">    ``(A + B) + C`` is equivalent to ``A + B + C``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    components</span>
+<span class="sd">        Loss terms to combine; must contain at least one element.</span>
+<span class="sd">    weights</span>
+<span class="sd">        Optional per-component weights. When provided, ``weights`` must</span>
+<span class="sd">        have the same length as ``components`` at construction time</span>
+<span class="sd">        (i.e. top-level components — child weights inside nested</span>
+<span class="sd">        compositions are multiplied element-wise by the parent weight</span>
+<span class="sd">        during flattening). A ``None`` entry is shorthand for ``1.0``,</span>
+<span class="sd">        so ``weights=[None, 2.0, None]`` means &quot;component 1 gets 2x,</span>
+<span class="sd">        others default&quot;. Passing ``weights=None`` defaults every</span>
+<span class="sd">        component to ``1.0``.</span>
+<span class="sd">    normalize_weights</span>
+<span class="sd">        When ``True`` (default), resolved weights are divided by their</span>
+<span class="sd">        sum at each call so the effective weights sum to ``1.0``. A</span>
+<span class="sd">        zero-sum raises :class:`ValueError`. When ``False``, raw</span>
+<span class="sd">        weighted sums are returned.</span>
+<span class="sd">    dtype_policy</span>
+<span class="sd">        Optional composed-level dtype policy applied at call time for</span>
+<span class="sd">        components whose own ``dtype_policy`` is still ``&quot;strict&quot;``. This</span>
+<span class="sd">        avoids mutating reusable leaf instances while allowing one composed</span>
+<span class="sd">        loss to opt into automatic dtype alignment.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    components</span>
+<span class="sd">        :class:`torch.nn.ModuleList` of the flattened leaf components.</span>
+<span class="sd">    normalize_weights</span>
+<span class="sd">        Whether effective weights are renormalized to sum to ``1.0``.</span>
+<span class="sd">    dtype_policy</span>
+<span class="sd">        Composed-level dtype alignment policy, or ``None`` when each leaf</span>
+<span class="sd">        controls dtype handling independently.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">components</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseLossFunction</span> <span class="o">|</span> <span class="n">ComposedLossFunction</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">normalize_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">dtype_policy</span><span class="p">:</span> <span class="n">DTypePolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Store flattened components, their weights, and the normalization flag.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;components must contain at least one loss term&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;components[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">] must be a BaseLossFunction or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;ComposedLossFunction, got &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">raw_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">raw_weights</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span> <span class="k">if</span> <span class="n">w</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">w</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">weights</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_weights</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;weights has length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">raw_weights</span><span class="p">)</span><span class="si">}</span><span class="s2"> but components has &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span><span class="si">}</span><span class="s2">; lengths must match.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">raw_weights</span><span class="p">):</span>
+                <span class="k">match</span> <span class="n">w</span><span class="p">:</span>
+                    <span class="k">case</span> <span class="nb">bool</span><span class="p">():</span>
+                        <span class="n">valid</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">case</span> <span class="nb">int</span><span class="p">()</span> <span class="o">|</span> <span class="nb">float</span><span class="p">()</span> <span class="o">|</span> <span class="n">LossWeightSchedule</span><span class="p">():</span>
+                        <span class="n">valid</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+                        <span class="n">valid</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;weights[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">] must be a float or LossWeightSchedule, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">w</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+
+        <span class="n">flat_components</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseLossFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">flat_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">comp</span><span class="p">,</span> <span class="n">parent_w</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">components</span><span class="p">,</span> <span class="n">raw_weights</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">child_comp</span><span class="p">,</span> <span class="n">child_w</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="n">comp</span><span class="o">.</span><span class="n">components</span><span class="p">,</span> <span class="n">comp</span><span class="o">.</span><span class="n">_weights</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">):</span>
+                    <span class="n">flat_components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">child_comp</span><span class="p">)</span>
+                    <span class="n">flat_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compose_weights</span><span class="p">(</span><span class="n">parent_w</span><span class="p">,</span> <span class="n">child_w</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">flat_components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span>
+                <span class="n">flat_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parent_w</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype_policy</span> <span class="o">=</span> <span class="n">_validate_dtype_policy</span><span class="p">(</span><span class="n">dtype_policy</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span><span class="n">flat_components</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">normalize_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="o">=</span> <span class="n">dtype_policy</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DTypePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Composed-level dtype policy applied to strict leaves at call time.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype_policy</span>
+
+    <span class="nd">@dtype_policy</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">DTypePolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtype_policy</span> <span class="o">=</span> <span class="n">_validate_optional_dtype_policy</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_raw_and_effective</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve raw and effective weights in a single pass.</span>
+
+<span class="sd">        Returns a triple ``(names, raw, effective)`` where ``raw`` holds</span>
+<span class="sd">        the per-component resolved floats (pre-normalization) and</span>
+<span class="sd">        ``effective`` holds the weights that will actually be applied —</span>
+<span class="sd">        identical to ``raw`` when :attr:`normalize_weights` is ``False``</span>
+<span class="sd">        and ``raw / sum(raw)`` otherwise. When normalization is enabled</span>
+<span class="sd">        the raw weights must sum to a strictly positive float; a sum</span>
+<span class="sd">        that is non-positive (negative, zero, or non-finite from</span>
+<span class="sd">        cancellation) is rejected with :class:`ValueError` because the</span>
+<span class="sd">        resulting normalization either flips every contribution&#39;s sign</span>
+<span class="sd">        or blows up. Individual raw weights may themselves be negative</span>
+<span class="sd">        as long as their sum is positive.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="n">_component_names</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">))</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_resolve_weight</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">w</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">names</span><span class="p">,</span> <span class="n">raw</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">total</span><span class="p">)</span> <span class="ow">or</span> <span class="n">total</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">resolved</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">raw</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ComposedLossFunction: cannot normalize weights whose sum &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;is not strictly positive (sum=</span><span class="si">{</span><span class="n">total</span><span class="si">!r}</span><span class="s2">). Resolved &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;weights at step=</span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">, epoch=</span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">resolved</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Choose weights whose sum is a finite positive float or &quot;</span>
+                <span class="s2">&quot;set normalize_weights=False.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">effective</span> <span class="o">=</span> <span class="p">[</span><span class="n">w</span> <span class="o">/</span> <span class="n">total</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">names</span><span class="p">,</span> <span class="n">raw</span><span class="p">,</span> <span class="n">effective</span>
+
+<div class="viewcode-block" id="ComposedLossFunction.current_weight">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction.current_weight">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">current_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve each component&#39;s weight to a float for ``(step, epoch)``.</span>
+
+<span class="sd">        When :attr:`normalize_weights` is ``True`` the returned list sums</span>
+<span class="sd">        to ``1.0``; otherwise it is the raw resolved weights. With</span>
+<span class="sd">        normalization enabled the raw sum must be a strictly positive</span>
+<span class="sd">        float or :class:`ValueError` is raised.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            Current global training step.</span>
+<span class="sd">        epoch</span>
+<span class="sd">            Current training epoch, or ``None`` when unused.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[float]</span>
+<span class="sd">            One effective weight per component, in order.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If normalization is enabled and the raw weights do not sum</span>
+<span class="sd">            to a strictly positive, finite float.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">effective</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_raw_and_effective</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">effective</span></div>
+
+
+<div class="viewcode-block" id="ComposedLossFunction.weight_factors">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction.weight_factors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">weight_factors</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a flat ``{component_name: effective_weight}`` dict.</span>
+
+<span class="sd">        Duplicate class names get numeric suffixes (``_0``, ``_1``, ...)</span>
+<span class="sd">        applied to *all* colliding entries, not only the duplicates.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="n">_component_names</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">))</span>
+        <span class="n">effective</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_weight</span><span class="p">(</span><span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="o">=</span><span class="n">epoch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">effective</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="ComposedLossFunction.requires_eval_grad">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction.requires_eval_grad">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">requires_eval_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether evaluating this loss needs autograd enabled.</span>
+
+<span class="sd">        Inspects each leaf component&#39;s ``requires_eval_grad`` flag. A</span>
+<span class="sd">        component reporting ``True`` (e.g. a force/stress loss that</span>
+<span class="sd">        differentiates the energy) forces gradient-enabled evaluation;</span>
+<span class="sd">        components reporting ``False`` do not. A component reporting</span>
+<span class="sd">        ``None`` is undeclared and cannot be inferred automatically.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` when at least one component requires gradients,</span>
+<span class="sd">            ``False`` when every component explicitly declares it does</span>
+<span class="sd">            not.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            When one or more components report ``requires_eval_grad=None``</span>
+<span class="sd">            and none require gradients, so the requirement is ambiguous.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">unknown</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">:</span>
+            <span class="n">requires_eval_grad</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="s2">&quot;requires_eval_grad&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">requires_eval_grad</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">requires_eval_grad</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">unknown</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="n">names</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot infer whether evaluating this loss requires &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;gradients for component(s): </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s2">. Set &quot;</span>
+                <span class="s2">&quot;requires_eval_grad on the component(s), or resolve the &quot;</span>
+                <span class="s2">&quot;policy explicitly (e.g. ValidationConfig grad_mode=&quot;</span>
+                <span class="s2">&quot;&#39;enabled&#39; or &#39;disabled&#39;).&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="ComposedLossFunction.forward">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">targets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossOutput</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the weighted total loss and per-component diagnostics.</span>
+
+<span class="sd">        Each component is called with the routed ``pred`` / ``target``</span>
+<span class="sd">        tensors, then its raw loss is scaled by the effective weight for</span>
+<span class="sd">        this step. The output&#39;s ``per_component_unweighted`` contains</span>
+<span class="sd">        each raw component loss before effective weighting;</span>
+<span class="sd">        ``per_component_weight``</span>
+<span class="sd">        holds the scalar weights that were applied (after normalization,</span>
+<span class="sd">        if enabled); ``per_component_raw_weight`` holds the</span>
+<span class="sd">        pre-normalization resolved weights so schedule ramps remain</span>
+<span class="sd">        observable on single-component normalized compositions; see</span>
+<span class="sd">        :attr:`BaseLossFunction.per_sample_loss` for the</span>
+<span class="sd">        ``per_component_sample`` contract.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">names</span><span class="p">,</span> <span class="n">raw_weights</span><span class="p">,</span> <span class="n">effective</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_raw_and_effective</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+
+        <span class="n">per_component_unweighted</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">per_component_sample</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">per_component_weight</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">effective</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">per_component_raw_weight</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">raw_weights</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">total</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">comp</span><span class="p">,</span> <span class="n">weight</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">,</span> <span class="n">effective</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">prediction_key</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="s2">&quot;prediction_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">target_key</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="s2">&quot;target_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">prediction_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot be used in &quot;</span>
+                    <span class="s2">&quot;ComposedLossFunction without a prediction_key attribute.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">target_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot be used in &quot;</span>
+                    <span class="s2">&quot;ComposedLossFunction without a target_key attribute.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">pred</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="n">prediction_key</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: prediction mapping is missing &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;key </span><span class="si">{</span><span class="n">prediction_key</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="n">target_key</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: target mapping is missing &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;key </span><span class="si">{</span><span class="n">target_key</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: prediction mapping key &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prediction_key</span><span class="si">!r}</span><span class="s2"> must resolve to torch.Tensor, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">pred</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: target mapping key &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target_key</span><span class="si">!r}</span><span class="s2"> must resolve to torch.Tensor, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="s2">&quot;dtype_policy&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;strict&quot;</span>
+            <span class="p">):</span>
+                <span class="n">pred</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="n">_align_dtypes_for_policy</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">)</span>
+            <span class="c1"># Guard against stale diagnostics from custom leaves that forget to clear.</span>
+            <span class="n">comp</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="n">comp</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> returned &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> from forward(); &quot;</span>
+                    <span class="s2">&quot;BaseLossFunction subclasses must return a torch.Tensor.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">contribution</span> <span class="o">=</span> <span class="n">weight</span> <span class="o">*</span> <span class="n">raw</span>
+            <span class="n">per_component_unweighted</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="n">comp</span><span class="o">.</span><span class="n">per_sample_loss</span>
+            <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> (component </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">) set &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;per_sample_loss to </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">; &quot;</span>
+                        <span class="s2">&quot;must be a torch.Tensor or None.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">sample</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> (component </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">) set &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;per_sample_loss with shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">; &quot;</span>
+                        <span class="s2">&quot;must be a 1-D tensor of shape (B,).&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">per_component_sample</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">weight</span> <span class="o">*</span> <span class="n">sample</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="n">total</span> <span class="o">=</span> <span class="n">contribution</span> <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">total</span> <span class="o">+</span> <span class="n">contribution</span>
+
+        <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;ComposedLossFunction has no components.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+            <span class="n">ComposedLossOutput</span><span class="p">,</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;total_loss&quot;</span><span class="p">:</span> <span class="n">total</span><span class="p">,</span>
+                <span class="s2">&quot;per_component_unweighted&quot;</span><span class="p">:</span> <span class="n">per_component_unweighted</span><span class="p">,</span>
+                <span class="s2">&quot;per_component_weight&quot;</span><span class="p">:</span> <span class="n">per_component_weight</span><span class="p">,</span>
+                <span class="s2">&quot;per_component_raw_weight&quot;</span><span class="p">:</span> <span class="n">per_component_raw_weight</span><span class="p">,</span>
+                <span class="s2">&quot;per_component_sample&quot;</span><span class="p">:</span> <span class="n">per_component_sample</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__mul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Scale every component weight by a float ``other``.</span>
+
+<span class="sd">        Only float/int scalars are accepted. Schedules are rejected with</span>
+<span class="sd">        :class:`TypeError`: compose schedules onto the individual</span>
+<span class="sd">        components before combining, or multiply the composition by a</span>
+<span class="sd">        plain float.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Multiplying a ComposedLossFunction by a &quot;</span>
+                    <span class="s2">&quot;LossWeightSchedule is not supported. Scale each &quot;</span>
+                    <span class="s2">&quot;component individually (e.g. schedule * EnergyMSELoss()) &quot;</span>
+                    <span class="s2">&quot;and compose the results, or multiply by a float.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">NotImplemented</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="n">scaled_weights</span> <span class="o">=</span> <span class="p">[</span><span class="n">_compose_weights</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+            <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">),</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">scaled_weights</span><span class="p">,</span>
+            <span class="n">normalize_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">,</span>
+            <span class="n">dtype_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__rmul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mirror of :meth:`__mul__` for ``scalar * composition``.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__mul__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``self + other`` flattening any existing composition.</span>
+
+<span class="sd">        The result inherits :attr:`normalize_weights` from ``self``.</span>
+<span class="sd">        Adding two compositions with mismatched ``normalize_weights``</span>
+<span class="sd">        raises :class:`ValueError` — combine them explicitly via</span>
+<span class="sd">        :class:`ComposedLossFunction` to pick the intended flag.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot add ComposedLossFunctions with mismatched &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;normalize_weights (self=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;other=</span><span class="si">{</span><span class="n">other</span><span class="o">.</span><span class="n">normalize_weights</span><span class="si">}</span><span class="s2">). Construct the &quot;</span>
+                    <span class="s2">&quot;combined composition explicitly via &quot;</span>
+                    <span class="s2">&quot;ComposedLossFunction(..., normalize_weights=...).&quot;</span>
+                <span class="p">)</span>
+            <span class="n">dtype_policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span>
+            <span class="k">if</span> <span class="n">dtype_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">dtype_policy</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">dtype_policy</span>
+            <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+                <span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">components</span><span class="p">],</span>
+                <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">_weights</span><span class="p">],</span>
+                <span class="n">normalize_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">,</span>
+                <span class="n">dtype_policy</span><span class="o">=</span><span class="n">dtype_policy</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+                <span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">,</span> <span class="n">other</span><span class="p">],</span>
+                <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span>
+                <span class="n">normalize_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">,</span>
+                <span class="n">dtype_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__radd__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``self`` when seeded with integer ``0`` (for :func:`sum`).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">other</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">other</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">],</span>
+                <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_weights</span><span class="p">],</span>
+                <span class="n">normalize_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="p">,</span>
+                <span class="n">dtype_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype_policy</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+<div class="viewcode-block" id="ComposedLossFunction.extra_repr">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction.extra_repr">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose component count and normalization alongside the default repr.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;num_components=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">components</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;normalize_weights=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize_weights</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">as_composed_loss</span><span class="p">(</span>
+    <span class="n">loss_fn</span><span class="p">:</span> <span class="n">BaseLossFunction</span> <span class="o">|</span> <span class="n">ComposedLossFunction</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``loss_fn`` as a :class:`ComposedLossFunction`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loss_fn : BaseLossFunction | ComposedLossFunction</span>
+<span class="sd">        Leaf or composed loss to normalize.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ComposedLossFunction</span>
+<span class="sd">        The original composed loss or a one-component composition.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``loss_fn`` is not an ALCHEMI loss function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">,</span> <span class="n">ComposedLossFunction</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">loss_fn</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">([</span><span class="n">loss_fn</span><span class="p">])</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+        <span class="s2">&quot;loss_fn must be a BaseLossFunction or ComposedLossFunction; &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">loss_target_keys</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return unique target keys required by ``loss_fn`` in component order.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loss_fn : ComposedLossFunction</span>
+<span class="sd">        Loss whose components declare ``target_key`` attributes.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[str, ...]</span>
+<span class="sd">        Unique target keys to read from a batch.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">seen_keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">target_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="n">loss_fn</span><span class="o">.</span><span class="n">components</span><span class="p">:</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="s2">&quot;target_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">seen_keys</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">seen_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">target_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">target_keys</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">assemble_loss_targets</span><span class="p">(</span>
+    <span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span><span class="p">,</span>
+    <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collect target tensors required by ``loss_fn`` from ``batch``.</span>
+
+<span class="sd">    This is the default :class:`LossTargetAssemblyProtocol` used by training and</span>
+<span class="sd">    validation. Custom assemblers may use the same signature to route targets</span>
+<span class="sd">    from ``predictions`` or from fields available on ``workflow``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loss_fn : ComposedLossFunction</span>
+<span class="sd">        Loss whose component ``target_key`` attributes define required targets.</span>
+<span class="sd">    predictions : Mapping[str, torch.Tensor]</span>
+<span class="sd">        Model predictions keyed by component ``prediction_key`` values. The</span>
+<span class="sd">        default implementation does not read this mapping.</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch exposing target tensors as attributes.</span>
+<span class="sd">    workflow : Any | None, optional</span>
+<span class="sd">        Workflow object supplied by the caller. Training passes the</span>
+<span class="sd">        :class:`~nvalchemi.training.TrainingStrategy`; the default implementation</span>
+<span class="sd">        does not read it.</span>
+<span class="sd">    target_keys : Sequence[str] | None, optional</span>
+<span class="sd">        Precomputed target keys. Defaults to :func:`loss_target_keys`.</span>
+<span class="sd">    batch_label : str, default &quot;Batch&quot;</span>
+<span class="sd">        Human-readable batch label used in missing-target errors.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, torch.Tensor]</span>
+<span class="sd">        Mapping from target key to target tensor.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    AttributeError</span>
+<span class="sd">        If a required target is absent from ``batch``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">del</span> <span class="n">predictions</span><span class="p">,</span> <span class="n">workflow</span>
+    <span class="n">component_by_key</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">key</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="n">loss_fn</span><span class="o">.</span><span class="n">components</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">key</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="s2">&quot;target_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">}</span>
+    <span class="n">targets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">target_keys</span> <span class="k">if</span> <span class="n">target_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">loss_target_keys</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">targets</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">component_name</span> <span class="o">=</span> <span class="n">component_by_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">batch_label</span><span class="si">}</span><span class="s2"> is missing target attribute </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;required by </span><span class="si">{</span><span class="n">component_name</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">return</span> <span class="n">targets</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_supervised_loss</span><span class="p">(</span>
+    <span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span><span class="p">,</span>
+    <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_assembler</span><span class="p">:</span> <span class="n">LossTargetAssemblyProtocol</span> <span class="o">=</span> <span class="n">assemble_loss_targets</span><span class="p">,</span>
+    <span class="n">target_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossOutput</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run ``loss_fn`` with targets and graph metadata from ``batch``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loss_fn : ComposedLossFunction</span>
+<span class="sd">        Supervised loss to evaluate.</span>
+<span class="sd">    predictions : Mapping[str, torch.Tensor]</span>
+<span class="sd">        Model predictions keyed by component ``prediction_key`` values.</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch exposing targets and optional graph metadata.</span>
+<span class="sd">    step : int</span>
+<span class="sd">        Current global optimizer step.</span>
+<span class="sd">    epoch : int</span>
+<span class="sd">        Current training epoch.</span>
+<span class="sd">    workflow : Any | None, optional</span>
+<span class="sd">        Workflow object supplied to ``target_assembler``. Training passes the</span>
+<span class="sd">        :class:`~nvalchemi.training.TrainingStrategy`.</span>
+<span class="sd">    target_assembler : LossTargetAssemblyProtocol, default assemble_loss_targets</span>
+<span class="sd">        Callable that builds the target mapping passed to ``loss_fn``.</span>
+<span class="sd">    target_keys : Sequence[str] | None, optional</span>
+<span class="sd">        Precomputed target keys to avoid repeated component scans.</span>
+<span class="sd">    batch_label : str, default &quot;Batch&quot;</span>
+<span class="sd">        Human-readable batch label used in missing-target errors.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ComposedLossOutput</span>
+<span class="sd">        Total and per-component loss diagnostics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">graph_meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes_per_graph&quot;</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">graph_meta</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">loss_fn</span><span class="p">(</span>
+        <span class="n">predictions</span><span class="p">,</span>
+        <span class="n">target_assembler</span><span class="p">(</span>
+            <span class="n">loss_fn</span><span class="p">,</span>
+            <span class="n">predictions</span><span class="p">,</span>
+            <span class="n">batch</span><span class="p">,</span>
+            <span class="n">workflow</span><span class="o">=</span><span class="n">workflow</span><span class="p">,</span>
+            <span class="n">target_keys</span><span class="o">=</span><span class="n">target_keys</span><span class="p">,</span>
+            <span class="n">batch_label</span><span class="o">=</span><span class="n">batch_label</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">,</span>
+        <span class="n">epoch</span><span class="o">=</span><span class="n">epoch</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">graph_meta</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compose_weights</span><span class="p">(</span>
+    <span class="n">outer</span><span class="p">:</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">inner</span><span class="p">:</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``outer * inner`` as a weight, keeping floats where possible.</span>
+
+<span class="sd">    If either operand is a schedule, the result is a</span>
+<span class="sd">    :class:`_ProductWeight` that resolves ``outer(step, epoch) *</span>
+<span class="sd">    inner(step, epoch)`` lazily. Pure float * float collapses to a float.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">outer_is_schedule</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outer</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">)</span>
+    <span class="n">inner_is_schedule</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inner</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">outer_is_schedule</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">inner_is_schedule</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">outer</span><span class="p">)</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">inner</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_ProductWeight</span><span class="p">(</span><span class="n">outer</span><span class="p">,</span> <span class="n">inner</span><span class="p">)</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_ProductWeight</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy product of two weights — either operand may be a schedule or a float.</span>
+
+<span class="sd">    Needed for nested composition flattening: when a parent composition</span>
+<span class="sd">    has a non-unity weight and a child&#39;s weight is a</span>
+<span class="sd">    :class:`LossWeightSchedule`, the product cannot be resolved at</span>
+<span class="sd">    construction time because the schedule is a callable of</span>
+<span class="sd">    ``(step, epoch)``. :class:`_ProductWeight` captures both operands</span>
+<span class="sd">    and evaluates the product at call time while structurally</span>
+<span class="sd">    satisfying the :class:`LossWeightSchedule` protocol (``per_epoch``</span>
+<span class="sd">    attribute + ``__call__``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">left</span><span class="p">:</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span>
+    <span class="n">right</span><span class="p">:</span> <span class="n">LossWeightSchedule</span> <span class="o">|</span> <span class="nb">float</span>
+    <span class="n">per_epoch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive ``per_epoch`` from the two operands.&quot;&quot;&quot;</span>
+        <span class="n">combined</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="s2">&quot;per_epoch&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">,</span> <span class="s2">&quot;per_epoch&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># Frozen dataclass → must go through object.__setattr__.</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;per_epoch&quot;</span><span class="p">,</span> <span class="n">combined</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a serializable spec that rebuilds this product schedule.&quot;&quot;&quot;</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">)</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">left</span>
+        <span class="p">)</span>
+        <span class="n">right</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">,</span> <span class="n">LossWeightSchedule</span><span class="p">)</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">create_model_spec</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">left</span><span class="o">=</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``left(step, epoch) * right(step, epoch)``.&quot;&quot;&quot;</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+        <span class="n">right</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">left</span><span class="p">)</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">right</span><span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

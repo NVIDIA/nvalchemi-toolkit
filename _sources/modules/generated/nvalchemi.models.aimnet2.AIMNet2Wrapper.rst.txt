@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.aimnet2
 
+
 .. autoclass:: AIMNet2Wrapper
     :members:
+
 
 .. raw:: html
 

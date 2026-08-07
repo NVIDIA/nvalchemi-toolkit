@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.mace
 
+
 .. autoclass:: MACEWrapper
     :members:
+
 
 .. raw:: html
 

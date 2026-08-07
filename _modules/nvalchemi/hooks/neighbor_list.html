@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.hooks.neighbor_list &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.hooks.neighbor_list &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/hooks/neighbor_list';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -440,17 +443,21 @@ document.write(`
 <span class="sd">refreshed each step via ``Tensor.copy_()`` — to avoid per-step dynamic</span>
 <span class="sd">allocation inside the ``neighbor_list`` dispatcher.</span>
 
-<span class="sd">``neighbor_list`` selects between ``batch_naive`` (avg &lt; 2000 atoms/system)</span>
-<span class="sd">and ``batch_cell_list`` (avg &gt;= 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.</span>
-<span class="sd">Both paths normally allocate auxiliary tensors on-demand with CPU-GPU syncs</span>
-<span class="sd">(e.g. ``.item()`` calls). :meth:`NeighborListHook._alloc_nl_kwargs`</span>
-<span class="sd">computes these **once** when the batch shape is first seen (or changes)</span>
-<span class="sd">and caches them in ``NeighborListHook._buf_nl_kwargs``:</span>
+<span class="sd">For PBC systems, ``NeighborListHook`` runs the ``nvalchemiops`` selector</span>
+<span class="sd">once per batch shape and caches the resulting explicit strategy name (for</span>
+<span class="sd">example ``batch_cell_list_pair_centric`` or ``batch_cluster_tile``). For</span>
+<span class="sd">non-PBC systems it keeps the legacy size threshold between naive and cell-list</span>
+<span class="sd">methods. The selected paths normally allocate auxiliary tensors on demand with</span>
+<span class="sd">CPU-GPU syncs (e.g. ``.item()`` calls), so</span>
+<span class="sd">:meth:`NeighborListHook._alloc_nl_kwargs` computes these **once** when the batch</span>
+<span class="sd">shape is first seen (or changes) and caches them in</span>
+<span class="sd">``NeighborListHook._buf_nl_kwargs``:</span>
 
 <span class="sd">* *Naive, no PBC*: no extra kwargs needed.</span>
 <span class="sd">* *Naive, PBC*: ``shift_range_per_dimension``, ``num_shifts_per_system``,</span>
 <span class="sd">  ``max_shifts_per_system``, and ``max_atoms_per_system``.</span>
 <span class="sd">* *Cell list*: seven cell-list scratch tensors via ``allocate_cell_list``.</span>
+<span class="sd">* *Cluster tile*: batch cluster-tile sort/group/tile scratch tensors.</span>
 
 <span class="sd">**NPT note**: geometry-dependent kwargs (shift ranges, cell-list sizes) are</span>
 <span class="sd">fixed when the staging buffers are first allocated for a given ``(N, B)``</span>
@@ -464,13 +471,30 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.neighbors.base_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">neighbor_list_strategy_run_args</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.neighbors.neighbor_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_max_neighbors</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">neighbor_list</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">neighbor_list</span><span class="p">,</span> <span class="n">suggest_neighbor_list_method</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors.rebuild_detection</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">batch_neighbor_list_needs_rebuild</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors.batch_cell_list</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
         <span class="n">estimate_batch_cell_list_sizes</span><span class="p">,</span>
     <span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">estimate_batch_cell_list_sizes</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors.batch_cluster_tile</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">allocate_batch_cluster_tile_list</span><span class="p">,</span>
+        <span class="n">estimate_batch_max_tiles_per_group</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">allocate_batch_cluster_tile_list</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">estimate_batch_max_tiles_per_group</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors.neighbor_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
         <span class="n">allocate_cell_list</span><span class="p">,</span>
         <span class="n">compute_naive_num_shifts</span><span class="p">,</span>
@@ -478,21 +502,6 @@ document.write(`
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">allocate_cell_list</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">compute_naive_num_shifts</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">estimate_batch_cell_list_sizes</span> <span class="o">=</span> <span class="kc">None</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.neighbors.rebuild_detection</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-        <span class="n">batch_neighbor_list_needs_rebuild</span> <span class="k">as</span> <span class="n">_batch_nl_needs_rebuild</span><span class="p">,</span>
-    <span class="p">)</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">_batch_nl_needs_rebuild</span> <span class="o">=</span> <span class="kc">None</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics._ops.neighbor_list_rebuild</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-        <span class="n">batch_neighbor_list_rebuild_inplace</span> <span class="k">as</span> <span class="n">_batch_nl_rebuild_inplace</span><span class="p">,</span>
-    <span class="p">)</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">_batch_nl_rebuild_inplace</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
@@ -508,7 +517,7 @@ document.write(`
 <span class="sd">    This hook runs at :attr:`~DynamicsStage.BEFORE_COMPUTE` and writes</span>
 <span class="sd">    neighbor data into the batch so that the model&#39;s ``adapt_input`` can</span>
 <span class="sd">    read it.  An optional Verlet skin buffer avoids rebuilding the list</span>
-<span class="sd">    every step: the list is only recomputed when the maximum atomic</span>
+<span class="sd">    every step: the list is only recomputed when the maximum raw Cartesian</span>
 <span class="sd">    displacement since the last build exceeds ``config.skin / 2``, or when</span>
 <span class="sd">    the set of active systems changes (detected via ``system_id``).</span>
 
@@ -537,31 +546,36 @@ document.write(`
 <span class="sd">        Verlet skin distance in the same length units as positions.</span>
 <span class="sd">        The neighbor list is searched out to ``cutoff + skin`` so that</span>
 <span class="sd">        atoms crossing the skin boundary but not the bare cutoff are</span>
-<span class="sd">        already included.  The list is only rebuilt when any atom has</span>
-<span class="sd">        moved more than ``skin / 2`` since the previous build (requires</span>
-<span class="sd">        ``nvalchemiops &gt;= 0.4``); set to ``0.0`` (default) to rebuild</span>
-<span class="sd">        every step.</span>
+<span class="sd">        already included.  The list is only rebuilt when any atom&#39;s raw</span>
+<span class="sd">        Cartesian position has moved more than ``skin / 2`` since the</span>
+<span class="sd">        previous build (requires ``nvalchemiops &gt;= 0.4``); set to ``0.0``</span>
+<span class="sd">        (default) to rebuild every step.</span>
 <span class="sd">    max_neighbors : int | None, optional</span>
 <span class="sd">        Maximum number of neighbors per atom for MATRIX format.  When</span>
 <span class="sd">        ``None`` (default), auto-estimated from the cutoff via</span>
 <span class="sd">        ``estimate_max_neighbors(cutoff)``.  Ignored for COO format.</span>
 <span class="sd">    stage : Enum | None, optional</span>
-<span class="sd">        The workflow stage at which this hook runs.  Defaults to</span>
-<span class="sd">        ``DynamicsStage.BEFORE_COMPUTE``.</span>
+<span class="sd">        Explicit workflow stage at which this hook runs.  Defaults to</span>
+<span class="sd">        ``None``; when ``None`` the hook fires at</span>
+<span class="sd">        ``DynamicsStage.BEFORE_COMPUTE`` (see the class description above).</span>
+<span class="sd">    method : str | None, optional</span>
+<span class="sd">        Explicit ``nvalchemiops`` neighbor-list method to use.  When ``None``</span>
+<span class="sd">        (default), the hook selects an appropriate method from the batch shape</span>
+<span class="sd">        and periodic-cell metadata.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="NeighborListHook.__init__">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">NeighborConfig</span><span class="p">,</span>
         <span class="n">skin</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">skin</span> <span class="o">=</span> <span class="n">skin</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">method</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_max_neighbors_override</span> <span class="o">=</span> <span class="n">max_neighbors</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_flag</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">format</span> <span class="o">==</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
@@ -590,12 +604,12 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># PBC only</span>
 
         <span class="c1"># Algorithm-specific pre-allocated kwargs forwarded to neighbor_list.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Adaptive K-dimension state.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_actual_max_k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># GPU scalar from last build</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_first_build</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Force sync check after first kernel call</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_first_build</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Force sync check after first kernel call</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Main hook entry point</span>
@@ -604,11 +618,11 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Recompute the neighbor list if needed and write it to the batch.</span>
 
-<span class="sd">        When ``skin &gt; 0`` and ``nvalchemiops`` provides</span>
+<span class="sd">        When ``skin &gt; 0``,</span>
 <span class="sd">        :func:`~nvalchemiops.torch.neighbors.rebuild_detection.batch_neighbor_list_needs_rebuild`,</span>
-<span class="sd">        the list is only rebuilt when at least one atom has moved more than</span>
-<span class="sd">        ``skin / 2`` since the previous build.  The reference positions are</span>
-<span class="sd">        updated in-place on the GPU (no clone) whenever a rebuild occurs.</span>
+<span class="sd">        the list is only rebuilt when at least one atom&#39;s raw Cartesian position</span>
+<span class="sd">        has moved more than ``skin / 2`` since the previous build.  The reference</span>
+<span class="sd">        positions are updated in-place on the GPU whenever a rebuild occurs.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
 
@@ -657,7 +671,15 @@ document.write(`
             <span class="c1"># Composition changed — check K before staging realloc.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_check_and_resize_k</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">pbc</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_alloc_staging_buffers</span><span class="p">(</span>
-                <span class="n">N</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">pbc</span><span class="p">,</span> <span class="n">batch_ptr</span>
+                <span class="n">N</span><span class="p">,</span>
+                <span class="n">B</span><span class="p">,</span>
+                <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">cell</span><span class="p">,</span>
+                <span class="n">pbc</span><span class="p">,</span>
+                <span class="n">batch_ptr</span><span class="p">,</span>
+                <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+                <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_alloc_N</span> <span class="o">=</span> <span class="n">N</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_alloc_B</span> <span class="o">=</span> <span class="n">B</span>
@@ -667,41 +689,20 @@ document.write(`
 
         <span class="c1"># ------------------------------------------------------------------</span>
         <span class="c1"># Skin check: decide per-system whether the neighbor list needs</span>
-        <span class="c1"># rebuilding based on atomic displacement since the last build.</span>
-        <span class="c1"># Uses the in-place variant to avoid per-step allocation of the</span>
-        <span class="c1"># rebuild_flags tensor.  Falls back to the upstream function if the</span>
-        <span class="c1"># in-place op is not available (nvalchemiops &lt; 0.4 or custom op not</span>
-        <span class="c1"># loaded).</span>
+        <span class="c1"># rebuilding based on raw Cartesian displacement since the last</span>
+        <span class="c1"># build.  Minimum-image displacement is not valid here: wrapping an</span>
+        <span class="c1"># atom changes the coordinate representation that cached periodic</span>
+        <span class="c1"># shifts refer to and must therefore trigger a rebuild.</span>
         <span class="c1"># ------------------------------------------------------------------</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_positions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">cell_inv</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv_ex</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_cell</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="k">else</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_flags</span> <span class="o">=</span> <span class="n">batch_neighbor_list_needs_rebuild</span><span class="p">(</span>
+                <span class="n">reference_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ref_positions</span><span class="p">,</span>
+                <span class="n">current_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span><span class="p">,</span>
+                <span class="n">batch_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_idx</span><span class="p">,</span>
+                <span class="n">skin_distance_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skin</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">update_reference_positions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">num_systems</span><span class="o">=</span><span class="n">B</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="n">_batch_nl_rebuild_inplace</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">_batch_nl_rebuild_inplace</span><span class="p">(</span>
-                    <span class="n">reference_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ref_positions</span><span class="p">,</span>
-                    <span class="n">current_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span><span class="p">,</span>
-                    <span class="n">batch_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_idx</span><span class="p">,</span>
-                    <span class="n">rebuild_flags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_flags</span><span class="p">,</span>
-                    <span class="n">skin_distance_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skin</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
-                    <span class="n">update_reference_positions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">cell</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_cell</span><span class="p">,</span>
-                    <span class="n">cell_inv</span><span class="o">=</span><span class="n">cell_inv</span><span class="p">,</span>
-                    <span class="n">pbc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_pbc</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">_batch_nl_needs_rebuild</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_flags</span> <span class="o">=</span> <span class="n">_batch_nl_needs_rebuild</span><span class="p">(</span>
-                    <span class="n">reference_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ref_positions</span><span class="p">,</span>
-                    <span class="n">current_positions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span><span class="p">,</span>
-                    <span class="n">batch_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_idx</span><span class="p">,</span>
-                    <span class="n">skin_distance_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skin</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
-                    <span class="n">update_reference_positions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">cell</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_cell</span><span class="p">,</span>
-                    <span class="n">cell_inv</span><span class="o">=</span><span class="n">cell_inv</span><span class="p">,</span>
-                    <span class="n">pbc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_pbc</span><span class="p">,</span>
-                <span class="p">)</span>
 
         <span class="c1"># ------------------------------------------------------------------</span>
         <span class="c1"># Build the neighbor list using pre-allocated buffers.</span>
@@ -719,6 +720,7 @@ document.write(`
             <span class="n">num_neighbors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_neighbors</span><span class="p">,</span>
             <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_matrix_shifts</span><span class="p">,</span>
             <span class="n">rebuild_flags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_flags</span><span class="p">,</span>
+            <span class="n">method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_method</span><span class="p">,</span>
             <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -747,6 +749,7 @@ document.write(`
                     <span class="n">num_neighbors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_neighbors</span><span class="p">,</span>
                     <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_matrix_shifts</span><span class="p">,</span>
                     <span class="n">rebuild_flags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Force full rebuild</span>
+                    <span class="n">method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_method</span><span class="p">,</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span><span class="p">,</span>
                 <span class="p">)</span>
 
@@ -902,6 +905,8 @@ document.write(`
         <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Allocate persistent staging buffers for the current (N, B) shape.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
@@ -913,17 +918,20 @@ document.write(`
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_buf_cell</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_buf_pbc</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1"># Pre-allocate rebuild_flags as all-True so that the very first step</span>
-        <span class="c1"># (before _ref_positions is set and the skin check runs) forces a full</span>
-        <span class="c1"># neighbor-list build for every system.  The in-place op zeroes this</span>
-        <span class="c1"># buffer at the start of each subsequent call before writing fresh values.</span>
+        <span class="c1"># Initialise rebuild_flags as all-True so the first step, before the skin</span>
+        <span class="c1"># check has reference positions, builds every system. Subsequent checks</span>
+        <span class="c1"># replace this tensor with the flags returned by nvalchemiops.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_flags</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="c1"># Pre-allocate algorithm-specific kwargs to eliminate on-demand CPU syncs</span>
         <span class="c1"># from the neighbor_list dispatcher.  Use the actual batch_ptr (if provided)</span>
         <span class="c1"># to compute max_atoms_per_system correctly — the staging buffer is still</span>
         <span class="c1"># all-zeros at this point and would give max_atoms = 0.</span>
         <span class="n">ptr</span> <span class="o">=</span> <span class="n">batch_ptr</span> <span class="k">if</span> <span class="n">batch_ptr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_ptr</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_alloc_nl_kwargs</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">pbc</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+        <span class="n">alloc_positions</span> <span class="o">=</span> <span class="n">positions</span> <span class="k">if</span> <span class="n">positions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_positions</span>
+        <span class="n">alloc_batch_idx</span> <span class="o">=</span> <span class="n">batch_idx</span> <span class="k">if</span> <span class="n">batch_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_alloc_nl_kwargs</span><span class="p">(</span>
+            <span class="n">N</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">alloc_positions</span><span class="p">,</span> <span class="n">alloc_batch_idx</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">pbc</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_copy_to_staging_buffers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -951,6 +959,7 @@ document.write(`
         <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
         <span class="n">batch_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
         <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -959,49 +968,88 @@ document.write(`
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Pre-allocate algorithm-specific kwargs to remove CPU-GPU syncs.</span>
 
-<span class="sd">        The ``neighbor_list`` dispatcher normally infers geometry-dependent</span>
-<span class="sd">        values (shift ranges, cell-list sizes) at call time using ``.item()``</span>
-<span class="sd">        synchronisations.  This method computes them **once** when the staging</span>
-<span class="sd">        buffers are allocated (or re-allocated after a shape change) and stores</span>
-<span class="sd">        the resulting tensors in ``_buf_nl_kwargs`` so they can be forwarded as</span>
-<span class="sd">        ``**kwargs`` on every ``neighbor_list`` call.</span>
-
-<span class="sd">        Algorithm selection mirrors the dispatcher threshold:</span>
-
-<span class="sd">        * ``avg_atoms &lt; 2000`` -&gt; ``batch_naive``</span>
-<span class="sd">        * ``avg_atoms &gt;= 2000`` -&gt; ``batch_cell_list``</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        N, B : int</span>
-<span class="sd">            Total atom count and number of systems at alloc time.</span>
-<span class="sd">        positions : torch.Tensor</span>
-<span class="sd">            Staging buffer for positions (used to estimate bounding box for</span>
-<span class="sd">            non-PBC cell-list systems).</span>
-<span class="sd">        batch_ptr : torch.Tensor</span>
-<span class="sd">            Staging buffer for batch_ptr (used to get max_atoms_per_system).</span>
-<span class="sd">        cell, pbc : torch.Tensor or None</span>
-<span class="sd">            Cell and PBC flag tensors at alloc time.</span>
-<span class="sd">        device, dtype : torch.device, torch.dtype</span>
-<span class="sd">            Allocation target.</span>
+<span class="sd">        The ops dispatcher exposes a host-only cost model that can select</span>
+<span class="sd">        fine-grained strategies such as ``batch_cell_list_pair_centric`` and</span>
+<span class="sd">        ``batch_cluster_tile``.  Run that selector once when staging buffers are</span>
+<span class="sd">        allocated, cache the chosen method, and pre-allocate scratch tensors for</span>
+<span class="sd">        the selected base algorithm.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">batch_ptr</span> <span class="o">=</span> <span class="n">batch_ptr</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_neighbor_list_method</span><span class="p">(</span>
+            <span class="n">N</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">batch_ptr</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">pbc</span><span class="p">,</span> <span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="n">base_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_base_neighbor_list_method</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_list_method</span><span class="p">)</span>
 
-        <span class="n">avg_atoms</span> <span class="o">=</span> <span class="n">N</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">use_cell_list</span> <span class="o">=</span> <span class="n">avg_atoms</span> <span class="o">&gt;=</span> <span class="mi">2000</span>
+        <span class="k">if</span> <span class="n">base_method</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;cluster_tile&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">allocate_batch_cluster_tile_list</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">estimate_batch_max_tiles_per_group</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="k">return</span>
+            <span class="n">alloc_cell</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">max_tiles_per_group</span> <span class="o">=</span> <span class="n">estimate_batch_max_tiles_per_group</span><span class="p">(</span>
+                <span class="n">batch_ptr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span> <span class="n">alloc_cell</span>
+            <span class="p">)</span>
+            <span class="p">(</span>
+                <span class="n">sorted_atom_index</span><span class="p">,</span>
+                <span class="n">sort_inv</span><span class="p">,</span>
+                <span class="n">sorted_pos_x</span><span class="p">,</span>
+                <span class="n">sorted_pos_y</span><span class="p">,</span>
+                <span class="n">sorted_pos_z</span><span class="p">,</span>
+                <span class="n">batch_idx_sorted</span><span class="p">,</span>
+                <span class="n">batch_ptr_padded</span><span class="p">,</span>
+                <span class="n">group_system</span><span class="p">,</span>
+                <span class="n">group_ptr</span><span class="p">,</span>
+                <span class="n">group_ctr_x</span><span class="p">,</span>
+                <span class="n">group_ctr_y</span><span class="p">,</span>
+                <span class="n">group_ctr_z</span><span class="p">,</span>
+                <span class="n">group_ext_x</span><span class="p">,</span>
+                <span class="n">group_ext_y</span><span class="p">,</span>
+                <span class="n">group_ext_z</span><span class="p">,</span>
+                <span class="n">num_tiles</span><span class="p">,</span>
+                <span class="n">tile_row_group</span><span class="p">,</span>
+                <span class="n">tile_col_group</span><span class="p">,</span>
+                <span class="n">tile_system</span><span class="p">,</span>
+            <span class="p">)</span> <span class="o">=</span> <span class="n">allocate_batch_cluster_tile_list</span><span class="p">(</span>
+                <span class="n">batch_ptr</span><span class="p">,</span>
+                <span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">max_tiles_per_group</span><span class="o">=</span><span class="n">max_tiles_per_group</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;max_tiles_per_group&quot;</span><span class="p">:</span> <span class="n">max_tiles_per_group</span><span class="p">,</span>
+                <span class="s2">&quot;sorted_atom_index&quot;</span><span class="p">:</span> <span class="n">sorted_atom_index</span><span class="p">,</span>
+                <span class="s2">&quot;sort_inv&quot;</span><span class="p">:</span> <span class="n">sort_inv</span><span class="p">,</span>
+                <span class="s2">&quot;sorted_pos_x&quot;</span><span class="p">:</span> <span class="n">sorted_pos_x</span><span class="p">,</span>
+                <span class="s2">&quot;sorted_pos_y&quot;</span><span class="p">:</span> <span class="n">sorted_pos_y</span><span class="p">,</span>
+                <span class="s2">&quot;sorted_pos_z&quot;</span><span class="p">:</span> <span class="n">sorted_pos_z</span><span class="p">,</span>
+                <span class="s2">&quot;batch_idx_sorted&quot;</span><span class="p">:</span> <span class="n">batch_idx_sorted</span><span class="p">,</span>
+                <span class="s2">&quot;batch_ptr_padded&quot;</span><span class="p">:</span> <span class="n">batch_ptr_padded</span><span class="p">,</span>
+                <span class="s2">&quot;group_system&quot;</span><span class="p">:</span> <span class="n">group_system</span><span class="p">,</span>
+                <span class="s2">&quot;group_ptr&quot;</span><span class="p">:</span> <span class="n">group_ptr</span><span class="p">,</span>
+                <span class="s2">&quot;group_ctr_x&quot;</span><span class="p">:</span> <span class="n">group_ctr_x</span><span class="p">,</span>
+                <span class="s2">&quot;group_ctr_y&quot;</span><span class="p">:</span> <span class="n">group_ctr_y</span><span class="p">,</span>
+                <span class="s2">&quot;group_ctr_z&quot;</span><span class="p">:</span> <span class="n">group_ctr_z</span><span class="p">,</span>
+                <span class="s2">&quot;group_ext_x&quot;</span><span class="p">:</span> <span class="n">group_ext_x</span><span class="p">,</span>
+                <span class="s2">&quot;group_ext_y&quot;</span><span class="p">:</span> <span class="n">group_ext_y</span><span class="p">,</span>
+                <span class="s2">&quot;group_ext_z&quot;</span><span class="p">:</span> <span class="n">group_ext_z</span><span class="p">,</span>
+                <span class="s2">&quot;num_tiles&quot;</span><span class="p">:</span> <span class="n">num_tiles</span><span class="p">,</span>
+                <span class="s2">&quot;tile_row_group&quot;</span><span class="p">:</span> <span class="n">tile_row_group</span><span class="p">,</span>
+                <span class="s2">&quot;tile_col_group&quot;</span><span class="p">:</span> <span class="n">tile_col_group</span><span class="p">,</span>
+                <span class="s2">&quot;tile_system&quot;</span><span class="p">:</span> <span class="n">tile_system</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">return</span>
 
-        <span class="k">if</span> <span class="n">use_cell_list</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">base_method</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;cell_list&quot;</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">estimate_batch_cell_list_sizes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">allocate_cell_list</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span>  <span class="c1"># nvalchemiops too old; fall back to dynamic allocation</span>
+                <span class="k">return</span>
             <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># PBC: use the actual cell geometry.</span>
                 <span class="n">alloc_cell</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
                 <span class="n">alloc_pbc</span> <span class="o">=</span> <span class="n">pbc</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Non-PBC: synthesise a bounding-box cell from current positions</span>
-                <span class="c1"># with a 1.5x pad so that position drift during the simulation</span>
-                <span class="c1"># doesn&#39;t overflow the pre-allocated cell-list arrays.</span>
-                <span class="n">expanded_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_batch_idx</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+                <span class="n">expanded_idx</span> <span class="o">=</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
                 <span class="n">pos_min</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
                 <span class="n">pos_min</span><span class="o">.</span><span class="n">scatter_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">expanded_idx</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amin&quot;</span><span class="p">)</span>
                 <span class="n">pos_max</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
@@ -1009,7 +1057,7 @@ document.write(`
                 <span class="n">cell_lengths</span> <span class="o">=</span> <span class="p">(</span><span class="n">pos_max</span> <span class="o">-</span> <span class="n">pos_min</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="o">+</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span>
                 <span class="p">)</span>
-                <span class="n">alloc_cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span><span class="n">cell_lengths</span><span class="p">)</span>  <span class="c1"># (B, 3, 3)</span>
+                <span class="n">alloc_cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span><span class="n">cell_lengths</span><span class="p">)</span>
                 <span class="n">alloc_pbc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 
             <span class="n">max_total_cells</span><span class="p">,</span> <span class="n">neighbor_search_radius</span> <span class="o">=</span> <span class="n">estimate_batch_cell_list_sizes</span><span class="p">(</span>
@@ -1035,30 +1083,62 @@ document.write(`
                 <span class="s2">&quot;cell_atom_start_indices&quot;</span><span class="p">:</span> <span class="n">cell_atom_start_indices</span><span class="p">,</span>
                 <span class="s2">&quot;cell_atom_list&quot;</span><span class="p">:</span> <span class="n">cell_atom_list</span><span class="p">,</span>
             <span class="p">}</span>
+            <span class="k">return</span>
 
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Naive algorithm.</span>
-            <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># PBC naive: pre-compute shift-range tensors so the dispatcher</span>
-                <span class="c1"># does not call compute_naive_num_shifts (which has .item()) on</span>
-                <span class="c1"># the hot path.</span>
-                <span class="k">if</span> <span class="n">compute_naive_num_shifts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">return</span>
-                <span class="n">shift_range</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">,</span> <span class="n">max_shifts</span> <span class="o">=</span> <span class="n">compute_naive_num_shifts</span><span class="p">(</span>
-                    <span class="n">cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span>
-                    <span class="n">pbc</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">max_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">batch_ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">batch_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s2">&quot;shift_range_per_dimension&quot;</span><span class="p">:</span> <span class="n">shift_range</span><span class="p">,</span>
-                    <span class="s2">&quot;num_shifts_per_system&quot;</span><span class="p">:</span> <span class="n">num_shifts</span><span class="p">,</span>
-                    <span class="s2">&quot;max_shifts_per_system&quot;</span><span class="p">:</span> <span class="n">max_shifts</span><span class="p">,</span>
-                    <span class="s2">&quot;max_atoms_per_system&quot;</span><span class="p">:</span> <span class="n">max_atoms</span><span class="p">,</span>
-                <span class="p">}</span></div>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">compute_naive_num_shifts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="n">shift_range</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">,</span> <span class="n">max_shifts</span> <span class="o">=</span> <span class="n">compute_naive_num_shifts</span><span class="p">(</span>
+                <span class="n">cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span>
+                <span class="n">pbc</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">max_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">batch_ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">batch_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_nl_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;shift_range_per_dimension&quot;</span><span class="p">:</span> <span class="n">shift_range</span><span class="p">,</span>
+                <span class="s2">&quot;num_shifts_per_system&quot;</span><span class="p">:</span> <span class="n">num_shifts</span><span class="p">,</span>
+                <span class="s2">&quot;max_shifts_per_system&quot;</span><span class="p">:</span> <span class="n">max_shifts</span><span class="p">,</span>
+                <span class="s2">&quot;max_atoms_per_system&quot;</span><span class="p">:</span> <span class="n">max_atoms</span><span class="p">,</span>
+            <span class="p">}</span>
 
-            <span class="c1"># No-PBC naive: no extra kwargs required — the kernel has no</span>
-            <span class="c1"># CPU-sync allocations in this branch.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_neighbor_list_method</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">batch_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Choose the explicit method to use inside the compiled hot path.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span>
+        <span class="n">fallback</span> <span class="o">=</span> <span class="s2">&quot;cell_list&quot;</span> <span class="k">if</span> <span class="n">N</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2000</span> <span class="k">else</span> <span class="s2">&quot;naive&quot;</span>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fallback</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">suggest_neighbor_list_method</span><span class="p">(</span>
+                <span class="n">batch_ptr</span><span class="p">,</span>
+                <span class="n">cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">pbc</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span>
+                <span class="n">half_fill</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">half_list</span><span class="p">,</span>
+                <span class="n">return_neighbor_list</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">positions_dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">NotImplementedError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">fallback</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_base_neighbor_list_method</span><span class="p">(</span><span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the dispatcher base method for a fine-grained strategy name.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;naive&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">neighbor_list_strategy_run_args</span><span class="p">(</span><span class="n">method</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">method</span></div>
+
 </pre></div>
 
                 </article>

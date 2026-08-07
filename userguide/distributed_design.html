@@ -1,0 +1,2089 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Distributed ML Potentials: Design Overview &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed_design';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Distributed Training" href="distributed_training.html" />
+    <link rel="prev" title="Bring Your Own Model: Authoring a Distribution Spec" href="distributed_byo.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Distributed...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 MD033 MD013 -->
+<section class="tex2jax_ignore mathjax_ignore" id="distributed-ml-potentials-design-overview">
+<span id="distributed-design-overview"></span><h1>Distributed ML Potentials: Design Overview<a class="headerlink" href="#distributed-ml-potentials-design-overview" title="Link to this heading">#</a></h1>
+<p>A guided tour of the distributed framework. Reads top-to-bottom as a
+30-minute talk; each section is a slide group anchored by a figure
+and a code block. Cross-links into the deeper user-guide chapters
+where appropriate.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Section</p></th>
+<th class="head"><p>Question it answers</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1. Motivation</p></td>
+<td><p>Why does naïve domain decomposition break for MPNNs?</p></td>
+</tr>
+<tr class="row-odd"><td><p>2. ShardTensor</p></td>
+<td><p>What primitive lets distribution stay invisible to the model?</p></td>
+</tr>
+<tr class="row-even"><td><p>3. Specs</p></td>
+<td><p>How does the framework know <em>what</em> to do at each op?</p></td>
+</tr>
+<tr class="row-odd"><td><p>4. MACE end-to-end</p></td>
+<td><p>What does “halo MPNN” actually look like?</p></td>
+</tr>
+<tr class="row-even"><td><p>5. UMA end-to-end</p></td>
+<td><p>How do models that rebuild their own neighbour list scale?</p></td>
+</tr>
+<tr class="row-odd"><td><p>6. Composition</p></td>
+<td><p>How do MACE + Ewald run in the same pipeline?</p></td>
+</tr>
+<tr class="row-even"><td><p>7. Warp / Triton kernels</p></td>
+<td><p>How do opaque kernels participate?</p></td>
+</tr>
+<tr class="row-odd"><td><p>8. Validation + BYO</p></td>
+<td><p>How does a new model author go from zero to production?</p></td>
+</tr>
+</tbody>
+</table>
+<hr class="docutils" />
+<section id="motivation-domain-decomposition-meets-message-passing">
+<h2>1. Motivation: domain decomposition meets message passing<a class="headerlink" href="#motivation-domain-decomposition-meets-message-passing" title="Link to this heading">#</a></h2>
+<section id="the-starting-point-classical-dd-works-for-short-range-pair-potentials">
+<h3>1.1 The starting point: classical DD works for short-range pair potentials<a class="headerlink" href="#the-starting-point-classical-dd-works-for-short-range-pair-potentials" title="Link to this heading">#</a></h3>
+<p>Spatial decomposition is the standard way to scale molecular dynamics:
+each rank owns a region of the simulation cell, computes forces for
+its atoms, and exchanges a thin shell of “ghost” atoms with neighbors
+for pair interactions whose cutoff crosses the boundary. For a pair
+potential like Lennard-Jones, the math is local and the comms are
+cheap.</p>
+<figure class="align-center" id="id1">
+<div class="graphviz"><object data="../_images/graphviz-26683ec27f9023db4fecdce44318907e0c7e70ab.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph halo_classical {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    global_view [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;16&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;global atom array (16 atoms)&lt;/B&gt;&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;0&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;1&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;2&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;3&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;9&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;10&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;11&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;12&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;13&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;14&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;15&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 0 owns&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 1 owns&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    rank0_view [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;12&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;rank 0's local view&lt;/B&gt;: 8 owned + 4 shell rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;0&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;1&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;2&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;3&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;9&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;10&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;11&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;my owned&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;shell (read-only)&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    rank1_view [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;12&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;rank 1's local view&lt;/B&gt;: 4 shell + 8 owned rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;9&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;10&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;11&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;12&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;13&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;14&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;15&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;shell (read-only)&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;my owned&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    global_view -&gt; rank0_view [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;slice + add shell&lt;/FONT&gt;&gt;];
+    global_view -&gt; rank1_view [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;slice + add shell&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">Classical halo decomposition for a short-range pair potential. The global atom array is split into rank-owned contiguous slices; each rank materialises a thin shell of remote atoms within <code class="docutils literal notranslate"><span class="pre">cutoff</span></code> of its boundary (dashed). Pairs that cross the boundary are evaluated locally on either rank, no message is in flight at force-eval time.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">The mental model: per-rank locality holds because pair interactions decay with distance.</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Single-process: O(N) atoms, O(N²) pairs (with cutoff: O(N))</span>
+<span class="k">for</span> <span class="n">atom</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">neighbour</span> <span class="ow">in</span> <span class="n">atom</span><span class="o">.</span><span class="n">within</span><span class="p">(</span><span class="n">cutoff</span><span class="p">):</span>
+        <span class="n">accumulate_force</span><span class="p">(</span><span class="n">atom</span><span class="p">,</span> <span class="n">neighbour</span><span class="p">)</span>
+
+<span class="c1"># Halo distributed: each rank does the same loop on its</span>
+<span class="c1"># (owned + halo) atoms, only writing forces for owned.</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="what-breaks-for-message-passing-potentials">
+<h3>1.2 What breaks for message-passing potentials<a class="headerlink" href="#what-breaks-for-message-passing-potentials" title="Link to this heading">#</a></h3>
+<p>A scatter-heavy MPNN like MACE doesn’t have one cutoff and one pair
+sum. It has L message-passing layers, each scattering edge features
+into per-atom features. After L layers, every atom’s representation
+depends on the L-hop neighbourhood — even atoms whose owned-rank is
+<em>not</em> the receiver. Two failure modes:</p>
+<figure class="align-center" id="id3">
+<div class="graphviz"><object data="../_images/graphviz-24c6c8e8849484ade0ffc64b3ef8227050872a53.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph halo_growth {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    layer1 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;14&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;after layer 1&lt;/B&gt;: shell of width 1·cutoff is enough&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;0&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;1&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;2&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;3&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;9&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;my owned (correct features)&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;1-hop shell&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    layer2 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;14&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;after layer 2&lt;/B&gt;: layer-1 features for shell atoms 8..9 must be correct, so shell must extend to atoms 10..11 too&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;0&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;1&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;2&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;3&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;9&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fff2cc&quot; STYLE=&quot;dashed&quot;&gt;10&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#fff2cc&quot; STYLE=&quot;dashed&quot;&gt;11&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;my owned&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;1-hop shell&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;2-hop shell&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    layerL [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;14&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;after layer L&lt;/B&gt;: shell width = L · cutoff (gets expensive fast)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;0&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;1&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;2&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;3&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;4&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;5&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;6&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;8&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;9&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fff2cc&quot; STYLE=&quot;dashed&quot;&gt;10&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#fff2cc&quot; STYLE=&quot;dashed&quot;&gt;11&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f4cccc&quot; STYLE=&quot;dashed&quot;&gt;12&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f4cccc&quot; STYLE=&quot;dashed&quot;&gt;…&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD COLSPAN=&quot;8&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;my owned&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD COLSPAN=&quot;6&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;shell grows with L&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    layer1 -&gt; layer2 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;go to next layer&lt;/FONT&gt;&gt;];
+    layer2 -&gt; layerL [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;…&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">Halo width grows with depth. Each layer’s update at an owned atom reads its 1-hop neighbours, so an owned atom’s value at layer ℓ depends on the ℓ-hop neighbourhood. To compute correct values for every owned atom, the shell must reach ℓ × cutoff out from the rank boundary at layer ℓ.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>The framework dodges this growth by <em>refreshing</em> the shell between
+layers (cheap exchange of one row’s worth of data per shell atom)
+rather than expanding it. After layer 1 finishes, the shell rows hold
+correct <em>layer-1</em> features; layer 2’s 1-hop reach into them is still
+correct.</p>
+<p>The two natural extremes that don’t work:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Strategy</p></th>
+<th class="head"><p>What happens</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>All-gather every layer.</strong></p></td>
+<td><p>Comms are O(N · L). Every rank sees the global tensor every layer. Parity with single-process but no scaling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strict-local.</strong> Drop edges crossing the rank boundary.</p></td>
+<td><p>No comms, but every owned atom near the boundary has missing neighbours. Forces on boundary atoms are wrong; energy is wrong; trajectories diverge.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="beyond-mpnns-the-long-range-tail">
+<h3>1.3 Beyond MPNNs: the long-range tail<a class="headerlink" href="#beyond-mpnns-the-long-range-tail" title="Link to this heading">#</a></h3>
+<p>Modern ML potentials don’t stop at MPNN. Several patterns make naïve
+locality even harder:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Pattern</p></th>
+<th class="head"><p>Locality breaks because</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Charge equilibration / electrostatic embedding (AIMNet2)</strong></p></td>
+<td><p>A per-system reduction in every layer. <code class="docutils literal notranslate"><span class="pre">mol_sum(per-atom)</span></code> is global.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Reciprocal-space methods (Ewald, PME)</strong></p></td>
+<td><p>The structure factor / charge mesh is global. FFT is global.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Attention-based potentials</strong></p></td>
+<td><p>All-pairs interactions, full softmax.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Graph-rebuilding models (UMA / eSCN)</strong></p></td>
+<td><p>The model constructs its own neighbor list inside <code class="docutils literal notranslate"><span class="pre">forward</span></code> — there’s no place outside the model to define a halo.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Stress via strain trick</strong></p></td>
+<td><p>Differentiates a <em>replicated</em> per-graph energy through per-atom positions.</p></td>
+</tr>
+</tbody>
+</table>
+<p>A halo-only world can’t host these without per-pattern surgery. We
+need a primitive that lets each model declare <em>its</em> locality contract.</p>
+</section>
+<section id="where-this-lands">
+<h3>1.4 Where this lands<a class="headerlink" href="#where-this-lands" title="Link to this heading">#</a></h3>
+<p>The framework supports three storage strategies. Each is a different
+answer to the “where does each rank’s per-atom tensor live, and what’s
+the row layout?” question.</p>
+<figure class="align-center" id="id4">
+<div class="graphviz"><object data="../_images/graphviz-db48ae565d37f369c0c201238c9102ff37c806dd.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph storage_modes {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    title_halo [label=&lt;&lt;B&gt;HALO STORAGE&lt;/B&gt;&lt;BR/&gt;(MACE / NequIP / LJ / Ewald / PME)&gt;];
+    title_sharded [label=&lt;&lt;B&gt;SHARDED STORAGE&lt;/B&gt;&lt;BR/&gt;(AIMNet2)&gt;];
+    title_replicated [label=&lt;&lt;B&gt;REPLICATED STORAGE&lt;/B&gt;&lt;BR/&gt;(UMA / eSCN-family)&gt;];
+
+    halo_r0 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt;rank 0's&lt;BR/&gt;owned&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt;rank 1's&lt;BR/&gt;shell&lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 0's local view: 8 owned + 4 halo rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    halo_r1 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt;rank 0's&lt;BR/&gt;shell&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt;rank 1's&lt;BR/&gt;owned&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 1's local view: 4 halo + 8 owned rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    sharded_r0 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt;rank 0's&lt;BR/&gt;owned&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;3&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 0's local view: 8 owned rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    sharded_r1 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt;rank 1's&lt;BR/&gt;owned&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;3&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 1's local view: 8 owned rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    repl_r0 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt;rank 0's&lt;BR/&gt;partition&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#cfd8dc&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt;rank 1's&lt;BR/&gt;partition&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#cfd8dc&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt; &lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 0's local view: full 16 rows; node_partition = [0..7]&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    repl_r1 [label=&lt;
+        &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+          &lt;TR&gt;
+            &lt;TD BGCOLOR=&quot;#cfd8dc&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt;rank 0's&lt;BR/&gt;partition&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#cfd8dc&quot; WIDTH=&quot;60&quot; STYLE=&quot;dashed&quot;&gt; &lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt;rank 1's&lt;BR/&gt;partition&lt;/TD&gt;
+            &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;60&quot;&gt; &lt;/TD&gt;
+          &lt;/TR&gt;
+          &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 1's local view: full 16 rows; node_partition = [8..15]&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;/TABLE&gt;
+    &gt;];
+
+    title_halo -&gt; halo_r0 [style=invis];
+    halo_r0 -&gt; halo_r1 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;refresh shell from&lt;BR/&gt;each other's owners&lt;/FONT&gt;&gt; dir=both color=&quot;#666&quot;];
+    title_sharded -&gt; sharded_r0 [style=invis];
+    sharded_r0 -&gt; sharded_r1 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;cross-rank read or scatter&lt;BR/&gt;routes over the wire&lt;BR/&gt;(no shell stored)&lt;/FONT&gt;&gt; dir=both color=&quot;#666&quot; style=dashed];
+    title_replicated -&gt; repl_r0 [style=invis];
+    repl_r0 -&gt; repl_r1 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;per-MP-layer all_gather&lt;BR/&gt;of partition rows&lt;BR/&gt;(every rank sees the&lt;BR/&gt;full feature tensor)&lt;/FONT&gt;&gt; dir=both color=&quot;#666&quot;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">Three ways to lay out a per-atom tensor across two ranks. Solid blocks are owned; dotted blocks are remote rows. <strong>Halo storage</strong> materialises a thin shell of remote owners’ rows on each rank (read-only mirrors). <strong>Sharded storage</strong> stores only owned; cross-rank reads route over the wire. <strong>Replicated storage</strong> stores the full tensor on every rank and partitions logically — the layout used by the <strong>graph-partition</strong> strategy (§5), for models that rebuild their own NL inside <code class="docutils literal notranslate"><span class="pre">forward</span></code> and need to see every position.</span><a class="headerlink" href="#id4" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Quick reference for picking a strategy:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Strategy</p></th>
+<th class="head"><p>Per-atom tensor row layout</p></th>
+<th class="head"><p>When the model needs it</p></th>
+<th class="head"><p>Per-step comm</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Halo</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[owned</span> <span class="pre">│</span> <span class="pre">halo]</span></code> — owned rows are unique, halo rows mirror remote owners.</p></td>
+<td><p>Local-receptive-field MPNN where the cutoff fits in one halo width. The model can be handed an opaque <code class="docutils literal notranslate"><span class="pre">(n_owned</span> <span class="pre">+</span> <span class="pre">n_halo,</span> <span class="pre">*F)</span></code> view and produce correct outputs without knowing the partition.</p></td>
+<td><p>One halo exchange per step (refresh shell rows).</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Sharded</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(n_owned,</span> <span class="pre">*F)</span></code> — each rank stores only its owned rows.</p></td>
+<td><p>Per-system reductions inside every layer (charge equilibration; <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code>). The cost of a per-layer halo refresh is dominated by the global reduction anyway, so saving on memory wins.</p></td>
+<td><p>One <code class="docutils literal notranslate"><span class="pre">all_to_all_v</span></code> per cross-rank read or scatter (already needed for <code class="docutils literal notranslate"><span class="pre">mol_sum</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Replicated</strong> (graph-partition)</p></td>
+<td><p>Full <code class="docutils literal notranslate"><span class="pre">(n_global,</span> <span class="pre">*F)</span></code> on every rank; partition is logical (a <code class="docutils literal notranslate"><span class="pre">node_partition</span></code> index slice).</p></td>
+<td><p>Models that build their own neighbor list inside <code class="docutils literal notranslate"><span class="pre">forward</span></code> and can’t be handed a pre-padded view (<code class="docutils literal notranslate"><span class="pre">UMA</span></code>’s <code class="docutils literal notranslate"><span class="pre">_generate_graph</span></code>, <code class="docutils literal notranslate"><span class="pre">eSCN</span></code>-family). Memory is O(n_global) per rank, so capped by single-GPU budget.</p></td>
+<td><p>Per-MP-layer feature <code class="docutils literal notranslate"><span class="pre">all_gather</span></code> (autograd-aware) plus per-system <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code> for energy / forces / stress.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The storage strategy is just the start. Within each strategy we still
+need to pick scatter rules, gather rules, and per-output reductions.
+Encoding those choices is the job of the <em>spec</em> (§3).</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="shardtensor-a-partition-aware-tensor-subclass">
+<h2>2. ShardTensor: a partition-aware Tensor subclass<a class="headerlink" href="#shardtensor-a-partition-aware-tensor-subclass" title="Link to this heading">#</a></h2>
+<section id="the-primitive">
+<h3>2.1 The primitive<a class="headerlink" href="#the-primitive" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ShardTensor</span></code> is a <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> subclass that carries metadata about
+the partition, plus a registry of dispatch handlers that intercept
+specific torch ops on it via <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code>. The same model code
+runs single-process and distributed; the runtime decides what to do
+based on the input’s metadata.</p>
+<figure class="align-center" id="id5">
+<div class="graphviz"><object data="../_images/graphviz-faca50af450989613f344efd38230b4cb1157076.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph shardtensor_anatomy {
+    rankdir=LR;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    tensor [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;2&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;B&gt;tensor data&lt;/B&gt; &amp;nbsp;&amp;nbsp; &lt;FONT POINT-SIZE=&quot;10&quot;&gt;(this rank's view, shape (12, 3))&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;65&quot;&gt; &lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;65&quot;&gt;owned&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;65&quot;&gt; &lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;80&quot; STYLE=&quot;dashed&quot;&gt;shell&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;4&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rows 0..7 are this rank's; rows 8..11 mirror neighbour rank's owned&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    metadata [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot; BGCOLOR=&quot;#fff2cc&quot;&gt;&lt;B&gt;metadata bag&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;how many rows are mine&lt;/TD&gt;&lt;TD&gt;8&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;how many rows total (mine + shell)&lt;/TD&gt;&lt;TD&gt;12&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;which rank am I&lt;/TD&gt;&lt;TD&gt;0&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;where do shell rows come from&lt;/TD&gt;&lt;TD&gt;rows 8..11&lt;BR/&gt;↤ rank 1's owned&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;how many systems&lt;BR/&gt;(for per-graph reductions)&lt;/TD&gt;&lt;TD&gt;1&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD VALIGN=&quot;TOP&quot;&gt;partition rules&lt;BR/&gt;(see §3)&lt;/TD&gt;&lt;TD ALIGN=&quot;LEFT&quot;&gt;storage = halo&lt;BR/&gt;scatter rule = halo_correction&lt;BR/&gt;gather rule = halo_read&lt;BR/&gt;per-system reductions = on&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    tensor -&gt; metadata [style=dashed label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;carries...&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">A ShardTensor is a regular tensor block with a small bag of metadata attached. The data lives in the same buffer as a plain tensor (zero-copy). The metadata describes what the rows mean and which rules govern operations on them.</span><a class="headerlink" href="#id5" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Construction. <code class="docutils literal notranslate"><span class="pre">wrap</span></code> is the canonical entry point — the framework calls it when promoting padded positions, and users call it for their own per-atom fields.</span><a class="headerlink" href="#id6" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShardTensor</span>
+
+<span class="n">t</span> <span class="o">=</span> <span class="n">ShardTensor</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span>
+    <span class="n">halo_padded_positions</span><span class="p">,</span>        <span class="c1"># (n_padded, 3) plain tensor</span>
+    <span class="n">spec</span><span class="o">=</span><span class="n">SPEC_MPNN_HALO</span><span class="p">,</span>           <span class="c1"># tells handlers HOW to dispatch</span>
+    <span class="n">meta</span><span class="o">=</span><span class="n">halo_meta</span><span class="p">,</span>                <span class="c1"># owned/padded counts, routing</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">halo_config</span><span class="p">,</span>            <span class="c1"># mesh + process group</span>
+    <span class="n">n_systems</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>                   <span class="c1"># for per-system reductions</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="dispatch-via-torch-function">
+<h3>2.2 Dispatch via <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code><a class="headerlink" href="#dispatch-via-torch-function" title="Link to this heading">#</a></h3>
+<p>When a torch op is called with at least one ShardTensor argument,
+PyTorch invokes <code class="docutils literal notranslate"><span class="pre">ShardTensor.__torch_function__</span></code>. We walk a small
+registry of <code class="docutils literal notranslate"><span class="pre">(op,</span> <span class="pre">predicate,</span> <span class="pre">handler)</span></code> tuples; the first matching
+predicate wins. No match → <code class="docutils literal notranslate"><span class="pre">super().__torch_function__</span></code> falls back
+to plain torch behaviour with metadata propagation.</p>
+<figure class="align-center" id="id7">
+<div class="graphviz"><object data="../_images/graphviz-0970a4c90b67d9a495d9ae52c35a0888845f7944.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph dispatch {
+    rankdir=TB; node [shape=box style=&quot;rounded,filled&quot; fontname=&quot;Helvetica&quot;];
+
+    Op [label=&quot;op(shard_tensor, ...)&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;];
+    Pred [label=&quot;any registered handler\npredicate matches?&quot;
+          fillcolor=&quot;#fff2cc&quot; fontcolor=&quot;#111111&quot; shape=diamond];
+    Handler [label=&quot;handler runs:\n• unwrap inputs\n• run cross-rank logic\n• promote outputs&quot;
+             fillcolor=&quot;#cfe2cf&quot; fontcolor=&quot;#111111&quot;];
+    Fallback [label=&quot;super().__torch_function__\n(plain torch.Tensor path)&quot;
+              fillcolor=&quot;#f3f3f3&quot; fontcolor=&quot;#111111&quot;];
+    Done [label=&quot;return result\n(metadata propagated)&quot; fillcolor=&quot;#82b366&quot; fontcolor=&quot;#111111&quot;];
+
+    Op -&gt; Pred;
+    Pred -&gt; Handler [label=&quot;yes&quot;];
+    Pred -&gt; Fallback [label=&quot;no&quot;];
+    Handler -&gt; Done;
+    Fallback -&gt; Done;
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">Dispatch flowchart for a single torch op. Predicates inspect the inputs’ shapes + spec; the matching handler runs cross-rank logic and re-promotes outputs.</span><a class="headerlink" href="#id7" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">A user-facing example. The wrapper code is identical to single-process; the dispatch machinery reads the partition off the tensor.</span><a class="headerlink" href="#id8" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Single-process or distributed — same line:</span>
+<span class="n">total_energy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_graphs</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">total_energy</span> <span class="o">=</span> <span class="n">total_energy</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="p">)</span>
+<span class="c1">#                                    ^</span>
+<span class="c1"># If atomic_energies is a ShardTensor with system_reductions=True</span>
+<span class="c1"># and accumulator shape == n_systems, the dispatch routes through</span>
+<span class="c1"># ``per_system_reduce``: local scatter + cross-rank all_reduce.</span>
+<span class="c1"># Otherwise: plain in-place scatter_add_.</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="why-almost-transparent">
+<h3>2.3 Why “almost transparent”<a class="headerlink" href="#why-almost-transparent" title="Link to this heading">#</a></h3>
+<p>There’s a footgun the framework has to surface explicitly. PyTorch’s
+in-place ops (<code class="docutils literal notranslate"><span class="pre">t.scatter_add_(...)</span></code>) return <code class="docutils literal notranslate"><span class="pre">self</span></code>; the standard
+idiom drops the return. Under cross-rank halo correction the handler
+<em>can’t</em> preserve in-place semantics — it returns a fresh tensor.
+Wrapper authors must rebind the return:</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">The one rule wrapper authors need to internalise. Single-process: rebind is a no-op. Distributed: mandatory.</span><a class="headerlink" href="#id9" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># WRONG (single-process: works; distributed: silently produces zeros)</span>
+<span class="n">G</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">receivers</span><span class="p">,</span> <span class="n">edge_feats</span><span class="p">)</span>
+
+<span class="c1"># RIGHT</span>
+<span class="n">G</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">receivers</span><span class="p">,</span> <span class="n">edge_feats</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The validator’s worker-error translator detects this exact pattern and
+surfaces it as a one-line fix. See <a class="reference internal" href="distributed_byo.html#distributed-byo-guide"><span class="std std-ref">Bring Your Own Model: Authoring a Distribution Spec</span></a> for
+the full catalogue of dispatch handlers and their predicates.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="specs-declaring-what-to-do-at-each-op">
+<h2>3. Specs: declaring what to do at each op<a class="headerlink" href="#specs-declaring-what-to-do-at-each-op" title="Link to this heading">#</a></h2>
+<p>ShardTensor knows <em>how</em> the data is partitioned. The
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.MLIPSpec.html#nvalchemi.distributed.MLIPSpec" title="nvalchemi.distributed.spec.MLIPSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLIPSpec</span></code></a> tells it <em>what to do</em>
+at each op. The split is deliberate: ShardTensor stays
+chemistry-free; specs encode model-specific reduction rules.</p>
+<p>The spec is a small structure with three knobs. Each knob has a
+visual interpretation on the tensor — that’s what the rest of this
+section walks through.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Knob</p></th>
+<th class="head"><p>Choices</p></th>
+<th class="head"><p>What gets visualised</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>scatter rule</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">halo_correction</span></code> / <code class="docutils literal notranslate"><span class="pre">local</span></code> / <code class="docutils literal notranslate"><span class="pre">distributed</span></code></p></td>
+<td><p>how an <code class="docutils literal notranslate"><span class="pre">t.scatter_add_(...)</span></code> call moves data</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>gather rule</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">halo_read</span></code> / <code class="docutils literal notranslate"><span class="pre">local</span></code> / <code class="docutils literal notranslate"><span class="pre">distributed</span></code></p></td>
+<td><p>how an <code class="docutils literal notranslate"><span class="pre">index_select</span></code> call sees data</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>per-system reductions</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">on</span></code> / <code class="docutils literal notranslate"><span class="pre">off</span></code></p></td>
+<td><p>how a per-graph energy <code class="docutils literal notranslate"><span class="pre">scatter_add</span></code> becomes a global sum</p></td>
+</tr>
+</tbody>
+</table>
+<p>Plus per-op transforms (§7) and per-output classifications (§8).</p>
+<section id="the-scatter-rule-where-do-partial-messages-go">
+<h3>3.1 The scatter rule: where do partial messages go?<a class="headerlink" href="#the-scatter-rule-where-do-partial-messages-go" title="Link to this heading">#</a></h3>
+<p>A scatter is “for each edge, write a contribution into the receiver’s
+row.” When the receiver might be a halo row (a mirrored copy of a
+remote rank’s owned), the scatter rule decides whether (and how) to
+account for that.</p>
+<figure class="align-center" id="id10">
+<div class="graphviz"><object data="../_images/graphviz-5fcf15e6d67122714e8d65f394825c6bb38b21e6.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph scatter_halo {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+    edge [color=&quot;#666&quot;];
+
+    s0 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;step 1: each rank does a local scatter — partials land in BOTH owned and shell rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;rank 0 owned&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;9&quot;&gt;filled with this rank's edges&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;rank 1's shell on rank 0&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;9&quot;&gt;partials destined for rank 1&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    s1 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;step 2: send shell partials back to owners; owners accumulate&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;rank 0 owned&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;9&quot;&gt;unchanged&lt;/FONT&gt;&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fce5cd&quot; WIDTH=&quot;120&quot;&gt;rank 1 owned receives&lt;BR/&gt;contributions from rank 0&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    s2 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;step 3: owners broadcast their final values back into the shell so the next layer sees them&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;rank 0 owned&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell now mirrors&lt;BR/&gt;rank 1's final owned&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    s0 -&gt; s1 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;send back&lt;BR/&gt;(reverse)&lt;/FONT&gt;&gt;];
+    s1 -&gt; s2 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;refresh&lt;BR/&gt;(forward)&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">scatter</span> <span class="pre">=</span> <span class="pre">&quot;halo_correction&quot;</span></code> — the canonical MPNN pattern. Each rank scatters its messages into both owned and shell rows. The shell partials get sent back to their owners and accumulated. Then owners’ values are pushed back out to refresh shell copies for the next layer.</span><a class="headerlink" href="#id10" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="align-center" id="id11">
+<div class="graphviz"><object data="../_images/graphviz-06cf5393e940f0b3e2556b692c6827719c71b07c.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph scatter_local {
+    rankdir=LR;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    a0 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;rank 0 owned&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;shell&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;scatter_add_ writes locally; nothing crosses ranks&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    a1 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot; STYLE=&quot;dashed&quot;&gt;shell&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;120&quot;&gt;rank 1 owned&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;same: pure local&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    a0 -&gt; a1 [style=invis];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">scatter</span> <span class="pre">=</span> <span class="pre">&quot;local&quot;</span></code> — pure per-rank scatter, no cross-rank exchange. Used when the accumulator is per-system (small) and the per-system all-reduce in step 2 of the next rule handles cross-rank correctness; or for a halo-unaware backbone whose edges already cover the global graph.</span><a class="headerlink" href="#id11" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="the-gather-rule-how-does-an-index-select-see-data">
+<h3>3.2 The gather rule: how does an index_select see data?<a class="headerlink" href="#the-gather-rule-how-does-an-index-select-see-data" title="Link to this heading">#</a></h3>
+<p>A gather is “for each input row index, fetch that row’s data.” When
+the index falls in the shell region (i.e. asks for a remote rank’s
+row), the gather rule decides whether to serve from the local
+mirror or to route a request to the owner.</p>
+<figure class="align-center" id="id12">
+<div class="graphviz"><object data="../_images/graphviz-4c9106b90cd9bfe305a5e0891ede13b87bdb4cf8.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph gather_halo {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    tensor [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;8&quot;&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;40&quot;&gt;0&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;40&quot;&gt;…&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;40&quot;&gt;7&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;40&quot; STYLE=&quot;dashed&quot;&gt;8&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fff2cc&quot; WIDTH=&quot;40&quot;&gt;&lt;B&gt;9&lt;/B&gt;&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;40&quot; STYLE=&quot;dashed&quot;&gt;10&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;40&quot; STYLE=&quot;dashed&quot;&gt;11&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;7&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rank 0's view: indices 0..7 are owned, 8..11 are shell&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    request [label=&lt;&lt;FONT POINT-SIZE=&quot;11&quot;&gt;&lt;B&gt;request: index_select [9]&lt;/B&gt;&lt;/FONT&gt;&gt;];
+    served [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;served from local shell row 9&lt;BR/&gt;(no cross-rank message)&lt;/FONT&gt;&gt;];
+
+    request -&gt; tensor [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;read&lt;/FONT&gt;&gt;];
+    tensor -&gt; served [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;return&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">gather</span> <span class="pre">=</span> <span class="pre">&quot;halo_read&quot;</span></code> — the index <code class="docutils literal notranslate"><span class="pre">9</span></code> (in this rank’s shell) is served from the local shell copy. No cross-rank traffic at gather time. Stays cheap because the shell is refreshed by the previous scatter’s step 3.</span><a class="headerlink" href="#id12" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="per-system-reductions-per-rank-scatter-cross-rank-sum">
+<h3>3.3 Per-system reductions: per-rank scatter + cross-rank sum<a class="headerlink" href="#per-system-reductions-per-rank-scatter-cross-rank-sum" title="Link to this heading">#</a></h3>
+<p>The most common reduction in MLIPs is <code class="docutils literal notranslate"><span class="pre">total_energy.scatter_add_(0,</span> <span class="pre">batch_idx,</span> <span class="pre">atomic_energies)</span></code> — collapsing per-atom energies into a
+per-graph total. Under partitioning, no rank has all the atoms, so
+the local scatter is a partial. <code class="docutils literal notranslate"><span class="pre">per_system_reduce</span></code> does the local
+scatter, then sums the partials across ranks.</p>
+<figure class="align-center" id="id13">
+<div class="graphviz"><object data="../_images/graphviz-c2ae75408f95323cbdc04bb79bc4391f97aaee2b.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph per_system {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    inputs [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;per-rank atomic energies (sliced to owned only)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD&gt;rank 0:&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;e₀ e₁ e₂ e₃ e₄ e₅ e₆ e₇&lt;/TD&gt;
+        &lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD&gt;rank 1:&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;e₈ e₉ e₁₀ e₁₁ e₁₂ e₁₃ e₁₄ e₁₅&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    locals [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;step 1: local scatter into per-graph slot&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;rank 0:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;&lt;B&gt;Σ₀..₇&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;rank 1:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#f6b26b&quot;&gt;&lt;B&gt;Σ₈..₁₅&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    global [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;step 2: all_reduce sum — every rank holds the global total&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;rank 0:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#82b366&quot; COLOR=&quot;white&quot;&gt;&lt;B&gt;E_global&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;rank 1:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#82b366&quot; COLOR=&quot;white&quot;&gt;&lt;B&gt;E_global&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    inputs -&gt; locals [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;scatter_add_ on owned slice&lt;/FONT&gt;&gt;];
+    locals -&gt; global [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;all_reduce(SUM)&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">per_system_reduce</span></code> — one primitive that combines a local per-system scatter with a cross-rank sum. The output is replicated globally on every rank, so any rank can read the final per-graph value.</span><a class="headerlink" href="#id13" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="the-complete-spec">
+<h3>3.4 The complete spec<a class="headerlink" href="#the-complete-spec" title="Link to this heading">#</a></h3>
+<p>The decisions above all live on a small data structure that the
+wrapper attaches via <code class="docutils literal notranslate"><span class="pre">distribution_spec</span></code>:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">distribution.policy</span></code></p></td>
+<td><p>Storage layout: halo / sharded / local. Each carries its own scatter and gather rules.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">distribution.custom_ops</span></code></p></td>
+<td><p>Per-op declarations for opaque kernels that bypass <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code> (Warp, Triton). See §7.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">output_kinds</span></code></p></td>
+<td><p>One of <code class="docutils literal notranslate"><span class="pre">PER_NODE</span></code>, <code class="docutils literal notranslate"><span class="pre">PER_GRAPH</span></code>, <code class="docutils literal notranslate"><span class="pre">GLOBAL</span></code>, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> per output. Drives final consolidation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">owned_only_outputs</span></code></p></td>
+<td><p>Per-atom outputs that are already globally correct on each rank (e.g. PME reciprocal forces) — skip the back-exchange.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">all_reduce_outputs</span></code></p></td>
+<td><p>Per-rank-partial outputs that need a final SUM across ranks (e.g. strain-trick stress).</p></td>
+</tr>
+</tbody>
+</table>
+<div class="literal-block-wrapper docutils container" id="id14">
+<div class="code-block-caption"><span class="caption-text">The shipped presets cover the production model families. A wrapper author either picks one or composes a new <code class="docutils literal notranslate"><span class="pre">MLIPSpec</span></code> directly.</span><a class="headerlink" href="#id14" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SPEC_MPNN_HALO</span><span class="p">,</span>        <span class="c1"># MACE, NequIP, Allegro, ORB (spatial halo)</span>
+    <span class="n">SPEC_MPNN_GP</span><span class="p">,</span>          <span class="c1"># MPNN node-partition graph-parallel</span>
+    <span class="n">SPEC_UMA_HALO</span><span class="p">,</span>         <span class="c1"># UMA / eSCN (spatial halo)</span>
+    <span class="n">SPEC_LJ_HALO</span><span class="p">,</span>          <span class="c1"># Lennard-Jones (Warp pair kernel)</span>
+    <span class="n">SPEC_EWALD_HALO</span><span class="p">,</span>       <span class="c1"># Ewald (real + reciprocal stages)</span>
+    <span class="n">SPEC_PME_HALO</span><span class="p">,</span>         <span class="c1"># PME (charge spread + FFT mesh)</span>
+    <span class="n">SPEC_DFTD3_HALO</span><span class="p">,</span>       <span class="c1"># DFT-D3 dispersion</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Authoring a spec for a new model is the topic of §7 + §8. For now,
+note that <strong>every spec parameterises the same dispatch machinery</strong> —
+the registry, the predicates, the handlers. The spec is the single
+declaration point.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="mace-end-to-end-what-halo-mpnn-looks-like">
+<h2>4. MACE end-to-end: what halo MPNN looks like<a class="headerlink" href="#mace-end-to-end-what-halo-mpnn-looks-like" title="Link to this heading">#</a></h2>
+<section id="the-forward-pass-three-steps">
+<h3>4.1 The forward pass, three steps<a class="headerlink" href="#the-forward-pass-three-steps" title="Link to this heading">#</a></h3>
+<figure class="align-center" id="id15">
+<div class="graphviz"><object data="../_images/graphviz-e48394c51ff41e78816e5ae45b01de5a5f333d06.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph mace_layer {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    fpre [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;features entering layer ℓ&lt;/B&gt;: shape (n_padded, F)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;my owned (8 rows of features)&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell (4 rows mirroring rank 1)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    scatter [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;compute messages, scatter into receivers&lt;/B&gt;: writes land in BOTH owned and shell rows&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;owned: full sum of incoming&lt;BR/&gt;edges where receiver is mine&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fff2cc&quot; WIDTH=&quot;120&quot;&gt;shell: partial sum of edges&lt;BR/&gt;where receiver lives on rank 1&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    after_back [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;shell partials sent back to owners; rank 1's owners now hold the cross-rank contributions too&lt;/B&gt;&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;owned: unchanged&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fce5cd&quot; WIDTH=&quot;120&quot;&gt;shell: emptied&lt;BR/&gt;(rank 1 has the data now)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    fpost [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;features leaving layer ℓ&lt;/B&gt;: shape (n_padded, F), shell refreshed for layer ℓ+1's gather&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;owned: layer-(ℓ+1) features&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell: rank 1's&lt;BR/&gt;layer-(ℓ+1) features&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    fpre -&gt; scatter [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;edge messages&lt;/FONT&gt;&gt;];
+    scatter -&gt; after_back [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;send back&lt;BR/&gt;(reverse exchange)&lt;/FONT&gt;&gt;];
+    after_back -&gt; fpost [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;refresh shell&lt;BR/&gt;(forward exchange)&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">One MACE message-passing layer under halo storage, viewed as tensor states (rank 0 of 2). The features tensor enters the layer as <code class="docutils literal notranslate"><span class="pre">(n_padded,</span> <span class="pre">F)</span></code> with both owned and shell rows populated. Edge messages scatter into the receivers’ rows, leaving partial accumulations in shell positions destined for rank 1. The framework’s scatter rule sends those partials back, then refreshes the shell so the next layer reads correct values.</span><a class="headerlink" href="#id15" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id16">
+<div class="code-block-caption"><span class="caption-text">What the wrapper actually writes. The halo-correction is implicit in ShardTensor dispatch — the wrapper has zero distribution code.</span><a class="headerlink" href="#id16" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inside MACE InteractionBlock — a typical scatter pattern:</span>
+<span class="n">node_feats</span> <span class="o">=</span> <span class="n">node_feats</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+<span class="n">node_feats</span> <span class="o">=</span> <span class="n">node_feats</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">receivers</span><span class="p">,</span> <span class="n">edge_messages</span><span class="p">)</span>
+<span class="c1">#       ^                       ^</span>
+<span class="c1">#       rebind handles          if edge_messages is a ShardTensor,</span>
+<span class="c1">#       distributed return       the dispatch handler does</span>
+<span class="c1">#                                halo_reverse + halo_forward</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="the-full-forward-one-slide">
+<h3>4.2 The full forward (one slide)<a class="headerlink" href="#the-full-forward-one-slide" title="Link to this heading">#</a></h3>
+<figure class="align-center" id="id17">
+<div class="graphviz"><object data="../_images/graphviz-12eb6a1c0ccbce3c47984f7d50c152445f66bd9b.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph mace_full {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    pos [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;positions&lt;/B&gt;: ShardTensor (n_padded, 3)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;my owned (8 atoms)&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell (4 atoms, mirrored)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    feats [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;features after L MP layers&lt;/B&gt;: ShardTensor (n_padded, F)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;my owned (correct)&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell (mirrored, layer-L)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    atE [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;atomic energies&lt;/B&gt;: head(features) → (n_padded,)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;my owned: 8 per-atom energies&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;120&quot; STYLE=&quot;dashed&quot;&gt;shell: 4 mirrors (will be dropped)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    pers [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;per-system reduce&lt;/B&gt;: drop shell, scatter into per-graph slot, all_reduce&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;local sum on rank 0:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;&lt;B&gt;Σ owned&lt;/B&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;after all_reduce:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;&lt;B&gt;E_global (replicated on every rank)&lt;/B&gt;&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    bwd [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;autograd.grad(E_global, positions)&lt;/B&gt;: produces ∂E/∂x on (n_padded, 3)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;180&quot;&gt;owned: this rank's contribution&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#fff2cc&quot; WIDTH=&quot;120&quot;&gt;shell: this rank's&lt;BR/&gt;partial gradient at others' atoms&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    forces [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;forces after consolidation&lt;/B&gt;: shell gradients sent back to owners&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#82b366&quot; WIDTH=&quot;180&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;my owned forces&lt;BR/&gt;(complete: own + cross-rank pieces)&lt;/FONT&gt;&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    pos -&gt; feats [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;L message-passing layers&lt;BR/&gt;(each: scatter + send-back + refresh)&lt;/FONT&gt;&gt;];
+    feats -&gt; atE [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;read-out head&lt;/FONT&gt;&gt;];
+    atE -&gt; pers [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;scatter_add into (n_graphs,)&lt;BR/&gt;(per-system reduce)&lt;/FONT&gt;&gt;];
+    pers -&gt; bwd [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;.backward()&lt;/FONT&gt;&gt;];
+    bwd -&gt; forces [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;framework routes&lt;BR/&gt;shell gradients to owners&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">A complete forward pass viewed as tensor states (rank 0 of 2). Positions enter as a halo-padded ShardTensor; L message-passing layers each apply the §4.1 pattern; the final atomic energies get sliced and reduced into a globally replicated total energy. Forces fall out of an autograd backward through positions; the framework routes shell gradients back to their owners.</span><a class="headerlink" href="#id17" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="why-this-is-short-to-write">
+<h3>4.3 Why this is short to write<a class="headerlink" href="#why-this-is-short-to-write" title="Link to this heading">#</a></h3>
+<div class="literal-block-wrapper docutils container" id="id18">
+<div class="code-block-caption"><span class="caption-text">A halo-MPNN wrapper has zero distribution-aware code. The framework promotes per-atom inputs to ShardTensor before calling the wrapper; <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code> propagates the partition through the wrapper’s ops; consolidation handles the final per-output reduction.</span><a class="headerlink" href="#id18" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MACEWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SPEC_MPNN_HALO</span>   <span class="c1"># halo correction + halo read + per-system reductions</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Drop neighbour-list sentinel rows. Single-process: drops the</span>
+        <span class="c1"># genuine padding rows the NL builder emits. Distributed: also</span>
+        <span class="c1"># drops halo-receiver rows the framework rewrote to the same</span>
+        <span class="c1"># sentinel value at NL-build time. One line, both regimes.</span>
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">neighbor_list</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>                <span class="c1"># already a ShardTensor under DD</span>
+            <span class="s2">&quot;edge_index&quot;</span><span class="p">:</span> <span class="n">edge_index</span><span class="p">[:,</span> <span class="n">valid</span><span class="p">],</span>
+            <span class="s2">&quot;node_attrs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node_attrs</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="s2">&quot;shifts&quot;</span><span class="p">:</span> <span class="o">...</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>The framework handles every cross-rank thing: halo build, NL filter,
+per-layer scatter/refresh, per-system reduction, force consolidation,
+strain-trick stress (with the inner virial pass routed correctly).</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="uma-end-to-end-node-partition-graph-parallel-for-graph-rebuilding-models">
+<h2>5. UMA end-to-end: node-partition graph parallel for graph-rebuilding models<a class="headerlink" href="#uma-end-to-end-node-partition-graph-parallel-for-graph-rebuilding-models" title="Link to this heading">#</a></h2>
+<p>Some models can’t be handed a halo-padded view because they build
+their own neighbor list inside <code class="docutils literal notranslate"><span class="pre">forward</span></code>. UMA / eSCN-family models
+take <code class="docutils literal notranslate"><span class="pre">positions</span></code> and emit <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> via their internal
+<code class="docutils literal notranslate"><span class="pre">radius_pbc</span></code> kernel — there’s no pre-forward seam to attach a halo
+to. The <strong>graph-partition strategy</strong>
+(<code class="xref py py-class docutils literal notranslate"><span class="pre">GraphPartitionStrategy</span></code>,
+selected with <code class="docutils literal notranslate"><span class="pre">DomainConfig(strategy=StrategyKind.GRAPH_PARTITION)</span></code>)
+answers that: every rank holds the full positions tensor, the model’s
+NL builder runs on the global geometry, then a balanced <em>node
+partition</em> — a contiguous slice of <code class="docutils literal notranslate"><span class="pre">arange(n_global)</span></code> — assigns each
+rank a distinct block of owned atoms.</p>
+<p>Each rank runs the backbone on its owned block. A per-MP-layer feature
+<code class="docutils literal notranslate"><span class="pre">all_gather</span></code> reconstructs the full node set the convolution needs,
+and a reduce-scatter adjoint on the backward routes each owned atom’s
+cross-rank gradient back to its owner. Per-system energy and stress sum
+the owned slices with an <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code>; forces come from fairchem’s own
+autograd (the <code class="docutils literal notranslate"><span class="pre">MODEL_INTERNAL</span></code> force strategy). Unlike the spatial
+halo the partition is geometry-free: the cell is an ordinary model
+input, atoms never migrate, and only the edge count drifts under MD (so
+compiled runs cap edges, not atoms).</p>
+<p>We don’t reimplement fairchem’s message passing. UMA’s
+<code class="docutils literal notranslate"><span class="pre">distribution_spec(StrategyKind.GRAPH_PARTITION)</span></code> returns a spec whose
+<code class="docutils literal notranslate"><span class="pre">policy</span></code> is <code class="xref py py-class docutils literal notranslate"><span class="pre">GraphParallelPolicy</span></code>
+and whose adapters are a handful of <code class="docutils literal notranslate"><span class="pre">MethodAdapter</span></code> swaps that make
+the backbone owned-block-aware — leaving
+<code class="docutils literal notranslate"><span class="pre">fairchem.core.common.gp_utils</span></code> untouched (an earlier design redirected
+gp_utils via a thread-local metadata object; the node partition owns its
+own gather/reduce, so it no longer needs to):</p>
+<div class="literal-block-wrapper docutils container" id="id19">
+<div class="code-block-caption"><span class="caption-text">Pseudocode — the node-partition adapter set (built lazily inside UMAWrapper.distribution_spec). eSCNMDBackbone / Edgewise / ElementReferences are the real imported fairchem classes; each MethodAdapter uses the class-form <code class="docutils literal notranslate"><span class="pre">MethodAdapter(RealClass,</span> <span class="pre">&quot;method_name&quot;,</span> <span class="pre">replacement)</span></code> (equivalently the keyword form <code class="docutils literal notranslate"><span class="pre">MethodAdapter(module_path=...,</span> <span class="pre">class_name=...,</span> <span class="pre">method_name=...,</span> <span class="pre">replacement=...)</span></code>) to swap one eSCN method for a distribution-aware variant.</span><a class="headerlink" href="#id19" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">partition_helpers</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="c1"># replicate the full geometry, build the graph, keep this rank&#39;s owned nodes</span>
+    <span class="n">MethodAdapter</span><span class="p">(</span><span class="n">eSCNMDBackbone</span><span class="p">,</span> <span class="s2">&quot;_generate_graph&quot;</span><span class="p">,</span> <span class="n">_distributed_partition_graph</span><span class="p">),</span>
+    <span class="c1"># all-gather owned node features to the full set for the edgewise conv</span>
+    <span class="n">MethodAdapter</span><span class="p">(</span><span class="n">Edgewise</span><span class="p">,</span> <span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="n">_distributed_edgewise_gather</span><span class="p">),</span>
+    <span class="c1"># undo element-reference offsets on the owned slice only</span>
+    <span class="n">MethodAdapter</span><span class="p">(</span><span class="n">ElementReferences</span><span class="p">,</span> <span class="s2">&quot;undo_refs&quot;</span><span class="p">,</span> <span class="n">_distributed_undo_refs</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The wrapper itself stays distribution-agnostic — its <code class="docutils literal notranslate"><span class="pre">forward</span></code> is the
+ordinary fairchem call. <code class="docutils literal notranslate"><span class="pre">distribution_spec</span></code> only picks the layout:</p>
+<div class="literal-block-wrapper docutils container" id="id20">
+<div class="code-block-caption"><span class="caption-text">distribution_spec returns the spatial-halo preset by default, or a node-partition GP spec (GraphParallelPolicy + the adapters above, built and memoised lazily) when the config selects GRAPH_PARTITION.</span><a class="headerlink" href="#id20" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">UMAWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">strategy</span> <span class="o">==</span> <span class="n">StrategyKind</span><span class="o">.</span><span class="n">GRAPH_PARTITION</span><span class="p">:</span>
+            <span class="c1"># MLIPSpec(distribution=DistributionSpec(policy=GraphParallelPolicy()),</span>
+            <span class="c1">#          adapters=partition_helpers, outputs=...) — memoised here</span>
+            <span class="o">...</span>
+        <span class="k">return</span> <span class="n">SPEC_UMA_HALO</span>                 <span class="c1"># default: spatial halo</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict_unit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>       <span class="c1"># fairchem does the rest</span>
+</pre></div>
+</div>
+</div>
+<p>What the framework adds on top:</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">GraphPartitionStrategy</span></code> records
+the balanced node partition
+(<code class="docutils literal notranslate"><span class="pre">arange(n_global).tensor_split(W)[rank]</span></code>), replicates positions to
+every rank (no halo padding), runs the wrapper on the owned block, and
+consolidates the outputs — <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code> for per-system energy /
+stress, reduce-scatter for owned force rows.</p></li>
+<li><p>The partition is fixed for the run: no cell tracking, no migration.
+Only the per-rank edge count moves, so a compiled forward caps edges.</p></li>
+</ul>
+<p>Even though every rank holds the full positions tensor, per-rank MP-layer
+activations only span <code class="docutils literal notranslate"><span class="pre">n_owned</span></code> rows, so peak memory under 2 ranks is
+consistently 0.55–0.90× single-rank memory (better at larger N, where
+the activations dominate the peak over the replicated positions). The
+compute speedup is more modest (~1.20× forward, ~1.55× NVT at 2 ranks)
+because the per-MP-layer <code class="docutils literal notranslate"><span class="pre">all_gather</span></code> is in the critical path.</p>
+</section>
+<hr class="docutils" />
+<section id="composing-models-pipelines-that-mix-strategies">
+<h2>6. Composing models: pipelines that mix strategies<a class="headerlink" href="#composing-models-pipelines-that-mix-strategies" title="Link to this heading">#</a></h2>
+<p>Real workflows compose models. Energy = MACE (short-range MPNN) +
+Ewald (long-range electrostatics). Different sub-models can want
+different storage strategies and different specs.</p>
+<figure class="align-center" id="id21">
+<div class="graphviz"><object data="../_images/graphviz-585d959ffbd0ab16bc349ac24854c927ed32ba3e.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph pipeline {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    input [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;input&lt;/B&gt;: per-rank owned atoms (8 each, ShardedBatch)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;rank 0 owned&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;120&quot;&gt;rank 1 owned&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    padded [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;padded batch&lt;/B&gt;: built once, reused by both blocks&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;rank 0: owned + shell&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#f6b26b&quot; WIDTH=&quot;120&quot;&gt;rank 1: shell + owned&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    mace [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot; BGCOLOR=&quot;#dce6f1&quot;&gt;&lt;B&gt;MACE block&lt;/B&gt;: short-range MPNN&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;spec = SPEC_MPNN_HALO&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;energy:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;E_MACE (replicated)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;forces:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;F_MACE (per-rank owned)&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    ewald [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot; BGCOLOR=&quot;#fff2cc&quot;&gt;&lt;B&gt;Ewald block&lt;/B&gt;: long-range electrostatics&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;spec = SPEC_EWALD_HALO + OpAdapter for partial S(k)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;energy:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;E_Ewald (replicated)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;&lt;TD&gt;forces:&lt;/TD&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;F_Ewald (per-rank owned)&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    out [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;&lt;B&gt;energy&lt;/B&gt; = E_MACE + E_Ewald (replicated)&lt;BR/&gt;&lt;B&gt;forces&lt;/B&gt; = F_MACE + F_Ewald (per-rank owned)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    input -&gt; padded [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;build halo (once)&lt;/FONT&gt;&gt;];
+    padded -&gt; mace;
+    padded -&gt; ewald;
+    mace -&gt; out;
+    ewald -&gt; out;
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">A two-block pipeline: MACE (short-range MPNN) + Ewald (long-range electrostatics). Halo construction happens once on the input; both blocks read the same padded tensor. Each block produces a globally replicated total energy and per-rank-owned forces; the pipeline sums them.</span><a class="headerlink" href="#id21" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id22">
+<div class="code-block-caption"><span class="caption-text">Pipeline construction is one line per block plus a top-level wrap.</span><a class="headerlink" href="#id22" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineModelWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedPipelineModel</span>
+
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">PipelineModelWrapper</span><span class="p">([</span>
+    <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span><span class="s2">&quot;medium-0b2&quot;</span><span class="p">),</span>
+    <span class="n">EwaldModelWrapper</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="mf">10.0</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="n">dist_model</span> <span class="o">=</span> <span class="n">DistributedPipelineModel</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="n">domain_config</span><span class="p">)</span>
+<span class="n">energy_dict</span> <span class="o">=</span> <span class="n">dist_model</span><span class="p">(</span><span class="n">sharded_batch</span><span class="p">)</span>
+<span class="c1"># energy_dict[&quot;energy&quot;]  ← MACE + Ewald summed, globally replicated</span>
+<span class="c1"># energy_dict[&quot;forces&quot;]  ← per-rank owned, autograd-derived</span>
+</pre></div>
+</div>
+</div>
+<p>Composition rules at the seam:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Sub-model A</p></th>
+<th class="head"><p>Sub-model B</p></th>
+<th class="head"><p>Pipeline strategy</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Halo</p></td>
+<td><p>Halo</p></td>
+<td><p>Halo (single padded_batch, both blocks read it)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Halo</p></td>
+<td><p>Sharded</p></td>
+<td><p>Sharded (most permissive)</p></td>
+</tr>
+<tr class="row-even"><td><p>Sharded</p></td>
+<td><p>Sharded</p></td>
+<td><p>Sharded</p></td>
+</tr>
+<tr class="row-odd"><td><p>Local</p></td>
+<td><p>anything</p></td>
+<td><p>the other one</p></td>
+</tr>
+</tbody>
+</table>
+<p>The merge rule is implemented in the module-level <code class="docutils literal notranslate"><span class="pre">_merge_policies</span></code>
+helper in <code class="docutils literal notranslate"><span class="pre">nvalchemi/distributed/spec.py</span></code> (with <code class="docutils literal notranslate"><span class="pre">_merge_compile_policies</span></code>
+for the compile contract), driven by <code class="docutils literal notranslate"><span class="pre">MLIPSpec.__or__</span></code> — same
+discriminated-union pattern as the Strategy classes themselves.</p>
+</section>
+<hr class="docutils" />
+<section id="wrapping-warp-triton-kernels">
+<h2>7. Wrapping Warp / Triton kernels<a class="headerlink" href="#wrapping-warp-triton-kernels" title="Link to this heading">#</a></h2>
+<section id="the-boundary-problem">
+<h3>7.1 The boundary problem<a class="headerlink" href="#the-boundary-problem" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ShardTensor.__torch_function__</span></code> only fires on ops PyTorch dispatches
+through the public Python API. Warp / Triton kernels reach into
+tensor data via <code class="docutils literal notranslate"><span class="pre">wp.from_torch(t)</span></code> / Triton’s pointer protocol —
+both strip the subclass before reading. The kernel sees a plain
+buffer and writes a plain buffer; ShardTensor never gets a chance to
+intervene.</p>
+<figure class="align-center" id="id23">
+<div class="graphviz"><object data="../_images/graphviz-00bcda7695c8f41715ed8f5f577fac26ac4e2b34.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph kernel_boundary {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    inp [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;input&lt;/B&gt;: ShardTensor (n_padded, 3)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;owned&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;80&quot; STYLE=&quot;dashed&quot;&gt;shell&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    pre [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;pre-shape&lt;/B&gt;: e.g. slice to owned-only&lt;BR/&gt;(arg_transforms = SliceOwned)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;owned (plain tensor)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    kern [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#f4cccc&quot;&gt;&lt;B&gt;kernel runs&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;Warp / Triton / custom_op&lt;BR/&gt;plain tensors only — ShardTensor is invisible inside&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    post [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;post-shape&lt;/B&gt;: e.g. send shell partials to owners,&lt;BR/&gt;refresh shell from owners&lt;BR/&gt;(output_transforms = ScatterOutputs)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;owned (corrected)&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;80&quot; STYLE=&quot;dashed&quot;&gt;shell (refreshed)&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    out [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD COLSPAN=&quot;2&quot;&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;&lt;B&gt;output&lt;/B&gt;: ShardTensor again, ready for the next op&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+        &lt;TR&gt;
+          &lt;TD BGCOLOR=&quot;#9fc5e8&quot; WIDTH=&quot;120&quot;&gt;owned&lt;/TD&gt;
+          &lt;TD BGCOLOR=&quot;#cfe2cf&quot; WIDTH=&quot;80&quot; STYLE=&quot;dashed&quot;&gt;shell&lt;/TD&gt;
+        &lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    inp -&gt; pre [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;unwrap + transform&lt;/FONT&gt;&gt;];
+    pre -&gt; kern [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;launch&lt;/FONT&gt;&gt;];
+    kern -&gt; post [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;cross-rank correction&lt;/FONT&gt;&gt;];
+    post -&gt; out [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;re-promote to ShardTensor&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">An OpAdapter wraps the kernel boundary. Inputs enter as ShardTensors; the adapter pre-shapes them per the wrapper’s declared transforms (e.g. slice to owned only); the kernel runs on plain tensors; outputs get post-shaped (e.g. shell-rows-back-to-owners) and re-promoted to ShardTensor for the rest of the model.</span><a class="headerlink" href="#id23" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="the-transform-vocabulary">
+<h3>7.2 The transform vocabulary<a class="headerlink" href="#the-transform-vocabulary" title="Link to this heading">#</a></h3>
+<p>Every input / output transform is a small dataclass marker. The
+framework’s <code class="docutils literal notranslate"><span class="pre">wrap_custom_op</span></code> interprets them at call time.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Position</p></th>
+<th class="head"><p>Transform</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>input</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GatherInputs</span></code></p></td>
+<td><p>halo-pad an owned-shape input to <code class="docutils literal notranslate"><span class="pre">(n_padded,</span> <span class="pre">*F)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>input</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GatherInputsFull</span></code></p></td>
+<td><p>sharded analogue: full-gather to <code class="docutils literal notranslate"><span class="pre">(n_global+1,</span> <span class="pre">*F)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>input</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SliceOwned</span></code></p></td>
+<td><p>slice halo-padded input to <code class="docutils literal notranslate"><span class="pre">(n_owned,</span> <span class="pre">*F)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>output</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ScatterOutputs</span></code></p></td>
+<td><p>halo_reverse + halo_forward on a per-atom output</p></td>
+</tr>
+<tr class="row-even"><td><p>output</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AllReduceSum</span></code></p></td>
+<td><p>cross-rank SUM (autograd-symmetric)</p></td>
+</tr>
+<tr class="row-odd"><td><p>output</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SliceOutputsOwned</span></code></p></td>
+<td><p>slice global-shape output back to owned-only</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="worked-example">
+<h3>7.3 Worked example<a class="headerlink" href="#worked-example" title="Link to this heading">#</a></h3>
+<div class="literal-block-wrapper docutils container" id="id24">
+<div class="code-block-caption"><span class="caption-text">A Warp pair-energy kernel wrapped through <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code>. (Excerpted from <code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code>.)</span><a class="headerlink" href="#id24" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@wp</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_gaussian_pair_kernel</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="nd">@torch</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">custom_op</span><span class="p">(</span><span class="s2">&quot;tutorial::gaussian_pair_energy&quot;</span><span class="p">,</span> <span class="n">mutates_args</span><span class="o">=</span><span class="p">())</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">gaussian_pair_energy</span><span class="p">(</span><span class="n">edge_index</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
+    <span class="n">energy_per_atom</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="n">wp</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">_gaussian_pair_kernel</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">energy_per_atom</span>
+
+<span class="c1"># Spec declares the boundary semantics.</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span>
+        <span class="n">policy</span><span class="o">=</span><span class="n">HaloStoragePolicy</span><span class="p">(),</span>
+        <span class="n">custom_ops</span><span class="o">=</span><span class="p">(</span>
+            <span class="n">OpAdapter</span><span class="p">(</span>
+                <span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">tutorial</span><span class="o">.</span><span class="n">gaussian_pair_energy</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+                <span class="n">arg_transforms</span><span class="o">=</span><span class="p">{},</span>                       <span class="c1"># halo-padded inputs OK as-is</span>
+                <span class="n">output_transforms</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="n">ScatterOutputs</span><span class="p">()},</span> <span class="c1"># output[0] is per-atom: halo-correct</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">output_kinds</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">,</span> <span class="o">...</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The OpAdapter is the <em>only</em> distribution-aware code in the wrapper.
+The kernel itself stays single-process; the spec parameterises the
+cross-rank wrap.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="validation-bring-your-own-model">
+<h2>8. Validation + Bring-Your-Own-Model<a class="headerlink" href="#validation-bring-your-own-model" title="Link to this heading">#</a></h2>
+<section id="the-flow">
+<h3>8.1 The flow<a class="headerlink" href="#the-flow" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code> is the BYO author’s only required entry point.
+A single call: build a sample, point at the model factory, get back a
+verdict + a working spec.</p>
+<figure class="align-center" id="id25">
+<div class="graphviz"><object data="../_images/graphviz-1b485705ac10fa7736207cd9ba07e832bb1a5ecd.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph validate {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    Factory [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#dce6f1&quot;&gt;&lt;B&gt;model_factory()&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;a callable that returns a fresh wrapper —&lt;BR/&gt;called once for the reference, once per spawned worker&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Ref [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;&lt;B&gt;reference run&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;single-process forward on the sample batch — produces the&lt;BR/&gt;per-output truth tensors plus an op-trace and helper-trace&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Spec0 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot;&gt;&lt;B&gt;initial candidate spec&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;use ``wrapper.distribution_spec`` if declared,&lt;BR/&gt;otherwise infer a sensible halo default&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Spawn [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#fff2cc&quot;&gt;&lt;B&gt;spawn ``world_size`` workers&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;each runs the wrapper through the framework with the candidate spec&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Diff [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#fff2cc&quot;&gt;&lt;B&gt;compare to reference&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;per-output abs/rel diff, op firings, halo completeness,&lt;BR/&gt;helper-diagnostic gaps&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Pass [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;&lt;B&gt;report.ok = True&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;save spec, ship alongside checkpoint&lt;/FONT&gt;&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    AutoFix [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#f4cccc&quot;&gt;&lt;B&gt;auto-fix rule engine&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;try a known mutation:&lt;BR/&gt;• swap halo correction → local&lt;BR/&gt;• promote per-graph autograd output to all-reduce&lt;BR/&gt;• drop a redundant all-reduce&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Translate [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#f4cccc&quot;&gt;&lt;B&gt;error translator&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;rewrite generic torch errors as&lt;BR/&gt;framework-specific hints (e.g. dropped scatter return)&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    Factory -&gt; Ref -&gt; Spec0;
+    Spec0 -&gt; Spawn -&gt; Diff;
+    Diff -&gt; Pass [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;diff &amp;lt; tolerance&lt;/FONT&gt;&gt;];
+    Diff -&gt; AutoFix [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;diff &amp;gt; tolerance&lt;/FONT&gt;&gt;];
+    Diff -&gt; Translate [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;worker raised&lt;/FONT&gt;&gt;];
+    AutoFix -&gt; Spawn [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;retry with mutated spec&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code> flow. A single reference run captures the truth; <code class="docutils literal notranslate"><span class="pre">world_size</span></code> workers re-run the same factory with a candidate spec; diffs that exceed tolerance trigger the auto-fix engine, which proposes a spec mutation and retries.</span><a class="headerlink" href="#id25" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="what-the-report-carries">
+<h3>8.2 What the report carries<a class="headerlink" href="#what-the-report-carries" title="Link to this heading">#</a></h3>
+<div class="literal-block-wrapper docutils container" id="id26">
+<div class="code-block-caption"><span class="caption-text">The actionable surface. Either <code class="docutils literal notranslate"><span class="pre">report.ok</span></code> is True and <code class="docutils literal notranslate"><span class="pre">report.spec</span></code> is ready to save, or <code class="docutils literal notranslate"><span class="pre">report.next_action</span></code> tells you exactly what’s wrong.</span><a class="headerlink" href="#id26" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">report</span> <span class="o">=</span> <span class="n">trace_and_validate</span><span class="p">(</span><span class="n">model_factory</span><span class="p">,</span> <span class="n">sample_batch</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+    <span class="n">report</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;my_model_spec.json&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">report</span><span class="o">.</span><span class="n">log_summary</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+    <span class="c1"># Output includes:</span>
+    <span class="c1"># - validation status + auto-fix applied</span>
+    <span class="c1"># - per-output abs/rel diffs vs single-process</span>
+    <span class="c1"># - dispatch-handler firings (so you can see what the multi-rank</span>
+    <span class="c1">#   run actually exercised)</span>
+    <span class="c1"># - halo-completeness verdict</span>
+    <span class="c1"># - helper-diagnostic gaps from watched third-party packages</span>
+    <span class="c1"># - &quot;Diagnosis:&quot; hint when an error pattern is recognised</span>
+    <span class="c1">#   (e.g. dropped scatter_add_ return, missing OpAdapter, etc.)</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="the-intended-user-path">
+<h3>8.3 The intended user path<a class="headerlink" href="#the-intended-user-path" title="Link to this heading">#</a></h3>
+<figure class="align-center" id="id27">
+<div class="graphviz"><object data="../_images/graphviz-15709ba4b36502aad5d11453f0d36b7f0e8dd075.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph byo {
+    rankdir=TB;
+    node [shape=plaintext fontname=&quot;Helvetica&quot;];
+
+    S1 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#dce6f1&quot;&gt;&lt;B&gt;1. write the single-process wrapper&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;no distribution code, no spec — just BaseModelMixin&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    S2 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#9fc5e8&quot;&gt;&lt;B&gt;2. call trace_and_validate&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;no arguments beyond ``model_factory`` + sample batch — auto-fix&lt;BR/&gt;discovers the spec for typical halo MPNNs and per-rank-partial outputs&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    S3 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#fff2cc&quot;&gt;&lt;B&gt;3. read report.log_summary(logger)&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;if it passed, the report shows the residual diff vs single-process;&lt;BR/&gt;if it failed, the diagnostic points at the root cause in plain English&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    S4 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#cfe2cf&quot;&gt;&lt;B&gt;4. (rare) author an OpAdapter&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;only needed if the model embeds a Warp / Triton kernel:&lt;BR/&gt;declare the input pre-shape and output post-shape on the spec&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    S5 [label=&lt;
+      &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot; CELLPADDING=&quot;6&quot;&gt;
+        &lt;TR&gt;&lt;TD BGCOLOR=&quot;#82b366&quot;&gt;&lt;FONT COLOR=&quot;white&quot;&gt;&lt;B&gt;5. spec.save(&quot;model_spec.json&quot;)&lt;/B&gt;&lt;BR/&gt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;ship alongside the checkpoint;&lt;BR/&gt;production loads it as ``MLIPSpec.load(...)``&lt;/FONT&gt;&lt;/FONT&gt;&lt;/TD&gt;&lt;/TR&gt;
+      &lt;/TABLE&gt;
+    &gt;];
+
+    S1 -&gt; S2 -&gt; S3;
+    S3 -&gt; S4 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;opaque kernel?&lt;/FONT&gt;&gt;];
+    S3 -&gt; S5 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;otherwise&lt;/FONT&gt;&gt;];
+    S4 -&gt; S2 [label=&lt;&lt;FONT POINT-SIZE=&quot;10&quot;&gt;re-validate&lt;/FONT&gt;&gt;];
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">The BYO arc — the same five steps regardless of whether the model is pure PyTorch (example 04) or has a Warp kernel (example 05). Most users finish at step 5 without ever touching step 4.</span><a class="headerlink" href="#id27" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<div class="literal-block-wrapper docutils container" id="id28">
+<div class="code-block-caption"><span class="caption-text">The end-to-end happy path is six lines. (Excerpted from <code class="docutils literal notranslate"><span class="pre">examples/distributed/04_byo_pytorch_mpnn.py</span></code>.)</span><a class="headerlink" href="#id28" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">model_factory</span><span class="p">():</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">BPWrapper</span><span class="p">(</span><span class="n">BPModel</span><span class="p">(</span><span class="n">feat_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">5.0</span><span class="p">))</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="n">trace_and_validate</span><span class="p">(</span><span class="n">model_factory</span><span class="p">,</span> <span class="n">sample_batch</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">report</span><span class="o">.</span><span class="n">log_summary</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>            <span class="c1"># validation PASSED in 1 attempt</span>
+<span class="n">report</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;bp_model_spec.json&quot;</span><span class="p">)</span>
+<span class="c1"># Production:</span>
+<span class="c1">#     spec = MLIPSpec.load(&quot;bp_model_spec.json&quot;)</span>
+<span class="c1">#     dist = DistributedModel(BPWrapper(BPModel()), domain_cfg, spec=spec)</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="what-s-not-in-this-overview">
+<h2>What’s not in this overview<a class="headerlink" href="#what-s-not-in-this-overview" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Performance numbers</strong> — see <code class="docutils literal notranslate"><span class="pre">examples/distributed/benchmark_*.py</span></code> and the
+scaling tables those produce. The benchmarks measure per-step wall
+clock, halo-build amortisation, and weak/strong scaling on argon /
+sodium chloride / silica supercells.</p></li>
+<li><p><strong>Checkpoint compatibility</strong> — covered in <a class="reference internal" href="distributed_byo.html"><span class="doc">Bring Your Own Model: Authoring a Distribution Spec</span></a>.</p></li>
+<li><p><strong>The full handler registry</strong> — every predicate + handler is
+documented in <a class="reference internal" href="distributed_shardtensor.html"><span class="doc">ShardTensor: How Per-Atom Fields Flow Across Ranks</span></a> (this overview only
+walks the dispatch flow at the conceptual level).</p></li>
+<li><p><strong>Failure-mode catalogue</strong> — common spec mistakes and the
+diagnostics that catch them are in <a class="reference internal" href="distributed_byo.html"><span class="doc">Bring Your Own Model: Authoring a Distribution Spec</span></a> §
+“Common failure modes”.</p></li>
+</ul>
+<p>For a runnable end-to-end build, work through the two BYO examples in
+order:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Example</p></th>
+<th class="head"><p>Adds</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">examples/distributed/04_byo_pytorch_mpnn.py</span></code></p></td>
+<td><p>The minimal pure-PyTorch path.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code></p></td>
+<td><p>The Warp-kernel path with a hand-authored <code class="docutils literal notranslate"><span class="pre">OpAdapter</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="distributed_byo.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Bring Your Own Model: Authoring a Distribution Spec</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed_training.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed Training</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#motivation-domain-decomposition-meets-message-passing">1. Motivation: domain decomposition meets message passing</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-starting-point-classical-dd-works-for-short-range-pair-potentials">1.1 The starting point: classical DD works for short-range pair potentials</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-breaks-for-message-passing-potentials">1.2 What breaks for message-passing potentials</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#beyond-mpnns-the-long-range-tail">1.3 Beyond MPNNs: the long-range tail</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#where-this-lands">1.4 Where this lands</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shardtensor-a-partition-aware-tensor-subclass">2. ShardTensor: a partition-aware Tensor subclass</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-primitive">2.1 The primitive</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dispatch-via-torch-function">2.2 Dispatch via <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-almost-transparent">2.3 Why “almost transparent”</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#specs-declaring-what-to-do-at-each-op">3. Specs: declaring what to do at each op</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-scatter-rule-where-do-partial-messages-go">3.1 The scatter rule: where do partial messages go?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-gather-rule-how-does-an-index-select-see-data">3.2 The gather rule: how does an index_select see data?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-system-reductions-per-rank-scatter-cross-rank-sum">3.3 Per-system reductions: per-rank scatter + cross-rank sum</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-complete-spec">3.4 The complete spec</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#mace-end-to-end-what-halo-mpnn-looks-like">4. MACE end-to-end: what halo MPNN looks like</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-forward-pass-three-steps">4.1 The forward pass, three steps</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-full-forward-one-slide">4.2 The full forward (one slide)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-is-short-to-write">4.3 Why this is short to write</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#uma-end-to-end-node-partition-graph-parallel-for-graph-rebuilding-models">5. UMA end-to-end: node-partition graph parallel for graph-rebuilding models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composing-models-pipelines-that-mix-strategies">6. Composing models: pipelines that mix strategies</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wrapping-warp-triton-kernels">7. Wrapping Warp / Triton kernels</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-boundary-problem">7.1 The boundary problem</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-transform-vocabulary">7.2 The transform vocabulary</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#worked-example">7.3 Worked example</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-bring-your-own-model">8. Validation + Bring-Your-Own-Model</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-flow">8.1 The flow</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-report-carries">8.2 What the report carries</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-intended-user-path">8.3 The intended user path</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-s-not-in-this-overview">What’s not in this overview</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/distributed_design.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

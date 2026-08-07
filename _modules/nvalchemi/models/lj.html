@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.lj &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.models.lj &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/lj';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -454,9 +457,9 @@ document.write(`
 <span class="sd">  are scalar parameters shared across all atom pairs.</span>
 <span class="sd">* Stress/virial computation (needed for NPT/NPH) is available via</span>
 <span class="sd">  ``model_config.active_outputs`` including ``&quot;stress&quot;``.  When enabled, the</span>
-<span class="sd">  wrapper returns a ``&quot;stress&quot;`` key containing the Cauchy stress</span>
-<span class="sd">  ``W/V`` in energy units.  After calling ``Batch.from_data_list``, set the</span>
-<span class="sd">  placeholder directly:</span>
+<span class="sd">  wrapper returns a ``&quot;stress&quot;`` key containing the tensile-positive Cauchy</span>
+<span class="sd">  stress ``-W/V`` in energy units.  After calling ``Batch.from_data_list``, set</span>
+<span class="sd">  the placeholder directly:</span>
 <span class="sd">  ``batch[&quot;stress&quot;] = torch.zeros(batch.num_graphs, 3, 3)``.  This is</span>
 <span class="sd">  required because ``&quot;stress&quot;`` is not a named ``AtomicData`` field and is</span>
 <span class="sd">  therefore not carried through batching automatically.</span>
@@ -474,8 +477,8 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._ops.lj</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">lj_energy_forces_batch_into</span><span class="p">,</span>
-    <span class="n">lj_energy_forces_virial_batch_into</span><span class="p">,</span>
+    <span class="n">lj_energy_forces_batch</span><span class="p">,</span>
+    <span class="n">lj_energy_forces_virial_batch</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseModelMixin</span><span class="p">,</span>
@@ -549,42 +552,61 @@ document.write(`
                 <span class="n">half_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">half_list</span><span class="p">,</span>
             <span class="p">),</span>
         <span class="p">)</span>
-        <span class="c1"># Pre-allocated compute output buffers — resized lazily on first forward</span>
-        <span class="c1"># or when N/B/dtype/device changes.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_atomic_energies_buf</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_forces_buf</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_virials_buf</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buf_N</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># Per-system energy accumulator (shape [B]), reused across steps and</span>
+        <span class="c1"># resized lazily when B / dtype / device change.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_B</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buf_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1"># Energy accumulation buffer (shape [B]).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1"># Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_null_shifts</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_null_shifts_shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Distributed hook</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="LennardJonesModelWrapper.distribution_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.lj.LennardJonesModelWrapper.html#nvalchemi.models.lj.LennardJonesModelWrapper.distribution_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;MLIPSpec for the Lennard-Jones wrapper under domain decomposition.</span>
+
+<span class="sd">        Halo-only; the ``strategy`` argument is accepted for the framework</span>
+<span class="sd">        contract and ignored (LJ ships no graph-parallel spec).</span>
+
+<span class="sd">        The LJ Warp kernels are opaque to sharded tensors, so each is wrapped</span>
+<span class="sd">        in an :class:`OpAdapter` that unwraps to local tensors for the kernel</span>
+<span class="sd">        and re-wraps the per-atom outputs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MLIPSpec</span>
+<span class="sd">            The halo spec plus one :class:`OpAdapter` per LJ kernel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SPEC_LJ_HALO</span><span class="p">,</span> <span class="n">OpAdapter</span>
+
+        <span class="n">custom_ops</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">OpAdapter</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">nvalchemi</span><span class="o">.</span><span class="n">lj_energy_forces_batch</span><span class="p">),</span>
+            <span class="n">OpAdapter</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">nvalchemi</span><span class="o">.</span><span class="n">lj_energy_forces_virial_batch</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+            <span class="n">SPEC_LJ_HALO</span><span class="p">,</span>
+            <span class="n">distribution</span><span class="o">=</span><span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="n">SPEC_LJ_HALO</span><span class="o">.</span><span class="n">distribution</span><span class="p">,</span> <span class="n">custom_ops</span><span class="o">=</span><span class="n">custom_ops</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># BaseModelMixin required properties</span>
     <span class="c1"># ------------------------------------------------------------------</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_compute_buffers</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Allocate or resize per-step output buffers.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">N</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_N</span>
-            <span class="ow">or</span> <span class="n">B</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_B</span>
-            <span class="ow">or</span> <span class="n">dtype</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_dtype</span>
-            <span class="ow">or</span> <span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buf_device</span>
-        <span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_atomic_energies_buf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_forces_buf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_virials_buf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_N</span> <span class="o">=</span> <span class="n">N</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_B</span> <span class="o">=</span> <span class="n">B</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_dtype</span> <span class="o">=</span> <span class="n">dtype</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_device</span> <span class="o">=</span> <span class="n">device</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Allocate or resize the per-system energy accumulator.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span> <span class="ow">is</span> <span class="kc">None</span>
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">B</span>
@@ -592,6 +614,9 @@ document.write(`
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span>
         <span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_B</span> <span class="o">=</span> <span class="n">B</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buf_device</span> <span class="o">=</span> <span class="n">device</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
@@ -602,11 +627,24 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Compute embeddings for the LennardJonesModelWrapper.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented — the Lennard-Jones potential produces no embeddings.</span>
 
-<span class="sd">        This method is not implemented for the LennardJonesModelWrapper, but it is included</span>
-<span class="sd">        to demonstrate how to override the super() implementation.</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            The input system.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Unused; accepted for interface compatibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomicData | Batch</span>
+<span class="sd">            Never returns.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Always; the LJ potential has no learned embeddings.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="s2">&quot;LennardJonesModelWrapper does not produce embeddings.&quot;</span>
@@ -620,11 +658,33 @@ document.write(`
 <div class="viewcode-block" id="LennardJonesModelWrapper.adapt_input">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.lj.LennardJonesModelWrapper.html#nvalchemi.models.lj.LennardJonesModelWrapper.adapt_input">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect required inputs from *data* without enabling gradients.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the inputs the LJ kernel needs from *data*.</span>
 
-<span class="sd">        Unlike the base-class implementation this method deliberately does</span>
-<span class="sd">        **not** call ``positions.requires_grad_(True)`` because forces are</span>
-<span class="sd">        computed analytically by the Warp kernel rather than via autograd.</span>
+<span class="sd">        Unlike the base implementation this does **not** enable gradients on</span>
+<span class="sd">        ``positions``: forces come analytically from the Warp kernel, not from</span>
+<span class="sd">        autograd.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : Batch</span>
+<span class="sd">            The input batch. ``AtomicData`` is rejected; wrap it first with</span>
+<span class="sd">            ``Batch.from_data_list([data])``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Unused; accepted for interface compatibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            Kernel inputs: the configured input fields plus ``batch_idx``,</span>
+<span class="sd">            ``ptr``, ``num_graphs``, ``fill_value``, and optional ``cells``</span>
+<span class="sd">            ``[B, 3, 3]`` / ``neighbor_matrix_shifts`` ``[N, K, 3]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If a required input field is missing from *data*.</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If *data* is an ``AtomicData`` rather than a ``Batch``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">input_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_data</span><span class="p">():</span>
@@ -656,8 +716,21 @@ document.write(`
 <div class="viewcode-block" id="LennardJonesModelWrapper.adapt_output">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.lj.LennardJonesModelWrapper.html#nvalchemi.models.lj.LennardJonesModelWrapper.adapt_output">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Adapts the model output to the framework&#39;s expected format.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map the LJ kernel output to the framework :class:`ModelOutputs` format.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model_output : dict</span>
+<span class="sd">            Raw kernel output with ``energy`` / ``forces`` and, when stress is</span>
+<span class="sd">            active, ``virial`` (converted here to tensile-positive Cauchy stress</span>
+<span class="sd">            ``-W / V``).</span>
+<span class="sd">        data : AtomicData | Batch</span>
+<span class="sd">            Original input batch; its ``cell`` provides the volume for stress.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            OrderedDict with the active output keys.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">output</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
@@ -669,10 +742,10 @@ document.write(`
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="s2">&quot;stress output requires cell for volume computation&quot;</span>
                     <span class="p">)</span>
-                <span class="c1"># Cauchy stress sigma = W/V (eV/A^3).</span>
+                <span class="c1"># Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).</span>
                 <span class="n">virial</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;virial&quot;</span><span class="p">]</span>
                 <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virial</span> <span class="o">/</span> <span class="n">volume</span>
+                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">virial</span> <span class="o">/</span> <span class="n">volume</span>
             <span class="k">elif</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
                 <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
@@ -685,8 +758,13 @@ document.write(`
 <div class="viewcode-block" id="LennardJonesModelWrapper.output_data">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.lj.LennardJonesModelWrapper.html#nvalchemi.models.lj.LennardJonesModelWrapper.output_data">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">output_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the set of keys that the model produces.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the output keys the model produces this run.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            ``{&quot;energy&quot;}`` plus ``&quot;forces&quot;`` and/or ``&quot;stress&quot;`` when they are</span>
+<span class="sd">            in ``model_config.active_outputs``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">}</span>
         <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
@@ -711,6 +789,8 @@ document.write(`
 <span class="sd">            Batch containing ``positions``, ``neighbor_matrix``,</span>
 <span class="sd">            ``num_neighbors``, and optionally ``cell`` / ``neighbor_matrix_shifts``</span>
 <span class="sd">            (populated by :class:`~nvalchemi.hooks.NeighborListHook`).</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`adapt_input`.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -718,7 +798,7 @@ document.write(`
 <span class="sd">            OrderedDict with keys ``&quot;energy&quot;`` (shape ``[B, 1]``),</span>
 <span class="sd">            ``&quot;forces&quot;`` (shape ``[N, 3]``), and optionally</span>
 <span class="sd">            ``&quot;stress&quot;`` (shape ``[B, 3, 3]``) — Cauchy stress</span>
-<span class="sd">            ``W/V`` in energy units.</span>
+<span class="sd">            ``-W/V`` in energy units.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">inp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
@@ -731,9 +811,9 @@ document.write(`
         <span class="n">N</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">K</span> <span class="o">=</span> <span class="n">neighbor_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_compute_buffers</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_compute_buffers</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="c1"># Build placeholder cell (identity) and shifts (zeros) for non-PBC.</span>
+        <span class="c1"># Non-PBC runs use a placeholder identity cell and zero shifts.</span>
         <span class="n">cells</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cells&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">cells</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cells</span> <span class="o">=</span> <span class="p">(</span>
@@ -762,27 +842,40 @@ document.write(`
 
         <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
 
+        <span class="c1"># Warp ops return per-atom energy / force (and a per-atom virial when</span>
+        <span class="c1"># given a per-atom ``batch_idx`` + per-atom cells). Under domain</span>
+        <span class="c1"># decomposition the spec&#39;s OpAdapter routes the sharded args;</span>
+        <span class="c1"># single-process they pass through unchanged.</span>
         <span class="k">if</span> <span class="n">compute_stresses</span><span class="p">:</span>
-            <span class="n">lj_energy_forces_virial_batch_into</span><span class="p">(</span>
+            <span class="c1"># Give each atom its own &quot;system&quot; so the kernel writes one virial</span>
+            <span class="c1"># row per atom; the dim-0 ``index_add_`` collapse below is then a</span>
+            <span class="c1"># per-atom scatter into a per-system accumulator, which the framework</span>
+            <span class="c1"># reduces owned-aware (owned-slice + all-reduce) — exactly like the</span>
+            <span class="c1"># per-atom energy scatter. This keeps the per-system virial correct</span>
+            <span class="c1"># under decomposition instead of summing each rank&#39;s owned + ghost</span>
+            <span class="c1"># atoms; single-process it equals the kernel&#39;s per-system virial.</span>
+            <span class="n">atom_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">atom_cells</span> <span class="o">=</span> <span class="n">cells</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+            <span class="n">atomic_energies</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">virial</span> <span class="o">=</span> <span class="n">lj_energy_forces_virial_batch</span><span class="p">(</span>
                 <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
-                <span class="n">cells</span><span class="o">=</span><span class="n">cells</span><span class="p">,</span>
+                <span class="n">cells</span><span class="o">=</span><span class="n">atom_cells</span><span class="p">,</span>
                 <span class="n">neighbor_matrix</span><span class="o">=</span><span class="n">neighbor_matrix</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
                 <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="n">neighbor_matrix_shifts</span><span class="p">,</span>
                 <span class="n">num_neighbors</span><span class="o">=</span><span class="n">num_neighbors</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
-                <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">batch_idx</span><span class="o">=</span><span class="n">atom_idx</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
                 <span class="n">fill_value</span><span class="o">=</span><span class="n">fill_value</span><span class="p">,</span>
                 <span class="n">epsilon</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">,</span>
                 <span class="n">sigma</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">,</span>
                 <span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
                 <span class="n">switch_width</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">switch_width</span><span class="p">,</span>
                 <span class="n">half_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">half_list</span><span class="p">,</span>
-                <span class="n">atomic_energies</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_atomic_energies_buf</span><span class="p">,</span>
-                <span class="n">forces</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_forces_buf</span><span class="p">,</span>
-                <span class="n">virial</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_virials_buf</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">virials</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_virials_buf</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">atomic_virial</span> <span class="o">=</span> <span class="n">virial</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+            <span class="n">virials</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">atomic_virial</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="n">atomic_virial</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">lj_energy_forces_batch_into</span><span class="p">(</span>
+            <span class="n">atomic_energies</span><span class="p">,</span> <span class="n">forces</span> <span class="o">=</span> <span class="n">lj_energy_forces_batch</span><span class="p">(</span>
                 <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
                 <span class="n">cells</span><span class="o">=</span><span class="n">cells</span><span class="p">,</span>
                 <span class="n">neighbor_matrix</span><span class="o">=</span><span class="n">neighbor_matrix</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
@@ -795,24 +888,32 @@ document.write(`
                 <span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
                 <span class="n">switch_width</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">switch_width</span><span class="p">,</span>
                 <span class="n">half_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">half_list</span><span class="p">,</span>
-                <span class="n">atomic_energies</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_atomic_energies_buf</span><span class="p">,</span>
-                <span class="n">forces</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_forces_buf</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">virials</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="c1"># Scatter per-atom energies to per-system totals using pre-allocated buffer.</span>
+        <span class="c1"># Scatter per-atom energies to per-system totals. For fp32 inputs,</span>
+        <span class="c1"># accumulate in fp64 to bound the run-to-run drift from the</span>
+        <span class="c1"># nondeterministic atomic-add order; fp64 inputs round-trip unchanged.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atomic_energies_buf</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">atomic_energies</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">:</span>
+            <span class="n">acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">acc</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="p">)</span>
 
-        <span class="c1"># Clone outputs from internal buffers so callers receive independent tensors.</span>
-        <span class="c1"># Without cloning, the next forward pass would overwrite the returned tensors</span>
-        <span class="c1"># in-place, silently corrupting any stored references.</span>
+        <span class="c1"># Clone the energy accumulator so callers get an independent tensor</span>
+        <span class="c1"># (the next forward zeroes it); forces / virials are already fresh.</span>
         <span class="n">model_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>  <span class="c1"># (B, 1)</span>
-            <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forces_buf</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">forces</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="k">if</span> <span class="n">virials</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;virial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virials</span>  <span class="c1"># already cloned above</span>
+            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;virial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virials</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
 
@@ -820,8 +921,24 @@ document.write(`
 <div class="viewcode-block" id="LennardJonesModelWrapper.export_model">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.lj.LennardJonesModelWrapper.html#nvalchemi.models.lj.LennardJonesModelWrapper.export_model">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">export_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">as_state_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Export model is not implemented for LennardJonesModelWrapper.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for the Lennard-Jones wrapper.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path : Path</span>
+<span class="sd">            Output path (unused).</span>
+<span class="sd">        as_state_dict : bool, optional</span>
+<span class="sd">            Unused. Defaults to ``False``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        None</span>
+<span class="sd">            Never returns.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Always; the LJ wrapper carries no learned weights to export.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 </div>

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.FineTuningStrategy.from\_pretrained\_checkpoint
+==================================================================
+
+.. currentmodule:: nvalchemi.training
+
+.. automethod:: FineTuningStrategy.from_pretrained_checkpoint

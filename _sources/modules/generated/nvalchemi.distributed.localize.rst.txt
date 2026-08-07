@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.localize
+==============================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: localize

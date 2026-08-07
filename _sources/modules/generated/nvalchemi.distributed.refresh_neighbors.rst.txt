@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.refresh\_neighbors
+========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: refresh_neighbors

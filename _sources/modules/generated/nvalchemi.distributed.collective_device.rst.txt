@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.collective\_device
+========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: collective_device

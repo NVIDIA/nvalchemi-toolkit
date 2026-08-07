@@ -1,0 +1,1189 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.partitioner &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/partitioner';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.partitioner</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Spatial partitioner for domain decomposition.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainConfig</span>
+
+<span class="c1"># Relative slack when deciding how many domains a ghost shell spans, absorbing</span>
+<span class="c1"># float32 round-off in the derived domain width.</span>
+<span class="n">_SPAN_ROUNDING_TOL</span> <span class="o">=</span> <span class="mf">1e-6</span>
+
+
+<div class="viewcode-block" id="SpatialPartitioner">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpatialPartitioner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns atoms to spatial sub-domains on a Cartesian grid.</span>
+
+<span class="sd">    The partitioner divides the simulation cell into axis-aligned blocks</span>
+<span class="sd">    and maps each atom to the rank that owns its block.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    config : DomainConfig</span>
+<span class="sd">        Domain decomposition configuration.</span>
+<span class="sd">    cell_matrix : torch.Tensor</span>
+<span class="sd">        Cell / box matrix describing the simulation domain.  Accepts</span>
+<span class="sd">        either the Batch convention ``(1, 3, 3)`` or the raw ``(3, 3)``</span>
+<span class="sd">        shape; leading batch dimensions are squeezed internally.</span>
+<span class="sd">    pbc : torch.Tensor</span>
+<span class="sd">        Periodic boundary conditions per axis.  Accepts either</span>
+<span class="sd">        ``(1, 3)`` (Batch convention) or ``(3,)``; leading batch</span>
+<span class="sd">        dimensions are squeezed internally.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1">#: Incremented whenever the neighbour-rank set changes, so anything derived</span>
+    <span class="c1">#: from it can tell that its copy is stale. Class-level so a partitioner</span>
+    <span class="c1">#: built without ``__init__`` still carries one.</span>
+    <span class="n">topology_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">DomainConfig</span><span class="p">,</span>
+        <span class="n">cell_matrix</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="c1"># Normalize to (3, 3) and (3,) regardless of whether the caller</span>
+        <span class="c1"># passed Batch-convention shapes (1, 3, 3) / (1, 3).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cell_matrix</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">cell_matrix</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">cell_matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="n">cell_matrix</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span> <span class="o">=</span> <span class="n">pbc</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">pbc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">pbc</span>
+
+        <span class="c1"># Determine world size from mesh or default to 1.</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># Compute cells_per_dimension from cell geometry and cutoff.</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">grid_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">grid_dims</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_cells_per_dim</span><span class="p">(</span><span class="n">cell_matrix</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+
+        <span class="c1"># Refine the cell grid if there are fewer cells than ranks.</span>
+        <span class="n">total_cells</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">total_cells</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span> <span class="o">=</span> <span class="n">SpatialPartitioner</span><span class="o">.</span><span class="n">refine_grid_for_ranks</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Compute the rank grid (Px, Py, Pz).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">SpatialPartitioner</span><span class="o">.</span><span class="n">compute_rank_grid</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Balance the partition: round each axis&#39;s cell count to a multiple of</span>
+        <span class="c1"># its rank-grid factor so the block assignment gives every rank an</span>
+        <span class="c1"># equal-width domain. Only for auto-computed grids — an explicit</span>
+        <span class="c1"># ``grid_dims`` is the user&#39;s deliberate choice and is left untouched.</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">grid_dims</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span> <span class="o">=</span> <span class="n">SpatialPartitioner</span><span class="o">.</span><span class="n">balance_cells_for_ranks</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Precompute the ghost reach and the neighbor ranks for every rank.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_span</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_span</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_ranks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_all_neighbor_ranks</span><span class="p">()</span>
+
+        <span class="c1"># Precompute the cell-matrix inverse used by ``assign_atoms_to_ranks``.</span>
+        <span class="c1"># The cell is fixed at construction (NVT/NVE), so caching avoids a</span>
+        <span class="c1"># per-step 3x3 inversion in the hot path. The per-call</span>
+        <span class="c1"># ``.to(device=, dtype=)`` is a no-op when device+dtype already match.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inv_cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cell_matrix</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.update_cell">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.update_cell">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_cell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cell_matrix</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Refresh the physical cell when a barostat (NPT/NPH) deforms the box.</span>
+
+<span class="sd">        Recomputes ``cell_matrix`` and its cached inverse; the fractional cell</span>
+<span class="sd">        grid (``cells_per_dim``) and rank layout are intentionally kept fixed so</span>
+<span class="sd">        rank assignment stays consistent as the box scales — only the physical</span>
+<span class="sd">        size of each grid cell changes. Halo regions (``rank_to_cell_bounds`` →</span>
+<span class="sd">        cartesian via ``cell_matrix``) and the fractional ghost width scale with</span>
+<span class="sd">        the updated cell automatically. Without this, the partitioner keeps the</span>
+<span class="sd">        partition-time box: as the cell grows, wrapped positions fall outside it</span>
+<span class="sd">        (fractional coords &gt;= 1) and ``assign_atoms_to_ranks`` misroutes atoms.</span>
+
+<span class="sd">        Contraction narrows every domain, so the ghost shell can come to span</span>
+<span class="sd">        more than one of them; the neighbour-rank set is rebuilt whenever that</span>
+<span class="sd">        happens, and :meth:`neighbor_span` raises if the geometry has contracted</span>
+<span class="sd">        past what the halo can express.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        cell_matrix : torch.Tensor</span>
+<span class="sd">            The barostat&#39;s updated cell, ``(3, 3)`` or ``(1, 3, 3)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cm</span> <span class="o">=</span> <span class="n">cell_matrix</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">cell_matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="n">cell_matrix</span>
+        <span class="n">previous_span</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_span&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cell_matrix</span> <span class="o">=</span> <span class="n">cm</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inv_cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cell_matrix</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_span</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_span</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_span</span> <span class="o">!=</span> <span class="n">previous_span</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_ranks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_all_neighbor_ranks</span><span class="p">()</span>
+            <span class="c1"># Anything derived from the neighbour set — the halo config&#39;s peer</span>
+            <span class="c1"># list and lattice images — is now stale.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">topology_version</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Initialization helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_cells_per_dim</span><span class="p">(</span>
+        <span class="n">cell_matrix</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute cells per dimension from cell geometry and cutoff.</span>
+
+<span class="sd">        Uses the nvalchemiops formula:</span>
+<span class="sd">            face_distance = 1.0 / norm(inverse_cell_T[dim])</span>
+<span class="sd">            cells = max(floor(face_distance / cutoff), 1)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Normalise to a strict 2D ``(3, 3)`` so torch&#39;s ``x.T``</span>
+        <span class="c1"># deprecation warning (fires on any non-2D tensor) doesn&#39;t</span>
+        <span class="c1"># trip — callers may pass ``(1, 3, 3)`` (Batch convention).</span>
+        <span class="k">if</span> <span class="n">cell_matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">cell_matrix</span> <span class="o">=</span> <span class="n">cell_matrix</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">inv_cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">cell_matrix</span><span class="p">)</span>
+        <span class="n">inv_cell_T</span> <span class="o">=</span> <span class="n">inv_cell</span><span class="o">.</span><span class="n">mT</span>  <span class="c1"># (3, 3) — same as .T for 2D, deprecation-free</span>
+
+        <span class="n">dims</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">face_distance</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">inv_cell_T</span><span class="p">[</span><span class="n">dim</span><span class="p">])</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">dims</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">face_distance</span> <span class="o">/</span> <span class="n">cutoff</span><span class="p">)),</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">dims</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dims</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dims</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.compute_rank_grid">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.compute_rank_grid">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_rank_grid</span><span class="p">(</span>
+        <span class="n">cells_per_dim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute ``(Px, Py, Pz)`` rank grid minimizing surface area.</span>
+
+<span class="sd">        Enumerates all 3-factor factorizations of *world_size* and picks the</span>
+<span class="sd">        one that minimizes the surface-area proxy</span>
+<span class="sd">        ``2 * (dx*dy + dy*dz + dx*dz)`` where ``dx = Nx/Px``, etc.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span> <span class="o">=</span> <span class="n">cells_per_dim</span>
+
+        <span class="n">best_grid</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">best_surface</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">Px</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">world_size</span> <span class="o">%</span> <span class="n">Px</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">remainder</span> <span class="o">=</span> <span class="n">world_size</span> <span class="o">//</span> <span class="n">Px</span>
+            <span class="k">for</span> <span class="n">Py</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">remainder</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">remainder</span> <span class="o">%</span> <span class="n">Py</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">Pz</span> <span class="o">=</span> <span class="n">remainder</span> <span class="o">//</span> <span class="n">Py</span>
+
+                <span class="n">dx</span> <span class="o">=</span> <span class="n">Nx</span> <span class="o">/</span> <span class="n">Px</span>
+                <span class="n">dy</span> <span class="o">=</span> <span class="n">Ny</span> <span class="o">/</span> <span class="n">Py</span>
+                <span class="n">dz</span> <span class="o">=</span> <span class="n">Nz</span> <span class="o">/</span> <span class="n">Pz</span>
+                <span class="n">surface</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">dx</span> <span class="o">*</span> <span class="n">dy</span> <span class="o">+</span> <span class="n">dy</span> <span class="o">*</span> <span class="n">dz</span> <span class="o">+</span> <span class="n">dx</span> <span class="o">*</span> <span class="n">dz</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">surface</span> <span class="o">&lt;</span> <span class="n">best_surface</span><span class="p">:</span>
+                    <span class="n">best_surface</span> <span class="o">=</span> <span class="n">surface</span>
+                    <span class="n">best_grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">best_grid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No valid factorization found&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">best_grid</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.refine_grid_for_ranks">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.refine_grid_for_ranks">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">refine_grid_for_ranks</span><span class="p">(</span>
+        <span class="n">cells_per_dim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Subdivide cells until there are at least *world_size* cells.</span>
+
+<span class="sd">        Doubles the smallest dimension iteratively. Warns if total cells</span>
+<span class="sd">        remain less than *world_size* after 64 iterations (safety cap).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span> <span class="o">=</span> <span class="n">cells_per_dim</span>
+        <span class="n">max_iters</span> <span class="o">=</span> <span class="mi">64</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iters</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">Nx</span> <span class="o">*</span> <span class="n">Ny</span> <span class="o">*</span> <span class="n">Nz</span> <span class="o">&gt;=</span> <span class="n">world_size</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="c1"># Double the smallest dimension.</span>
+            <span class="n">min_val</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">Nx</span> <span class="o">==</span> <span class="n">min_val</span><span class="p">:</span>
+                <span class="n">Nx</span> <span class="o">*=</span> <span class="mi">2</span>
+            <span class="k">elif</span> <span class="n">Ny</span> <span class="o">==</span> <span class="n">min_val</span><span class="p">:</span>
+                <span class="n">Ny</span> <span class="o">*=</span> <span class="mi">2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">Nz</span> <span class="o">*=</span> <span class="mi">2</span>
+
+        <span class="k">if</span> <span class="n">Nx</span> <span class="o">*</span> <span class="n">Ny</span> <span class="o">*</span> <span class="n">Nz</span> <span class="o">&lt;</span> <span class="n">world_size</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Could not refine cell grid to </span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2"> cells; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">Nx</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">Ny</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">Nz</span><span class="si">}</span><span class="s2"> cells with grid (</span><span class="si">{</span><span class="n">Nx</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">Ny</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">Nz</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.balance_cells_for_ranks">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.balance_cells_for_ranks">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">balance_cells_for_ranks</span><span class="p">(</span>
+        <span class="n">cells_per_dim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">rank_grid</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Round each axis&#39;s cell count to a multiple of its rank-grid factor.</span>
+
+<span class="sd">        The cell-&gt;rank block assignment (``cx = ceil(Nx / Px)``) gives the first</span>
+<span class="sd">        ranks ``cx`` cells and the last rank the remainder, so when ``Nx`` is</span>
+<span class="sd">        not a multiple of ``Px`` the domains are unequal — e.g. 3 cells across</span>
+<span class="sd">        2 ranks splits 2:1. Making ``Nx`` a multiple of ``Px`` gives every rank</span>
+<span class="sd">        ``Nx / Px`` equal-width cells.</span>
+
+<span class="sd">        Rounds DOWN to the nearest multiple of ``Pi`` (floored at ``Pi`` so each</span>
+<span class="sd">        rank keeps at least one cell). Rounding down — never up — keeps each</span>
+<span class="sd">        cell at least as wide as the cutoff-derived size, so cells stay</span>
+<span class="sd">        ``&gt;= cutoff``. Axes with a single rank (``Pi == 1``) are unchanged.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">n_i</span><span class="p">,</span> <span class="n">p_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="n">rank_grid</span><span class="p">):</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_i</span> <span class="k">if</span> <span class="n">p_i</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="k">else</span> <span class="nb">max</span><span class="p">(</span><span class="n">p_i</span><span class="p">,</span> <span class="p">(</span><span class="n">n_i</span> <span class="o">//</span> <span class="n">p_i</span><span class="p">)</span> <span class="o">*</span> <span class="n">p_i</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Cell ↔ rank mapping</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.cell_to_rank">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.cell_to_rank">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cell_to_rank</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">ix</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">iy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">iz</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map cell indices ``(ix, iy, iz)`` to the owning rank.</span>
+
+<span class="sd">        Works with both scalar ints and batched :class:`torch.Tensor` inputs.</span>
+<span class="sd">        Uses ceiling-division block assignment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nx</span> <span class="o">/</span> <span class="n">Px</span><span class="p">)</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Ny</span> <span class="o">/</span> <span class="n">Py</span><span class="p">)</span>
+        <span class="n">cz</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nz</span> <span class="o">/</span> <span class="n">Pz</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ix</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">rx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">ix</span> <span class="o">//</span> <span class="n">cx</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Px</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">ry</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">iy</span> <span class="o">//</span> <span class="n">cy</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Py</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">rz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">iz</span> <span class="o">//</span> <span class="n">cz</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Pz</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">rx</span> <span class="o">+</span> <span class="n">Px</span> <span class="o">*</span> <span class="p">(</span><span class="n">ry</span> <span class="o">+</span> <span class="n">Py</span> <span class="o">*</span> <span class="n">rz</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rx</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">ix</span> <span class="o">//</span> <span class="n">cx</span><span class="p">,</span> <span class="n">Px</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">ry</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">iy</span> <span class="o">//</span> <span class="n">cy</span><span class="p">,</span> <span class="n">Py</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">rz</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">iz</span> <span class="o">//</span> <span class="n">cz</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">rx</span> <span class="o">+</span> <span class="n">Px</span> <span class="o">*</span> <span class="p">(</span><span class="n">ry</span> <span class="o">+</span> <span class="n">Py</span> <span class="o">*</span> <span class="n">rz</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.keeps_owner">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.keeps_owner">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">keeps_owner</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">positions</span><span class="p">:</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">,</span>
+        <span class="n">owner_rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">hysteresis</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hysteresis-aware ownership test.</span>
+
+<span class="sd">        An atom keeps its owner until it drifts more than ``hysteresis``</span>
+<span class="sd">        (Cartesian Angstrom) past the owner&#39;s domain boundary — i.e. it stays</span>
+<span class="sd">        while inside the owner&#39;s domain expanded by ``hysteresis`` on every axis</span>
+<span class="sd">        (PBC-wrapped on periodic axes). This stops the per-step migration</span>
+<span class="sd">        thrashing of atoms that merely vibrate across a domain plane.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        positions : torch.Tensor</span>
+<span class="sd">            ``[N, 3]`` atom positions in Cartesian coordinates.</span>
+<span class="sd">        owner_rank : int</span>
+<span class="sd">            The rank whose ownership is being tested.</span>
+<span class="sd">        hysteresis : float</span>
+<span class="sd">            Cartesian margin (Angstrom) an atom must exceed past the boundary</span>
+<span class="sd">            before it loses its owner.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``[N]`` bool, True where an atom currently owned by ``owner_rank``</span>
+<span class="sd">            should keep that owner.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Correctness relies on ``hysteresis &lt;= skin / 2`` (enforced by</span>
+<span class="sd">        ``DomainConfig``): a deferred atom plus inter-rebuild drift stays within</span>
+<span class="sd">        the owner&#39;s halo (``ghost_width = cutoff + skin``), so the owner still</span>
+<span class="sd">        has all the atom&#39;s neighbors and the neighbor still ghosts the atom.</span>
+<span class="sd">        Uses the same fractional-bounds + reciprocal-norm geometry as the halo</span>
+<span class="sd">        ghost region it must stay inside.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">inv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">@</span> <span class="n">inv</span>  <span class="c1"># (N, 3) fractional coords (row-vector convention)</span>
+        <span class="n">cells</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">lo_cell</span><span class="p">,</span> <span class="n">hi_cell</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_to_cell_bounds</span><span class="p">(</span><span class="n">owner_rank</span><span class="p">)</span>
+        <span class="n">frac_lo</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">lo_cell</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">cells</span>  <span class="c1"># (3,)</span>
+        <span class="n">frac_hi</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">hi_cell</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">cells</span>  <span class="c1"># (3,)</span>
+        <span class="c1"># Cartesian hysteresis -&gt; fractional per axis: |reciprocal vector| are the</span>
+        <span class="c1"># rows of inv(cell).T (matches _ghost_width_fractional).</span>
+        <span class="n">norms</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">inv</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (3,)</span>
+        <span class="n">h_frac</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">hysteresis</span><span class="p">)</span> <span class="o">*</span> <span class="n">norms</span>  <span class="c1"># (3,)</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">frac_lo</span> <span class="o">-</span> <span class="n">h_frac</span>  <span class="c1"># expanded-domain lower bound per axis</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">frac_hi</span> <span class="o">+</span> <span class="n">h_frac</span>  <span class="c1"># expanded-domain upper bound per axis</span>
+        <span class="n">pbc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">frac</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">fd</span> <span class="o">=</span> <span class="n">frac</span><span class="p">[:,</span> <span class="n">d</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">pbc</span><span class="p">[</span><span class="n">d</span><span class="p">]):</span>
+                <span class="c1"># Membership of f (mod 1) in [a, b] on the unit circle; the band</span>
+                <span class="c1"># width (hi-lo + 2*hysteresis) is &lt; 1, so test f, f-1, f+1.</span>
+                <span class="n">fm</span> <span class="o">=</span> <span class="n">fd</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span>
+                <span class="n">in_d</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">((</span><span class="n">fm</span> <span class="o">&gt;=</span> <span class="n">a</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">fm</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">[</span><span class="n">d</span><span class="p">]))</span>
+                    <span class="o">|</span> <span class="p">((</span><span class="n">fm</span> <span class="o">-</span> <span class="mf">1.0</span> <span class="o">&gt;=</span> <span class="n">a</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">fm</span> <span class="o">-</span> <span class="mf">1.0</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">[</span><span class="n">d</span><span class="p">]))</span>
+                    <span class="o">|</span> <span class="p">((</span><span class="n">fm</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">&gt;=</span> <span class="n">a</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">fm</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">[</span><span class="n">d</span><span class="p">]))</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">in_d</span> <span class="o">=</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&gt;=</span> <span class="n">a</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">[</span><span class="n">d</span><span class="p">])</span>
+            <span class="n">keep</span> <span class="o">=</span> <span class="n">keep</span> <span class="o">&amp;</span> <span class="n">in_d</span>
+        <span class="k">return</span> <span class="n">keep</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.rank_to_cell_bounds">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.rank_to_cell_bounds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rank_to_cell_bounds</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return cell index bounds ``(lo, hi)`` owned by *rank*.</span>
+
+<span class="sd">        ``lo`` is inclusive, ``hi`` is exclusive.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+
+        <span class="n">rx</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="n">rz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_to_grid_coords</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nx</span> <span class="o">/</span> <span class="n">Px</span><span class="p">)</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Ny</span> <span class="o">/</span> <span class="n">Py</span><span class="p">)</span>
+        <span class="n">cz</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nz</span> <span class="o">/</span> <span class="n">Pz</span><span class="p">)</span>
+
+        <span class="n">lo</span> <span class="o">=</span> <span class="p">(</span><span class="n">rx</span> <span class="o">*</span> <span class="n">cx</span><span class="p">,</span> <span class="n">ry</span> <span class="o">*</span> <span class="n">cy</span><span class="p">,</span> <span class="n">rz</span> <span class="o">*</span> <span class="n">cz</span><span class="p">)</span>
+        <span class="n">hi</span> <span class="o">=</span> <span class="p">(</span><span class="nb">min</span><span class="p">((</span><span class="n">rx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">cx</span><span class="p">,</span> <span class="n">Nx</span><span class="p">),</span> <span class="nb">min</span><span class="p">((</span><span class="n">ry</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">cy</span><span class="p">,</span> <span class="n">Ny</span><span class="p">),</span> <span class="nb">min</span><span class="p">((</span><span class="n">rz</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">cz</span><span class="p">,</span> <span class="n">Nz</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">lo</span><span class="p">,</span> <span class="n">hi</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.rank_to_grid_coords">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.rank_to_grid_coords">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rank_to_grid_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decompose a linear rank index into ``(rx, ry, rz)`` grid coords.&quot;&quot;&quot;</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">_Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+        <span class="n">rx</span> <span class="o">=</span> <span class="n">rank</span> <span class="o">%</span> <span class="n">Px</span>
+        <span class="n">ry</span> <span class="o">=</span> <span class="p">(</span><span class="n">rank</span> <span class="o">//</span> <span class="n">Px</span><span class="p">)</span> <span class="o">%</span> <span class="n">Py</span>
+        <span class="n">rz</span> <span class="o">=</span> <span class="n">rank</span> <span class="o">//</span> <span class="p">(</span><span class="n">Px</span> <span class="o">*</span> <span class="n">Py</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">rx</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="n">rz</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Neighbor ranks</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.domain_widths">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.domain_widths">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">domain_widths</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Physical width of one rank&#39;s domain along each axis, in Angstroms.</span>
+
+<span class="sd">        Each rank owns ``ceil(N_d / P_d)`` grid cells of width</span>
+<span class="sd">        ``face_distance_d / N_d``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[float, float, float]</span>
+<span class="sd">            Per-axis domain width.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cell_matrix</span>
+        <span class="n">inv_cell_T</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">cm</span><span class="p">)</span><span class="o">.</span><span class="n">mT</span>
+        <span class="n">widths</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">face</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">inv_cell_T</span><span class="p">[</span><span class="n">d</span><span class="p">])</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">n_d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">[</span><span class="n">d</span><span class="p">]</span>
+            <span class="n">cells_per_rank</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">n_d</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span><span class="p">[</span><span class="n">d</span><span class="p">])</span>
+            <span class="n">widths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cells_per_rank</span> <span class="o">*</span> <span class="n">face</span> <span class="o">/</span> <span class="n">n_d</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">widths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">widths</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">widths</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="SpatialPartitioner.neighbor_span">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.neighbor_span">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">neighbor_span</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rank offsets the ghost shell reaches along each axis.</span>
+
+<span class="sd">        ``ceil(ghost_width / domain_width)`` — 1 while the ghost fits inside one</span>
+<span class="sd">        domain, more once it does not (many ranks, a small cell, or a barostat</span>
+<span class="sd">        contracting the box). Communicating only ``+/-1`` in that case silently</span>
+<span class="sd">        drops every interaction that spans two or more domains.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[int, int, int]</span>
+<span class="sd">            Per-axis offset range.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the shell would have to wrap onto the rank&#39;s own periodic image,</span>
+<span class="sd">            which the halo exchange cannot express.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ghost</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">effective_ghost_width</span><span class="p">()</span>
+        <span class="n">widths</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">domain_widths</span><span class="p">()</span>
+        <span class="n">span</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="c1"># ``domain_widths`` derives the face distance from a float32 matrix</span>
+            <span class="c1"># inverse, so a shell that fits exactly lands a few ulp above 1.0 and</span>
+            <span class="c1"># would round up to a spurious extra domain. Absorb that before the</span>
+            <span class="c1"># ceil; a genuine overshoot is orders of magnitude larger.</span>
+            <span class="n">ratio</span> <span class="o">=</span> <span class="p">(</span><span class="n">ghost</span> <span class="o">/</span> <span class="n">widths</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="o">-</span> <span class="n">_SPAN_ROUNDING_TOL</span> <span class="k">if</span> <span class="n">widths</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ratio</span><span class="p">))</span> <span class="k">if</span> <span class="n">widths</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">1</span>
+            <span class="n">p_d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span><span class="p">[</span><span class="n">d</span><span class="p">]</span>
+            <span class="c1"># An offset of +/-P_d wraps back onto the rank itself, so the shell</span>
+            <span class="c1"># would need the rank&#39;s own periodic image as a ghost -- something</span>
+            <span class="c1"># the neighbour list cannot express. Reaching every OTHER rank is</span>
+            <span class="c1"># fine (they simply dedupe), so only s &gt;= P_d is fatal.</span>
+            <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="p">[</span><span class="n">d</span><span class="p">])</span> <span class="ow">and</span> <span class="n">s</span> <span class="o">&gt;=</span> <span class="n">p_d</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Ghost width </span><span class="si">{</span><span class="n">ghost</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> A spans </span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2"> rank domains along &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;axis </span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2"> (domain width </span><span class="si">{</span><span class="n">widths</span><span class="p">[</span><span class="n">d</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> A, </span><span class="si">{</span><span class="n">p_d</span><span class="si">}</span><span class="s2"> ranks on &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;that axis), so the halo would wrap onto the rank&#39;s own &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;periodic image. Use fewer ranks, a larger cell, or a &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;smaller cutoff/skin.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">span</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">p_d</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">p_d</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">span</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">span</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">span</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_all_neighbor_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Precompute the set of neighbor ranks for every rank.&quot;&quot;&quot;</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+        <span class="n">total_ranks</span> <span class="o">=</span> <span class="n">Px</span> <span class="o">*</span> <span class="n">Py</span> <span class="o">*</span> <span class="n">Pz</span>
+        <span class="n">span</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_span</span><span class="p">()</span>
+        <span class="n">neighbor_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">total_ranks</span><span class="p">):</span>
+            <span class="n">neighbor_map</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_neighbor_ranks_for</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">span</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">neighbor_map</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_neighbor_ranks_for</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">span</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the spatial neighbor ranks the ghost shell reaches for *rank*.</span>
+
+<span class="sd">        *span* is the per-axis offset range from :meth:`neighbor_span` (computed</span>
+<span class="sd">        on demand when omitted). For PBC dimensions, wrap around. For non-PBC,</span>
+<span class="sd">        skip out-of-bounds.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+        <span class="n">rx</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="n">rz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_to_grid_coords</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+        <span class="n">pbc_x</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">pbc_y</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">pbc_z</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">sx</span><span class="p">,</span> <span class="n">sy</span><span class="p">,</span> <span class="n">sz</span> <span class="o">=</span> <span class="n">span</span> <span class="k">if</span> <span class="n">span</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_span</span><span class="p">()</span>
+
+        <span class="n">neighbors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="n">sx</span><span class="p">,</span> <span class="n">sx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">dy</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="n">sy</span><span class="p">,</span> <span class="n">sy</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">dz</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="n">sz</span><span class="p">,</span> <span class="n">sz</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">dx</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">dy</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">dz</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="n">nx</span> <span class="o">=</span> <span class="n">rx</span> <span class="o">+</span> <span class="n">dx</span>
+                    <span class="n">ny</span> <span class="o">=</span> <span class="n">ry</span> <span class="o">+</span> <span class="n">dy</span>
+                    <span class="n">nz</span> <span class="o">=</span> <span class="n">rz</span> <span class="o">+</span> <span class="n">dz</span>
+
+                    <span class="c1"># Check bounds / wrap for each dimension.</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_bounds_or_wrap</span><span class="p">(</span><span class="n">nx</span><span class="p">,</span> <span class="n">Px</span><span class="p">,</span> <span class="n">pbc_x</span><span class="p">):</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_bounds_or_wrap</span><span class="p">(</span><span class="n">ny</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">pbc_y</span><span class="p">):</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_bounds_or_wrap</span><span class="p">(</span><span class="n">nz</span><span class="p">,</span> <span class="n">Pz</span><span class="p">,</span> <span class="n">pbc_z</span><span class="p">):</span>
+                        <span class="k">continue</span>
+
+                    <span class="n">nx</span> <span class="o">=</span> <span class="n">nx</span> <span class="o">%</span> <span class="n">Px</span>
+                    <span class="n">ny</span> <span class="o">=</span> <span class="n">ny</span> <span class="o">%</span> <span class="n">Py</span>
+                    <span class="n">nz</span> <span class="o">=</span> <span class="n">nz</span> <span class="o">%</span> <span class="n">Pz</span>
+
+                    <span class="n">neighbor_rank</span> <span class="o">=</span> <span class="n">nx</span> <span class="o">+</span> <span class="n">Px</span> <span class="o">*</span> <span class="p">(</span><span class="n">ny</span> <span class="o">+</span> <span class="n">Py</span> <span class="o">*</span> <span class="n">nz</span><span class="p">)</span>
+                    <span class="c1"># Exclude self (can happen when PBC wraps a dimension</span>
+                    <span class="c1"># that has only 1 rank, e.g. rank_grid (1, 1, 2) with</span>
+                    <span class="c1"># full PBC — dx=±1 along Px=1 wraps back to self).</span>
+                    <span class="k">if</span> <span class="n">neighbor_rank</span> <span class="o">!=</span> <span class="n">rank</span> <span class="ow">and</span> <span class="n">neighbor_rank</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">neighbors</span><span class="p">:</span>
+                        <span class="n">neighbors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">neighbor_rank</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">neighbors</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_in_bounds_or_wrap</span><span class="p">(</span><span class="n">coord</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">periodic</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a neighbor coordinate is valid, considering PBC.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">coord</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">periodic</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.get_neighbor_ranks">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.get_neighbor_ranks">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_neighbor_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return precomputed neighbor ranks for *rank*.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_neighbor_ranks</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Atom assignment (vectorized)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="SpatialPartitioner.assign_atoms_to_ranks">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.SpatialPartitioner.html#nvalchemi.distributed.SpatialPartitioner.assign_atoms_to_ranks">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assign_atoms_to_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign each atom to a rank based on its position.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        positions : torch.Tensor</span>
+<span class="sd">            ``(N, 3)`` atom positions in Cartesian coordinates.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``(N,)`` integer tensor of rank assignments.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+
+        <span class="c1"># Fractional coordinates. ``cart = frac @ cell_matrix`` (rows of</span>
+        <span class="c1"># cell_matrix = lattice vectors), so ``frac = cart @ inv(cell_matrix)``</span>
+        <span class="c1"># — not ``inv(cell).T``, which gives wrong fractional coords on skew</span>
+        <span class="c1"># cells (hex / triclinic) and mis-assigns boundary atoms.</span>
+        <span class="n">inv_cell</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_cell</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">@</span> <span class="n">inv_cell</span>  <span class="c1"># (N, 3)</span>
+
+        <span class="n">cells_per_dim_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="c1"># Cell coordinates.</span>
+        <span class="n">cell_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">frac</span> <span class="o">*</span> <span class="n">cells_per_dim_t</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+        <span class="c1"># PBC wrap for periodic dimensions; clamp for non-periodic.</span>
+        <span class="n">cells_per_dim_int</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+        <span class="p">)</span>
+        <span class="n">pbc_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Wrap periodic dims via modulo.</span>
+        <span class="n">wrapped</span> <span class="o">=</span> <span class="n">cell_coords</span> <span class="o">%</span> <span class="n">cells_per_dim_int</span>
+        <span class="c1"># Clamp non-periodic dims.</span>
+        <span class="n">clamped</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span>
+            <span class="n">cell_coords</span><span class="p">,</span>
+            <span class="nb">min</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">cells_per_dim_int</span><span class="p">),</span>
+            <span class="nb">max</span><span class="o">=</span><span class="n">cells_per_dim_int</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Select based on pbc mask.</span>
+        <span class="n">cell_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">pbc_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">wrapped</span><span class="p">,</span> <span class="n">clamped</span><span class="p">)</span>
+
+        <span class="c1"># Vectorized cell_to_rank.</span>
+        <span class="n">Nx</span><span class="p">,</span> <span class="n">Ny</span><span class="p">,</span> <span class="n">Nz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells_per_dim</span>
+        <span class="n">Px</span><span class="p">,</span> <span class="n">Py</span><span class="p">,</span> <span class="n">Pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank_grid</span>
+
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nx</span> <span class="o">/</span> <span class="n">Px</span><span class="p">)</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Ny</span> <span class="o">/</span> <span class="n">Py</span><span class="p">)</span>
+        <span class="n">cz</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">Nz</span> <span class="o">/</span> <span class="n">Pz</span><span class="p">)</span>
+
+        <span class="n">rx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">cell_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="n">cx</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Px</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">ry</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">cell_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="n">cy</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Py</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">rz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">cell_coords</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">//</span> <span class="n">cz</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">Pz</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">ranks</span> <span class="o">=</span> <span class="n">rx</span> <span class="o">+</span> <span class="n">Px</span> <span class="o">*</span> <span class="p">(</span><span class="n">ry</span> <span class="o">+</span> <span class="n">Py</span> <span class="o">*</span> <span class="n">rz</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ranks</span></div>
+</div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">IndexPartitioner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns atoms to ranks by contiguous, count-balanced index ranges.</span>
+
+<span class="sd">    A geometry-free alternative to :class:`SpatialPartitioner`: atom ``i`` is</span>
+<span class="sd">    owned by the rank holding its slice of ``arange(N)``, split into ``W``</span>
+<span class="sd">    contiguous chunks with the remainder spread over the low ranks. Every rank</span>
+<span class="sd">    neighbors every other (no spatial locality), so a decomposition built on this</span>
+<span class="sd">    partitioner exchanges across the whole mesh rather than a boundary shell.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">DomainConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">mesh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_neighbor_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Every other rank: an index partition has no boundary shell.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rank : int</span>
+<span class="sd">            The rank whose neighbours are wanted.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[int]</span>
+<span class="sd">            All ranks except *rank*.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span> <span class="o">!=</span> <span class="n">rank</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">assign_atoms_to_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign atoms to ranks in balanced contiguous index blocks.</span>
+
+<span class="sd">        Position-independent, unlike the spatial partitioner: atom order alone</span>
+<span class="sd">        decides the owner, so the assignment is stable as atoms move.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        positions : torch.Tensor</span>
+<span class="sd">            Atomic positions, read only for their count and device.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Owning rank per atom, shape ``[N]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owned_counts</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_owned_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
+        <span class="n">base</span><span class="p">,</span> <span class="n">rem</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">base</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="n">rem</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">w</span><span class="p">)]</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.register\_type\_serializer
+=============================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: register_type_serializer

@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.dftd3
 
+
 .. autoclass:: DFTD3ModelWrapper
     :members:
+
 
 .. raw:: html
 

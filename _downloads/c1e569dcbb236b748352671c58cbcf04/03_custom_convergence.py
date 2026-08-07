@@ -45,7 +45,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -238,7 +238,7 @@ class _LogHook:
     stage = DynamicsStage.AFTER_STEP
     frequency = 50
 
-    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
         batch = ctx.batch
         step = ctx.step_count + 1
         energy = batch.energy.squeeze(-1)

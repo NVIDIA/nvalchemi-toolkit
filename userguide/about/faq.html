@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Frequently Asked Questions &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Frequently Asked Questions &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/about/faq';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Contribution Guide" href="contributing.html" />
-    <link rel="prev" title="Introduction to ALCHEMI Toolkit" href="intro.html" />
+    <link rel="prev" title="Conventions" href="conventions.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -367,6 +370,7 @@ document.write(`
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,16 +379,33 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="../reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -449,7 +470,7 @@ document.write(`
 <h2>General<a class="headerlink" href="#general" title="Link to this heading">#</a></h2>
 <section id="how-do-i-get-started">
 <h3>How do I get started?<a class="headerlink" href="#how-do-i-get-started" title="Link to this heading">#</a></h3>
-<p>For installation instructions, check the <a class="reference internal" href="install.html"><span class="doc std std-doc">installation guide</span></a>. For a
+<p>For installation instructions, check the <a class="reference internal" href="install.html"><span class="std std-doc">installation guide</span></a>. For a
 quick working example, see the <a class="reference internal" href="../index.html"><span class="doc std std-doc">User Guide</span></a>. For detailed API usage,
 refer to the <a class="reference internal" href="../../modules/index.html"><span class="doc std std-doc">API documentation</span></a>.</p>
 <p>If your question is not answered here, please submit a Github <a class="reference external" href="https://www.github.com/NVIDIA/nvalchemi-toolkit/issues/new/choose">Issue</a>.</p>
@@ -462,7 +483,7 @@ refer to the <a class="reference internal" href="../../modules/index.html"><span
 <li><p>CPU execution via NVIDIA Warp (x86 and ARM, including Apple Silicon)</p></li>
 </ul>
 <p>For best performance, we recommend CUDA 12+ with driver version 570.xx or newer.
-See the <a class="reference internal" href="install.html"><span class="doc std std-doc">installation guide</span></a> for full prerequisites.</p>
+See the <a class="reference internal" href="install.html"><span class="std std-doc">installation guide</span></a> for full prerequisites.</p>
 </section>
 </section>
 <section id="dynamics-simulation">
@@ -502,7 +523,7 @@ example, see the
 <h2>Interoperability<a class="headerlink" href="#interoperability" title="Link to this heading">#</a></h2>
 <section id="how-do-i-convert-from-ase-atoms-to-nvalchemi">
 <h3>How do I convert from ASE Atoms to nvalchemi?<a class="headerlink" href="#how-do-i-convert-from-ase-atoms-to-nvalchemi" title="Link to this heading">#</a></h3>
-<p>Use <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_atoms" title="nvalchemi.data.AtomicData.from_atoms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">AtomicData.from_atoms()</span></code></a> to
+<p>Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">AtomicData.from_atoms()</span></code> to
 convert an <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> object into an <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> graph. ASE integer tags are
 automatically mapped to <code class="docutils literal notranslate"><span class="pre">AtomCategory</span></code> values. See the
 <a class="reference internal" href="../../examples/basic/03_ase_integration.html"><span class="doc">ASE integration example</span></a> for a
@@ -522,12 +543,12 @@ round-trip workflow (ASE -&gt; nvalchemi -&gt; ASE).</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="intro.html"
+       href="conventions.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Introduction to ALCHEMI Toolkit</p>
+        <p class="prev-next-title">Conventions</p>
       </div>
     </a>
     <a class="right-next"

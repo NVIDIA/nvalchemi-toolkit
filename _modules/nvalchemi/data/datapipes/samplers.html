@@ -1,0 +1,1362 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.data.datapipes.samplers &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/samplers';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.da...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.data.datapipes.samplers</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Samplers for datasets composed with :class:`MultiDataset`.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">ceil</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Integral</span><span class="p">,</span> <span class="n">Real</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">Self</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sampler</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.multidataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiDataset</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span>
+
+<span class="n">EpochPolicy</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;dataset_size&quot;</span><span class="p">,</span> <span class="s2">&quot;min_size&quot;</span><span class="p">,</span> <span class="s2">&quot;max_size&quot;</span><span class="p">]</span>
+
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributedSamplerProtocol</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Protocol for samplers that partition work across distributed ranks.</span>
+
+<span class="sd">    This intentionally matches the public surface provided by</span>
+<span class="sd">    :class:`torch.utils.data.DistributedSampler` so native PyTorch samplers</span>
+<span class="sd">    satisfy the protocol structurally.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_replicas : int</span>
+<span class="sd">        Number of distributed workers participating in sampling.</span>
+<span class="sd">    rank : int</span>
+<span class="sd">        Rank local to the sampler&#39;s process group.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the current epoch for deterministic per-epoch shuffling.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return keyword arguments for torch random APIs.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;generator&quot;</span><span class="p">:</span> <span class="n">generator</span><span class="p">}</span> <span class="k">if</span> <span class="n">generator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalise_weights</span><span class="p">(</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">lengths</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return positive finite weights for each child dataset.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">lengths</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">lengths</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span><span class="si">}</span><span class="s2"> dataset weights, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Dataset weights must be finite&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">tensor</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Dataset weights must be non-negative&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one dataset weight must be positive&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">lengths</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">weight</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">length</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> has positive weight but no samples&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tensor</span> <span class="o">/</span> <span class="n">tensor</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_counts_from_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Allocate an integer total according to fractional weights.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">total</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;total must be &gt;= 1, got </span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">raw_counts</span> <span class="o">=</span> <span class="n">weights</span> <span class="o">*</span> <span class="n">total</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">raw_counts</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">remaining</span> <span class="o">=</span> <span class="n">total</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">remaining</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">fractions</span> <span class="o">=</span> <span class="n">raw_counts</span> <span class="o">-</span> <span class="n">counts</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">torch</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">fractions</span><span class="p">,</span> <span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="n">remaining</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+            <span class="n">counts</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">counts</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_local_order</span><span class="p">(</span>
+    <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return one local index order for a child dataset.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">shuffle</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="o">**</span><span class="n">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">))</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_shuffle_indices</span><span class="p">(</span>
+    <span class="n">indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a shuffled copy of indices.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">indices</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">),</span> <span class="o">**</span><span class="n">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">))</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">indices</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">order</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_num_sharded_items</span><span class="p">(</span><span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return number of items emitted by one distributed rank.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">num_replicas</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">length</span>
+    <span class="k">if</span> <span class="n">drop_last</span> <span class="ow">and</span> <span class="n">length</span> <span class="o">%</span> <span class="n">num_replicas</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ceil</span><span class="p">((</span><span class="n">length</span> <span class="o">-</span> <span class="n">num_replicas</span><span class="p">)</span> <span class="o">/</span> <span class="n">num_replicas</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ceil</span><span class="p">(</span><span class="n">length</span> <span class="o">/</span> <span class="n">num_replicas</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_distributed_shard</span><span class="p">(</span>
+    <span class="n">indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the subset of epoch items assigned to one distributed rank.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    indices : list</span>
+<span class="sd">        Sample indices in the order they would be retrieved for this epoch</span>
+<span class="sd">        before splitting the work across data-parallel ranks. In a</span>
+<span class="sd">        single-process run, this would be the sampler order.</span>
+<span class="sd">    num_replicas : int</span>
+<span class="sd">        Number of distributed ranks sharing the epoch.</span>
+<span class="sd">    rank : int</span>
+<span class="sd">        Rank whose local shard should be returned.</span>
+<span class="sd">    drop_last : bool</span>
+<span class="sd">        Whether to truncate the full epoch instead of padding it when the epoch</span>
+<span class="sd">        length is not evenly divisible by ``num_replicas``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        Rank-local shard of ``indices``.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    To make strided sharding produce the same number of items on each rank, the</span>
+<span class="sd">    full epoch order is first resized to ``total_size``. ``num_samples`` is the</span>
+<span class="sd">    number of items one rank should emit, computed as</span>
+<span class="sd">    ``ceil(len(indices) / num_replicas)`` unless ``drop_last=True`` requires</span>
+<span class="sd">    truncating an uneven tail. ``total_size`` is the all-rank item count,</span>
+<span class="sd">    ``num_samples * num_replicas``.</span>
+
+<span class="sd">    With ``drop_last=True``, the full list is truncated to ``total_size``.</span>
+<span class="sd">    Otherwise, items from the beginning of the epoch are repeated until the list</span>
+<span class="sd">    is evenly divisible across ranks, matching PyTorch</span>
+<span class="sd">    :class:`~torch.utils.data.DistributedSampler` behavior. After resizing, rank</span>
+<span class="sd">    ``r`` receives every ``num_replicas``-th item starting at offset ``r``:</span>
+<span class="sd">    ``indices[r:total_size:num_replicas]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">num_replicas</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">indices</span>
+
+    <span class="n">num_samples</span> <span class="o">=</span> <span class="n">_num_sharded_items</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">),</span> <span class="n">num_replicas</span><span class="p">,</span> <span class="n">drop_last</span><span class="p">)</span>
+    <span class="n">total_size</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="o">*</span> <span class="n">num_replicas</span>
+    <span class="k">if</span> <span class="n">drop_last</span><span class="p">:</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[:</span><span class="n">total_size</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">total_size</span><span class="p">:</span>
+        <span class="n">padding_size</span> <span class="o">=</span> <span class="n">total_size</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">padding_size</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">):</span>
+            <span class="n">indices</span> <span class="o">+=</span> <span class="n">indices</span><span class="p">[:</span><span class="n">padding_size</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">+=</span> <span class="p">(</span><span class="n">indices</span> <span class="o">*</span> <span class="n">ceil</span><span class="p">(</span><span class="n">padding_size</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)))[:</span><span class="n">padding_size</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">indices</span><span class="p">[</span><span class="n">rank</span><span class="p">:</span><span class="n">total_size</span><span class="p">:</span><span class="n">num_replicas</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_contains_float</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether any value should switch counts to ratio semantics.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
+        <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Integral</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_num_batches_from_policy</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">epoch_policy</span><span class="p">:</span> <span class="n">EpochPolicy</span><span class="p">,</span>
+    <span class="n">lengths</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">samples_per_dataset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">total_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">replacement</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute default epoch length from per-dataset batch allocations.&quot;&quot;&quot;</span>
+    <span class="n">contributing</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">lengths</span><span class="p">,</span> <span class="n">samples_per_dataset</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">contributing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one dataset must contribute samples per batch&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">replacement</span><span class="p">:</span>
+        <span class="n">min_batches</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">ceil</span><span class="p">(</span><span class="n">length</span> <span class="o">/</span> <span class="n">count</span><span class="p">)</span> <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">contributing</span><span class="p">)</span>
+        <span class="n">max_batches</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">ceil</span><span class="p">(</span><span class="n">length</span> <span class="o">/</span> <span class="n">count</span><span class="p">)</span> <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">contributing</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">min_batches</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">length</span> <span class="o">//</span> <span class="n">count</span> <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">contributing</span><span class="p">)</span>
+        <span class="n">max_batches</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">length</span> <span class="o">//</span> <span class="n">count</span> <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">contributing</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">epoch_policy</span> <span class="o">==</span> <span class="s2">&quot;dataset_size&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ceil</span><span class="p">(</span><span class="n">total_length</span> <span class="o">/</span> <span class="n">batch_size</span><span class="p">)</span> <span class="k">if</span> <span class="n">replacement</span> <span class="k">else</span> <span class="n">min_batches</span>
+    <span class="k">if</span> <span class="n">epoch_policy</span> <span class="o">==</span> <span class="s2">&quot;min_size&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">min_batches</span>
+    <span class="k">if</span> <span class="n">epoch_policy</span> <span class="o">==</span> <span class="s2">&quot;max_size&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">replacement</span> <span class="ow">and</span> <span class="n">max_batches</span> <span class="o">&gt;</span> <span class="n">min_batches</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;epoch_policy=&#39;max_size&#39; requires replacement=True when smaller &quot;</span>
+                <span class="s2">&quot;datasets would need oversampling&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">max_batches</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">&quot;epoch_policy must be one of &#39;dataset_size&#39;, &#39;min_size&#39;, or &#39;max_size&#39;&quot;</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="MultiDatasetSampler">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.MultiDatasetSampler.html#nvalchemi.data.datapipes.MultiDatasetSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MultiDatasetSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample global indices from a :class:`MultiDataset` at dataset-level rates.</span>
+
+<span class="sd">    ``MultiDatasetSampler`` yields individual global sample indices (it is a</span>
+<span class="sd">    :class:`torch.utils.data.Sampler` of ``int``), choosing which child dataset</span>
+<span class="sd">    each sample is drawn from according to per-dataset ``weights`` -- defaulting</span>
+<span class="sd">    to the child lengths, which reproduces proportional sampling from the</span>
+<span class="sd">    concatenated index space. Pass it to a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` as ``sampler=``;</span>
+<span class="sd">    the loader then groups the emitted indices into batches of ``batch_size``,</span>
+<span class="sd">    so batch composition is *stochastic*. Use</span>
+<span class="sd">    :class:`MultiDatasetBatchSampler` instead when each batch must contain a</span>
+<span class="sd">    guaranteed number of samples from each child.</span>
+
+<span class="sd">    The sampler is distributed-aware: it shards the epoch across</span>
+<span class="sd">    ``num_replicas`` ranks (inferred from an initialized ``distributed_manager``</span>
+<span class="sd">    when one is supplied), and :meth:`set_epoch` reseeds shuffling per epoch for</span>
+<span class="sd">    correct cross-rank ordering -- the same contract as</span>
+<span class="sd">    :class:`torch.utils.data.DistributedSampler`. ``replacement`` controls</span>
+<span class="sd">    whether a child&#39;s samples may repeat within an epoch; with</span>
+<span class="sd">    ``replacement=False`` the requested per-child counts may not exceed the</span>
+<span class="sd">    child sizes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : MultiDataset</span>
+<span class="sd">        Dataset wrapper that defines child dataset offsets.</span>
+<span class="sd">    weights : Sequence[float] | None, default=None</span>
+<span class="sd">        Per-child dataset sampling rates. ``None`` uses child lengths, matching</span>
+<span class="sd">        proportional sampling from the concatenated global index space.</span>
+<span class="sd">    num_samples : int | None, default=None</span>
+<span class="sd">        Number of global indices emitted per epoch. ``None`` emits</span>
+<span class="sd">        ``len(dataset)`` samples.</span>
+<span class="sd">    replacement : bool, default=True</span>
+<span class="sd">        Whether local samples may repeat within an epoch.</span>
+<span class="sd">    shuffle : bool, default=True</span>
+<span class="sd">        Randomize dataset choices and local sample order.</span>
+<span class="sd">    generator : torch.Generator | None, default=None</span>
+<span class="sd">        Optional random generator for reproducible sampling.</span>
+<span class="sd">    num_replicas : int | None, default=None</span>
+<span class="sd">        Number of distributed ranks. ``None`` uses initialized</span>
+<span class="sd">        ``distributed_manager.world_size`` or defaults to ``1``.</span>
+<span class="sd">    rank : int | None, default=None</span>
+<span class="sd">        Rank for this sampler. ``None`` uses initialized</span>
+<span class="sd">        ``distributed_manager.rank`` or defaults to ``0``.</span>
+<span class="sd">    distributed_manager : DistributedManager | None, default=None</span>
+<span class="sd">        Optional distributed manager used to infer rank and world size.</span>
+<span class="sd">    seed : int, default=0</span>
+<span class="sd">        Base seed used for deterministic shuffling across epochs when</span>
+<span class="sd">        ``generator`` is ``None``.</span>
+<span class="sd">    drop_last : bool, default=False</span>
+<span class="sd">        Drop tail samples to make the epoch evenly divisible across ranks.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Oversample a small child dataset by weighting it above its natural share::</span>
+
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.data.datapipes import DataLoader  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.data.datapipes.samplers import MultiDatasetSampler</span>
+<span class="sd">        &gt;&gt;&gt; sampler = MultiDatasetSampler(multi, weights=(1.0, 3.0))  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; loader = DataLoader(multi, batch_size=8, sampler=sampler)  # doctest: +SKIP</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    MultiDatasetBatchSampler : Fix the per-child composition of every batch.</span>
+<span class="sd">    MultiDataset : The concatenated dataset these global indices address.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">MultiDataset</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">replacement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the sampler.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">child</span><span class="p">)</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">datasets</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="o">=</span> <span class="n">_normalise_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span> <span class="k">if</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">num_samples</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_samples must be &gt;= 1, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">replacement</span> <span class="o">=</span> <span class="n">replacement</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span> <span class="o">=</span> <span class="n">generator</span>
+        <span class="k">if</span> <span class="n">distributed_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">num_replicas</span> <span class="o">=</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">world_size</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">rank</span>
+        <span class="k">if</span> <span class="n">num_replicas</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_replicas</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">num_replicas</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_replicas must be &gt;= 1, got </span><span class="si">{</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">&gt;=</span> <span class="n">num_replicas</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;rank must be in the range [0, </span><span class="si">{</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">=</span> <span class="n">num_replicas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="o">=</span> <span class="n">drop_last</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># if not sampling without replacement, we go through the datasets</span>
+        <span class="c1"># and make sure there are sufficient samples to meet the weights</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">replacement</span><span class="p">:</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="n">_counts_from_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">dataset_index</span><span class="p">,</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                <span class="nb">zip</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="n">length</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;replacement=False cannot draw &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> samples from dataset </span><span class="si">{</span><span class="n">dataset_index</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;with only </span><span class="si">{</span><span class="n">length</span><span class="si">}</span><span class="s2"> samples&quot;</span>
+                    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_epoch_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the generator used for this epoch.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">generator</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_global_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the full unsharded epoch of global sample indices.&quot;&quot;&quot;</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_generator</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replacement</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+            <span class="c1"># Draw dataset choices once, then draw per-dataset local indices in</span>
+            <span class="c1"># vectors to avoid one scalar RNG call per emitted sample.</span>
+            <span class="n">dataset_choices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
+                <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span>
+                <span class="n">dataset_choices</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">local_orders</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span>
+                    <span class="n">length</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">count</span><span class="p">,),</span>
+                    <span class="o">**</span><span class="n">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">),</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">cursors</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">dataset_index</span> <span class="ow">in</span> <span class="n">dataset_choices</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+                <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+                <span class="n">local_index</span> <span class="o">=</span> <span class="n">local_orders</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">][</span><span class="n">cursor</span><span class="p">]</span>
+                <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">to_global_index</span><span class="p">(</span><span class="n">dataset_index</span><span class="p">,</span> <span class="n">local_index</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">indices</span>
+
+        <span class="c1"># case where we may be shuffling or replacing samples</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">_counts_from_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">)</span>
+        <span class="n">dataset_choices</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">dataset_index</span>
+            <span class="k">for</span> <span class="n">dataset_index</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+            <span class="n">dataset_choices</span> <span class="o">=</span> <span class="n">_shuffle_indices</span><span class="p">(</span><span class="n">dataset_choices</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span>
+
+        <span class="c1"># Without replacement, build one local order per child dataset and</span>
+        <span class="c1"># advance cursors as batches consume those fixed orders.</span>
+        <span class="n">local_orders</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_local_order</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">length</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span>
+        <span class="p">]</span>
+        <span class="n">cursors</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dataset_index</span> <span class="ow">in</span> <span class="n">dataset_choices</span><span class="p">:</span>
+            <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replacement</span><span class="p">:</span>
+                <span class="n">local_index</span> <span class="o">=</span> <span class="n">local_orders</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">][</span>
+                    <span class="n">cursor</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+                <span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">local_index</span> <span class="o">=</span> <span class="n">local_orders</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">][</span><span class="n">cursor</span><span class="p">]</span>
+            <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">to_global_index</span><span class="p">(</span><span class="n">dataset_index</span><span class="p">,</span> <span class="n">local_index</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">indices</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield rank-local global sample indices.&quot;&quot;&quot;</span>
+        <span class="k">yield from</span> <span class="n">_distributed_shard</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span><span class="p">(),</span>
+            <span class="n">num_replicas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span>
+            <span class="n">drop_last</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of rank-local emitted global indices.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_num_sharded_items</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiDatasetSampler.set_epoch">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.MultiDatasetSampler.html#nvalchemi.data.datapipes.MultiDatasetSampler.set_epoch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the epoch used for deterministic distributed shuffling.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        epoch : int</span>
+<span class="sd">            Epoch number added to ``seed`` when this sampler owns its generator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="MultiDatasetBatchSampler">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html#nvalchemi.data.datapipes.MultiDatasetBatchSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MultiDatasetBatchSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample full global-index batches from a :class:`MultiDataset`.</span>
+
+<span class="sd">    ``MultiDatasetBatchSampler`` yields whole batches -- each a ``list`` of</span>
+<span class="sd">    global indices (it is a :class:`torch.utils.data.Sampler` of ``list[int]``)</span>
+<span class="sd">    -- and is passed to a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` as</span>
+<span class="sd">    ``batch_sampler=`` (mutually exclusive with ``sampler``, ``shuffle``, and</span>
+<span class="sd">    the loader&#39;s ``batch_size``). Unlike :class:`MultiDatasetSampler`, it fixes</span>
+<span class="sd">    the *composition* of every batch: each batch holds a deterministic number of</span>
+<span class="sd">    samples from each child dataset, set either by ``samples_per_dataset``</span>
+<span class="sd">    (explicit integer counts, or floats read as relative rates) or by</span>
+<span class="sd">    ``weights`` (rates that split ``batch_size`` across children). Use this class</span>
+<span class="sd">    for ratio- or curriculum-controlled multi-source training where every</span>
+<span class="sd">    optimizer step must see a guaranteed mixture ratio.</span>
+
+<span class="sd">    Epoch length (``num_batches``) can be given directly or derived from</span>
+<span class="sd">    ``epoch_policy``: ``&quot;dataset_size&quot;`` sizes the epoch by the combined length,</span>
+<span class="sd">    ``&quot;min_size&quot;`` stops when the smallest contributing child is exhausted, and</span>
+<span class="sd">    ``&quot;max_size&quot;`` runs until the largest is exhausted (oversampling smaller</span>
+<span class="sd">    children when ``replacement=True``). Like :class:`MultiDatasetSampler`, it</span>
+<span class="sd">    shards across ``num_replicas`` ranks and honors :meth:`set_epoch`, mirroring</span>
+<span class="sd">    :class:`torch.utils.data.DistributedSampler`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : MultiDataset</span>
+<span class="sd">        Dataset wrapper that defines child dataset offsets.</span>
+<span class="sd">    batch_size : int</span>
+<span class="sd">        Number of samples in each emitted batch.</span>
+<span class="sd">    weights : Sequence[float] | None, default=None</span>
+<span class="sd">        Per-child rates used to allocate ``batch_size`` slots. ``None`` uses</span>
+<span class="sd">        child lengths, matching proportional sampling from the global index</span>
+<span class="sd">        space.</span>
+<span class="sd">    samples_per_dataset : Sequence[int | float] | None, default=None</span>
+<span class="sd">        Per-child batch allocation. Integer entries are exact sample counts</span>
+<span class="sd">        per batch. If any entry is a float, the full sequence is interpreted</span>
+<span class="sd">        as relative per-dataset rates and allocated across ``batch_size``.</span>
+<span class="sd">        Mutually exclusive with ``weights``.</span>
+<span class="sd">    num_batches : int | None, default=None</span>
+<span class="sd">        Number of batches per epoch. For replacement sampling, the default is</span>
+<span class="sd">        ``ceil(len(dataset) / batch_size)``. Without replacement, the default is</span>
+<span class="sd">        the number of complete batches supported by the smallest requested child</span>
+<span class="sd">        allocation.</span>
+<span class="sd">    epoch_policy : {&quot;dataset_size&quot;, &quot;min_size&quot;, &quot;max_size&quot;}, default=&quot;dataset_size&quot;</span>
+<span class="sd">        Policy used to compute ``num_batches`` when it is not provided.</span>
+<span class="sd">        ``&quot;dataset_size&quot;`` simply returns the combined dataset length divided</span>
+<span class="sd">        by the batch size when ``replacement=True``, otherwise ``min_size``. ``&quot;min_size&quot;``</span>
+<span class="sd">        stops when the smallest contributing dataset would be exhausted.</span>
+<span class="sd">        ``&quot;max_size&quot;`` runs until the largest contributing dataset would be</span>
+<span class="sd">        exhausted, oversampling smaller datasets when ``replacement=True``.</span>
+<span class="sd">    replacement : bool, default=True</span>
+<span class="sd">        Whether local samples may repeat within an epoch.</span>
+<span class="sd">    shuffle : bool, default=True</span>
+<span class="sd">        Randomize local sample order and sample order within each batch.</span>
+<span class="sd">    generator : torch.Generator | None, default=None</span>
+<span class="sd">        Optional random generator for reproducible sampling.</span>
+<span class="sd">    num_replicas : int | None, default=None</span>
+<span class="sd">        Number of distributed ranks. ``None`` uses initialized</span>
+<span class="sd">        ``distributed_manager.world_size`` or defaults to ``1``.</span>
+<span class="sd">    rank : int | None, default=None</span>
+<span class="sd">        Rank for this sampler. ``None`` uses initialized</span>
+<span class="sd">        ``distributed_manager.rank`` or defaults to ``0``.</span>
+<span class="sd">    distributed_manager : DistributedManager | None, default=None</span>
+<span class="sd">        Optional distributed manager used to infer rank and world size.</span>
+<span class="sd">    seed : int, default=0</span>
+<span class="sd">        Base seed used for deterministic shuffling across epochs when</span>
+<span class="sd">        ``generator`` is ``None``.</span>
+<span class="sd">    drop_last : bool, default=False</span>
+<span class="sd">        Drop tail batches to make the epoch evenly divisible across ranks.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Guarantee three samples from the first child and one from the second in</span>
+<span class="sd">    every batch of four::</span>
+
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.data.datapipes import DataLoader  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.data.datapipes.samplers import MultiDatasetBatchSampler</span>
+<span class="sd">        &gt;&gt;&gt; sampler = MultiDatasetBatchSampler(  # doctest: +SKIP</span>
+<span class="sd">        ...     multi, batch_size=4, samples_per_dataset=(3, 1)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; loader = DataLoader(multi, batch_sampler=sampler)  # doctest: +SKIP</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    MultiDatasetSampler : Emit single indices for stochastic per-sample mixing.</span>
+<span class="sd">    MultiDataset : The concatenated dataset these global indices address.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">MultiDataset</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">samples_per_dataset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">epoch_policy</span><span class="p">:</span> <span class="n">EpochPolicy</span> <span class="o">=</span> <span class="s2">&quot;dataset_size&quot;</span><span class="p">,</span>
+        <span class="n">replacement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the batch sampler.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batch_size must be &gt;= 1, got </span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">samples_per_dataset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weights and samples_per_dataset are mutually exclusive&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">child</span><span class="p">)</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">datasets</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">replacement</span> <span class="o">=</span> <span class="n">replacement</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span> <span class="o">=</span> <span class="n">generator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch_policy</span> <span class="o">=</span> <span class="n">epoch_policy</span>
+        <span class="k">if</span> <span class="n">distributed_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">num_replicas</span> <span class="o">=</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">world_size</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">distributed_manager</span><span class="o">.</span><span class="n">rank</span>
+        <span class="k">if</span> <span class="n">num_replicas</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_replicas</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">num_replicas</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_replicas must be &gt;= 1, got </span><span class="si">{</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">&gt;=</span> <span class="n">num_replicas</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;rank must be in the range [0, </span><span class="si">{</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">=</span> <span class="n">num_replicas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="o">=</span> <span class="n">drop_last</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">samples_per_dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">normalised_weights</span> <span class="o">=</span> <span class="n">_normalise_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span> <span class="o">=</span> <span class="n">_counts_from_weights</span><span class="p">(</span>
+                <span class="n">normalised_weights</span><span class="p">,</span> <span class="n">batch_size</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">samples_per_dataset</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span><span class="si">}</span><span class="s2"> per-dataset counts, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">samples_per_dataset</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># if floats are provided, we treat them as ratios</span>
+            <span class="k">if</span> <span class="n">_contains_float</span><span class="p">(</span><span class="n">samples_per_dataset</span><span class="p">):</span>
+                <span class="n">normalised_weights</span> <span class="o">=</span> <span class="n">_normalise_weights</span><span class="p">(</span>
+                    <span class="n">samples_per_dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span> <span class="o">=</span> <span class="n">_counts_from_weights</span><span class="p">(</span>
+                    <span class="n">normalised_weights</span><span class="p">,</span> <span class="n">batch_size</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">exact_counts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">samples_per_dataset</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">Integral</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                            <span class="s2">&quot;Integer samples_per_dataset entries must be &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;integral counts, got </span><span class="si">{</span><span class="n">count</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">exact_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span> <span class="o">=</span> <span class="n">exact_counts</span>
+
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">count</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;samples_per_dataset counts must be non-negative&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">)</span> <span class="o">!=</span> <span class="n">batch_size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;samples_per_dataset counts must sum to batch_size: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">)</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one dataset must contribute samples per batch&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">dataset_index</span><span class="p">,</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">length</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Dataset </span><span class="si">{</span><span class="n">dataset_index</span><span class="si">}</span><span class="s2"> contributes </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> samples per &quot;</span>
+                    <span class="s2">&quot;batch but has no samples&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">replacement</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">_num_batches_from_policy</span><span class="p">(</span>
+                    <span class="n">epoch_policy</span><span class="o">=</span><span class="n">epoch_policy</span><span class="p">,</span>
+                    <span class="n">lengths</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span>
+                    <span class="n">samples_per_dataset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">,</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">total_length</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">),</span>
+                    <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">num_batches</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">num_batches</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">max_complete_batches</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
+                <span class="n">length</span> <span class="o">//</span> <span class="n">count</span>
+                <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">_num_batches_from_policy</span><span class="p">(</span>
+                    <span class="n">epoch_policy</span><span class="o">=</span><span class="n">epoch_policy</span><span class="p">,</span>
+                    <span class="n">lengths</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span>
+                    <span class="n">samples_per_dataset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">,</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">total_length</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">),</span>
+                    <span class="n">replacement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">num_batches</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">num_batches</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span> <span class="o">&gt;</span> <span class="n">max_complete_batches</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;replacement=False supports at most &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">max_complete_batches</span><span class="si">}</span><span class="s2"> complete batches for the requested &quot;</span>
+                    <span class="s2">&quot;per-dataset counts&quot;</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_batches must be &gt;= 1, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiDatasetBatchSampler.balanced">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html#nvalchemi.data.datapipes.MultiDatasetBatchSampler.balanced">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">balanced</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">MultiDataset</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">num_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">epoch_policy</span><span class="p">:</span> <span class="n">EpochPolicy</span> <span class="o">=</span> <span class="s2">&quot;dataset_size&quot;</span><span class="p">,</span>
+        <span class="n">replacement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a batch sampler with equal dataset-level sampling rates.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dataset : MultiDataset</span>
+<span class="sd">            Dataset wrapper that defines child dataset offsets.</span>
+<span class="sd">        batch_size : int</span>
+<span class="sd">            Number of samples in each emitted batch.</span>
+<span class="sd">        num_batches : int | None, default=None</span>
+<span class="sd">            Number of batches per epoch.</span>
+<span class="sd">        epoch_policy : {&quot;dataset_size&quot;, &quot;min_size&quot;, &quot;max_size&quot;}, default=&quot;dataset_size&quot;</span>
+<span class="sd">            Policy used to compute ``num_batches`` when it is not provided.</span>
+<span class="sd">        replacement : bool, default=True</span>
+<span class="sd">            Whether local samples may repeat within an epoch.</span>
+<span class="sd">        shuffle : bool, default=True</span>
+<span class="sd">            Randomize local sample order and sample order within each batch.</span>
+<span class="sd">        generator : torch.Generator | None, default=None</span>
+<span class="sd">            Optional random generator for reproducible sampling.</span>
+<span class="sd">        num_replicas : int | None, default=None</span>
+<span class="sd">            Number of distributed ranks.</span>
+<span class="sd">        rank : int | None, default=None</span>
+<span class="sd">            Rank for this sampler.</span>
+<span class="sd">        distributed_manager : DistributedManager | None, default=None</span>
+<span class="sd">            Optional distributed manager used to infer rank and world size.</span>
+<span class="sd">        seed : int, default=0</span>
+<span class="sd">            Base seed used for deterministic shuffling across epochs.</span>
+<span class="sd">        drop_last : bool, default=False</span>
+<span class="sd">            Drop tail batches to make the epoch evenly divisible across ranks.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Self</span>
+<span class="sd">            Batch sampler with one equal relative weight per child dataset.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">datasets</span><span class="p">),</span>
+            <span class="n">num_batches</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span>
+            <span class="n">epoch_policy</span><span class="o">=</span><span class="n">epoch_policy</span><span class="p">,</span>
+            <span class="n">replacement</span><span class="o">=</span><span class="n">replacement</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">num_replicas</span><span class="o">=</span><span class="n">num_replicas</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
+            <span class="n">distributed_manager</span><span class="o">=</span><span class="n">distributed_manager</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">drop_last</span><span class="o">=</span><span class="n">drop_last</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_epoch_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the generator used for this epoch.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">generator</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_iter_global_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield the unsharded epoch of global-index batches.&quot;&quot;&quot;</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_generator</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replacement</span><span class="p">:</span>
+            <span class="c1"># Replacement batches can be generated independently, so stream</span>
+            <span class="c1"># each batch without materializing the all-rank epoch.</span>
+            <span class="n">cursors</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span><span class="p">):</span>
+                <span class="n">batch</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">dataset_index</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+                        <span class="n">local_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">],</span>
+                            <span class="p">(</span><span class="n">count</span><span class="p">,),</span>
+                            <span class="o">**</span><span class="n">_generator_kwargs</span><span class="p">(</span><span class="n">generator</span><span class="p">),</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+                        <span class="n">local_indices</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="p">(</span><span class="n">cursor</span> <span class="o">+</span> <span class="n">i</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+                            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+                        <span class="p">]</span>
+                        <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span> <span class="o">+=</span> <span class="n">count</span>
+                    <span class="n">batch</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">to_global_index</span><span class="p">(</span><span class="n">dataset_index</span><span class="p">,</span> <span class="n">local_index</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">local_index</span> <span class="ow">in</span> <span class="n">local_indices</span>
+                    <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">_shuffle_indices</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="k">else</span> <span class="n">batch</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Without replacement, build fixed local orders and consume them</span>
+        <span class="c1"># cursor-style so each child dataset is exhausted predictably.</span>
+        <span class="n">local_orders</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_local_order</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">length</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span>
+        <span class="p">]</span>
+        <span class="n">cursors</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span><span class="p">):</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">dataset_index</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_per_dataset</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span>
+                <span class="n">local_indices</span> <span class="o">=</span> <span class="n">local_orders</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">][</span><span class="n">cursor</span> <span class="p">:</span> <span class="n">cursor</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+                <span class="n">cursors</span><span class="p">[</span><span class="n">dataset_index</span><span class="p">]</span> <span class="o">+=</span> <span class="n">count</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">to_global_index</span><span class="p">(</span><span class="n">dataset_index</span><span class="p">,</span> <span class="n">local_index</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">local_index</span> <span class="ow">in</span> <span class="n">local_indices</span>
+                <span class="p">)</span>
+            <span class="k">yield</span> <span class="n">_shuffle_indices</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="k">else</span> <span class="n">batch</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_global_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the full unsharded epoch of global-index batches.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter_global_batches</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield rank-local batches of global sample indices.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Single-process runs can stream directly; no padding or rank</span>
+            <span class="c1"># filtering is needed.</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_global_batches</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="n">_num_sharded_items</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span>
+        <span class="p">)</span>
+        <span class="n">total_size</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span>
+        <span class="n">padding_size</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="k">else</span> <span class="n">total_size</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span>
+        <span class="c1"># Cache only the prefix needed for DistributedSampler-style padding,</span>
+        <span class="c1"># then rank-filter the streamed global batch order.</span>
+        <span class="n">prefix</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">ordinal</span><span class="p">,</span> <span class="n">batch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter_global_batches</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="n">ordinal</span> <span class="o">&gt;=</span> <span class="n">total_size</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">padding_size</span><span class="p">:</span>
+                <span class="n">prefix</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ordinal</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">batch</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="ow">and</span> <span class="n">prefix</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">padding_size</span><span class="p">):</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="n">prefix</span><span class="p">[</span><span class="n">offset</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)]</span>
+                <span class="n">ordinal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span> <span class="o">+</span> <span class="n">offset</span>
+                <span class="k">if</span> <span class="n">ordinal</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">batch</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of rank-local emitted batches.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_num_sharded_items</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiDatasetBatchSampler.set_epoch">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html#nvalchemi.data.datapipes.MultiDatasetBatchSampler.set_epoch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the epoch used for deterministic distributed shuffling.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        epoch : int</span>
+<span class="sd">            Epoch number added to ``seed`` when this sampler owns its generator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

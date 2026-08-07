@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Distributed Pipeline Examples &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Distributed Examples &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/index';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin" href="01_distributed_pipeline.html" />
-    <link rel="prev" title="AIMNet2 + Ewald Pipeline Geometry Optimization" href="../advanced/08_aimnet2_ewald_pipeline.html" />
+    <link rel="prev" title="MACE Training with ALCHEMI Training Utilities" href="../advanced/10_mace_training.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -378,6 +381,8 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -389,11 +394,18 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Distributed Pipeline Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
 </ul>
 </li>
 </ul>
@@ -436,7 +448,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">Distributed...</li>
+    <li class="breadcrumb-item active" aria-current="page">Distributed Examples</li>
   </ul>
 </nav>
 </div>
@@ -453,24 +465,31 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="distributed-pipeline-examples">
-<span id="sphx-glr-examples-distributed"></span><h1>Distributed Pipeline Examples<a class="headerlink" href="#distributed-pipeline-examples" title="Link to this heading">#</a></h1>
-<p>These examples demonstrate multi-GPU distributed simulation pipelines
-using <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>.  They require
-multiple GPUs and must be launched with <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>.</p>
+  <section id="distributed-examples">
+<span id="sphx-glr-examples-distributed"></span><h1>Distributed Examples<a class="headerlink" href="#distributed-examples" title="Link to this heading">#</a></h1>
+<p>These examples cover the two multi-GPU paths in NVAlchemi:</p>
+<ul class="simple">
+<li><p><strong>Pipeline parallelism</strong> (examples 01–02) — map ranks to dynamics
+stages with <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>.</p></li>
+<li><p><strong>Domain decomposition</strong> (examples 03–05) — shard one system across
+ranks with <a class="reference internal" href="../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a>, including
+the “bring your own model” arc.</p></li>
+</ul>
+<p>All require multiple GPUs and must be launched with <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>These examples are <strong>not executed</strong> during the Sphinx documentation
 build.  To run them, use <code class="docutils literal notranslate"><span class="pre">torchrun</span></code> as shown in each example.</p>
 </div>
-<section id="architecture-overview">
-<h2>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading">#</a></h2>
+<section id="pipeline-architecture-overview">
+<h2>Pipeline Architecture Overview<a class="headerlink" href="#pipeline-architecture-overview" title="Link to this heading">#</a></h2>
 <p>A <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a> maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
 communication buffers:</p>
-<div class="graphviz"><img src="../../_images/graphviz-2c9855e988f2635c27558eb39449670e19ec1525.png" alt="digraph distributed_pipeline {
+<div class="graphviz"><object data="../../_images/graphviz-ef45dd574581246f553bea52ed6a04b19629bbf9.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph distributed_pipeline {
     rankdir=LR;
-    node [shape=box, style=&quot;rounded,filled&quot;, fillcolor=&quot;#e8f4fd&quot;,
+    node [shape=box, style=&quot;rounded,filled&quot;, fillcolor=&quot;#e8f4fd&quot; fontcolor=&quot;#111111&quot;,
           fontname=&quot;Helvetica&quot;, fontsize=11];
     edge [fontname=&quot;Helvetica&quot;, fontsize=10];
 
@@ -478,7 +497,7 @@ communication buffers:</p>
     rank1 [label=&quot;Rank 1: Langevin\n(downstream + sink)&quot;];
 
     rank0 -&gt; rank1 [label=&quot;NCCL&quot;];
-}" class="graphviz" /></div>
+}</p></object></div>
 <p>Key concepts:</p>
 <ul class="simple">
 <li><p><strong>Upstream ranks</strong> (<code class="docutils literal notranslate"><span class="pre">prior_rank=None</span></code>): hold a
@@ -501,7 +520,7 @@ process runs only the stage assigned to its rank.</p></li>
 torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>--master_port<span class="o">=</span><span class="m">29500</span><span class="w"> </span>examples/distributed/01_distributed_pipeline.py
 </pre></div>
 </div>
-<p><strong>02 — Monitoring with LoggingHook, ProfilerHook, and ZarrData</strong> (4 GPUs required):</p>
+<p><strong>02 — Monitoring with LoggingHook, StageTimingHook, and ZarrData</strong> (4 GPUs required):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>examples/distributed/02_distributed_monitoring.py
 </pre></div>
 </div>
@@ -515,16 +534,103 @@ written to the working directory.  Rank 0 also prints a collated summary.</p>
 Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.</p>
 </dd>
 <dt><strong>02 — Distributed Monitoring</strong></dt><dd><p>Same topology as example 01, augmented with per-rank LoggingHook and
-ProfilerHook for observability, and ZarrData sinks for persistent
+StageTimingHook for observability, and ZarrData sinks for persistent
 trajectory storage.  Shows post-run log collation on rank 0.</p>
 </dd>
 </dl>
+</section>
+<section id="domain-decomposition-examples">
+<h2>Domain-Decomposition Examples<a class="headerlink" href="#domain-decomposition-examples" title="Link to this heading">#</a></h2>
+<p>These shard a single system across ranks with
+<a class="reference internal" href="../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a> (halo exchange + force
+consolidation handled by the framework).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 03 — MACE NVT Langevin MD, trajectory written to xyz from rank 0</span>
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>examples/distributed/03_mace_nvt_distributed.py
+
+<span class="c1"># 04 / 05 — bring-your-own model, validated against a single-process reference</span>
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>examples/distributed/04_byo_pytorch_mpnn.py
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>examples/distributed/05_byo_graph_transformer.py
+
+<span class="c1"># 06 — MACE NPT (barostat) MD, evolving-cell trajectory written from rank 0</span>
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>examples/distributed/06_mace_npt_distributed.py
+
+<span class="c1"># 07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</span>
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>examples/distributed/07_fire_nvt_dd.py
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>03 — MACE NVT Distributed</strong></dt><dd><p>End-to-end distributed MD with a stock
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a>: a short
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> trajectory under
+<code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>, with per-step neighbour-list rebuild and xyz
+snapshot logging from rank 0.  No distributed-aware code at the user
+layer.</p>
+</dd>
+<dt><strong>04 — BYO PyTorch MPNN</strong></dt><dd><p>The full bring-your-own arc for a plain-PyTorch Behler-Parrinello
+potential: architecture → wrapper → run → <code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code>
+against a single-process reference → <code class="docutils literal notranslate"><span class="pre">MLIPSpec.save</span></code>/<code class="docutils literal notranslate"><span class="pre">load</span></code>.  An
+MPNN-halo model whose forward is scatter-aggregations + autograd
+needs no distributed code.</p>
+</dd>
+<dt><strong>05 — BYO Graph Transformer (Warp kernel)</strong></dt><dd><p>The same arc when the model embeds a performance-critical Warp
+kernel that is opaque to ShardTensor dispatch.  Shows declaring the
+kernel’s distribution semantics once via
+<code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code>.</p>
+</dd>
+<dt><strong>06 — MACE NPT Distributed</strong></dt><dd><p>The constant-pressure sibling of example 03: a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code> trajectory (Nosé–Hoover thermostat +
+isotropic barostat) under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>, with the cell relaxing
+toward equilibrium.  The barostat/thermostat couple to <em>global</em>
+quantities (total kinetic energy, degrees of freedom, pressure
+tensor); the framework’s dynamics coordinator all-reduces them and
+broadcasts the replicated cell + barostat state each step, so the only
+user change from example 03 is requesting <code class="docutils literal notranslate"><span class="pre">stress</span></code> and swapping in
+<code class="docutils literal notranslate"><span class="pre">NPT</span></code>.</p>
+</dd>
+<dt><strong>07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</strong></dt><dd><p>The 2-D generalization of example 01: a FIRE relaxation →
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> MD pipeline where <em>each stage
+is itself domain-decomposed</em>.  A <code class="docutils literal notranslate"><span class="pre">(pipeline,</span> <span class="pre">domain)</span></code>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a> gives each stage a
+whole domain sub-mesh row; a stage is just <code class="docutils literal notranslate"><span class="pre">DomainParallel(dynamics)</span></code>
+handed to <code class="docutils literal notranslate"><span class="pre">DistributedPipeline(stages,</span> <span class="pre">mesh=mesh)</span></code>.  <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>
+overrides the pipeline’s communication seam so the group <em>lead</em> performs
+the cross-stage hand-off (over the pipeline axis) while the group
+scatters/gathers to its sub-mesh — no distributed-aware code in the model
+or the integrators.  Keep the per-step <strong>domain</strong> dimension intra-node
+(NVLink) and let the rare-hand-off <strong>pipeline</strong> dimension span nodes (IB);
+<code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">GPUs</span></code> = 2 stages × 2 domain.  FIRE’s velocity mixing couples to
+<em>global</em> power/norm scalars (<code class="docutils literal notranslate"><span class="pre">v·f</span></code> / <code class="docutils literal notranslate"><span class="pre">v·v</span></code> / <code class="docutils literal notranslate"><span class="pre">f·f</span></code>), which the
+dynamics coordinator all-reduces within each stage’s domain group.</p>
+</dd>
+</dl>
+</section>
+<section id="benchmarks">
+<h2>Benchmarks<a class="headerlink" href="#benchmarks" title="Link to this heading">#</a></h2>
+<p>Performance + force-equivalence benchmarks for the
+domain-decomposition path live in <code class="docutils literal notranslate"><span class="pre">benchmark/distributed/</span></code> (two
+config-driven runners covering LJ, Ewald, PME, MACE, AIMNet2, and UMA).
+See <code class="docutils literal notranslate"><span class="pre">benchmark/distributed/README.md</span></code>.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example orchestrates two independent FIRE → NVTLangevin pipelines running in parallel across 4 GPUs using DistributedPipeline."><img alt="" src="../../_images/sphx_glr_01_distributed_pipeline_thumb.png" />
 <p><a class="reference internal" href="01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</span></a></p>
   <div class="sphx-glr-thumbnail-title">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE → NVTLangevin topology:"><img alt="" src="../../_images/sphx_glr_02_distributed_monitoring_thumb.png" />
 <p><a class="reference internal" href="02_distributed_monitoring.html"><span class="doc">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</span></a></p>
   <div class="sphx-glr-thumbnail-title">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="End-to-end distributed MD: load a MACE foundation-model checkpoint, run a short NVTLangevin trajectory across multiple ranks under DomainParallel, and record the trajectory to an xyz file from rank 0."><img alt="" src="../../_images/sphx_glr_03_mace_nvt_distributed_thumb.png" />
+<p><a class="reference internal" href="03_mace_nvt_distributed.html"><span class="doc">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</span></a></p>
+  <div class="sphx-glr-thumbnail-title">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This walkthrough takes a small interatomic potential — written in plain PyTorch — through the canonical BYO arc:"><img alt="" src="../../_images/sphx_glr_04_byo_pytorch_mpnn_thumb.png" />
+<p><a class="reference internal" href="04_byo_pytorch_mpnn.html"><span class="doc">Bring your own PyTorch model: from architecture to a saved spec</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Bring your own PyTorch model: from architecture to a saved spec</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The same arc as 04_byo_pytorch_mpnn, but now the model embeds one performance-critical Warp kernel — the case where OpAdapter carries weight."><img alt="" src="../../_images/sphx_glr_05_byo_graph_transformer_thumb.png" />
+<p><a class="reference internal" href="05_byo_graph_transformer.html"><span class="doc">Bring your own model with a Warp kernel: from architecture to spec</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Bring your own model with a Warp kernel: from architecture to spec</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The constant-pressure sibling of example 03. Load a MACE checkpoint, run a short NPT trajectory across multiple ranks under DomainParallel, and record the trajectory — including the evolving cell — to an xyz file from rank 0."><img alt="" src="../../_images/sphx_glr_06_mace_npt_distributed_thumb.png" />
+<p><a class="reference internal" href="06_mace_npt_distributed.html"><span class="doc">MACE NPT: domain-decomposed constant-pressure MD with a barostat</span></a></p>
+  <div class="sphx-glr-thumbnail-title">MACE NPT: domain-decomposed constant-pressure MD with a barostat</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where each stage is itself domain-decomposed across a group of GPUs. This is the 2-D generalization of 01_distributed_pipeline: that example maps one rank per stage; here each stage is a whole domain sub-mesh cooperating on one large system, and the two stages form the pipeline dimension."><img alt="" src="../../_images/sphx_glr_07_fire_nvt_dd_thumb.png" />
+<p><a class="reference internal" href="07_fire_nvt_dd.html"><span class="doc">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</span></a></p>
+  <div class="sphx-glr-thumbnail-title">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</div>
 </div></div><div class="toctree-wrapper compound">
 </div>
 </section>
@@ -541,12 +647,12 @@ trajectory storage.  Shows post-run log collation on rank 0.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../advanced/08_aimnet2_ewald_pipeline.html"
+       href="../advanced/10_mace_training.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">AIMNet2 + Ewald Pipeline Geometry Optimization</p>
+        <p class="prev-next-title">MACE Training with ALCHEMI Training Utilities</p>
       </div>
     </a>
     <a class="right-next"
@@ -576,9 +682,11 @@ trajectory storage.  Shows post-run log collation on rank 0.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture-overview">Architecture Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pipeline-architecture-overview">Pipeline Architecture Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-examples">Running the Examples</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-descriptions">Example Descriptions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#domain-decomposition-examples">Domain-Decomposition Examples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#benchmarks">Benchmarks</a></li>
 </ul>
   </nav></div>
 

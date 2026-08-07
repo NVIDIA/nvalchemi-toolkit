@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.pme
 
+
 .. autoclass:: PMEModelWrapper
     :members:
+
 
 .. raw:: html
 

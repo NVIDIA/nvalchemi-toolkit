@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Hooks &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Hooks &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/hooks';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
-    <link rel="prev" title="Models: Wrapping ML Interatomic Potentials" href="models.html" />
+    <link rel="next" title="Reporting" href="reporting.html" />
+    <link rel="prev" title="Serialization and Reproducibility" href="serialization.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
@@ -447,8 +467,8 @@ document.write(`
 <section class="tex2jax_ignore mathjax_ignore" id="hooks">
 <span id="dynamics-hooks-guide"></span><span id="hooks-guide"></span><h1>Hooks<a class="headerlink" href="#hooks" title="Link to this heading">#</a></h1>
 <p>Hooks let you observe or modify workflow state at specific points in any
-engine’s execution loop—dynamics simulations, training loops, or custom
-pipelines—without touching the engine code itself. They are the primary
+engine’s execution loop — dynamics simulations, training loops, or custom
+pipelines — without touching the engine code itself. They are the primary
 extension mechanism for logging, convergence checking, trajectory recording,
 and any custom per-step logic.</p>
 <div class="admonition tip">
@@ -480,21 +500,21 @@ and registering hooks for dynamics simulations.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">__call__(ctx,</span> <span class="pre">stage)</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>The hook’s logic, called with a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> and the current stage</p></td>
+<td><p>The hook’s logic, called with a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> or workflow-specific subclass and the current stage</p></td>
 </tr>
 </tbody>
 </table>
 <p>The <code class="docutils literal notranslate"><span class="pre">Hook</span></code> protocol lives in <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code> and is
 stage-enum agnostic — the same protocol works for dynamics, training,
 or any custom workflow.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span><span class="p">,</span> <span class="n">HookContext</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">Hook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">MyHook</span><span class="p">:</span>
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
     <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: energy = </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">MyHook</span><span class="p">(),</span> <span class="n">Hook</span><span class="p">)</span>  <span class="c1"># True --- structural subtyping</span>
@@ -523,14 +543,16 @@ current step count.</p>
 <p>A <code class="docutils literal notranslate"><span class="pre">Hook</span></code> is implemented as a Python <code class="docutils literal notranslate"><span class="pre">Protocol</span></code>, which represents structural
 subtyping: for those wanting to write custom <code class="docutils literal notranslate"><span class="pre">Hook</span></code>s,
 it’s not necessary to subclass the base <code class="docutils literal notranslate"><span class="pre">Hook</span></code>, providing that your
-custom class contains the same attributes and methods—as long as it
+custom class contains the same attributes and methods — as long as it
 quacks like a duck.</p>
 </div>
 </section>
-<section id="hookcontext">
-<h2>HookContext<a class="headerlink" href="#hookcontext" title="Link to this heading">#</a></h2>
-<p>Every hook receives a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> object that
-provides a unified snapshot of the current workflow state:</p>
+<section id="context-objects">
+<h2>Context Objects<a class="headerlink" href="#context-objects" title="Link to this heading">#</a></h2>
+<p>Every hook receives a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> object, or a
+workflow-specific subclass, that provides a snapshot of the current workflow
+state. The base context contains only fields that are meaningful to all
+hook-enabled workflows:</p>
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Field</p></th>
@@ -543,58 +565,112 @@ provides a unified snapshot of the current workflow state:</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">Batch</span></code></p></td>
 <td><p>All engines</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">step_count</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
-<td><p>All engines</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">model</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">model</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
 <td><p>All engines</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">converged_mask</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Dynamics only</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">loss</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Training only</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">torch.optim.Optimizer</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Training only</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">lr_scheduler</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">object</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Training only</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gradients</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Training only</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epoch</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
-<td><p>Training only</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">global_rank</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">global_rank</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>All engines (distributed)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workflow</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">workflow</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">Any</span></code></p></td>
 <td><p>Back-reference to the engine</p></td>
 </tr>
 </tbody>
 </table>
+<p>Dynamics engines pass <a class="reference internal" href="../modules/generated/nvalchemi.hooks.DynamicsContext.html#nvalchemi.hooks.DynamicsContext" title="nvalchemi.hooks.DynamicsContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsContext</span></code></a>, which adds:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">step_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Current dynamics step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">converged_mask</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Samples that converged at the current hook stage</p></td>
+</tr>
+</tbody>
+</table>
+<p>Training loops pass <a class="reference internal" href="../modules/generated/nvalchemi.hooks.TrainContext.html#nvalchemi.hooks.TrainContext" title="nvalchemi.hooks.TrainContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainContext</span></code></a>, which adds:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">step_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Current optimizer step on this worker</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">global_step_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Current optimizer step across all data-parallel workers</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">batch_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Training batches consumed, including skipped optimizer steps</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epoch_step_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Batches consumed within the current epoch</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epoch</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Current epoch</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">loss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Aggregate loss</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">losses</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Named loss components</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">BaseModelMixin]</span> <span class="pre">|</span> <span class="pre">ModuleDict[str,</span> <span class="pre">BaseModelMixin]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Models in the training step</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">optimizers</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list[torch.optim.Optimizer]</span></code></p></td>
+<td><p>Optimizers in the training step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">lr_schedulers</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list[LRScheduler</span> <span class="pre">|</span> <span class="pre">None]</span></code></p></td>
+<td><p>Learning-rate schedulers</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gradients</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Parameter gradients</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grad_scaler</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.amp.GradScaler</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Gradient scaler for mixed-precision training</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">validation</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">Any]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Latest validation summary</p></td>
+</tr>
+</tbody>
+</table>
 <p>The engine builds this context object at each stage via an overridable
-<code class="docutils literal notranslate"><span class="pre">_build_context(batch)</span></code> method, so each engine type populates the fields
-relevant to its workflow.</p>
+<code class="docutils literal notranslate"><span class="pre">_build_context(batch)</span></code> method. Custom engines should return their own
+<code class="docutils literal notranslate"><span class="pre">HookContext</span></code> subclass when hooks need workflow-specific fields.</p>
 <section id="optional-context-manager-support">
 <h3>Optional context manager support<a class="headerlink" href="#optional-context-manager-support" title="Link to this heading">#</a></h3>
 <p>Hooks may optionally implement <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> and <code class="docutils literal notranslate"><span class="pre">__exit__</span></code>. If present, the
 engine calls them when the workflow starts and ends (or when using the engine
 as a context manager). This is useful for hooks that manage resources like
 open files or logger instances — for example,
-<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> uses this to set up and tear down
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> uses this to set up and tear down
 its logger.</p>
 </section>
 </section>
@@ -626,7 +702,7 @@ them are satisfied (AND semantics).</p>
 <p>The simplest way to create one is with the convenience classmethods:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
 
-<span class="c1"># Check whether fmax (pre-computed scalar on the batch) is below a threshold</span>
+<span class="c1"># Check whether the max per-atom force norm (from the `forces` tensor) is below a threshold</span>
 <span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
 
 <span class="c1"># Or check per-atom force norms directly (applies a norm reduction internally)</span>
@@ -681,7 +757,8 @@ Each entry is a dictionary with the fields of the internal
 </pre></div>
 </div>
 <p>All criteria must be satisfied for a system to converge. If you omit <code class="docutils literal notranslate"><span class="pre">criteria</span></code>
-entirely, the hook defaults to a single <code class="docutils literal notranslate"><span class="pre">fmax</span> <span class="pre">&lt;</span> <span class="pre">0.05</span></code> criterion.</p>
+entirely, the hook defaults to a single force-norm criterion computed from the
+<code class="docutils literal notranslate"><span class="pre">forces</span></code> tensor (<code class="docutils literal notranslate"><span class="pre">key=&quot;forces&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">reduce_op=&quot;norm&quot;</span></code>, threshold <code class="docutils literal notranslate"><span class="pre">0.05</span></code>).</p>
 </section>
 <section id="how-evaluation-works-under-the-hood">
 <h4>How evaluation works under the hood<a class="headerlink" href="#how-evaluation-works-under-the-hood" title="Link to this heading">#</a></h4>
@@ -712,20 +789,35 @@ AND-reduced across criteria to produce a single <code class="docutils literal no
 those systems to stop being updated.</p>
 </section>
 </section>
-<section id="logginghook">
-<h3>LoggingHook<a class="headerlink" href="#logginghook" title="Link to this heading">#</a></h3>
-<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records scalar observables
+<section id="dynamics-logginghook">
+<h3>Dynamics LoggingHook<a class="headerlink" href="#dynamics-logginghook" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records scalar observables
 (energy, temperature, maximum force, etc.) at a configurable interval:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span>
 
 <span class="n">hook</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;hooks.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># log every 10 steps</span>
 </pre></div>
 </div>
-<p>The hook implements the context manager protocol to manage its logger lifecycle.</p>
+<p>The hook implements the context manager protocol to manage its logger lifecycle.
+It is the current built-in dynamics logger, not the full logging abstraction for
+all workflows.</p>
+</section>
+<section id="logging-vs-reporting">
+<h3>Logging vs. reporting<a class="headerlink" href="#logging-vs-reporting" title="Link to this heading">#</a></h3>
+<p>Use logging hooks when you want simple, direct records from a workflow: rows,
+files, or lightweight backend writes that are easy to inspect later. Logging is
+workflow-general; dynamics and training can each have loggers that understand
+their own event model. For example, the built-in dynamics <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> writes
+per-graph dynamics observables to CSV, TensorBoard, or a custom sink without
+imposing a higher-level analysis model.</p>
+<p>Use reporting when you want workflow-level summaries: scalar collection,
+rank-aware reductions, serialized reporting snapshots, live dashboards, or
+analysis-facing output across training and dynamics. The reporting abstractions
+are described separately in the <a class="reference internal" href="reporting.html"><span class="doc">reporting user guide</span></a>.</p>
 </section>
 <section id="snapshothook">
 <h3>SnapshotHook<a class="headerlink" href="#snapshothook" title="Link to this heading">#</a></h3>
-<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> saves the full batch state to a
+<p><a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> saves the full batch state to a
 <a class="reference internal" href="dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">data sink</span></a> at regular intervals. This is how you record
 trajectories:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SnapshotHook</span>
@@ -740,7 +832,7 @@ trajectories:</p>
 </section>
 <section id="convergedsnapshothook">
 <h3>ConvergedSnapshotHook<a class="headerlink" href="#convergedsnapshothook" title="Link to this heading">#</a></h3>
-<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a> is a specialised variant
+<p><a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a> is a specialised variant
 that only saves systems at the moment they satisfy their convergence criterion. This
 is useful for collecting relaxed structures from a large batch without storing the
 full trajectory:</p>
@@ -757,16 +849,16 @@ full trajectory:</p>
 <section id="simple-dynamics-hook">
 <h3>Simple dynamics hook<a class="headerlink" href="#simple-dynamics-hook" title="Link to this heading">#</a></h3>
 <p>To write your own hook, create a class that implements the three required members
-(<code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span></code>, <code class="docutils literal notranslate"><span class="pre">__call__</span></code>). The <code class="docutils literal notranslate"><span class="pre">__call__</span></code> method receives a
-<a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> and the current stage:</p>
+(<code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span></code>, <code class="docutils literal notranslate"><span class="pre">__call__</span></code>). Dynamics hooks receive a
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.DynamicsContext.html#nvalchemi.hooks.DynamicsContext" title="nvalchemi.hooks.DynamicsContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsContext</span></code></a> and the current stage:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">PrintFmaxHook</span><span class="p">:</span>
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
     <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">fmax</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: fmax = </span><span class="si">{</span><span class="n">fmax</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV/A&quot;</span><span class="p">)</span>
 </pre></div>
@@ -778,7 +870,7 @@ full trajectory:</p>
 The registry calls this instead of comparing <code class="docutils literal notranslate"><span class="pre">stage</span> <span class="pre">==</span> <span class="pre">hook.stage</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">StepTimerHook</span><span class="p">:</span>
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>  <span class="c1"># primary stage (for protocol compliance)</span>
@@ -791,7 +883,7 @@ The registry calls this instead of comparing <code class="docutils literal notra
     <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
         <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
@@ -807,14 +899,19 @@ The registry calls this instead of comparing <code class="docutils literal notra
 a custom enum), use <code class="docutils literal notranslate"><span class="pre">plum.dispatch</span></code> to overload <code class="docutils literal notranslate"><span class="pre">__call__</span></code> with different stage
 types. This lets you customize behavior per category:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">HookContext</span>
 
 <span class="c1"># Example custom stage enum for a hypothetical pipeline</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">MyPipelineStage</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
     <span class="n">BEFORE_PROCESS</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">AFTER_PROCESS</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PipelineContext</span><span class="p">(</span><span class="n">HookContext</span><span class="p">):</span>
+    <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">UniversalLoggerHook</span><span class="p">:</span>
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>  <span class="c1"># primary stage</span>
@@ -827,29 +924,30 @@ types. This lets you customize behavior per category:</p>
         <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span>
 
     <span class="nd">@dispatch</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">fmax</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[dynamics] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: fmax=</span><span class="si">{</span><span class="n">fmax</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="nd">@dispatch</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">MyPipelineStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">PipelineContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">MyPipelineStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[pipeline] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: processed&quot;</span><span class="p">)</span>
 
     <span class="nd">@dispatch</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[custom] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: stage=</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[custom] stage=</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, graphs=</span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The built-in <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> uses this
-pattern to instrument dynamics and custom workflows with appropriate
-NVTX domain annotations.</p>
+<p>Cross-category hooks such as <a class="reference internal" href="../modules/generated/nvalchemi.hooks.TorchProfilerHook.html#nvalchemi.hooks.TorchProfilerHook" title="nvalchemi.hooks.TorchProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TorchProfilerHook</span></code></a> use
+this pattern to claim the training and dynamics stages they support.
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.hooks.StageTimingHook" title="nvalchemi.hooks.StageTimingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code></a> uses the same multi-stage hook
+protocol for lightweight per-stage timing.</p>
 </section>
 <section id="resource-management-with-enter-exit">
 <h3>Resource management with <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> / <code class="docutils literal notranslate"><span class="pre">__exit__</span></code><a class="headerlink" href="#resource-management-with-enter-exit" title="Link to this heading">#</a></h3>
 <p>If your hook needs setup or teardown (e.g. opening a file), add <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> and
 <code class="docutils literal notranslate"><span class="pre">__exit__</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">FileWriterHook</span><span class="p">:</span>
     <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
@@ -863,7 +961,7 @@ NVTX domain annotations.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">energy</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">energy</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -872,6 +970,67 @@ NVTX domain annotations.</p>
             <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
+</section>
+<section id="restartable-hooks-with-checkpointablehook">
+<h3>Restartable hooks with <code class="docutils literal notranslate"><span class="pre">CheckpointableHook</span></code><a class="headerlink" href="#restartable-hooks-with-checkpointablehook" title="Link to this heading">#</a></h3>
+<p>Hooks are stateless by default. If a hook owns state that changes training
+semantics after a restart (for example EMA weights, a dynamic schedule, or a
+history buffer), make it satisfy
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.CheckpointableHook.html#nvalchemi.hooks.CheckpointableHook" title="nvalchemi.hooks.CheckpointableHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointableHook</span></code></a> by adding <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">load_state_dict()</span></code>. Training checkpoints discover this protocol at runtime and
+store only hooks that opt in.</p>
+<p>Pydantic-backed hooks should keep declarative configuration in model fields and
+use <code class="docutils literal notranslate"><span class="pre">model_dump()</span></code> for the configuration part of <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code>. Use
+<code class="docutils literal notranslate"><span class="pre">model_dump_json()</span></code> when you need a JSON representation for logs or separate
+configuration files. Runtime tensors or counters that are not Pydantic fields
+can then be added explicitly.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">CheckpointableHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingUpdateHook</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RunningLossHook</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">TrainingUpdateHook</span><span class="p">):</span>
+    <span class="n">window</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="n">num_updates</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="n">_loss_sum</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">will_skip</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">stage</span> <span class="ow">is</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_OPTIMIZER_STEP</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">will_skip</span>
+            <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">loss</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">value</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span> <span class="o">+</span> <span class="n">value</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_updates</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">loss</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;loss_sum&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;window&quot;</span> <span class="ow">in</span> <span class="n">state</span> <span class="ow">and</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;window&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">window</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;RunningLossHook checkpoint window does not match&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_updates</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_updates&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_updates</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loss_sum</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;loss_sum&quot;</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">RunningLossHook</span><span class="p">(),</span> <span class="n">CheckpointableHook</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Only implement this protocol for state that must survive restart. Temporary
+resources, cached buffers that can be rebuilt, and bookkeeping derived from the
+workflow counters should stay out of hook checkpoints.</p>
 </section>
 </section>
 <section id="composing-hooks">
@@ -925,20 +1084,20 @@ used by snapshot hooks.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="models.html"
+       href="serialization.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Models: Wrapping ML Interatomic Potentials</p>
+        <p class="prev-next-title">Serialization and Reproducibility</p>
       </div>
     </a>
     <a class="right-next"
-       href="dynamics.html"
+       href="reporting.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Dynamics: Optimization and Molecular Dynamics</p>
+        <p class="prev-next-title">Reporting</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -961,7 +1120,7 @@ used by snapshot hooks.</p></li>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-hook-protocol">The Hook protocol</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hookcontext">HookContext</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#context-objects">Context Objects</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-context-manager-support">Optional context manager support</a></li>
 </ul>
 </li>
@@ -973,7 +1132,8 @@ used by snapshot hooks.</p></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#status-migration-in-multi-stage-pipelines">Status migration in multi-stage pipelines</a></li>
 </ul>
 </li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#logginghook">LoggingHook</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dynamics-logginghook">Dynamics LoggingHook</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#logging-vs-reporting">Logging vs. reporting</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#snapshothook">SnapshotHook</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#convergedsnapshothook">ConvergedSnapshotHook</a></li>
 </ul>
@@ -983,6 +1143,7 @@ used by snapshot hooks.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-stage-hooks-with-runs-on-stage">Multi-stage hooks with <code class="docutils literal notranslate"><span class="pre">_runs_on_stage</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-category-hooks-with-plum-dispatch">Cross-category hooks with <code class="docutils literal notranslate"><span class="pre">plum</span></code> dispatch</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-management-with-enter-exit">Resource management with <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> / <code class="docutils literal notranslate"><span class="pre">__exit__</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#restartable-hooks-with-checkpointablehook">Restartable hooks with <code class="docutils literal notranslate"><span class="pre">CheckpointableHook</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composing-hooks">Composing hooks</a></li>

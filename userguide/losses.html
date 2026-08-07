@@ -1,0 +1,1711 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Losses &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/losses';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Fine-Tuning Pretrained Models" href="finetuning.html" />
+    <link rel="prev" title="Training" href="training.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="training_finetuning.html" class="nav-link">Training &amp; Fine-tuning</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Losses</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="losses">
+<span id="losses-guide"></span><h1>Losses<a class="headerlink" href="#losses" title="Link to this heading">#</a></h1>
+<p>Computing the loss - how well a model’s prediction lines up with its
+targets - is a central part of model training. In particular, how we
+design and execute the loss computation can play an extremely large
+role in how we design model architectures as it dictates what kind of
+signal propagates back to the weight updates. NVIDIA ALCHEMI Toolkit
+provides a flexible abstraction with these requirements in mind: users
+and developers can use existing loss functions or implement their own
+logic in a straightforward manner, and freely compose them with a modular
+scheduling system that allows curricula to be designed exactly for a wide
+range of training styles.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-loss-api</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on using,
+composing, and implementing training losses.</p>
+</div>
+<p>This page covers:</p>
+<ul class="simple">
+<li><p>the built-in leaf (or terms) losses and how to call them directly;</p></li>
+<li><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction" title="nvalchemi.training.ComposedLossFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code></a> for multi-task
+training and where per-loss coefficients live;</p></li>
+<li><p>loss-weight scheduling via the
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.LossWeightSchedule.html#nvalchemi.training.LossWeightSchedule" title="nvalchemi.training.LossWeightSchedule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossWeightSchedule</span></code></a> protocol, applied
+at the composition level;</p></li>
+<li><p>how to write your own loss — first a pure tensor-to-tensor loss,
+then a metadata-aware one.</p></li>
+</ul>
+<section id="built-in-losses">
+<h2>Built-in losses<a class="headerlink" href="#built-in-losses" title="Link to this heading">#</a></h2>
+<p>The choice of reduction shapes both gradient noise and interpretability.
+MSE losses (<code class="docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code>) have smooth
+gradients and are the default starting point for most training runs. Huber
+variants (<code class="docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code>, <code class="docutils literal notranslate"><span class="pre">StressHuberLoss</span></code>) reduce
+sensitivity to outlier labels — prefer them when your dataset has noisy
+DFT references or a long tail of unusual configurations. MAE and L2-norm
+reductions (<code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code>) report in the same units
+as the target and are easiest to interpret as validation metrics, though
+their non-smooth gradients make them less common as the primary training
+loss.</p>
+<p>The built-in losses cover standard MLIP training targets and additional
+MAE/L2 norm tensor reductions. Each is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> with
+configurable <code class="docutils literal notranslate"><span class="pre">target_key</span></code> / <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code> attributes used by
+composition. All built-in losses expose <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code> for optional
+prediction/target dtype alignment before validation. The MSE-style losses
+expose an opt-in <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code> flag; the MAE/L2 norm losses expose
+<code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code> and mask target <code class="docutils literal notranslate"><span class="pre">NaN</span></code> and <code class="docutils literal notranslate"><span class="pre">inf</span></code> values.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Class</p></th>
+<th class="head"><p>Target</p></th>
+<th class="head"><p>Key defaults</p></th>
+<th class="head"><p>Extra knobs</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMSELoss.html#nvalchemi.training.EnergyMSELoss" title="nvalchemi.training.EnergyMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></a></p></td>
+<td><p>Per-graph energy <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_energy&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">per_atom</span></code> normalization, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMAELoss.html#nvalchemi.training.EnergyMAELoss" title="nvalchemi.training.EnergyMAELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code></a></p></td>
+<td><p>Per-graph energy <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> or <code class="docutils literal notranslate"><span class="pre">(B,)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_energy&quot;</span></code></p></td>
+<td><p>MAE reduction, <code class="docutils literal notranslate"><span class="pre">per_atom</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyHuberLoss.html#nvalchemi.training.EnergyHuberLoss" title="nvalchemi.training.EnergyHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code></a></p></td>
+<td><p>Per-graph energy <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_energy&quot;</span></code></p></td>
+<td><p>Huber residual, <code class="docutils literal notranslate"><span class="pre">per_atom</span></code>, <code class="docutils literal notranslate"><span class="pre">delta</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceMSELoss.html#nvalchemi.training.ForceMSELoss" title="nvalchemi.training.ForceMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceMSELoss</span></code></a></p></td>
+<td><p>Per-atom forces, dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> or padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;forces&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_forces&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceHuberLoss.html#nvalchemi.training.ForceHuberLoss" title="nvalchemi.training.ForceHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code></a></p></td>
+<td><p>Per-atom forces, dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> or padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;forces&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_forces&quot;</span></code></p></td>
+<td><p>Huber residual, <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count</span></code>, <code class="docutils literal notranslate"><span class="pre">delta</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceL2NormLoss.html#nvalchemi.training.ForceL2NormLoss" title="nvalchemi.training.ForceL2NormLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code></a></p></td>
+<td><p>Per-atom forces, dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> or padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;forces&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_forces&quot;</span></code></p></td>
+<td><p>Vector-L2 reduction, <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.StressMSELoss.html#nvalchemi.training.StressMSELoss" title="nvalchemi.training.StressMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">StressMSELoss</span></code></a></p></td>
+<td><p>Per-graph stress <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;stress&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_stress&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.StressHuberLoss.html#nvalchemi.training.StressHuberLoss" title="nvalchemi.training.StressHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">StressHuberLoss</span></code></a></p></td>
+<td><p>Per-graph stress <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;stress&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;predicted_stress&quot;</span></code></p></td>
+<td><p>Huber residual, <code class="docutils literal notranslate"><span class="pre">delta</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<section id="calling-a-leaf-loss-directly">
+<h3>Calling a leaf loss directly<a class="headerlink" href="#calling-a-leaf-loss-directly" title="Link to this heading">#</a></h3>
+<p>A leaf loss is a plain <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>. For losses that do not require
+graph metadata — <code class="docutils literal notranslate"><span class="pre">EnergyMSELoss(per_atom=False)</span></code> (the default), dense
+<code class="docutils literal notranslate"><span class="pre">ForceMSELoss(normalize_by_atom_count=False)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ForceHuberLoss(normalize_by_atom_count=False)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">StressHuberLoss</span></code>, <code class="docutils literal notranslate"><span class="pre">EnergyMAELoss(per_atom=False)</span></code>,
+and dense <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss(normalize_by_atom_count=False)</span></code> — call it
+with <code class="docutils literal notranslate"><span class="pre">(pred,</span> <span class="pre">target)</span></code> and get a scalar back. Leaves carry no weight or
+schedule of their own; a direct call returns the unweighted value:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span>
+<span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>         <span class="c1"># scalar Tensor</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ForceMSELoss()</span></code> and <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss()</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=True</span></code>), <code class="docutils literal notranslate"><span class="pre">EnergyHuberLoss()</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code>), and both energy losses with <code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code> require
+graph metadata and will raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> on a bare <code class="docutils literal notranslate"><span class="pre">(pred,</span> <span class="pre">target)</span></code>
+call. Either pass metadata kwargs (see
+<a class="reference internal" href="#passing-graph-metadata"><span class="std std-ref">Passing graph metadata</span></a>) or, for dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code>
+forces, disable the per-graph normalization for a tensor-only call:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForceL2NormLoss</span><span class="p">,</span> <span class="n">ForceMSELoss</span>
+
+<span class="n">force_fn</span> <span class="o">=</span> <span class="n">ForceMSELoss</span><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>   <span class="c1"># plain MSE over (V, 3)</span>
+<span class="n">force_pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">force_target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">loss</span> <span class="o">=</span> <span class="n">force_fn</span><span class="p">(</span><span class="n">force_pred</span><span class="p">,</span> <span class="n">force_target</span><span class="p">)</span>             <span class="c1"># no metadata needed</span>
+
+<span class="n">l2_fn</span> <span class="o">=</span> <span class="n">ForceL2NormLoss</span><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">l2_loss</span> <span class="o">=</span> <span class="n">l2_fn</span><span class="p">(</span><span class="n">force_pred</span><span class="p">,</span> <span class="n">force_target</span><span class="p">)</span>             <span class="c1"># no metadata needed</span>
+</pre></div>
+</div>
+<p>Padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code> forces still require <code class="docutils literal notranslate"><span class="pre">num_nodes_per_graph</span></code> even
+with <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=False</span></code>, since padding rows must be
+masked before reduction.</p>
+<section id="expected-shape-layouts">
+<span id="canonical-shape-layouts"></span><h4>Expected shape layouts<a class="headerlink" href="#expected-shape-layouts" title="Link to this heading">#</a></h4>
+<p>Built-in leaves call <code class="docutils literal notranslate"><span class="pre">assert_same_shape(...,</span> <span class="pre">strict=True)</span></code>, so
+prediction and target shapes must match exactly. The table below lists
+the layouts these losses are designed for.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Loss</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">pred</span></code> shape</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">target</span></code> shape</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> or <code class="docutils literal notranslate"><span class="pre">(B,)</span></code></p></td>
+<td><p>exact same shape as <code class="docutils literal notranslate"><span class="pre">pred</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code> (dense)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code> (padded)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code> (dense)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code> (padded)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code> (dense)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code> (padded)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">StressHuberLoss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> versus <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> is broadcast-compatible but rejected by the
+built-ins. Keep the explicit trailing <code class="docutils literal notranslate"><span class="pre">1</span></code> on per-graph tensors unless
+both prediction and target intentionally use the <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> layout supported
+by <code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code>.</p>
+</div>
+<p>Leaf losses do not receive schedule counters. <code class="docutils literal notranslate"><span class="pre">step=</span></code> and <code class="docutils literal notranslate"><span class="pre">epoch=</span></code>
+belong to <a class="reference internal" href="../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction" title="nvalchemi.training.ComposedLossFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code></a>, which
+uses them to resolve schedule-driven weights before calling each leaf
+(see <a class="reference internal" href="#composition-weights"><span class="std std-ref">Composition weights and schedules</span></a>).</p>
+</section>
+</section>
+<section id="data-type-alignment">
+<span id="dtype-alignment"></span><h3>Data type alignment<a class="headerlink" href="#data-type-alignment" title="Link to this heading">#</a></h3>
+<p>In some workflows, it is desireable to train models with a different
+precision from the more common ML ones like <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code> and <code class="docutils literal notranslate"><span class="pre">float32</span></code>;
+for long term integration, double (<code class="docutils literal notranslate"><span class="pre">float64</span></code>) may be required.</p>
+<p>To serve this purpose, <code class="docutils literal notranslate"><span class="pre">BaseLossFunction</span></code> provides a mechanism for
+defining the policy for casting:</p>
+<ul class="simple">
+<li><p>By default, leaf losses use <code class="docutils literal notranslate"><span class="pre">dtype_policy=&quot;strict&quot;</span></code>: prediction and target
+tensors must already have the same dtype, and mismatches raise before shape
+validation. This catches accidental mixed precision labels early.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">dtype_policy=&quot;prediction_to_target&quot;</span></code> when labels define the desired loss
+dtype and model outputs should be cast to match them, or</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dtype_policy=&quot;target_to_prediction&quot;</span></code> when labels should follow the model output
+dtype. Casting happens before each leaf’s normal shape and dtype validation.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">(</span><span class="n">dtype_policy</span><span class="o">=</span><span class="s2">&quot;prediction_to_target&quot;</span><span class="p">)</span>
+<span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">predicted_energy</span><span class="p">,</span> <span class="n">energy_labels</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For multi-component objectives, set the policy on the composition when every
+strict leaf should share the same behavior:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">ComposedLossFunction</span><span class="p">,</span> <span class="n">EnergyMSELoss</span><span class="p">,</span> <span class="n">ForceMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">ComposedLossFunction</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">EnergyMSELoss</span><span class="p">(),</span> <span class="n">ForceMSELoss</span><span class="p">()],</span>
+    <span class="n">dtype_policy</span><span class="o">=</span><span class="s2">&quot;prediction_to_target&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When using operator sugar, set the same property after constructing the composed
+loss:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">()</span>
+<span class="n">loss_fn</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="o">=</span> <span class="s2">&quot;prediction_to_target&quot;</span>
+</pre></div>
+</div>
+<p>A composed-level policy is applied at call time only to leaves whose own
+<code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code> is still <code class="docutils literal notranslate"><span class="pre">&quot;strict&quot;</span></code>; an explicitly configured leaf keeps its own
+policy. This lets you set a broad default without mutating reusable leaf loss
+instances or overriding a component that needs different dtype handling.</p>
+</section>
+<section id="passing-graph-metadata">
+<span id="id1"></span><h3>Passing graph metadata<a class="headerlink" href="#passing-graph-metadata" title="Link to this heading">#</a></h3>
+<p>Concrete losses may require graph metadata as keyword arguments. For
+example, <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code> with the default graph-balanced normalization
+needs <code class="docutils literal notranslate"><span class="pre">batch_idx</span></code> and <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> for dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> forces:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForceMSELoss</span>
+
+<span class="n">force_fn</span> <span class="o">=</span> <span class="n">ForceMSELoss</span><span class="p">()</span>                         <span class="c1"># normalize_by_atom_count=True</span>
+
+<span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">batch_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+
+<span class="n">loss</span> <span class="o">=</span> <span class="n">force_fn</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The same loss accepts a padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code> layout with per-graph
+counts instead:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pred_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">target_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+
+<span class="n">loss</span> <span class="o">=</span> <span class="n">force_fn</span><span class="p">(</span><span class="n">pred_padded</span><span class="p">,</span> <span class="n">target_padded</span><span class="p">,</span> <span class="n">num_nodes_per_graph</span><span class="o">=</span><span class="n">counts</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMSELoss.html#nvalchemi.training.EnergyMSELoss" title="nvalchemi.training.EnergyMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMAELoss.html#nvalchemi.training.EnergyMAELoss" title="nvalchemi.training.EnergyMAELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyHuberLoss.html#nvalchemi.training.EnergyHuberLoss" title="nvalchemi.training.EnergyHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceMSELoss.html#nvalchemi.training.ForceMSELoss" title="nvalchemi.training.ForceMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceMSELoss</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceHuberLoss.html#nvalchemi.training.ForceHuberLoss" title="nvalchemi.training.ForceHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code></a>, and
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ForceL2NormLoss.html#nvalchemi.training.ForceL2NormLoss" title="nvalchemi.training.ForceL2NormLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code></a> accept an optional
+<code class="docutils literal notranslate"><span class="pre">batch=</span></code> keyword argument as a convenience source for metadata when the
+selected reduction needs it. When <code class="docutils literal notranslate"><span class="pre">batch=</span></code> is provided, the loss pulls
+<code class="docutils literal notranslate"><span class="pre">batch_idx</span></code>, <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code>, and <code class="docutils literal notranslate"><span class="pre">num_nodes_per_graph</span></code> directly from it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Batch-derived metadata — shorter callsite</span>
+<span class="n">loss</span> <span class="o">=</span> <span class="n">force_fn</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">)</span>
+
+<span class="c1"># Equivalent explicit call — fine-grained control</span>
+<span class="n">loss</span> <span class="o">=</span> <span class="n">force_fn</span><span class="p">(</span>
+    <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+    <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Explicit kwargs always win when both are provided — useful if you want
+to override <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> for a sub-batch without rebuilding a <code class="docutils literal notranslate"><span class="pre">Batch</span></code>.
+A duck-typed <code class="docutils literal notranslate"><span class="pre">batch</span></code> that’s missing a required attribute still falls
+through to the descriptive <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> raised by the metadata
+resolver, so you don’t have to pre-validate it.</p>
+</section>
+<section id="ignoring-missing-labels">
+<h3>Ignoring missing labels<a class="headerlink" href="#ignoring-missing-labels" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code>, and <code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code> have an <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite=False</span></code>
+flag. When <code class="docutils literal notranslate"><span class="pre">True</span></code>, target entries equal to <code class="docutils literal notranslate"><span class="pre">NaN</span></code> contribute zero to both
+the loss value and the gradient — a “nanmean”-style reduction
+implemented with branch-free tensor ops so it stays <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>-safe:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">energy_loss</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">(</span><span class="n">ignore_nonfinite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">],</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span> <span class="p">[</span><span class="mf">3.0</span><span class="p">]])</span>
+<span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">loss</span> <span class="o">=</span> <span class="n">energy_loss</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+
+<span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">pred</span><span class="o">.</span><span class="n">grad</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">==</span> <span class="mf">0.0</span>   <span class="c1"># masked row has zero gradient</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">NaN</span></code> targets contribute zero loss and zero gradient; a graph whose
+target is entirely <code class="docutils literal notranslate"><span class="pre">NaN</span></code> contributes exactly <code class="docutils literal notranslate"><span class="pre">0.0</span></code> because the numerator
+and denominator both go to zero and the denominator is clamp-min’d to
+<code class="docutils literal notranslate"><span class="pre">1</span></code>. The default (<code class="docutils literal notranslate"><span class="pre">ignore_nonfinite=False</span></code>) lets <code class="docutils literal notranslate"><span class="pre">NaN</span></code> propagate, which is
+usually what you want during development when a label <em>shouldn’t</em> be
+missing.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>For these MSE-style losses, only target <code class="docutils literal notranslate"><span class="pre">NaN</span></code>s are treated as missing
+labels. Prediction <code class="docutils literal notranslate"><span class="pre">NaN</span></code>s still propagate whenever the corresponding
+target is finite; if the target is <code class="docutils literal notranslate"><span class="pre">NaN</span></code>, that position contributes zero
+loss and zero gradient. Do not rely on <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code> to hide model
+explosions.</p>
+</div>
+<p>If you need a different exclusion strategy — for example, masking based on
+per-graph quality flags or confidence scores rather than per-entry NaN checks —
+override <code class="docutils literal notranslate"><span class="pre">mask</span></code> in a custom leaf. See <a class="reference internal" href="#masking-mask">Masking</a>.</p>
+</section>
+<section id="mae-and-force-l2-reductions">
+<h3>MAE and force-L2 reductions<a class="headerlink" href="#mae-and-force-l2-reductions" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code> and <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code> implement tensor reductions only.
+They do not apply dataset normalization, target transforms,
+element-reference corrections, or any other preprocessing; apply those
+outside the loss before passing tensors in.</p>
+<p><code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code> computes absolute energy residuals and defaults to
+<code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code>: prediction and target are divided by
+<code class="docutils literal notranslate"><span class="pre">num_nodes_per_graph</span></code>, then reduced with atom-count weights so that
+larger graphs contribute in proportion to their size — matching the
+reduction semantics of <code class="docutils literal notranslate"><span class="pre">EnergyMSELoss(per_atom=True)</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code> computes a per-atom vector norm before reduction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">per_atom</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">predicted_forces</span> <span class="o">-</span> <span class="n">forces</span><span class="p">,</span> <span class="nb">ord</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=True</span></code>, dense forces use <code class="docutils literal notranslate"><span class="pre">batch_idx</span></code> and
+<code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> to compute a valid-atom mean per graph, then mean over
+graphs; padded forces use <code class="docutils literal notranslate"><span class="pre">num_nodes_per_graph</span></code> counts or a node mask to
+exclude padding before the same per-graph reduction. With
+<code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=False</span></code>, the scalar is a global mean over valid
+atom L2 norms.</p>
+<p>Both MAE/L2 norm losses have <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite=True</span></code> by default and use
+<code class="docutils literal notranslate"><span class="pre">torch.isfinite(target)</span></code> (<code class="docutils literal notranslate"><span class="pre">.all(dim=-1)</span></code> for force vectors), excluding
+target <code class="docutils literal notranslate"><span class="pre">NaN</span></code> and <code class="docutils literal notranslate"><span class="pre">inf</span></code> labels while preserving gradients through valid
+prediction entries.</p>
+<p>If the built-in reductions don’t match your objective — for instance, if you want
+a per-graph median instead of a mean, or a reduction that accounts for
+per-structure uncertainty weights — override <code class="docutils literal notranslate"><span class="pre">reduce</span></code> in a custom leaf. See
+<a class="reference internal" href="#reduction-reduce">Reduction</a>.</p>
+</section>
+<section id="shape-and-dtype-validation">
+<span id="shape-validation"></span><h3>Shape and dtype validation<a class="headerlink" href="#shape-and-dtype-validation" title="Link to this heading">#</a></h3>
+<p>Built-in leaves validate inputs via the
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction.validate" title="nvalchemi.training.BaseLossFunction.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> hook, which calls
+<code class="xref py py-func docutils literal notranslate"><span class="pre">nvalchemi.training.losses.assert_same_shape()</span></code> with <code class="docutils literal notranslate"><span class="pre">strict=True</span></code>. This
+requires exact shape and dtype equality between <code class="docutils literal notranslate"><span class="pre">pred</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code>, raising a
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> that embeds the component name and routing keys in the message for
+easy diagnosis.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses</span><span class="w"> </span><span class="kn">import</span> <span class="n">assert_same_shape</span>
+
+<span class="n">assert_same_shape</span><span class="p">(</span>
+    <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;MyLoss&quot;</span><span class="p">,</span>
+    <span class="n">prediction_key</span><span class="o">=</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">,</span>
+    <span class="n">target_key</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">assert_same_shape</span></code> checks <code class="docutils literal notranslate"><span class="pre">dtype</span></code> equality first. With <code class="docutils literal notranslate"><span class="pre">strict=False</span></code> it uses
+<code class="docutils literal notranslate"><span class="pre">torch.broadcast_shapes</span></code> to verify shape compatibility — so <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> vs. <code class="docutils literal notranslate"><span class="pre">(B,)</span></code>
+passes — while <code class="docutils literal notranslate"><span class="pre">strict=True</span></code> requires exact shape equality.</p>
+<p>Some legitimate losses have <code class="docutils literal notranslate"><span class="pre">pred.shape</span> <span class="pre">!=</span> <span class="pre">target.shape</span></code> by design, so validation
+is opt-in per-leaf rather than enforced globally. When writing a custom loss,
+<code class="docutils literal notranslate"><span class="pre">validate</span></code> is the place to enforce whatever shape invariant your loss expects — or
+to skip the check entirely when the shapes are intentionally asymmetric. See
+<a class="reference internal" href="#shape-and-dtype-validation-validate">Shape and dtype validation</a> in the custom
+loss section for override examples. Note that <code class="docutils literal notranslate"><span class="pre">assert_same_shape</span></code> is exported from
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.training.losses</span></code> only — it is not re-exported from the top-level
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.</p>
+</section>
+</section>
+<section id="composition">
+<h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
+<p>Real training objectives typically combine several targets. The idiomatic way is
+to literally add leaves together and use the resulting
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ComposedLossFunction.html#nvalchemi.training.ComposedLossFunction" title="nvalchemi.training.ComposedLossFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyMSELoss</span><span class="p">,</span> <span class="n">ForceMSELoss</span><span class="p">,</span> <span class="n">StressMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">StressMSELoss</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">loss_fn</span></code> is an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> whose components sit in an
+<code class="docutils literal notranslate"><span class="pre">nn.ModuleList</span></code>, so <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">.state_dict()</span></code>, <code class="docutils literal notranslate"><span class="pre">.modules()</span></code>, and
+the nested <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> work the way you’d expect. Adding a
+<code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code> to another loss flattens transparently:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">loss_fn_a</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">()</span>
+<span class="n">loss_fn_b</span> <span class="o">=</span> <span class="n">loss_fn_a</span> <span class="o">+</span> <span class="n">StressMSELoss</span><span class="p">()</span>   <span class="c1"># still 3 flat components</span>
+</pre></div>
+</div>
+<p>The subsections below first cover the call signature and return type, then
+weights and scheduling — how to control the relative importance of each term.</p>
+<section id="the-call-signature">
+<h3>The call signature<a class="headerlink" href="#the-call-signature" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code> takes <strong>keyed mappings</strong> rather than raw tensors. This is the
+design that allows routing: each leaf reads its own <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code> and
+<code class="docutils literal notranslate"><span class="pre">target_key</span></code> attributes to pull the tensors it needs from the two mappings, so you
+pass one unified set of predictions and targets and the composition handles the
+dispatch automatically. You never have to manually split tensors and call each leaf
+in turn.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">loss_fn</span><span class="p">(</span>
+    <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">targets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossOutput</span><span class="p">:</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>Any extra <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code> — graph metadata, batch index, atom counts — are forwarded
+unchanged to every leaf. Each leaf consumes what it needs and ignores the rest, so
+you pass metadata once at the call site rather than threading it through each loss
+individually:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">predictions</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;predicted_energy&quot;</span><span class="p">:</span> <span class="n">model_outputs</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;predicted_forces&quot;</span><span class="p">:</span> <span class="n">model_outputs</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;predicted_stress&quot;</span><span class="p">:</span> <span class="n">model_outputs</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">targets</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span>
+    <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span>
+    <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span>
+    <span class="n">predictions</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="n">global_step</span><span class="p">,</span> <span class="n">epoch</span><span class="o">=</span><span class="n">epoch</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+    <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+    <span class="n">num_nodes_per_graph</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">out</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Or equivalently <code class="docutils literal notranslate"><span class="pre">loss_fn(predictions,</span> <span class="pre">targets,</span> <span class="pre">step=...,</span> <span class="pre">epoch=...,</span> <span class="pre">batch=batch)</span></code>; see <a class="reference internal" href="#passing-graph-metadata"><span class="std std-ref">Passing graph metadata</span></a>.</p>
+</section>
+<section id="the-return-type">
+<h3>The return type<a class="headerlink" href="#the-return-type" title="Link to this heading">#</a></h3>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">.backward()</span></code> on <code class="docutils literal notranslate"><span class="pre">total_loss</span></code> is all you need for training, but
+<code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code> returns a richer
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ComposedLossOutput.html#nvalchemi.training.ComposedLossOutput" title="nvalchemi.training.ComposedLossOutput"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLossOutput</span></code></a> — a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">typing.TypedDict</span></code> — specifically so you can observe the composition’s
+internals without recomputing anything. The per-component fields are the primary
+hook for logging and debugging: they tell you what each task is contributing to
+the objective and what weight was actually applied at this step (which differs from
+the raw weight when <code class="docutils literal notranslate"><span class="pre">normalize_weights=True</span></code> or a schedule is active).</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">total_loss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code></p></td>
+<td><p>Scalar sum of <code class="docutils literal notranslate"><span class="pre">effective_weight</span> <span class="pre">*</span> <span class="pre">component_loss</span></code> across components. <code class="docutils literal notranslate"><span class="pre">.backward()</span></code> on this.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">per_component_unweighted</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code></p></td>
+<td><p>Raw per-component loss before applying the effective weight. Keyed by component class name with suffixes on duplicates.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">per_component_weight</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">float]</span></code></p></td>
+<td><p>Effective (post-normalization) weights actually applied at this call.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">per_component_raw_weight</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">float]</span></code></p></td>
+<td><p>Raw (pre-normalization) weights, equal to <code class="docutils literal notranslate"><span class="pre">per_component_weight</span></code> when <code class="docutils literal notranslate"><span class="pre">normalize_weights=False</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">per_component_sample</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code></p></td>
+<td><p>Weighted, detached <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> tensors for components that populate <code class="docutils literal notranslate"><span class="pre">per_sample_loss</span></code>. Absent when the leaf stores <code class="docutils literal notranslate"><span class="pre">None</span></code>. See <a class="reference internal" href="#per-sample-loss-diagnostics">Per-sample loss diagnostics</a> below for details (including aggregation caveats).</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">out</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+<span class="n">out</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;per_component_unweighted&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">log_scalar</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;loss/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">step</span><span class="o">=</span><span class="n">global_step</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;per_component_weight&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">log_scalar</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;loss_weight/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">global_step</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">per_component_weight</span></code> is particularly useful when a schedule is active: logging it
+alongside the raw loss tells you whether a sudden loss spike came from the model or
+from a weight that jumped. Duplicate class names get numeric suffixes
+(<code class="docutils literal notranslate"><span class="pre">StressMSELoss_0</span></code>, <code class="docutils literal notranslate"><span class="pre">StressMSELoss_1</span></code>, …) so keys remain unique.</p>
+</section>
+<section id="per-sample-loss-diagnostics">
+<span id="id2"></span><h3>Per-sample loss diagnostics<a class="headerlink" href="#per-sample-loss-diagnostics" title="Link to this heading">#</a></h3>
+<p>The scalar <code class="docutils literal notranslate"><span class="pre">total_loss</span></code> is what the optimizer sees, but understanding <em>which
+structures</em> are driving the loss is a separate concern — useful for identifying
+hard samples, debugging dataset quality issues, or building curriculum strategies
+that weight structures by difficulty. Every leaf exposes this through an optional
+<code class="docutils literal notranslate"><span class="pre">per_sample_loss:</span> <span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code> attribute, populated as a detached <code class="docutils literal notranslate"><span class="pre">(B,)</span></code>
+side effect of <code class="docutils literal notranslate"><span class="pre">forward</span></code> and cleared to <code class="docutils literal notranslate"><span class="pre">None</span></code> at the start of each call.</p>
+<p>The built-in losses populate it when the residual shape makes a per-graph
+decomposition well-defined. Whether a given configuration populates it and any
+aggregation caveats are listed below:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Loss</p></th>
+<th class="head"><p>When populated</p></th>
+<th class="head"><p>Aggregation caveat</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></p></td>
+<td><p>Recognizable <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> residuals</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code> stores per-graph squared per-atom residuals; scalar applies atom-count weights. <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite=True</span></code> uses a global valid-entry divisor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyMAELoss</span></code></p></td>
+<td><p>Supported <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> layouts</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code> stores per-graph absolute per-atom residuals; scalar applies atom-count weights. <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite=True</span></code> stores masked entries as zero; scalar divides by valid atom-count-weighted sum.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code></p></td>
+<td><p>Recognizable <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> residuals</p></td>
+<td><p>Same layout caveats as <code class="docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code>; scalar is a graph-balanced mean over labeled structures when <code class="docutils literal notranslate"><span class="pre">per_atom=True</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code></p></td>
+<td><p>Always</p></td>
+<td><p>None; per-graph Frobenius MSE is already the scalar mean input.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">StressHuberLoss</span></code></p></td>
+<td><p>Always</p></td>
+<td><p>Same as <code class="docutils literal notranslate"><span class="pre">StressMSELoss</span></code>; per-graph component Huber mean, then mean over graphs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code></p></td>
+<td><p>Graph-balanced paths and padded global path</p></td>
+<td><p>Dense <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=False</span></code> leaves it absent. Padded global path divides by total valid components.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code></p></td>
+<td><p>Same paths as <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code></p></td>
+<td><p>Inherits <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code> reduction; default global component mean leaves <code class="docutils literal notranslate"><span class="pre">per_sample_loss</span></code> absent for dense inputs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code></p></td>
+<td><p>Graph-balanced paths and padded global path</p></td>
+<td><p>Dense <code class="docutils literal notranslate"><span class="pre">normalize_by_atom_count=False</span></code> leaves it absent. Padded global path divides by total valid atoms.</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">ComposedLossOutput[&quot;per_component_sample&quot;]</span></code> surfaces these per-graph tensors
+weighted by the effective composition weight, making them ready to log or rank
+directly. Components whose <code class="docutils literal notranslate"><span class="pre">per_sample_loss</span></code> was <code class="docutils literal notranslate"><span class="pre">None</span></code> are <strong>absent</strong> from the
+dict, so check before reading:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">out</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+<span class="k">if</span> <span class="s2">&quot;EnergyMSELoss&quot;</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;per_component_sample&quot;</span><span class="p">]:</span>
+    <span class="n">per_graph_energy_loss</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;per_component_sample&quot;</span><span class="p">][</span><span class="s2">&quot;EnergyMSELoss&quot;</span><span class="p">]</span>
+    <span class="c1"># shape (B,), detached, weighted by the effective energy weight at this step</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For paths with an aggregation caveat, inspect individual components rather than
+assuming <code class="docutils literal notranslate"><span class="pre">per_sample_loss.mean()</span></code> equals the scalar return.</p>
+</div>
+<p>Custom leaves control this field through <code class="docutils literal notranslate"><span class="pre">self.per_sample_loss</span></code> inside their
+<code class="docutils literal notranslate"><span class="pre">reduce</span></code> override. See <a class="reference internal" href="#reduction-reduce">Reduction</a> for the contract.</p>
+</section>
+<section id="routing-errors">
+<h3>Routing errors<a class="headerlink" href="#routing-errors" title="Link to this heading">#</a></h3>
+<p>Before computing anything, <code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code> validates that its inputs
+satisfy the routing contract. Errors here almost always indicate a mismatch between
+what <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> returned and what the loss components expect — catching it at
+the call site is faster than debugging a silent wrong result or a downstream
+shape error.</p>
+<ul class="simple">
+<li><p>A missing <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code> or <code class="docutils literal notranslate"><span class="pre">target_key</span></code> in the input mappings
+raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
+<li><p>A mapping entry that is not a <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.</p></li>
+<li><p>A component class without <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code> / <code class="docutils literal notranslate"><span class="pre">target_key</span></code>
+attributes (e.g. a custom loss you forgot to configure) raises
+<code class="docutils literal notranslate"><span class="pre">AttributeError</span></code>.</p></li>
+<li><p>A non-finite or non-strictly-positive <strong>sum</strong> of resolved weights
+(when <code class="docutils literal notranslate"><span class="pre">normalize_weights=True</span></code>) raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> — see
+<a class="reference internal" href="#weight-normalization"><span class="std std-ref">Weight normalization</span></a> for details.</p></li>
+</ul>
+</section>
+<section id="weights">
+<span id="composition-weights"></span><h3>Weights<a class="headerlink" href="#weights" title="Link to this heading">#</a></h3>
+<p>More often than not, it is desirable to assign weights to different terms/leaves
+of the composed loss, for example training on more numerically stable targets
+first before introducing more complex/difficult outputs that are hard to optimize.</p>
+<p>The weighting values are stored within the composed loss, rather than on the
+individual term/loss; this is so that dynamic schedules can be orchestrated.
+By default, if no weight is provided, any given loss term/leaf is multiplied
+by <code class="docutils literal notranslate"><span class="pre">1.0</span></code>. Static weights are most easily and intuitively applied by multiplying
+a term in the composition like shown below:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyMSELoss</span><span class="p">,</span> <span class="n">ForceMSELoss</span><span class="p">,</span> <span class="n">StressMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="mf">10.0</span> <span class="o">*</span> <span class="n">ForceMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="n">StressMSELoss</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>While the leading <code class="docutils literal notranslate"><span class="pre">1.0</span></code> is not necessary, it is used to illustrate how it should
+just resemble an equation where we train with a 10x weighting on the forces,
+but only 10% emphasis on the stresses in a periodic system.</p>
+<p>Alternatively, the weights can be specified as a list of values;
+<code class="docutils literal notranslate"><span class="pre">3.0</span> <span class="pre">*</span> <span class="pre">EnergyMSELoss()</span></code> produces a one-component
+<code class="docutils literal notranslate"><span class="pre">ComposedLossFunction([EnergyMSELoss()],</span> <span class="pre">weights=[3.0])</span></code>; subsequent additions
+flatten components and weights into a single composition.</p>
+<p id="weight-normalization">By default, the values above are <strong>not</strong> applied literally: the default behavior,
+when <code class="docutils literal notranslate"><span class="pre">normalize_weights</span></code> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, has each weighting factor normalized
+by the sum of the weights. This is desirable when trying to reason about the
+relative weighting of each term and to keep things numerically stable, however
+sometimes the actual desired behavior is to have each term scaled literally
+because it has physical meaning or needs the amplification. In those cases,
+set <code class="docutils literal notranslate"><span class="pre">normalize_weights=False</span></code>.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">normalize_weights=True</span></code>, the resolved weight sum must be finite and
+strictly positive at every call; a zero or NaN sum raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> before
+any gradient is computed.</p>
+</section>
+<section id="weight-schedules">
+<h3>Weight schedules<a class="headerlink" href="#weight-schedules" title="Link to this heading">#</a></h3>
+<p>Static weights fix the relative importance of each task for the entire run.
+When your training objective should change over time — warming up force weight
+over the first thousand steps, introducing stress loss at epoch 10, annealing
+energy weight as the model converges — use a schedule instead of a float.</p>
+<p>Any entry in the <code class="docutils literal notranslate"><span class="pre">weights</span></code> list may be a
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.LossWeightSchedule.html#nvalchemi.training.LossWeightSchedule" title="nvalchemi.training.LossWeightSchedule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossWeightSchedule</span></code></a>. The composition evaluates it
+at every call with the <code class="docutils literal notranslate"><span class="pre">(step,</span> <span class="pre">epoch)</span></code> you pass to <code class="docutils literal notranslate"><span class="pre">forward</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConstantWeight</span><span class="p">,</span>
+    <span class="n">CosineWeight</span><span class="p">,</span>
+    <span class="n">EnergyMSELoss</span><span class="p">,</span>
+    <span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="n">LinearWeight</span><span class="p">,</span>
+    <span class="n">PiecewiseWeight</span><span class="p">,</span>
+    <span class="n">StressMSELoss</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">energy_sched</span> <span class="o">=</span> <span class="n">ConstantWeight</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force_sched</span> <span class="o">=</span> <span class="n">LinearWeight</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">num_steps</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="n">stress_sched</span> <span class="o">=</span> <span class="n">PiecewiseWeight</span><span class="p">(</span>
+    <span class="n">boundaries</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span>
+    <span class="n">values</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">per_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">energy_sched</span> <span class="o">*</span> <span class="n">EnergyMSELoss</span><span class="p">()</span>
+    <span class="o">+</span> <span class="n">force_sched</span> <span class="o">*</span> <span class="n">ForceMSELoss</span><span class="p">()</span>
+    <span class="o">+</span> <span class="n">stress_sched</span> <span class="o">*</span> <span class="n">StressMSELoss</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">epoch</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Schedule</p></th>
+<th class="head"><p>Shape</p></th>
+<th class="head"><p>Typical use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.ConstantWeight.html#nvalchemi.training.ConstantWeight" title="nvalchemi.training.ConstantWeight"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConstantWeight</span></code></a></p></td>
+<td><p>Flat</p></td>
+<td><p>Static task weight</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.LinearWeight.html#nvalchemi.training.LinearWeight" title="nvalchemi.training.LinearWeight"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinearWeight</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">start</span></code> → <code class="docutils literal notranslate"><span class="pre">end</span></code> over <code class="docutils literal notranslate"><span class="pre">num_steps</span></code>, clamped</p></td>
+<td><p>Curriculum warm-up</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.CosineWeight.html#nvalchemi.training.CosineWeight" title="nvalchemi.training.CosineWeight"><code class="xref py py-class docutils literal notranslate"><span class="pre">CosineWeight</span></code></a></p></td>
+<td><p>Half-cosine <code class="docutils literal notranslate"><span class="pre">start</span></code> → <code class="docutils literal notranslate"><span class="pre">end</span></code>, clamped</p></td>
+<td><p>Smooth curriculum</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.PiecewiseWeight.html#nvalchemi.training.PiecewiseWeight" title="nvalchemi.training.PiecewiseWeight"><code class="xref py py-class docutils literal notranslate"><span class="pre">PiecewiseWeight</span></code></a></p></td>
+<td><p>Step function over boundaries</p></td>
+<td><p>Phase changes</p></td>
+</tr>
+</tbody>
+</table>
+<p>Every schedule has a <code class="docutils literal notranslate"><span class="pre">per_epoch:</span> <span class="pre">bool</span></code> field. When <code class="docutils literal notranslate"><span class="pre">False</span></code> (the default), the
+schedule advances by the <code class="docutils literal notranslate"><span class="pre">step</span></code> argument; when <code class="docutils literal notranslate"><span class="pre">True</span></code>, by <code class="docutils literal notranslate"><span class="pre">epoch</span></code>. Mixing the two
+lets most schedules advance per batch while keeping others — such as a
+stress-weight curriculum — aligned with learning-rate epochs. A <code class="docutils literal notranslate"><span class="pre">per_epoch=True</span></code>
+schedule called with <code class="docutils literal notranslate"><span class="pre">epoch=None</span></code> raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>Operator constraints</strong> — a few non-obvious restrictions worth knowing:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">composition</span> <span class="pre">+</span> <span class="pre">composition</span></code></strong> requires both sides to share the same
+<code class="docutils literal notranslate"><span class="pre">normalize_weights</span></code> flag. Mismatch raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>; construct the
+combined composition explicitly to choose.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">schedule</span> <span class="pre">*</span> <span class="pre">composition</span></code></strong> is rejected with <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>. Scale each
+component individually and compose the results, or multiply the
+composition by a plain float.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">bool</span> <span class="pre">*</span> <span class="pre">loss</span></code></strong> is rejected to prevent <code class="docutils literal notranslate"><span class="pre">True</span></code> silently coercing to
+<code class="docutils literal notranslate"><span class="pre">1.0</span></code>. Pass <code class="docutils literal notranslate"><span class="pre">1.0</span></code> explicitly.</p></li>
+</ul>
+</div>
+</section>
+<section id="bring-your-own-schedule">
+<h3>Bring your own schedule<a class="headerlink" href="#bring-your-own-schedule" title="Link to this heading">#</a></h3>
+<p>When none of the built-in schedules fit — reciprocal-step decay, exponential decay
+with a floor, cyclic oscillation, or a schedule driven by external state —
+implement <a class="reference internal" href="../modules/training/generated/nvalchemi.training.LossWeightSchedule.html#nvalchemi.training.LossWeightSchedule" title="nvalchemi.training.LossWeightSchedule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossWeightSchedule</span></code></a> directly.
+The protocol is <code class="docutils literal notranslate"><span class="pre">runtime_checkable</span></code>, so any object with a <code class="docutils literal notranslate"><span class="pre">per_epoch</span></code> attribute
+and a <code class="docutils literal notranslate"><span class="pre">__call__(step:</span> <span class="pre">int,</span> <span class="pre">epoch:</span> <span class="pre">int)</span> <span class="pre">-&gt;</span> <span class="pre">float</span></code> method plugs into a composition
+without subclassing anything:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">CappedInverse</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return min(1.0, 1.0 / max(step, 1)) — reciprocal step decay.&quot;&quot;&quot;</span>
+
+    <span class="n">per_epoch</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">CappedInverse</span><span class="p">()</span> <span class="o">*</span> <span class="n">ForceMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">EnergyMSELoss</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>When a custom schedule is part of a <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code>, it must also be
+serializable into the strategy checkpoint spec. Add <code class="docutils literal notranslate"><span class="pre">to_spec()</span></code> to meet the
+full protocol:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CappedInverse</span><span class="p">:</span>
+    <span class="n">per_epoch</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cap</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cap</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cap</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">create_model_spec</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">cap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cap</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Subclass the internal <code class="docutils literal notranslate"><span class="pre">_BaseWeightSchedule</span></code> (from
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.training.losses.base</span></code>) when you want Pydantic validation and a
+default <code class="docutils literal notranslate"><span class="pre">to_spec()</span></code> implementation backed by <code class="docutils literal notranslate"><span class="pre">model_dump()</span></code>.</p>
+<p>Scheduling controls <em>when</em> each objective matters; the next section covers
+how to change <em>what</em> is computed inside a leaf — residuals, normalization,
+masking, and reduction — by writing your own loss.</p>
+</section>
+</section>
+<section id="writing-your-own-loss">
+<h2>Writing your own loss<a class="headerlink" href="#writing-your-own-loss" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.BaseLossFunction.html#nvalchemi.training.BaseLossFunction" title="nvalchemi.training.BaseLossFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseLossFunction</span></code></a> is a <strong>template-method</strong> class:
+its <code class="docutils literal notranslate"><span class="pre">forward</span></code> orchestrates five hooks in a fixed order, each with a default
+implementation you can selectively override. This design lets you implement only
+the logic your loss actually requires — from a single residual formula to a fully
+custom reduction pipeline — without rewriting the parts the base class handles
+correctly.</p>
+<p>Four conventions apply to every custom loss:</p>
+<ol class="arabic simple">
+<li><p><strong>Define <code class="docutils literal notranslate"><span class="pre">target_key</span></code> and <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code>.</strong> These class-level attributes tell
+<code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code> which slots in the prediction/target mappings to wire
+into your loss. Without them, your loss works standalone but cannot participate
+in a composition.</p></li>
+<li><p><strong>Accept <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code> in hooks that receive them.</strong> <code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code>
+forwards extra metadata kwargs to every component. Swallowing the ones you
+don’t use keeps your loss composable with any other loss in the mix.</p></li>
+<li><p><strong>Keep hooks tensor-first.</strong> See
+<a class="reference internal" href="#passing-graph-metadata"><span class="std std-ref">Passing graph metadata</span></a> for the kwarg contract.</p></li>
+<li><p><strong>Weight scheduling lives on <code class="docutils literal notranslate"><span class="pre">ComposedLossFunction</span></code>.</strong> Your hooks return
+unweighted values. Override <code class="docutils literal notranslate"><span class="pre">forward</span></code> directly to bypass the template when a
+loss has a fundamentally non-standard signature — but doing so means the
+composition hook structure no longer applies.</p></li>
+</ol>
+<section id="residuals-compute-residual">
+<h3>Residuals (compute_residual)<a class="headerlink" href="#residuals-compute-residual" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">compute_residual</span></code> is the one hook every leaf must implement — it has no default
+and the base class raises if you omit it. It receives the (optionally normalized)
+<code class="docutils literal notranslate"><span class="pre">pred</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> tensors and the boolean <code class="docutils literal notranslate"><span class="pre">valid</span></code> mask produced by <code class="docutils literal notranslate"><span class="pre">mask</span></code>, and
+returns an element-wise residual tensor of the same shape. Because <code class="docutils literal notranslate"><span class="pre">normalize</span></code> and
+<code class="docutils literal notranslate"><span class="pre">mask</span></code> have already run, <code class="docutils literal notranslate"><span class="pre">compute_residual</span></code> can focus entirely on the residual
+formula and safely zero invalid positions with <code class="docutils literal notranslate"><span class="pre">torch.where</span></code>.</p>
+<p>The minimum viable leaf overrides nothing but <code class="docutils literal notranslate"><span class="pre">compute_residual</span></code>. The base class
+provides validation, an all-valid mask, and a validity-weighted mean reduction —
+you supply only the residual formula:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseLossFunction</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">EnergyMSELoss</span><span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">):</span>
+    <span class="n">target_key</span> <span class="o">=</span> <span class="s2">&quot;energy&quot;</span>
+    <span class="n">prediction_key</span> <span class="o">=</span> <span class="s2">&quot;predicted_energy&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_residual</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">valid</span><span class="p">,</span> <span class="n">pred</span> <span class="o">-</span> <span class="n">target</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">pred</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Expose <code class="docutils literal notranslate"><span class="pre">target_key</span></code> and <code class="docutils literal notranslate"><span class="pre">prediction_key</span></code> via <code class="docutils literal notranslate"><span class="pre">__init__</span></code> when callers should be
+able to override routing keys or configure extra fields — for example, <code class="docutils literal notranslate"><span class="pre">delta</span></code> on
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyHuberLoss.html#nvalchemi.training.EnergyHuberLoss" title="nvalchemi.training.EnergyHuberLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyHuberLoss</span></code></a>.</p>
+</section>
+<section id="normalization-normalize">
+<h3>Normalization (normalize)<a class="headerlink" href="#normalization-normalize" title="Link to this heading">#</a></h3>
+<p>The default <code class="docutils literal notranslate"><span class="pre">normalize</span></code> is a pass-through: <code class="docutils literal notranslate"><span class="pre">pred</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> flow unchanged into
+<code class="docutils literal notranslate"><span class="pre">compute_residual</span></code>, and an empty <a class="reference internal" href="../modules/training/generated/nvalchemi.training.ReductionContext.html#nvalchemi.training.ReductionContext" title="nvalchemi.training.ReductionContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReductionContext</span></code></a>
+is forwarded to the downstream hooks. Override it when the residual should be
+computed on transformed inputs — the most common case being per-atom normalization,
+where both energy tensors are divided by atom count before the squared-error is
+taken. The <a class="reference internal" href="../modules/training/generated/nvalchemi.training.ReductionContext.html#nvalchemi.training.ReductionContext" title="nvalchemi.training.ReductionContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReductionContext</span></code></a> is a <code class="docutils literal notranslate"><span class="pre">dict</span></code>-like
+container that flows from <code class="docutils literal notranslate"><span class="pre">normalize</span></code> through <code class="docutils literal notranslate"><span class="pre">mask</span></code> and into <code class="docutils literal notranslate"><span class="pre">reduce</span></code>; storing
+normalization factors as <code class="docutils literal notranslate"><span class="pre">ctx[&quot;weights&quot;]</span></code> instructs the base <code class="docutils literal notranslate"><span class="pre">reduce</span></code> to apply a
+correspondingly weighted mean automatically.</p>
+<p>Override <code class="docutils literal notranslate"><span class="pre">normalize</span></code> to return a <code class="docutils literal notranslate"><span class="pre">(pred,</span> <span class="pre">target,</span> <span class="pre">ctx)</span></code> triple. Here, each energy
+prediction and target is divided by atom count, and the counts are stored in the
+context so the final reduction is also atom-count-weighted:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseLossFunction</span><span class="p">,</span> <span class="n">ReductionContext</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PerAtomEnergyMSELoss</span><span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">):</span>
+    <span class="n">target_key</span> <span class="o">=</span> <span class="s2">&quot;energy&quot;</span>
+    <span class="n">prediction_key</span> <span class="o">=</span> <span class="s2">&quot;predicted_energy&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalize</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">ReductionContext</span><span class="p">]:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">ReductionContext</span><span class="p">()</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_nodes_per_graph&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">counts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;PerAtomEnergyMSELoss requires num_nodes_per_graph=... metadata.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">pred</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">ctx</span><span class="p">[</span><span class="s2">&quot;weights&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">counts</span>
+        <span class="k">return</span> <span class="n">pred</span> <span class="o">/</span> <span class="n">counts</span><span class="p">,</span> <span class="n">target</span> <span class="o">/</span> <span class="n">counts</span><span class="p">,</span> <span class="n">ctx</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_residual</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">valid</span><span class="p">,</span> <span class="n">pred</span> <span class="o">-</span> <span class="n">target</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">pred</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ctx[&quot;weights&quot;]</span></code> here is a <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">1)</span></code> atom-count tensor. The base <code class="docutils literal notranslate"><span class="pre">reduce</span></code>
+multiplies per-graph residuals by these weights when computing the mean, giving
+larger graphs proportionally more influence — the same semantics as
+<code class="docutils literal notranslate"><span class="pre">EnergyMSELoss(per_atom=True)</span></code>.</p>
+</section>
+<section id="masking-mask">
+<span id="id3"></span><h3>Masking (mask)<a class="headerlink" href="#masking-mask" title="Link to this heading">#</a></h3>
+<p>The default <code class="docutils literal notranslate"><span class="pre">mask</span></code> returns an all-True tensor — every position is valid, with no
+padding exclusion and no NaN handling. The mask flows to <code class="docutils literal notranslate"><span class="pre">compute_residual</span></code> as the
+<code class="docutils literal notranslate"><span class="pre">valid</span></code> argument, and the base <code class="docutils literal notranslate"><span class="pre">reduce</span></code> excludes <code class="docutils literal notranslate"><span class="pre">False</span></code> positions from both the
+numerator and denominator. Override it when entries should be excluded from the
+loss entirely. Two cases come up most often: missing labels, where NaN or inf
+targets should contribute zero loss and zero gradient; and padded batches, where
+padding rows occupy valid memory but should not contribute to the loss. You can
+also combine both, or define completely custom validity criteria.</p>
+<p>Override <code class="docutils literal notranslate"><span class="pre">mask</span></code> to return a boolean tensor broadcast-compatible with <code class="docutils literal notranslate"><span class="pre">pred</span></code> and
+<code class="docutils literal notranslate"><span class="pre">target</span></code>. For missing labels, <code class="docutils literal notranslate"><span class="pre">torch.isfinite(target)</span></code> is usually sufficient:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ctx</span><span class="p">:</span> <span class="n">ReductionContext</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ignore_nonfinite</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For padded tensor layouts, also exclude padding rows. The built-in force losses
+combine a node-validity mask with an optional <code class="docutils literal notranslate"><span class="pre">isfinite</span></code> check:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">num_nodes_per_graph</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_nodes_per_graph&quot;</span><span class="p">)</span>
+    <span class="c1"># Build a (B, V_max) node mask from counts, expand to (B, V_max, 3)</span>
+    <span class="n">node_mask</span> <span class="o">=</span> <span class="n">_padded_node_mask</span><span class="p">(</span><span class="n">num_nodes_per_graph</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">pred</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">node_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">pred</span><span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ignore_nonfinite</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="n">valid</span> <span class="o">&amp;</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">valid</span>
+</pre></div>
+</div>
+<p>The key contract: <code class="docutils literal notranslate"><span class="pre">mask</span></code> returns a boolean tensor received by <code class="docutils literal notranslate"><span class="pre">compute_residual</span></code>
+as <code class="docutils literal notranslate"><span class="pre">valid</span></code>. Use <code class="docutils literal notranslate"><span class="pre">torch.where(valid,</span> <span class="pre">...,</span> <span class="pre">torch.zeros_like(...))</span></code> in
+<code class="docutils literal notranslate"><span class="pre">compute_residual</span></code> to zero invalid entries; the base <code class="docutils literal notranslate"><span class="pre">reduce</span></code> handles the
+denominator.</p>
+</section>
+<section id="reduction-reduce">
+<span id="id4"></span><h3>Reduction (reduce)<a class="headerlink" href="#reduction-reduce" title="Link to this heading">#</a></h3>
+<p>The default <code class="docutils literal notranslate"><span class="pre">reduce</span></code> computes a validity-weighted global mean: valid entries
+contribute to both the numerator and the denominator, with <code class="docutils literal notranslate"><span class="pre">ctx[&quot;weights&quot;]</span></code>
+applied if <code class="docutils literal notranslate"><span class="pre">normalize</span></code> set them. Override it when the default aggregation would
+bias your training signal. The most common case is a heterogeneous batch — one
+very large graph and many small ones — where a global atom-position mean gives
+disproportionate gradient signal to the large graph. A graph-balanced reduction
+computes a per-graph mean first, then means over graphs, giving equal weight to
+each structure regardless of size. This matters most for force losses, where atom
+counts vary significantly across structures.</p>
+<p><code class="docutils literal notranslate"><span class="pre">reduce</span></code> receives the element-wise <code class="docutils literal notranslate"><span class="pre">residual</span></code> and boolean <code class="docutils literal notranslate"><span class="pre">valid</span></code> tensors, along
+with any graph metadata forwarded as kwargs. The
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.training.losses.reductions</span></code> module provides scatter-based helpers for
+building graph-level aggregations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseLossFunction</span><span class="p">,</span> <span class="n">ReductionContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.reductions</span><span class="w"> </span><span class="kn">import</span> <span class="n">per_graph_sum</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">GraphBalancedForceMSE</span><span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">):</span>
+    <span class="n">target_key</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span>
+    <span class="n">prediction_key</span> <span class="o">=</span> <span class="s2">&quot;predicted_forces&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_residual</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pred</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">valid</span><span class="p">,</span> <span class="n">pred</span> <span class="o">-</span> <span class="n">target</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">pred</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reduce</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">residual</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">valid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">ReductionContext</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">batch_idx</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">]</span>
+        <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">]</span>
+        <span class="n">valid_f</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">per_atom_se</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">per_atom_valid</span> <span class="o">=</span> <span class="n">valid_f</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">per_graph_num</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">per_atom_se</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">)</span>
+        <span class="n">per_graph_den</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">per_atom_valid</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">)</span>
+        <span class="n">per_sample</span> <span class="o">=</span> <span class="n">per_graph_num</span> <span class="o">/</span> <span class="n">per_graph_den</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="n">per_sample</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">per_sample</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Populate <code class="docutils literal notranslate"><span class="pre">self.per_sample_loss</span></code> with a detached <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> tensor to expose
+per-graph diagnostics through <code class="docutils literal notranslate"><span class="pre">ComposedLossOutput[&quot;per_component_sample&quot;]</span></code>.
+See <a class="reference internal" href="#per-sample-loss-diagnostics">Per-sample loss diagnostics</a> for the full
+contract; leave it <code class="docutils literal notranslate"><span class="pre">None</span></code> when a per-graph decomposition is unavailable.</p>
+</section>
+<section id="shape-and-dtype-validation-validate">
+<span id="id5"></span><h3>Shape and dtype validation (validate)<a class="headerlink" href="#shape-and-dtype-validation-validate" title="Link to this heading">#</a></h3>
+<p>By default, <code class="docutils literal notranslate"><span class="pre">validate</span></code> calls
+<code class="xref py py-func docutils literal notranslate"><span class="pre">nvalchemi.training.losses.assert_same_shape()</span></code> with <code class="docutils literal notranslate"><span class="pre">strict=True</span></code>,
+requiring exact shape and dtype equality between <code class="docutils literal notranslate"><span class="pre">pred</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> before any
+residual computation runs. Override it when your loss has <code class="docutils literal notranslate"><span class="pre">pred.shape</span> <span class="pre">!=</span> <span class="pre">target.shape</span></code> by design — a dipole loss derived from per-atom charges might produce
+<code class="docutils literal notranslate"><span class="pre">(V,)</span></code> charge predictions and compare them against <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3)</span></code> dipole targets, which
+<code class="docutils literal notranslate"><span class="pre">assert_same_shape</span></code> would reject even though the asymmetry is intentional.
+Replace <code class="docutils literal notranslate"><span class="pre">validate</span></code> with whatever check is meaningful for your shapes, or skip it
+entirely:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="c1"># pred is (V,) charges, target is (B, 3) dipoles — shapes are intentional</span>
+    <span class="k">if</span> <span class="n">pred</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;dtype mismatch: pred </span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2"> vs target </span><span class="si">{</span><span class="n">target</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<p>When <code class="docutils literal notranslate"><span class="pre">pred</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> should always match exactly, keep the default.</p>
+</section>
+<section id="layout-dispatch-with-plum-advanced">
+<h3>Layout dispatch with plum (advanced)<a class="headerlink" href="#layout-dispatch-with-plum-advanced" title="Link to this heading">#</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This section covers an advanced pattern used by the built-in force losses.
+You do not need plum-dispatch to write a custom loss; most custom losses
+branch on <code class="docutils literal notranslate"><span class="pre">pred.ndim</span></code> directly or accept a single layout. Read on only if
+you need a loss that cleanly handles both dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> and padded
+<code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code> inputs with separate, testable code paths per layout.</p>
+</div>
+<p>The built-in force losses (<code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceHuberLoss</span></code>, <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code>)
+accept both dense <code class="docutils literal notranslate"><span class="pre">(V,</span> <span class="pre">3)</span></code> and padded <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">V_max,</span> <span class="pre">3)</span></code> inputs. Rather than
+branching on <code class="docutils literal notranslate"><span class="pre">pred.ndim</span></code> inside each hook, they use
+<a class="reference external" href="https://github.com/beartype/plum">plum-dispatch</a> to route to
+type-annotated overloads. For example, <code class="docutils literal notranslate"><span class="pre">ForceMSELoss._valid_force_components</span></code>
+has two <code class="docutils literal notranslate"><span class="pre">&#64;overload</span></code> implementations — one for <code class="docutils literal notranslate"><span class="pre">Forces</span></code> (dense, 2-D) and
+one for <code class="docutils literal notranslate"><span class="pre">_PaddedForces</span></code> (padded, 3-D) — plus a <code class="docutils literal notranslate"><span class="pre">&#64;dispatch</span></code> fallback:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">overload</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ForceMSELoss</span><span class="p">(</span><span class="n">BaseLossFunction</span><span class="p">):</span>
+    <span class="c1"># ...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_valid_force_components</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pred</span><span class="p">:</span> <span class="n">Forces</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">Forces</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dense (V, 3) path — no padding mask needed.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_valid_force_components</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pred</span><span class="p">:</span> <span class="n">_PaddedForces</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">_PaddedForces</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Padded (B, V_max, 3) path — build node mask from counts.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_valid_force_components</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">num_nodes_per_graph</span><span class="p">):</span>
+        <span class="k">pass</span>  <span class="c1"># plum routes to the matching overload at runtime</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">mask</span></code> and <code class="docutils literal notranslate"><span class="pre">reduce</span></code> hooks delegate to these dispatched helpers,
+keeping each layout’s logic in a focused, testable overload. If you are
+writing a loss that handles multiple tensor layouts, the <code class="docutils literal notranslate"><span class="pre">ForceMSELoss</span></code>
+and <code class="docutils literal notranslate"><span class="pre">ForceL2NormLoss</span></code> implementations in
+<code class="docutils literal notranslate"><span class="pre">nvalchemi/training/losses/terms.py</span></code> are the reference patterns to
+follow.</p>
+</section>
+<section id="testing-a-custom-loss">
+<h3>Testing a custom loss<a class="headerlink" href="#testing-a-custom-loss" title="Link to this heading">#</a></h3>
+<p>Two checks usually suffice:</p>
+<ol class="arabic simple">
+<li><p>A direct call returns a scalar of the expected dtype and gradient
+flows back to <code class="docutils literal notranslate"><span class="pre">pred</span></code>.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">ignore_nonfinite</span></code> semantics matter for your loss, assert that a
+<code class="docutils literal notranslate"><span class="pre">NaN</span></code>-filled target row contributes zero to <code class="docutils literal notranslate"><span class="pre">pred.grad</span></code>.</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnergyMSELoss</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span>
+<span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="n">value</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="n">value</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="k">assert</span> <span class="n">pred</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</pre></div>
+</div>
+<p>For composed losses, assert <code class="docutils literal notranslate"><span class="pre">total_loss</span></code> equals the expected weighted
+sum of per-component values on a tiny batch — inspect
+<code class="docutils literal notranslate"><span class="pre">out[&quot;per_component_unweighted&quot;]</span></code> and <code class="docutils literal notranslate"><span class="pre">out[&quot;per_component_weight&quot;]</span></code> to see
+exactly what the composition applied.</p>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>API</strong>: <a class="reference internal" href="../modules/training/losses.html#losses-api"><span class="std std-ref">Losses — Training Terms</span></a> for the full class and schedule reference.</p></li>
+<li><p><strong>Reductions</strong>: the <code class="docutils literal notranslate"><span class="pre">nvalchemi.training.losses.reductions</span></code> module for
+scatter-based per-graph helpers usable in custom losses.</p></li>
+<li><p><strong>Models</strong>: the <a class="reference internal" href="models.html"><span class="doc">models guide</span></a> covers the model-side of the
+contract (how <code class="docutils literal notranslate"><span class="pre">predictions</span></code> mappings are produced).</p></li>
+<li><p><strong>Hooks</strong>: the <a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">hooks guide</span></a> covers the
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> fields a training loop
+makes available, including <code class="docutils literal notranslate"><span class="pre">ctx.loss</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="training.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Training</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="finetuning.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Fine-Tuning Pretrained Models</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-losses">Built-in losses</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-a-leaf-loss-directly">Calling a leaf loss directly</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#expected-shape-layouts">Expected shape layouts</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-type-alignment">Data type alignment</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#passing-graph-metadata">Passing graph metadata</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ignoring-missing-labels">Ignoring missing labels</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mae-and-force-l2-reductions">MAE and force-L2 reductions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shape-and-dtype-validation">Shape and dtype validation</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composition">Composition</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-call-signature">The call signature</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-return-type">The return type</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-sample-loss-diagnostics">Per-sample loss diagnostics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#routing-errors">Routing errors</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#weights">Weights</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#weight-schedules">Weight schedules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#bring-your-own-schedule">Bring your own schedule</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-your-own-loss">Writing your own loss</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#residuals-compute-residual">Residuals (compute_residual)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#normalization-normalize">Normalization (normalize)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#masking-mask">Masking (mask)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reduction-reduce">Reduction (reduce)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shape-and-dtype-validation-validate">Shape and dtype validation (validate)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#layout-dispatch-with-plum-advanced">Layout dispatch with plum (advanced)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#testing-a-custom-loss">Testing a custom loss</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/losses.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

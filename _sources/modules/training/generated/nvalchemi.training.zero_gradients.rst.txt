@@ -1,0 +1,6 @@
+﻿nvalchemi.training.zero\_gradients
+==================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: zero_gradients

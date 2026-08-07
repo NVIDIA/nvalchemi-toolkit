@@ -138,7 +138,9 @@ Intermediate Examples
 
 These examples assume familiarity with the basic tier and introduce
 the storage layer, performance monitoring, and more complex pipeline
-patterns.
+patterns. Training examples are labeled explicitly in this list; if the
+collection grows further, split training workflows into a dedicated examples
+section so inference, dynamics, and training entry points remain easy to scan.
 
 **01 — Multi-Stage Pipeline**: FusedStage composition, LoggingHook CSV output,
 step-budget migration, fused hooks for global status monitoring.
@@ -153,7 +155,15 @@ LJ stress computation, cell fluctuation monitoring.
 system_id tracking, ConvergedSnapshotHook collecting results.
 
 **05 — Safety and Monitoring**: NaNDetectorHook, MaxForceClampHook,
-EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
+EnergyDriftMonitorHook, StageTimingHook — defensive MD patterns.
+
+**06 — DDP MLP Training**: DDPHook with a simple MLP, dummy AtomicData,
+single-node ``torchrun`` launch, and ``auto``/``gloo``/``nccl`` backend
+selection.
+
+**07 — Rich Training Reporting**: Live Rich dashboard driven by synthetic
+training losses, validation metrics, progress counters, and learning-rate
+scheduler values.
 
 
 
@@ -248,6 +258,40 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example trains a small MLP on synthetic per-system energy labels and uses DDPHook to configure torch.nn.parallel.DistributedDataParallel. The dataset is intentionally small and generated on the fly so the example focuses on the distributed training wiring rather than model quality.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_06_ddp_mlp_training_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/06_ddp_mlp_training`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Distributed Training: DDPHook with a Dummy MLP</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example shows how the hook-native reporting API turns training state into Rich terminal dashboards. It uses synthetic losses instead of a real model so that the moving parts are visible: a workflow emits a TrainContext, a ReportingOrchestrator decides when reporting runs, and RichReporter renders the scalar snapshot.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_07_rich_training_reporting_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/07_rich_training_reporting`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Rich Training Reporting</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -281,6 +325,14 @@ the ``+`` operator; PipelineModelWrapper for dependent pipelines.
 
 **08 — AIMNet2 + Ewald Pipeline**: Composing AIMNet2 with Ewald
 electrostatics and DFTD3 dispersion in a multi-group pipeline.
+
+**09 — UMA NVE/NVT**: Driving the fairchem UMA foundation model through
+NVE / NVT dynamics with energy-drift tracking; OMat crystals and OMol
+molecules via task selection on ``UMAWrapper.from_checkpoint``.
+
+**10 — MACE Training**: Training a ScaleShiftMACE model with the ALCHEMI
+training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
+validation, and distributed launch patterns.
 
 
 
@@ -411,7 +463,7 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — the most powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — a powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters.">
 
 .. only:: html
 
@@ -426,26 +478,66 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="UMA (Universal Models for Atoms, from fairchem-core) is a multi-task foundation model: a single checkpoint ships heads for molecules (OMol), bulk crystals (OMat), catalysis (OC20), direct air capture (ODAC), and molecular crystals (OMC).  UMAWrapper exposes one task head at a time and computes conservative forces (and, for periodic tasks, stress) via autograd.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_09_uma_nve_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/09_uma_nve`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example walks through a complete model-training lifecycle on the ALCHEMI Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN dataset as the reference workflow. The training script run configuration is loaded with Hydra from 10_vanilla_mace.yaml.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_10_mace_training_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/10_mace_training`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MACE Training with ALCHEMI Training Utilities</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
 
     </div>
 
-Distributed Pipeline Examples
-==============================
+Distributed Examples
+====================
 
-These examples demonstrate multi-GPU distributed simulation pipelines
-using :class:`~nvalchemi.dynamics.DistributedPipeline`.  They require
-multiple GPUs and must be launched with ``torchrun``.
+These examples cover the two multi-GPU paths in NVAlchemi:
+
+- **Pipeline parallelism** (examples 01–02) — map ranks to dynamics
+  stages with :class:`~nvalchemi.dynamics.DistributedPipeline`.
+- **Domain decomposition** (examples 03–05) — shard one system across
+  ranks with :class:`~nvalchemi.distributed.DomainParallel`, including
+  the "bring your own model" arc.
+
+All require multiple GPUs and must be launched with ``torchrun``.
 
 .. warning::
 
    These examples are **not executed** during the Sphinx documentation
    build.  To run them, use ``torchrun`` as shown in each example.
 
-Architecture Overview
----------------------
+Pipeline Architecture Overview
+------------------------------
 
 A :class:`~nvalchemi.dynamics.DistributedPipeline` maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
@@ -455,7 +547,7 @@ communication buffers:
 
    digraph distributed_pipeline {
        rankdir=LR;
-       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd",
+       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd" fontcolor="#111111",
              fontname="Helvetica", fontsize=11];
        edge [fontname="Helvetica", fontsize=10];
 
@@ -489,7 +581,7 @@ Running the Examples
    # CPU/debug mode (set backend="gloo" in the script first):
    torchrun --nproc_per_node=4 --master_port=29500 examples/distributed/01_distributed_pipeline.py
 
-**02 — Monitoring with LoggingHook, ProfilerHook, and ZarrData** (4 GPUs required):
+**02 — Monitoring with LoggingHook, StageTimingHook, and ZarrData** (4 GPUs required):
 
 .. code-block:: bash
 
@@ -507,8 +599,86 @@ Example Descriptions
 
 **02 — Distributed Monitoring**
    Same topology as example 01, augmented with per-rank LoggingHook and
-   ProfilerHook for observability, and ZarrData sinks for persistent
+   StageTimingHook for observability, and ZarrData sinks for persistent
    trajectory storage.  Shows post-run log collation on rank 0.
+
+Domain-Decomposition Examples
+-----------------------------
+
+These shard a single system across ranks with
+:class:`~nvalchemi.distributed.DomainParallel` (halo exchange + force
+consolidation handled by the framework).
+
+.. code-block:: bash
+
+   # 03 — MACE NVT Langevin MD, trajectory written to xyz from rank 0
+   torchrun --nproc_per_node=2 examples/distributed/03_mace_nvt_distributed.py
+
+   # 04 / 05 — bring-your-own model, validated against a single-process reference
+   torchrun --nproc_per_node=2 examples/distributed/04_byo_pytorch_mpnn.py
+   torchrun --nproc_per_node=2 examples/distributed/05_byo_graph_transformer.py
+
+   # 06 — MACE NPT (barostat) MD, evolving-cell trajectory written from rank 0
+   torchrun --nproc_per_node=2 examples/distributed/06_mace_npt_distributed.py
+
+   # 07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed
+   torchrun --nproc_per_node=4 examples/distributed/07_fire_nvt_dd.py
+
+**03 — MACE NVT Distributed**
+   End-to-end distributed MD with a stock
+   :class:`~nvalchemi.models.mace.MACEWrapper`: a short
+   :class:`~nvalchemi.dynamics.NVTLangevin` trajectory under
+   ``DomainParallel``, with per-step neighbour-list rebuild and xyz
+   snapshot logging from rank 0.  No distributed-aware code at the user
+   layer.
+
+**04 — BYO PyTorch MPNN**
+   The full bring-your-own arc for a plain-PyTorch Behler-Parrinello
+   potential: architecture → wrapper → run → ``trace_and_validate``
+   against a single-process reference → ``MLIPSpec.save``/``load``.  An
+   MPNN-halo model whose forward is scatter-aggregations + autograd
+   needs no distributed code.
+
+**05 — BYO Graph Transformer (Warp kernel)**
+   The same arc when the model embeds a performance-critical Warp
+   kernel that is opaque to ShardTensor dispatch.  Shows declaring the
+   kernel's distribution semantics once via
+   :class:`~nvalchemi.distributed.spec.OpAdapter`.
+
+**06 — MACE NPT Distributed**
+   The constant-pressure sibling of example 03: a
+   :class:`~nvalchemi.dynamics.NPT` trajectory (Nosé–Hoover thermostat +
+   isotropic barostat) under ``DomainParallel``, with the cell relaxing
+   toward equilibrium.  The barostat/thermostat couple to *global*
+   quantities (total kinetic energy, degrees of freedom, pressure
+   tensor); the framework's dynamics coordinator all-reduces them and
+   broadcasts the replicated cell + barostat state each step, so the only
+   user change from example 03 is requesting ``stress`` and swapping in
+   ``NPT``.
+
+**07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed**
+   The 2-D generalization of example 01: a FIRE relaxation →
+   :class:`~nvalchemi.dynamics.NVTLangevin` MD pipeline where *each stage
+   is itself domain-decomposed*.  A ``(pipeline, domain)``
+   :class:`~torch.distributed.device_mesh.DeviceMesh` gives each stage a
+   whole domain sub-mesh row; a stage is just ``DomainParallel(dynamics)``
+   handed to ``DistributedPipeline(stages, mesh=mesh)``.  ``DomainParallel``
+   overrides the pipeline's communication seam so the group *lead* performs
+   the cross-stage hand-off (over the pipeline axis) while the group
+   scatters/gathers to its sub-mesh — no distributed-aware code in the model
+   or the integrators.  Keep the per-step **domain** dimension intra-node
+   (NVLink) and let the rare-hand-off **pipeline** dimension span nodes (IB);
+   ``4 GPUs`` = 2 stages × 2 domain.  FIRE's velocity mixing couples to
+   *global* power/norm scalars (``v·f`` / ``v·v`` / ``f·f``), which the
+   dynamics coordinator all-reduces within each stage's domain group.
+
+Benchmarks
+----------
+
+Performance + force-equivalence benchmarks for the
+domain-decomposition path live in ``benchmark/distributed/`` (two
+config-driven runners covering LJ, Ewald, PME, MACE, AIMNet2, and UMA).
+See ``benchmark/distributed/README.md``.
 
 
 
@@ -549,6 +719,91 @@ Example Descriptions
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="End-to-end distributed MD: load a MACE foundation-model checkpoint, run a short NVTLangevin trajectory across multiple ranks under DomainParallel, and record the trajectory to an xyz file from rank 0.">
+
+.. only:: html
+
+  .. image:: /examples/distributed/images/thumb/sphx_glr_03_mace_nvt_distributed_thumb.png
+    :alt:
+
+  :doc:`/examples/distributed/03_mace_nvt_distributed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This walkthrough takes a small interatomic potential — written in plain PyTorch — through the canonical BYO arc:">
+
+.. only:: html
+
+  .. image:: /examples/distributed/images/thumb/sphx_glr_04_byo_pytorch_mpnn_thumb.png
+    :alt:
+
+  :doc:`/examples/distributed/04_byo_pytorch_mpnn`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Bring your own PyTorch model: from architecture to a saved spec</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The same arc as 04_byo_pytorch_mpnn, but now the model embeds one performance-critical Warp kernel — the case where OpAdapter carries weight.">
+
+.. only:: html
+
+  .. image:: /examples/distributed/images/thumb/sphx_glr_05_byo_graph_transformer_thumb.png
+    :alt:
+
+  :doc:`/examples/distributed/05_byo_graph_transformer`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Bring your own model with a Warp kernel: from architecture to spec</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The constant-pressure sibling of example 03. Load a MACE checkpoint, run a short NPT trajectory across multiple ranks under DomainParallel, and record the trajectory — including the evolving cell — to an xyz file from rank 0.">
+
+.. only:: html
+
+  .. image:: /examples/distributed/images/thumb/sphx_glr_06_mace_npt_distributed_thumb.png
+    :alt:
+
+  :doc:`/examples/distributed/06_mace_npt_distributed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MACE NPT: domain-decomposed constant-pressure MD with a barostat</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where each stage is itself domain-decomposed across a group of GPUs. This is the 2-D generalization of 01_distributed_pipeline: that example maps one rank per stage; here each stage is a whole domain sub-mesh cooperating on one large system, and the two stages form the pipeline dimension.">
+
+.. only:: html
+
+  .. image:: /examples/distributed/images/thumb/sphx_glr_07_fire_nvt_dd_thumb.png
+    :alt:
+
+  :doc:`/examples/distributed/07_fire_nvt_dd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</div>
     </div>
 
 

@@ -1,35 +1,18 @@
-﻿nvalchemi.dynamics.SizeAwareSampler
-===================================
+﻿..
+    The empty line below should not be removed. It is added such that the `rst_prolog`
+    is added before the :mod: directive. Otherwise, the rendering will show as a
+    paragraph instead of a header.
+
+:mod:`nvalchemi.dynamics`.SizeAwareSampler
+=================================================
 
 .. currentmodule:: nvalchemi.dynamics
 
+
 .. autoclass:: SizeAwareSampler
+    :members:
 
-   
-   .. automethod:: __init__
 
-   
-   .. rubric:: Methods
+.. raw:: html
 
-   .. autosummary::
-   
-      ~SizeAwareSampler.__init__
-      ~SizeAwareSampler.build_initial_batch
-      ~SizeAwareSampler.request_replacement
-      ~SizeAwareSampler.request_replacements
-      ~SizeAwareSampler.request_replacements_budget
-   
-   
-
-   
-   
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~SizeAwareSampler.exhausted
-      ~SizeAwareSampler.max_atoms
-      ~SizeAwareSampler.max_batch_size
-      ~SizeAwareSampler.max_edges
-   
-   
+    <div class="clearer"></div>

@@ -27,6 +27,8 @@ as `shifts` (Cartesian displacements) and
 `neighbor_list_shifts` (integer lattice indices) for periodicity.
 - **Optional system-level**: `energy`, `cell`, `pbc`, `stress`, `virial`, etc.
 
+For stress, virial, and pressure sign conventions, see {ref}`conventions`.
+
 All tensor fields use PyTorch tensors, so you can move them to GPU with `.to(device)` or
 use the mixin method {py:meth}`nvalchemi.data.data.DataMixin.to` for device/dtype changes.
 
@@ -414,3 +416,7 @@ entries then.
   (``basic/01_data_structures.py``) for a runnable script.
 - **API**: {py:mod}`nvalchemi.data` for the full API of AtomicData, Batch, and the
   zarr-based reader/writer and dataloader.
+- **Transforms**: See the [Transforms section](datapipes_guide) of the Data
+  Loading Pipeline guide for how to hook per-sample and per-batch transforms
+  into {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` and
+  {py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader`.

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.to\_local
+===============================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: to_local

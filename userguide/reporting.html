@@ -1,0 +1,1308 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Reporting &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/reporting';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
+    <link rel="prev" title="Hooks" href="hooks.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Reporting</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="reporting">
+<span id="reporting-guide"></span><h1>Reporting<a class="headerlink" href="#reporting" title="Link to this heading">#</a></h1>
+<p>Training runs and dynamics simulations both produce a constant stream of
+structured data: loss components, learning rates, gradient norms, energy
+trajectories, convergence fractions. Watching those numbers tells you whether a
+run is healthy, whether it is worth continuing, and whether a change made things
+better or worse. The problem is that wiring each metric into the lifecycle by
+hand — a hook per metric, one per backend — quickly becomes its own maintenance
+burden.</p>
+<p>Reporting solves this at the layer above individual hooks. Register a single
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.ReportingOrchestrator.html#nvalchemi.hooks.ReportingOrchestrator" title="nvalchemi.hooks.ReportingOrchestrator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReportingOrchestrator</span></code></a> and tell it which lifecycle
+stages and output backends you want. At each matching event it collects scalars
+from the hook context, assembles a structured payload, handles rank reduction,
+and fans the result out to every configured reporter. Training code does not
+change when you add, remove, or replace a backend.</p>
+<p>The design is deliberately minimal on the reporter side. The
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.Reporter.html#nvalchemi.hooks.Reporter" title="nvalchemi.hooks.Reporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reporter</span></code></a> protocol requires one method —
+<code class="docutils literal notranslate"><span class="pre">report(ctx,</span> <span class="pre">stage,</span> <span class="pre">state)</span></code>. That is enough to write a CSV exporter, a W&amp;B
+integration, a custom dashboard, or any other sink. The built-in reporters —
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.TensorBoardReporter.html#nvalchemi.hooks.TensorBoardReporter" title="nvalchemi.hooks.TensorBoardReporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorBoardReporter</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.RichReporter.html#nvalchemi.hooks.RichReporter" title="nvalchemi.hooks.RichReporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">RichReporter</span></code></a> — satisfy the same protocol as a
+custom one would, so switching or extending is a matter of swapping objects.</p>
+<section id="reporting-versus-logging">
+<h2>Reporting versus logging<a class="headerlink" href="#reporting-versus-logging" title="Link to this heading">#</a></h2>
+<p>Logging and reporting have different intent, and the distinction helps you
+choose the right tool for each output.</p>
+<p>Logging captures a direct stream of events — per-batch rows, per-graph
+observables, gradient statistics — in a form you can replay or audit after
+the run. Each record corresponds to one event and contains whatever that event
+produced. The built-in <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> for dynamics works this way: it writes one
+row per system per step with energy, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, temperature, and status counts.</p>
+<p>Reporting produces curated summaries. A reporter receives the hook context at a
+chosen cadence, decides which scalars to extract, optionally reduces them across
+ranks, and renders or serializes the result. Detail that does not belong in a
+summary is intentionally dropped. The output is a compact dashboard or analysis
+record, not a raw event log and so the interpretation would be reporting provides
+insight, whereas logging just provides data. The
+logger vs. reporter abstraction is backend agnostic, and so writing to CSV could
+be done by either, however if you need to communicate between ranks, or do some
+post-processing of the values, then write and use a reporter. More concretely,
+a reporter or a logger could write to a CSV file, but in the latter case each rank
+could write their own metrics asynchronously, while the former would provide the
+ability to reduce the metrics across all workers.</p>
+</section>
+<section id="how-reporting-works">
+<h2>How reporting works<a class="headerlink" href="#how-reporting-works" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.ReportingOrchestrator.html#nvalchemi.hooks.ReportingOrchestrator" title="nvalchemi.hooks.ReportingOrchestrator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReportingOrchestrator</span></code></a> is a standard hook — it
+goes in <code class="docutils literal notranslate"><span class="pre">hooks=[...]</span></code> alongside everything else. The role of the orchestrator
+is to act with the requested cadence on each provided reporter:</p>
+<ol class="arabic simple">
+<li><p>Updates shared <a class="reference internal" href="../modules/generated/nvalchemi.hooks.ReportingState.html#nvalchemi.hooks.ReportingState" title="nvalchemi.hooks.ReportingState"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReportingState</span></code></a> with an event
+count, timestamps, and a bounded recent-message buffer.</p></li>
+<li><p>Applies rank-zero gating for reporters that request it.</p></li>
+<li><p>Calls each reporter with <code class="docutils literal notranslate"><span class="pre">(ctx,</span> <span class="pre">stage,</span> <span class="pre">state)</span></code>.</p></li>
+<li><p>Applies the configured error policy if a reporter raises.</p></li>
+</ol>
+<figure class="align-default" id="id2">
+<div class="graphviz"><object data="../_images/graphviz-64c0677f07a4af11bc677395db5414ec32dae0a8.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">Reporting orchestrator flow</p></object></div>
+<figcaption>
+<p><span class="caption-text">Reporting orchestrator flow, from workflow to output.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Each reporter calls <a class="reference internal" href="../modules/generated/nvalchemi.hooks.collect_scalars.html#nvalchemi.hooks.collect_scalars" title="nvalchemi.hooks.collect_scalars"><code class="xref py py-func docutils literal notranslate"><span class="pre">collect_scalars()</span></code></a> to build a
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.ScalarSnapshot.html#nvalchemi.hooks.ScalarSnapshot" title="nvalchemi.hooks.ScalarSnapshot"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarSnapshot</span></code></a> — a frozen payload containing the
+stage name, wall-clock timestamp, elapsed time, event and step counters, rank,
+training epoch and batch metadata, and a flat dictionary of scalar values. Keys
+use slash-separated paths:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">loss/total</span></code>, <code class="docutils literal notranslate"><span class="pre">loss/{component}/unweighted</span></code>, <code class="docutils literal notranslate"><span class="pre">loss/{component}/weight</span></code> —
+from a composed loss</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">optimizer/0/lr</span></code>, <code class="docutils literal notranslate"><span class="pre">scheduler/0/lr</span></code> — learning rates from configured
+optimizers and schedulers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">training/progress_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">training/eta_s</span></code>, <code class="docutils literal notranslate"><span class="pre">training/steps_per_s</span></code> —
+workflow progress and throughput (when available)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">converged_fraction</span></code> — dynamics observables
+when enabled</p></li>
+</ul>
+<p>For distributed runs, all ranks independently collect their own scalar
+snapshot. What changes per-reporter is what happens after collection:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">requires_all_ranks</span> <span class="pre">=</span> <span class="pre">True</span></code> — all ranks participate in a collective
+reduction (mean, sum, min, or max). Once reduced, only rank zero calls
+<code class="docutils literal notranslate"><span class="pre">reporter.report()</span></code> with the merged snapshot; nonzero ranks return without
+writing.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rank_zero_only</span> <span class="pre">=</span> <span class="pre">True</span></code> — no reduction occurs. The orchestrator calls
+<code class="docutils literal notranslate"><span class="pre">reporter.report()</span></code> only on rank zero; nonzero ranks are skipped entirely.</p></li>
+<li><p>Neither flag set — each rank calls <code class="docutils literal notranslate"><span class="pre">reporter.report()</span></code> independently with
+its own local snapshot.</p></li>
+</ul>
+<p>Set <code class="docutils literal notranslate"><span class="pre">requires_all_ranks</span></code> when the output needs cross-rank agreement — a global
+mean loss, total throughput across all GPUs. Set <code class="docutils literal notranslate"><span class="pre">rank_zero_only</span></code> when
+independence is acceptable and parallel writes to the same destination must be
+avoided.</p>
+<figure class="align-default" id="id3">
+<div class="graphviz"><object data="../_images/graphviz-3153b53d9fdb86d8ec0ee551b012e1802d24e0ae.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">Distributed reporting reduction flow</p></object></div>
+<figcaption>
+<p><span class="caption-text">Distributed reporting: per-rank collection, reduction, and rank-zero write.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="getting-started">
+<h2>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading">#</a></h2>
+<p>The minimal setup is one orchestrator with the reporters you want. Both
+built-in reporters can be active at the same time and receive the same scalar
+payload independently:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReportingOrchestrator</span><span class="p">,</span> <span class="n">RichReporter</span><span class="p">,</span> <span class="n">TensorBoardReporter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStrategy</span>
+
+<span class="n">reporting</span> <span class="o">=</span> <span class="n">ReportingOrchestrator</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">TensorBoardReporter</span><span class="p">(</span><span class="s2">&quot;runs/my-experiment&quot;</span><span class="p">),</span>
+        <span class="n">RichReporter</span><span class="p">(),</span>
+    <span class="p">],</span>
+    <span class="n">stages</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span><span class="p">},</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="p">(</span>
+    <span class="o">...</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">reporting</span><span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">stages</span></code> controls which lifecycle stages trigger a report. The default is
+<code class="docutils literal notranslate"><span class="pre">{&quot;AFTER_OPTIMIZER_STEP&quot;,</span> <span class="pre">&quot;AFTER_STEP&quot;}</span></code>, which covers both training and
+dynamics workflows. Override it when you want reports at a different cadence
+— for example, <code class="docutils literal notranslate"><span class="pre">{&quot;AFTER_EPOCH&quot;}</span></code> for epoch-level summaries only.</p>
+<p><code class="docutils literal notranslate"><span class="pre">frequency</span></code> throttles reporting to every N events at the configured stages.
+For a long run where reporting every optimizer step adds unnecessary overhead,
+<code class="docutils literal notranslate"><span class="pre">frequency=10</span></code> or higher keeps the output readable without missing trends.</p>
+<p><code class="docutils literal notranslate"><span class="pre">error_policy</span></code> controls what happens if a reporter raises. The default is
+<code class="docutils literal notranslate"><span class="pre">ReportingErrorPolicy.RAISE</span></code>. Set it to <code class="docutils literal notranslate"><span class="pre">&quot;warn&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;ignore&quot;</span></code> when a broken
+reporter should not abort the run:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReportingErrorPolicy</span><span class="p">,</span> <span class="n">ReportingOrchestrator</span>
+
+<span class="n">reporting</span> <span class="o">=</span> <span class="n">ReportingOrchestrator</span><span class="p">(</span>
+    <span class="n">reporters</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
+    <span class="n">stages</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span><span class="p">},</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">error_policy</span><span class="o">=</span><span class="s2">&quot;warn&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="built-in-reporters">
+<h2>Built-in reporters<a class="headerlink" href="#built-in-reporters" title="Link to this heading">#</a></h2>
+<section id="tensorboardreporter">
+<h3>TensorBoardReporter<a class="headerlink" href="#tensorboardreporter" title="Link to this heading">#</a></h3>
+<p>Use <a class="reference internal" href="../modules/generated/nvalchemi.hooks.TensorBoardReporter.html#nvalchemi.hooks.TensorBoardReporter" title="nvalchemi.hooks.TensorBoardReporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorBoardReporter</span></code></a> when you want persistent,
+replayable training curves — for comparing runs, archiving results, or
+post-hoc analysis with TensorBoard’s UI or any tool that reads event files.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorBoardReporter</span>
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">TensorBoardReporter</span><span class="p">(</span>
+    <span class="s2">&quot;runs/my-experiment&quot;</span><span class="p">,</span>
+    <span class="n">tag_prefix</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">,</span>  <span class="c1"># prepended to all tags: &quot;train/loss/total&quot;, etc.</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>          <span class="c1"># flush after every event</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Each reporting event writes one scalar per key in the snapshot using the step
+count as the global step. Keys become TensorBoard tags directly: <code class="docutils literal notranslate"><span class="pre">loss/total</span></code>,
+<code class="docutils literal notranslate"><span class="pre">optimizer/0/lr</span></code>, <code class="docutils literal notranslate"><span class="pre">training/progress_fraction</span></code>, and so on. The writer
+initializes lazily on the first event, so constructing the reporter before the
+run starts is safe.</p>
+<p>For distributed runs, set <code class="docutils literal notranslate"><span class="pre">rank_reduction</span></code> to control how scalars are combined
+before rank zero writes them. When <code class="docutils literal notranslate"><span class="pre">None</span></code> (the default), each rank writes
+independently. Pass <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code> to reduce across all ranks — all ranks
+must report the same scalar keys when reduction is enabled.</p>
+<p><code class="docutils literal notranslate"><span class="pre">TensorBoardReporter</span></code> requires <code class="docutils literal notranslate"><span class="pre">tensorboard</span></code> to be installed. Construction
+raises if the dependency is missing.</p>
+</section>
+<section id="richreporter">
+<h3>RichReporter<a class="headerlink" href="#richreporter" title="Link to this heading">#</a></h3>
+<p>Use <a class="reference internal" href="../modules/generated/nvalchemi.hooks.RichReporter.html#nvalchemi.hooks.RichReporter" title="nvalchemi.hooks.RichReporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">RichReporter</span></code></a> when you want to watch a run in
+progress. It renders scalar snapshots as a live terminal dashboard using Rich’s
+<code class="docutils literal notranslate"><span class="pre">Live</span></code> display, showing loss curves, learning rates, throughput, and ETA in
+real time without checking a file or browser.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">RichReporter</span>
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span>
+    <span class="n">layout</span><span class="o">=</span><span class="s2">&quot;training&quot;</span><span class="p">,</span>     <span class="c1"># built-in layout; see below for options</span>
+    <span class="n">history_size</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>      <span class="c1"># (step, value) points retained per metric</span>
+    <span class="n">precision</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>           <span class="c1"># significant digits in the latest-value table</span>
+    <span class="n">refresh_per_second</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">layout</span></code> parameter controls which dashboard surface is rendered. Pass
+<code class="docutils literal notranslate"><span class="pre">&quot;training&quot;</span></code> for a training-focused view, <code class="docutils literal notranslate"><span class="pre">&quot;dynamics&quot;</span></code> for a dynamics
+simulation view, <code class="docutils literal notranslate"><span class="pre">None</span></code> for automatic selection based on the first context
+received, or a custom <code class="docutils literal notranslate"><span class="pre">RichLayout</span></code> object to build your own surface. Layout
+design is covered in detail in <a class="reference internal" href="#designing-rich-layouts">Designing Rich layouts</a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">plot_keys</span></code>, <code class="docutils literal notranslate"><span class="pre">max_plots</span></code>, and <code class="docutils literal notranslate"><span class="pre">plot_height</span></code> control which metrics get
+time-series panels and how large those panels are. <code class="docutils literal notranslate"><span class="pre">rank_reduction</span></code>,
+<code class="docutils literal notranslate"><span class="pre">custom_scalars</span></code>, <code class="docutils literal notranslate"><span class="pre">include_losses</span></code>, and <code class="docutils literal notranslate"><span class="pre">include_optimizer_lrs</span></code> behave the
+same as for <code class="docutils literal notranslate"><span class="pre">TensorBoardReporter</span></code>.</p>
+<p>You can preview any layout without running a workflow:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">RichReporter</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="s2">&quot;training&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;training dashboard&quot;</span><span class="p">)</span>
+<span class="n">RichReporter</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="s2">&quot;dynamics&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;dynamics dashboard&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Those two calls render the dashboards below. Both share the same skeleton — a
+column of at-a-glance value panels on the left, time-series plots on the right,
+and a <code class="docutils literal notranslate"><span class="pre">Messages</span></code> panel for reporter output — and differ in what they choose to
+put in each slot:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">&quot;training&quot;</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">&quot;dynamics&quot;</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Value panels</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Latest</span> <span class="pre">Metrics</span></code>, <code class="docutils literal notranslate"><span class="pre">Progress</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Observables</span></code>, <code class="docutils literal notranslate"><span class="pre">Convergence</span> <span class="pre">/</span> <span class="pre">Pipeline</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Plot panel</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Training</span> <span class="pre">Curves</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Dynamics</span> <span class="pre">Traces</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Plotted by default</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">loss/total</span></code>, <code class="docutils literal notranslate"><span class="pre">optimizer/lr</span></code>, <code class="docutils literal notranslate"><span class="pre">scheduler/lr</span></code>, per-component losses</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_drift</span></code>, <code class="docutils literal notranslate"><span class="pre">converged_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">active_fraction</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Question it answers</p></td>
+<td><p>Is the loss coming down, and how long is left?</p></td>
+<td><p>Is the simulation healthy, and how much of the batch has converged?</p></td>
+</tr>
+</tbody>
+</table>
+<p>The <code class="docutils literal notranslate"><span class="pre">&quot;training&quot;</span></code> layout leads with the loss breakdown, learning rates, and
+progress/ETA — the things you watch to decide whether a run is worth continuing:</p>
+<figure class="align-default" id="id4">
+<a class="reference internal image-reference" href="../_images/rich_reporter_training.svg"><img alt="RichReporter training layout showing loss curves, learning rate, and progress" src="../_images/rich_reporter_training.svg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The built-in <code class="docutils literal notranslate"><span class="pre">&quot;training&quot;</span></code> layout, rendered by
+<code class="docutils literal notranslate"><span class="pre">RichReporter.preview(layout=&quot;training&quot;)</span></code>.</span><a class="headerlink" href="#id4" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>The <code class="docutils literal notranslate"><span class="pre">&quot;dynamics&quot;</span></code> layout swaps those for simulation observables and a
+convergence/pipeline panel, since a batched relaxation is judged on how many
+systems have finished rather than on a single scalar going down:</p>
+<figure class="align-default" id="id5">
+<a class="reference internal image-reference" href="../_images/rich_reporter_dynamics.svg"><img alt="RichReporter dynamics layout showing energy, fmax, temperature, and convergence" src="../_images/rich_reporter_dynamics.svg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The built-in <code class="docutils literal notranslate"><span class="pre">&quot;dynamics&quot;</span></code> layout, rendered by
+<code class="docutils literal notranslate"><span class="pre">RichReporter.preview(layout=&quot;dynamics&quot;)</span></code>.</span><a class="headerlink" href="#id5" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Neither is fixed: <code class="docutils literal notranslate"><span class="pre">plot_keys</span></code>, <code class="docutils literal notranslate"><span class="pre">max_plots</span></code>, and <code class="docutils literal notranslate"><span class="pre">plot_height</span></code> retune the plot
+panel without writing a layout, and a custom
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.RichLayout.html#nvalchemi.hooks.RichLayout" title="nvalchemi.hooks.RichLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RichLayout</span></code></a> replaces the surface entirely (see
+<a class="reference internal" href="#designing-rich-layouts">Designing Rich layouts</a>).</p>
+<p>For an animated live-data demo using synthetic metrics:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/intermediate/07_rich_training_reporting.py<span class="w"> </span>--steps<span class="w"> </span><span class="m">80</span><span class="w"> </span>--delay<span class="w"> </span><span class="m">0</span>.05
+</pre></div>
+</div>
+</section>
+</section>
+<section id="designing-rich-layouts">
+<span id="id1"></span><h2>Designing Rich layouts<a class="headerlink" href="#designing-rich-layouts" title="Link to this heading">#</a></h2>
+<p>The terminal dashboard is the most visible reporting surface during a run. A
+layout that surfaces the right metrics at a glance — loss trajectory, learning
+rate, convergence fraction, throughput — makes it significantly easier to catch
+problems early and understand what a run is doing. The layout system is designed
+so you can build the dashboard that suits your workflow and workstyle: a
+validation-focused view for fine-tuning, a compact single-metric status bar for
+debugging, or a fully custom multi-panel surface for complex pipelines.</p>
+<p><code class="docutils literal notranslate"><span class="pre">RichReporter</span></code> manages everything that is not rendering: the Rich <code class="docutils literal notranslate"><span class="pre">Live</span></code>
+context, scalar collection, history retention, rank filtering, and refresh
+cadence. Your layout is a rendering policy — given the current snapshot and
+history, return a Rich renderable. It owns no lifecycle, no state, no
+distributed logic.</p>
+<section id="built-in-layouts">
+<h3>Built-in layouts<a class="headerlink" href="#built-in-layouts" title="Link to this heading">#</a></h3>
+<section id="training-layout">
+<h4>Training layout<a class="headerlink" href="#training-layout" title="Link to this heading">#</a></h4>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.TrainingRichLayout.html#nvalchemi.hooks.TrainingRichLayout" title="nvalchemi.hooks.TrainingRichLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingRichLayout</span></code></a> (<code class="docutils literal notranslate"><span class="pre">layout=&quot;training&quot;</span></code>) is
+optimized for monitoring an active training run. It surfaces:</p>
+<ul class="simple">
+<li><p><strong>Latest metrics</strong> — a table of current scalars in display order, updated
+at each reporting event</p></li>
+<li><p><strong>Progress sidebar</strong> — step count, epoch, throughput, and ETA</p></li>
+<li><p><strong>Training curves</strong> — time-series plots for <code class="docutils literal notranslate"><span class="pre">loss/total</span></code>, learning rate,
+and per-component losses</p></li>
+<li><p><strong>Messages panel</strong> — recent reporter messages and warnings</p></li>
+</ul>
+<p>Use <code class="docutils literal notranslate"><span class="pre">&quot;training&quot;</span></code> for any training or fine-tuning workflow. It automatically
+picks up all loss components from a composed loss, learning rates from all
+configured optimizers and schedulers, and progress information when the
+training context exposes it. Pin it explicitly when you do not want automatic
+layout selection from the first context:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="s2">&quot;training&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="dynamics-layout">
+<h4>Dynamics layout<a class="headerlink" href="#dynamics-layout" title="Link to this heading">#</a></h4>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.DynamicsRichLayout.html#nvalchemi.hooks.DynamicsRichLayout" title="nvalchemi.hooks.DynamicsRichLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsRichLayout</span></code></a> (<code class="docutils literal notranslate"><span class="pre">layout=&quot;dynamics&quot;</span></code>) is
+optimized for monitoring a molecular dynamics or geometry optimization
+simulation. It surfaces:</p>
+<ul class="simple">
+<li><p><strong>Observables</strong> — energy, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, temperature, convergence fraction</p></li>
+<li><p><strong>Pipeline sidebar</strong> — active count, graduated count, per-status breakdown</p></li>
+<li><p><strong>Dynamics traces</strong> — time-series plots for energy, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, temperature,
+and convergence fraction</p></li>
+<li><p><strong>Messages panel</strong> — recent reporter messages and warnings</p></li>
+</ul>
+<p>This layout also sets <code class="docutils literal notranslate"><span class="pre">include_dynamics_scalars</span> <span class="pre">=</span> <span class="pre">True</span></code>, which tells
+<code class="docutils literal notranslate"><span class="pre">RichReporter</span></code> to collect default dynamics observables from the context
+automatically — without this, energy, temperature, and convergence would not
+appear in the snapshot.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="s2">&quot;dynamics&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="subclassing-baserichlayout">
+<h3>Subclassing BaseRichLayout<a class="headerlink" href="#subclassing-baserichlayout" title="Link to this heading">#</a></h3>
+<p>When none of the built-in layouts fits your workflow but you want the same
+general structure — header, latest-metric table, time-series plots, messages
+panel — subclass <a class="reference internal" href="../modules/generated/nvalchemi.hooks.BaseRichLayout.html#nvalchemi.hooks.BaseRichLayout" title="nvalchemi.hooks.BaseRichLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseRichLayout</span></code></a>. The base class
+owns the panel structure and Rich rendering; you supply the preferred plot
+metrics, panel titles, and preview curves.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseRichLayout</span><span class="p">,</span> <span class="n">RichReporter</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationRichLayout</span><span class="p">(</span><span class="n">BaseRichLayout</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span>
+            <span class="n">preferred_plot_keys</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;validation/loss&quot;</span><span class="p">,</span> <span class="s2">&quot;validation/mae&quot;</span><span class="p">),</span>
+            <span class="n">latest_title</span><span class="o">=</span><span class="s2">&quot;Validation Metrics&quot;</span><span class="p">,</span>
+            <span class="n">history_title</span><span class="o">=</span><span class="s2">&quot;Validation Curves&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_history</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;validation/loss&quot;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.62</span><span class="p">,</span> <span class="mf">0.51</span><span class="p">,</span> <span class="mf">0.44</span><span class="p">),</span>
+            <span class="s2">&quot;validation/mae&quot;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.31</span><span class="p">,</span> <span class="mf">0.24</span><span class="p">,</span> <span class="mf">0.19</span><span class="p">,</span> <span class="mf">0.16</span><span class="p">),</span>
+        <span class="p">}</span>
+
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">ValidationRichLayout</span><span class="p">())</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ValidationRichLayout</span></code> inherits the full <code class="docutils literal notranslate"><span class="pre">BaseRichLayout</span></code> panel structure — a
+table of latest scalars, time-series plots, and a messages panel — but wires it
+to validation metrics rather than training ones. Each constructor argument
+controls a distinct part of that structure:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">name</span></code> — layout identifier used in log output and error traces</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">preferred_plot_keys</span></code> — metrics that get dedicated time-series panels, listed
+in display order; other scalars appear in the table but not the plots</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">latest_title</span></code> / <code class="docutils literal notranslate"><span class="pre">history_title</span></code> — section headers for the scalar table and
+the time-series plots region respectively</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default_preview_history</span></code> — synthetic <code class="docutils literal notranslate"><span class="pre">(step,</span> <span class="pre">value)</span></code> sequences used by
+<code class="docutils literal notranslate"><span class="pre">RichReporter.preview()</span></code> to render a static mock-up without a live run</p></li>
+</ul>
+<p>Override the preview metadata methods when the default training context does
+not match your workflow. A validation-only layout, for example, may not have
+a meaningful epoch or batch count:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ValidationRichLayout</span><span class="p">(</span><span class="n">BaseRichLayout</span><span class="p">):</span>
+    <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;AFTER_VALIDATION&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_batch_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+</pre></div>
+</div>
+<p>Set <code class="docutils literal notranslate"><span class="pre">include_dynamics_scalars=True</span></code> in the <code class="docutils literal notranslate"><span class="pre">super().__init__(...)</span></code> call if
+your workflow also needs dynamics observables in the snapshot.</p>
+<p>Once the layout class is defined, pass it as the <code class="docutils literal notranslate"><span class="pre">layout</span></code> argument to
+<code class="docutils literal notranslate"><span class="pre">RichReporter</span></code>. The layout and reporter are independent — the layout renders;
+the reporter owns the <code class="docutils literal notranslate"><span class="pre">Live</span></code> context, history retention, and refresh cadence:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReportingOrchestrator</span><span class="p">,</span> <span class="n">RichReporter</span>
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">ValidationRichLayout</span><span class="p">())</span>
+<span class="n">reporting</span> <span class="o">=</span> <span class="n">ReportingOrchestrator</span><span class="p">([</span><span class="n">reporter</span><span class="p">],</span> <span class="n">stages</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;AFTER_VALIDATION&quot;</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="implementing-richlayout-directly">
+<h3>Implementing RichLayout directly<a class="headerlink" href="#implementing-richlayout-directly" title="Link to this heading">#</a></h3>
+<p>When the header-table-plots structure does not fit — a compact single-line
+status bar, a side-by-side rank comparison, a custom pipeline-status panel —
+implement <a class="reference internal" href="../modules/generated/nvalchemi.hooks.RichLayout.html#nvalchemi.hooks.RichLayout" title="nvalchemi.hooks.RichLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RichLayout</span></code></a> directly. This gives you full
+control over the rendered surface while <code class="docutils literal notranslate"><span class="pre">RichReporter</span></code> still manages everything
+else: <code class="docutils literal notranslate"><span class="pre">Live</span></code>, scalar collection, history retention, rank filtering, and refresh.</p>
+<p>The protocol requires five methods and one class attribute:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">RichReporter</span><span class="p">,</span> <span class="n">ScalarSnapshot</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks.reporting.layouts</span><span class="w"> </span><span class="kn">import</span> <span class="n">RichMetricHistory</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CompactLayout</span><span class="p">:</span>
+    <span class="n">include_dynamics_scalars</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># True to add dynamics observables</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_history</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;my/metric&quot;</span><span class="p">:</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">)}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">3</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_batch_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">128</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">render</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">snapshot</span><span class="p">:</span> <span class="n">ScalarSnapshot</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">RichMetricHistory</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_scalars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">plot_keys</span><span class="p">,</span>
+        <span class="n">max_plots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">plot_height</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="o">...</span>  <span class="c1"># return a Rich renderable</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">snapshot</span></code> is the latest <a class="reference internal" href="../modules/generated/nvalchemi.hooks.ScalarSnapshot.html#nvalchemi.hooks.ScalarSnapshot" title="nvalchemi.hooks.ScalarSnapshot"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarSnapshot</span></code></a>, or
+<code class="docutils literal notranslate"><span class="pre">None</span></code> before the first reporting event — always guard against <code class="docutils literal notranslate"><span class="pre">None</span></code>. Use
+<code class="docutils literal notranslate"><span class="pre">snapshot.scalars</span></code> for current values, <code class="docutils literal notranslate"><span class="pre">snapshot.messages</span></code> for recent reporter
+messages or warnings. <code class="docutils literal notranslate"><span class="pre">history</span></code> maps metric keys to sequences of
+<code class="docutils literal notranslate"><span class="pre">(step,</span> <span class="pre">value)</span></code> tuples, useful for drawing trend lines or sparklines. The
+remaining parameters are display preferences passed through from <code class="docutils literal notranslate"><span class="pre">RichReporter</span></code>
+and controllable by the user at reporter-construction time.</p>
+<p>Do not create a nested <code class="docutils literal notranslate"><span class="pre">Rich.Live</span></code> inside <code class="docutils literal notranslate"><span class="pre">render</span></code>. <code class="docutils literal notranslate"><span class="pre">RichReporter</span></code> owns the
+<code class="docutils literal notranslate"><span class="pre">Live</span></code> context; your layout’s job is to return a renderable, nothing else.</p>
+<p>The following Rich components cover most layout needs:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Layout</span></code></p></td>
+<td><p>Split the terminal into named regions for independent panels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Panel</span></code></p></td>
+<td><p>Frame a region, table, or group with a title and border.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Table</span></code></p></td>
+<td><p>Show latest scalar values, rank summaries, or pipeline status.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Text</span></code></p></td>
+<td><p>Build styled labels and compact status lines.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Group</span></code></p></td>
+<td><p>Stack multiple renderables inside one layout region.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Columns</span></code></p></td>
+<td><p>Arrange small repeated panels, such as per-rank summaries.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Align</span></code>, <code class="docutils literal notranslate"><span class="pre">Padding</span></code></p></td>
+<td><p>Position or pad a renderable without a new region.</p></td>
+</tr>
+</tbody>
+</table>
+<p>A complete minimal layout that renders all current scalars in a compact table:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">rich</span><span class="w"> </span><span class="kn">import</span> <span class="n">box</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.console</span><span class="w"> </span><span class="kn">import</span> <span class="n">Group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.layout</span><span class="w"> </span><span class="kn">import</span> <span class="n">Layout</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.panel</span><span class="w"> </span><span class="kn">import</span> <span class="n">Panel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.text</span><span class="w"> </span><span class="kn">import</span> <span class="n">Text</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">RichReporter</span><span class="p">,</span> <span class="n">ScalarSnapshot</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks.reporting.layouts</span><span class="w"> </span><span class="kn">import</span> <span class="n">RichMetricHistory</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CompactLayout</span><span class="p">:</span>
+    <span class="n">include_dynamics_scalars</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_history</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;my/metric&quot;</span><span class="p">:</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">)}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">3</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_preview_batch_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">128</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">render</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">snapshot</span><span class="p">:</span> <span class="n">ScalarSnapshot</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">RichMetricHistory</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_scalars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">plot_keys</span><span class="p">,</span>
+        <span class="n">max_plots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">plot_height</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Layout</span><span class="p">:</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">Layout</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;root&quot;</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">split_column</span><span class="p">(</span>
+            <span class="n">Layout</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;header&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">3</span><span class="p">),</span>
+            <span class="n">Layout</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;body&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">subtitle</span> <span class="o">=</span> <span class="n">Text</span><span class="p">(</span>
+            <span class="s2">&quot;waiting for metrics&quot;</span> <span class="k">if</span> <span class="n">snapshot</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">stage</span>
+        <span class="p">)</span>
+        <span class="n">layout</span><span class="p">[</span><span class="s2">&quot;header&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">Panel</span><span class="p">(</span><span class="n">Group</span><span class="p">(</span><span class="n">Text</span><span class="p">(</span><span class="n">title</span><span class="p">),</span> <span class="n">subtitle</span><span class="p">),</span> <span class="n">box</span><span class="o">=</span><span class="n">box</span><span class="o">.</span><span class="n">SIMPLE</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">box</span><span class="o">=</span><span class="n">box</span><span class="o">.</span><span class="n">SIMPLE_HEAD</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Metric&quot;</span><span class="p">)</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Latest&quot;</span><span class="p">,</span> <span class="n">justify</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">snapshot</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span><span class="s2">&quot;(waiting)&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">snapshot</span><span class="o">.</span><span class="n">scalars</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+                <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.</span><span class="si">{</span><span class="n">precision</span><span class="si">}</span><span class="s2">g</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">layout</span><span class="p">[</span><span class="s2">&quot;body&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Panel</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Summary&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">layout</span>
+
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">CompactLayout</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="previewing-layouts">
+<h3>Previewing layouts<a class="headerlink" href="#previewing-layouts" title="Link to this heading">#</a></h3>
+<p>Any layout can be previewed as a static render without starting a workflow.
+This is the right way to tune panel structure, verify that metric labels look
+right, and check that <code class="docutils literal notranslate"><span class="pre">default_preview_history</span></code> curves are representative:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">RichReporter</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="s2">&quot;training&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;training dashboard&quot;</span><span class="p">)</span>
+<span class="n">RichReporter</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">ValidationRichLayout</span><span class="p">(),</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;validation run&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For an animated preview with synthetic metrics updating in real time, the
+bundled example covers both built-in layouts and accepts <code class="docutils literal notranslate"><span class="pre">--steps</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--delay</span></code> to control how long it runs:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/intermediate/07_rich_training_reporting.py<span class="w"> </span>--steps<span class="w"> </span><span class="m">80</span><span class="w"> </span>--delay<span class="w"> </span><span class="m">0</span>.05
+</pre></div>
+</div>
+</section>
+</section>
+<section id="writing-your-own-reporter">
+<h2>Writing your own reporter<a class="headerlink" href="#writing-your-own-reporter" title="Link to this heading">#</a></h2>
+<p>Any object with a <code class="docutils literal notranslate"><span class="pre">report(ctx,</span> <span class="pre">stage,</span> <span class="pre">state)</span></code> method satisfies the
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.Reporter.html#nvalchemi.hooks.Reporter" title="nvalchemi.hooks.Reporter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reporter</span></code></a> protocol. Where a logger writes one record
+per event without filtering, a reporter decides what to write and when — the
+result is a curated summary, not a raw event stream.</p>
+<p>The example below writes per-epoch summary statistics rather than one row per
+reporting event. It accumulates scalar snapshots during the epoch, then flushes
+a single mean-per-metric row when an epoch boundary is detected:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">collect_scalars</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">EpochSummaryReporter</span><span class="p">:</span>
+    <span class="n">rank_zero_only</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_keys</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_flush</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">snapshot</span> <span class="o">=</span> <span class="n">collect_scalars</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">epoch</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_flush</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">epoch</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">scalars</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="s2">&quot;epoch&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys</span><span class="p">)</span>
+        <span class="n">means</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="n">means</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="k">if</span> <span class="n">values</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_epoch</span><span class="p">]</span> <span class="o">+</span> <span class="n">means</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The same protocol works for any experiment-tracking backend. A W&amp;B integration
+follows the same skeleton: <code class="docutils literal notranslate"><span class="pre">wandb.init()</span></code> in <code class="docutils literal notranslate"><span class="pre">__enter__</span></code>, <code class="docutils literal notranslate"><span class="pre">run.log(scalars,</span> <span class="pre">step=...)</span></code> in <code class="docutils literal notranslate"><span class="pre">report</span></code>, and <code class="docutils literal notranslate"><span class="pre">run.finish()</span></code> in <code class="docutils literal notranslate"><span class="pre">__exit__</span></code>. The payload in
+<code class="docutils literal notranslate"><span class="pre">snapshot.scalars</span></code> maps directly to what W&amp;B, MLflow, and similar tools expect.</p>
+<p>Three optional attributes integrate with the orchestrator:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rank_zero_only</span> <span class="pre">=</span> <span class="pre">True</span></code> — the orchestrator skips this reporter on nonzero
+ranks entirely. Use this for any reporter that writes to a file or serial
+destination.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">requires_all_ranks</span> <span class="pre">=</span> <span class="pre">True</span></code> — the reporter participates in a distributed
+collective reduction before receiving the final snapshot. Use this when
+you want cross-rank metrics such as the mean loss across all GPUs.</p></li>
+<li><p>Context manager protocol (<code class="docutils literal notranslate"><span class="pre">__enter__</span></code> / <code class="docutils literal notranslate"><span class="pre">__exit__</span></code>) or <code class="docutils literal notranslate"><span class="pre">close()</span></code> — the
+orchestrator calls these at the boundaries of the training run, so file
+handles, writers, and external connections open and close cleanly.</p></li>
+</ul>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.collect_scalars.html#nvalchemi.hooks.collect_scalars" title="nvalchemi.hooks.collect_scalars"><code class="xref py py-func docutils literal notranslate"><span class="pre">collect_scalars()</span></code></a> accepts the same <code class="docutils literal notranslate"><span class="pre">include_losses</span></code>,
+<code class="docutils literal notranslate"><span class="pre">include_optimizer_lrs</span></code>, <code class="docutils literal notranslate"><span class="pre">include_dynamics</span></code>, and <code class="docutils literal notranslate"><span class="pre">custom_scalars</span></code> flags as the
+built-in reporters, so you get the same structured payload with a single call.</p>
+<p>To add messages visible in the Rich dashboard or accessible to downstream
+reporters, write to <code class="docutils literal notranslate"><span class="pre">state.add_message(level,</span> <span class="pre">text,</span> <span class="pre">reporter=self)</span></code>. Messages
+are bounded by <code class="docutils literal notranslate"><span class="pre">state.max_messages</span></code> and surface in <code class="docutils literal notranslate"><span class="pre">snapshot.messages</span></code> on
+subsequent events.</p>
+<p>Register a custom reporter the same way as any built-in one:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReportingOrchestrator</span><span class="p">,</span> <span class="n">RichReporter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStrategy</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="p">(</span>
+    <span class="o">...</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">ReportingOrchestrator</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">EpochSummaryReporter</span><span class="p">(</span><span class="s2">&quot;metrics.csv&quot;</span><span class="p">),</span> <span class="n">RichReporter</span><span class="p">()],</span>
+            <span class="n">stages</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;AFTER_OPTIMIZER_STEP&quot;</span><span class="p">},</span>
+            <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<section id="adding-custom-scalars">
+<h3>Adding custom scalars<a class="headerlink" href="#adding-custom-scalars" title="Link to this heading">#</a></h3>
+<p>Both built-in reporters and custom reporters accept a <code class="docutils literal notranslate"><span class="pre">custom_scalars</span></code> mapping
+that adds metrics beyond what automatic collection covers. Each entry maps a
+string key to a callable with signature <code class="docutils literal notranslate"><span class="pre">(ctx,</span> <span class="pre">stage)</span> <span class="pre">-&gt;</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">Mapping</span> <span class="pre">|</span> <span class="pre">None</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorBoardReporter</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gradient_norm</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">total_sq</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">norm</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">total_sq</span> <span class="o">**</span> <span class="mf">0.5</span>
+
+
+<span class="n">reporter</span> <span class="o">=</span> <span class="n">TensorBoardReporter</span><span class="p">(</span>
+    <span class="s2">&quot;runs/example&quot;</span><span class="p">,</span>
+    <span class="n">custom_scalars</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;diagnostics/grad_norm&quot;</span><span class="p">:</span> <span class="n">gradient_norm</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A callback that returns <code class="docutils literal notranslate"><span class="pre">None</span></code> is silently omitted from the snapshot — use
+this to guard against missing context fields without raising.</p>
+<p>To suppress automatic scalar collection and use only custom scalars, set
+<code class="docutils literal notranslate"><span class="pre">include_losses=False</span></code> and <code class="docutils literal notranslate"><span class="pre">include_optimizer_lrs=False</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span>
+    <span class="n">include_losses</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">include_optimizer_lrs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">custom_scalars</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;diagnostics/grad_norm&quot;</span><span class="p">:</span> <span class="n">gradient_norm</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../modules/hooks.html"><span class="doc">Hooks — Core Framework</span></a> — <code class="docutils literal notranslate"><span class="pre">Reporter</span></code> protocol, <code class="docutils literal notranslate"><span class="pre">ScalarSnapshot</span></code>,
+<code class="docutils literal notranslate"><span class="pre">collect_scalars</span></code>, and <code class="docutils literal notranslate"><span class="pre">ScalarCallback</span></code> API reference</p></li>
+<li><p><a class="reference internal" href="hooks.html"><span class="doc">Hooks</span></a> — hook lifecycle and <code class="docutils literal notranslate"><span class="pre">TrainContext</span></code></p></li>
+<li><p><a class="reference internal" href="training.html"><span class="doc">Training</span></a> — training lifecycle stages and where reporting fits</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="hooks.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Hooks</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="dynamics.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Dynamics: Optimization and Molecular Dynamics</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reporting-versus-logging">Reporting versus logging</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-reporting-works">How reporting works</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#getting-started">Getting started</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-reporters">Built-in reporters</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensorboardreporter">TensorBoardReporter</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#richreporter">RichReporter</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designing-rich-layouts">Designing Rich layouts</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-layouts">Built-in layouts</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#training-layout">Training layout</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#dynamics-layout">Dynamics layout</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#subclassing-baserichlayout">Subclassing BaseRichLayout</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementing-richlayout-directly">Implementing RichLayout directly</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#previewing-layouts">Previewing layouts</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-your-own-reporter">Writing your own reporter</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-custom-scalars">Adding custom scalars</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/reporting.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

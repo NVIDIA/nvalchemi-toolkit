@@ -1,0 +1,832 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.losses.schedules &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/losses/schedules';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.losses.schedules</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sa">r</span><span class="sd">&quot;&quot;&quot;Concrete weight schedules for loss functions.</span>
+
+<span class="sd">Four Pydantic-validated schedules are provided: :class:`ConstantWeight`,</span>
+<span class="sd">:class:`LinearWeight`, :class:`CosineWeight`, and :class:`PiecewiseWeight`.</span>
+<span class="sd">Each satisfies the runtime-checkable</span>
+<span class="sd">:class:`~nvalchemi.training.losses.base.LossWeightSchedule` protocol and</span>
+<span class="sd">can be supplied inside :class:`ComposedLossFunction`&#39;s ``weights``</span>
+<span class="sd">sequence or on the left of ``schedule * leaf``.</span>
+
+<span class="sd">The concrete schedules always receive both the global step and epoch.</span>
+<span class="sd">When ``per_epoch=False`` (the default), schedule windows and boundaries</span>
+<span class="sd">advance by global step. When ``per_epoch=True``, they advance by epoch,</span>
+<span class="sd">which lets loss weights follow optimizers or learning-rate schedulers</span>
+<span class="sd">that update once per epoch.</span>
+
+<span class="sd">Notation</span>
+<span class="sd">--------</span>
+<span class="sd">Each schedule maps a scalar schedule index :math:`t` to a weight</span>
+<span class="sd">:math:`w(t)`. :math:`t` is the global step when ``per_epoch=False`` (the</span>
+<span class="sd">default) and the epoch when ``per_epoch=True``, and :math:`T` denotes the</span>
+<span class="sd">``num_steps`` window length of the ramp schedules.</span>
+
+<span class="sd">Serialization note</span>
+<span class="sd">------------------</span>
+
+<span class="sd">Schedules live in :class:`ComposedLossFunction`&#39;s ``weights`` argument</span>
+<span class="sd">rather than on leaves, and are reconstructed by the upstream</span>
+<span class="sd">``TrainingStrategy`` from their ``(instance, spec)`` pair — the same</span>
+<span class="sd">pattern used for models and optimizers (see</span>
+<span class="sd">:mod:`nvalchemi.training._checkpoint`). A concrete schedule class still</span>
+<span class="sd">round-trips standalone via :func:`~nvalchemi.training.create_model_spec`.</span>
+
+<span class="sd">Adding a new schedule</span>
+<span class="sd">---------------------</span>
+
+<span class="sd">You can write any callable ``(step: int, epoch: int) -&gt; float`` with a</span>
+<span class="sd">``per_epoch`` attribute and it will satisfy the</span>
+<span class="sd">:class:`~nvalchemi.training.losses.base.LossWeightSchedule` protocol.</span>
+
+<span class="sd">To participate in :class:`~nvalchemi.training.strategy.TrainingStrategy`</span>
+<span class="sd">checkpointing, custom schedule classes must also be spec-serializable.</span>
+<span class="sd">Custom schedule classes must implement ``to_spec()`` returning a</span>
+<span class="sd">:class:`~nvalchemi.training._spec.BaseSpec` so strategy checkpoints can</span>
+<span class="sd">rebuild them. The built-in Pydantic schedule base provides this method</span>
+<span class="sd">from ``model_dump()``.</span>
+
+<span class="sd">Alternatively, subclass</span>
+<span class="sd">:class:`~nvalchemi.training.losses.base._BaseWeightSchedule`:</span>
+
+<span class="sd">1. Inherit to pick up ``per_epoch`` and the frozen Pydantic config.</span>
+<span class="sd">2. Implement ``__call__(step: int, epoch: int) -&gt; float``; use</span>
+<span class="sd">   ``self._map_schedule_index(step, epoch)`` for schedules that advance</span>
+<span class="sd">   over a single training counter.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">bisect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_BaseWeightSchedule</span>
+
+<span class="n">_PositiveSteps</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Annotated</span><span class="p">[</span>
+    <span class="nb">int</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">(</span>
+        <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Positive length of the schedule window in steps or epochs.&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="ConstantWeight">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ConstantWeight.html#nvalchemi.training.ConstantWeight">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConstantWeight</span><span class="p">(</span><span class="n">_BaseWeightSchedule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Time-invariant loss weight that returns ``value`` at every update.</span>
+
+<span class="sd">    ``ConstantWeight`` is the simplest :class:`LossWeightSchedule`: it ignores</span>
+<span class="sd">    both the global step and the epoch and always yields :attr:`value`. Reach</span>
+<span class="sd">    for it when a component&#39;s contribution is fixed but you still want to</span>
+<span class="sd">    express the weight as a schedule object -- for instance to keep a uniform</span>
+<span class="sd">    type across a :class:`ComposedLossFunction`&#39;s ``weights`` sequence, or to</span>
+<span class="sd">    scale a leaf loss with the ``schedule * leaf`` operator. A bare ``float``</span>
+<span class="sd">    weight behaves identically; the schedule form is mostly for symmetry and</span>
+<span class="sd">    serialization.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.losses import ConstantWeight</span>
+<span class="sd">    &gt;&gt;&gt; w = ConstantWeight(value=2.5)</span>
+<span class="sd">    &gt;&gt;&gt; w(step=0, epoch=0), w(step=1000, epoch=9)</span>
+<span class="sd">    (2.5, 2.5)</span>
+
+<span class="sd">    Multiply a leaf loss to build a weighted component::</span>
+
+<span class="sd">        &gt;&gt;&gt; weighted = ConstantWeight(value=10.0) * ForceMSELoss()</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Instances are frozen (immutable) per the shared ``_BaseWeightSchedule``</span>
+<span class="sd">    config, so a schedule can be safely reused across components.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">value</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Constant weight value.&quot;</span><span class="p">)]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return :attr:`value`, ignoring ``step`` and ``epoch``.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_RampSchedule</span><span class="p">(</span><span class="n">_BaseWeightSchedule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared base for linear / cosine ramps from ``start`` to ``end``.</span>
+
+<span class="sd">    Subclasses only differ in the curve applied to the clamped fraction</span>
+<span class="sd">    ``t in [0, 1]``. The index is the global step when ``per_epoch=False``</span>
+<span class="sd">    and the epoch when ``per_epoch=True``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">start</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Weight at schedule index 0.&quot;</span><span class="p">)]</span>
+    <span class="n">end</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Weight at schedule index `num_steps`.&quot;</span><span class="p">)]</span>
+    <span class="n">num_steps</span><span class="p">:</span> <span class="n">_PositiveSteps</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ramp_fraction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the clamped fraction ``t in [0, 1]`` or ``None`` outside the window.</span>
+
+<span class="sd">        ``None`` means the caller should return the boundary value</span>
+<span class="sd">        (``start`` for ``idx &lt;= 0``; ``end`` for ``idx &gt;= num_steps``).</span>
+<span class="sd">        Otherwise the return is the raw linear fraction; subclasses apply</span>
+<span class="sd">        their own curve to it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map_schedule_index</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">idx</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">idx</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span>
+
+
+<div class="viewcode-block" id="LinearWeight">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.LinearWeight.html#nvalchemi.training.LinearWeight">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearWeight</span><span class="p">(</span><span class="n">_RampSchedule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Loss weight that ramps linearly from ``start`` to ``end``.</span>
+
+<span class="sd">    ``LinearWeight`` interpolates a component&#39;s weight along a straight line:</span>
+<span class="sd">    it returns :attr:`start` at schedule index ``0`` and :attr:`end` at index</span>
+<span class="sd">    :attr:`num_steps`, moving proportionally in between. Use it to phase a loss</span>
+<span class="sd">    term in or out gradually -- for example warming a force or stress term up</span>
+<span class="sd">    from ``0`` over the first few thousand updates, or annealing an auxiliary</span>
+<span class="sd">    term down toward the end of training. The schedule index is the global step</span>
+<span class="sd">    when ``per_epoch=False`` (default) and the epoch when ``per_epoch=True``,</span>
+<span class="sd">    and the value is clamped to :attr:`start` for index ``&lt;= 0`` and to</span>
+<span class="sd">    :attr:`end` for index ``&gt;= num_steps``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.losses import LinearWeight</span>
+<span class="sd">    &gt;&gt;&gt; w = LinearWeight(start=0.0, end=1.0, num_steps=10)</span>
+<span class="sd">    &gt;&gt;&gt; w(step=0, epoch=0), w(step=5, epoch=0), w(step=100, epoch=0)</span>
+<span class="sd">    (0.0, 0.5, 1.0)</span>
+
+<span class="sd">    Advance the ramp once per epoch instead of per step::</span>
+
+<span class="sd">        &gt;&gt;&gt; w = LinearWeight(start=0.2, end=1.0, num_steps=10, per_epoch=True)</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``num_steps`` must be strictly positive. Instances are frozen (immutable)</span>
+<span class="sd">    per the shared ``_BaseWeightSchedule`` config.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Linear ramp from ``start`` to ``end``, clamped at both ends.&quot;&quot;&quot;</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ramp_fraction</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">frac</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map_schedule_index</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">*</span> <span class="n">frac</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="CosineWeight">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.CosineWeight.html#nvalchemi.training.CosineWeight">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CosineWeight</span><span class="p">(</span><span class="n">_RampSchedule</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Loss weight that eases from ``start`` to ``end`` on a half-cosine curve.</span>
+
+<span class="sd">    ``CosineWeight`` interpolates like :class:`LinearWeight` but follows a</span>
+<span class="sd">    half-cosine (smooth ``ease-in/ease-out``) path: it starts and ends nearly</span>
+<span class="sd">    flat and changes fastest near the midpoint. Writing :math:`s` for</span>
+<span class="sd">    ``start``, :math:`e` for ``end``, and :math:`T` for ``num_steps``, the</span>
+<span class="sd">    weight at schedule index :math:`t` is</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        w(t) = s + (e - s)\,\frac{1 - \cos(\pi \tau)}{2},</span>
+<span class="sd">        \qquad \tau = \operatorname{clamp}\!\left(\frac{t}{T},\, 0,\, 1\right).</span>
+
+<span class="sd">    The clamp on :math:`\tau` yields :math:`w = s` for :math:`t \le 0` (where</span>
+<span class="sd">    :math:`\cos 0 = 1`) and :math:`w = e` for :math:`t \ge T` (where</span>
+<span class="sd">    :math:`\cos \pi = -1`), with the fastest change at the midpoint</span>
+<span class="sd">    :math:`t = T/2`. Prefer it over a linear ramp when you want a gentler onset</span>
+<span class="sd">    and settle for a term, which can avoid the abrupt gradient shifts a sharp</span>
+<span class="sd">    linear turn-on causes. The schedule index :math:`t` is the global step when</span>
+<span class="sd">    ``per_epoch=False`` (default) and the epoch when ``per_epoch=True``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.losses import CosineWeight</span>
+<span class="sd">    &gt;&gt;&gt; w = CosineWeight(start=0.0, end=1.0, num_steps=10)</span>
+<span class="sd">    &gt;&gt;&gt; w(step=0, epoch=0), round(w(step=5, epoch=0), 3), w(step=100, epoch=0)</span>
+<span class="sd">    (0.0, 0.5, 1.0)</span>
+
+<span class="sd">    Anneal a weight downward on the cosine curve::</span>
+
+<span class="sd">        &gt;&gt;&gt; w = CosineWeight(start=1.0, end=0.1, num_steps=5000)</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``num_steps`` must be strictly positive. Instances are frozen (immutable)</span>
+<span class="sd">    per the shared ``_BaseWeightSchedule`` config.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Half-cosine interpolation, clamped at both ends.&quot;&quot;&quot;</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ramp_fraction</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">frac</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map_schedule_index</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span>
+            <span class="p">)</span>
+        <span class="c1"># Half-cosine: cos(0)=1 at index=0 -&gt; start; cos(pi)=-1 at num_steps -&gt; end.</span>
+        <span class="n">curve</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">frac</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">*</span> <span class="n">curve</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="PiecewiseWeight">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.PiecewiseWeight.html#nvalchemi.training.PiecewiseWeight">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PiecewiseWeight</span><span class="p">(</span><span class="n">_BaseWeightSchedule</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Step-function loss weight that switches value at fixed boundaries.</span>
+
+<span class="sd">    ``PiecewiseWeight`` holds a constant weight within each interval and jumps</span>
+<span class="sd">    to the next value once the schedule index crosses a boundary. Given</span>
+<span class="sd">    boundaries :math:`b_0 &lt; b_1 &lt; \dots &lt; b_{k-1}` and values</span>
+<span class="sd">    :math:`v_0, \dots, v_k`, the weight at schedule index :math:`t` is the value</span>
+<span class="sd">    of the interval that contains :math:`t`:</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        w(t) =</span>
+<span class="sd">        \begin{cases}</span>
+<span class="sd">          v_0 &amp; t &lt; b_0, \\</span>
+<span class="sd">          v_j &amp; b_{j-1} \le t &lt; b_j \quad (1 \le j \le k-1), \\</span>
+<span class="sd">          v_k &amp; t \ge b_{k-1}.</span>
+<span class="sd">        \end{cases}</span>
+
+<span class="sd">    Equivalently :math:`w(t) = v_j` with</span>
+<span class="sd">    :math:`j = \bigl|\{\, m : b_m \le t \,\}\bigr|`, the number of boundaries the</span>
+<span class="sd">    index has reached or passed (each interval is closed on the left). Use it</span>
+<span class="sd">    for stage-wise or curriculum-style training where a term should be on/off or</span>
+<span class="sd">    held at discrete levels rather than ramped continuously -- for example</span>
+<span class="sd">    enabling a stress term only after a warm-up phase. The schedule index</span>
+<span class="sd">    :math:`t` is the global step when ``per_epoch=False`` (default) and the</span>
+<span class="sd">    epoch when ``per_epoch=True``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.losses import PiecewiseWeight</span>
+<span class="sd">    &gt;&gt;&gt; w = PiecewiseWeight(boundaries=(10, 20), values=(0.1, 0.5, 0.9))</span>
+<span class="sd">    &gt;&gt;&gt; w(step=5, epoch=0), w(step=15, epoch=0), w(step=25, epoch=0)</span>
+<span class="sd">    (0.1, 0.5, 0.9)</span>
+
+<span class="sd">    Switch weights per epoch instead of per step::</span>
+
+<span class="sd">        &gt;&gt;&gt; w = PiecewiseWeight(</span>
+<span class="sd">        ...     boundaries=(5,), values=(0.0, 1.0), per_epoch=True</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``values`` must have exactly ``len(boundaries) + 1`` entries and</span>
+<span class="sd">    ``boundaries`` must be strictly increasing and non-negative; an ``after``</span>
+<span class="sd">    validator raises ``ValueError`` otherwise. Fields are tuples (not lists) so</span>
+<span class="sd">    instances stay hashable under the frozen model config.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">boundaries</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Strictly increasing, non-negative schedule-index boundaries.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Values for each interval; length len(boundaries) + 1.&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_boundaries_and_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PiecewiseWeight</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enforce strictly-increasing non-negative boundaries and correct length.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;values must have length len(boundaries) + 1; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;len(values)=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;len(boundaries)=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">prev</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">b</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;boundaries must be non-negative; got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">b</span> <span class="o">&lt;=</span> <span class="n">prev</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;boundaries must be strictly increasing; got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">prev</span> <span class="o">=</span> <span class="n">b</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the value of the interval containing the schedule index.</span>
+
+<span class="sd">        ``bisect_right`` gives the count of boundaries that the index has</span>
+<span class="sd">        reached or passed, which is the index into :attr:`values`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_right</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">boundaries</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_map_schedule_index</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

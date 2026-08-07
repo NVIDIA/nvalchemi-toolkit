@@ -1,0 +1,1423 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Training &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/training';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Losses" href="losses.html" />
+    <link rel="prev" title="Training &amp; Fine-tuning" href="training_finetuning.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="training_finetuning.html" class="nav-link">Training &amp; Fine-tuning</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Training</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="training">
+<span id="training-guide"></span><h1>Training<a class="headerlink" href="#training" title="Link to this heading">#</a></h1>
+<p>Model training in NVIDIA ALCHEMI Toolkit is designed to be a highly modular,
+extensible, and ergonomic set of core functionalities: everything was designed
+with the explicit intention for users and developers to implement their atomistic
+modeling intentions with as little friction as possible, whilst keeping
+production readiness (e.g. traceability and reproducibility) a background constant.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-training-api</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on configuring
+and extending <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> workflows.</p>
+</div>
+<p>As with many components in <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code>, many of the core user-facing
+interfaces are written with <code class="docutils literal notranslate"><span class="pre">pydantic</span></code>, making early validation and (de)serialization
+first-class citizens. The core of the training utilities is organized around
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a> — a <code class="docutils literal notranslate"><span class="pre">pydantic</span></code> workflow engine
+that orchestrates the moving pieces during training, as well as ensuring that
+the “recipe” for training can be and is persisted, reproducible, and user-friendly.
+This class is similar to a “trainer” abstraction that many are familiar with, albeit
+with some key differences in what it comprises for the sake of reproducibility
+as well as with modern model training concepts in mind such as multi-model
+distillation, multitask loss weight scheduling, model averaging, etc. that have
+become recently popular in atomistic AI/ML models.</p>
+<section id="minimal-structure">
+<h2>Minimal structure<a class="headerlink" href="#minimal-structure" title="Link to this heading">#</a></h2>
+<p>Before getting into the details, it helps to see the overall anatomy at once.
+Nearly every training script, however elaborate it eventually becomes, is built
+from the same five parts:</p>
+<ol class="arabic simple">
+<li><p>Build or load one or more models.</p></li>
+<li><p>Create a dataloader that emits <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> objects.</p></li>
+<li><p>Define the loss or training function that turns each batch into a scalar loss.</p></li>
+<li><p>Configure optimizer, scheduler, validation, and hook behavior.</p></li>
+<li><p>Execute the strategy, while leaving a trail of metrics and model weights.</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CheckpointHook</span><span class="p">,</span>
+    <span class="n">ComposedLossFunction</span><span class="p">,</span>
+    <span class="n">EnergyMSELoss</span><span class="p">,</span>
+    <span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="n">OptimizerConfig</span><span class="p">,</span>
+    <span class="n">TrainingStrategy</span><span class="p">,</span>
+    <span class="n">ValidationConfig</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># configure how the model will be trained</span>
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">()</span> <span class="o">*</span> <span class="mf">10.0</span>
+
+<span class="c1"># pass a model, the optimizer configuration, and supporting</span>
+<span class="c1"># functionality as hooks</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">lr</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">),</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">validation_config</span><span class="o">=</span><span class="n">ValidationConfig</span><span class="p">(</span><span class="n">validation_data</span><span class="o">=</span><span class="n">val_loader</span><span class="p">,</span> <span class="n">every_n_epochs</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">CheckpointHook</span><span class="p">(</span><span class="s2">&quot;runs/example/checkpoints&quot;</span><span class="p">,</span> <span class="n">epoch_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">)],</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The rest of this page walks through what happens after <code class="docutils literal notranslate"><span class="pre">run()</span></code> starts. The key
+idea is that <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> is not only a loop over batches; it is a small
+workflow engine whose public extension points are the values of
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStage</span></code>.</p>
+</section>
+<section id="lifecycle-overview">
+<h2>Lifecycle Overview<a class="headerlink" href="#lifecycle-overview" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">run()</span></code> expands into a fixed sequence of stages. The whole of it fits in the
+single diagram below, which is useful as a reference when you are trying
+to understand the orchestration flow as well as when you are trying to build
+new workflows and components:</p>
+<div class="graphviz"><object data="../_images/graphviz-0d1d88e7e2f5092e9e71242067764f78087f73d3.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph training_lifecycle {
+  graph [rankdir=TB, compound=true, nodesep=0.45, ranksep=0.55];
+
+  setup [label=&quot;SETUP\nworkflow and dataloader preparation&quot;];
+  ddp [label=&quot;DDPHook\nwrap models, install distributed samplers&quot;, fillcolor=&quot;#26351d&quot;];
+  before_training [label=&quot;BEFORE_TRAINING\nonce, before first batch&quot;];
+
+  subgraph cluster_epoch {
+    label=&quot;epoch loop&quot;;
+    color=&quot;#76b900&quot;;
+    fontcolor=&quot;#eeeeee&quot;;
+    style=&quot;rounded&quot;;
+
+    before_epoch [label=&quot;BEFORE_EPOCH\nepoch-level initialization&quot;];
+
+    subgraph cluster_batch {
+      label=&quot;batch/update loop&quot;;
+      color=&quot;#4d7900&quot;;
+      fontcolor=&quot;#eeeeee&quot;;
+      style=&quot;rounded&quot;;
+
+      before_batch [label=&quot;BEFORE_BATCH\nzero-grad policy, accumulation setup&quot;];
+      before_forward [label=&quot;BEFORE_FORWARD\nlast chance to prepare batch/model inputs&quot;];
+      forward [label=&quot;training_fn(model, batch)\nmodel predictions&quot;, fillcolor=&quot;#183449&quot;];
+      after_forward [label=&quot;AFTER_FORWARD\npredictions are available&quot;];
+      before_loss [label=&quot;BEFORE_LOSS&quot;];
+      loss [label=&quot;loss_fn(predictions, batch)\nstructured loss output&quot;, fillcolor=&quot;#183449&quot;];
+      after_loss [label=&quot;AFTER_LOSS\nloss diagnostics are available&quot;];
+      before_backward [label=&quot;BEFORE_BACKWARD&quot;];
+      do_backward [
+        label=&quot;DO_BACKWARD\nTrainingUpdateOrchestrator\nmay transform/own backward&quot;,
+        fillcolor=&quot;#4a3315&quot;
+      ];
+      after_backward [label=&quot;AFTER_BACKWARD\ngradients are available&quot;];
+      before_step [label=&quot;BEFORE_OPTIMIZER_STEP\nlast pre-step observation&quot;];
+      do_step [
+        label=&quot;DO_OPTIMIZER_STEP\nTrainingUpdateOrchestrator\nmay veto/own step&quot;,
+        fillcolor=&quot;#4a3315&quot;
+      ];
+      after_step [label=&quot;AFTER_OPTIMIZER_STEP\nEMA, step diagnostics, step validation&quot;];
+      after_batch [label=&quot;AFTER_BATCH\nbatch logging, cleanup, checkpoint cadence&quot;];
+    }
+
+    after_epoch [label=&quot;AFTER_EPOCH\nepoch logging/checkpoints, epoch validation&quot;];
+  }
+
+  after_training [label=&quot;AFTER_TRAINING\nfinal training cleanup&quot;];
+  final_validation [label=&quot;final validation\nif configured&quot;, fillcolor=&quot;#26351d&quot;];
+  after_validation [label=&quot;AFTER_VALIDATION\nvalidation loggers and metric schedulers&quot;, fillcolor=&quot;#26351d&quot;];
+
+  setup -&gt; ddp [label=&quot;setup hooks&quot;];
+  ddp -&gt; before_training;
+  before_training -&gt; before_epoch;
+  before_epoch -&gt; before_batch;
+  before_batch -&gt; before_forward -&gt; forward -&gt; after_forward;
+  after_forward -&gt; before_loss -&gt; loss -&gt; after_loss;
+  after_loss -&gt; before_backward -&gt; do_backward -&gt; after_backward;
+  after_backward -&gt; before_step -&gt; do_step -&gt; after_step -&gt; after_batch;
+  after_batch -&gt; before_batch [label=&quot;next batch&quot;, style=dashed];
+  after_batch -&gt; after_epoch [label=&quot;epoch exhausted&quot;];
+  after_epoch -&gt; before_epoch [label=&quot;next epoch&quot;, style=dashed];
+  after_step -&gt; after_validation [label=&quot;every_n_steps&quot;, style=dotted];
+  after_epoch -&gt; after_validation [label=&quot;every_n_epochs&quot;, style=dotted];
+  after_epoch -&gt; after_training [label=&quot;target reached&quot;];
+  after_training -&gt; final_validation -&gt; after_validation;
+}</p></object></div>
+<p>The diagram is meant to be read as both execution order and API map. Stages are
+where <a class="reference internal" href="hooks.html"><span class="doc">hooks</span></a> enter the workflow; the filled operation boxes are
+where the strategy itself calls the model, loss, backward pass, optimizer,
+scheduler, validation, or checkpoint machinery. Most stages are placed as
+observation points: hooks can inspect the current
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.TrainContext.html#nvalchemi.hooks.TrainContext" title="nvalchemi.hooks.TrainContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainContext</span></code></a>, log metrics, update side state, or
+modify workflow-owned objects when that stage allows it. The exception is the two
+replacement stages, <code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code> and <code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code>, which are unique to
+training and are owned either by the strategy default path or by the
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateOrchestrator.html#nvalchemi.training.hooks.TrainingUpdateOrchestrator" title="nvalchemi.training.hooks.TrainingUpdateOrchestrator"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingUpdateOrchestrator</span></code></a>.</p>
+<p>The per-batch stages in the inner loop are covered in detail in subsequent
+sections, but the outer stages are worth describing here since they are where
+coarser-grained work belongs. <code class="docutils literal notranslate"><span class="pre">BEFORE_TRAINING</span></code> and <code class="docutils literal notranslate"><span class="pre">AFTER_TRAINING</span></code> fire
+exactly once, wrapping the whole run: the former suits one-time setup that needs
+the resolved runtime state, and the latter is the place for final teardown such
+as flushing a reporting sink or closing a writer. <code class="docutils literal notranslate"><span class="pre">BEFORE_EPOCH</span></code> and
+<code class="docutils literal notranslate"><span class="pre">AFTER_EPOCH</span></code> bracket each pass over the dataloader; the latter is the natural
+home for epoch-level summaries, periodic checkpoints, and epoch-cadence
+validation. The validation stages sit slightly apart from the main flow: a
+validation pass runs on a step or epoch cadence, and the moment it finishes
+<code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code> fires while its reduced summary is still in hand — which is
+exactly where validation logging and metric-driven schedulers such as
+<code class="docutils literal notranslate"><span class="pre">ReduceLROnPlateau</span></code> do their work.</p>
+</section>
+<section id="configuring-a-training-strategy">
+<span id="id1"></span><h2>Configuring a training strategy<a class="headerlink" href="#configuring-a-training-strategy" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> is organized around two groups of inputs. The forward path —
+<code class="docutils literal notranslate"><span class="pre">models</span></code>, <code class="docutils literal notranslate"><span class="pre">training_fn</span></code>, <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code>, and <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> — controls what
+happens to each batch. The loop control layer — <code class="docutils literal notranslate"><span class="pre">optimizer_configs</span></code>,
+<code class="docutils literal notranslate"><span class="pre">validation_config</span></code>, <code class="docutils literal notranslate"><span class="pre">hooks</span></code>, and <code class="docutils literal notranslate"><span class="pre">num_epochs</span></code> or <code class="docutils literal notranslate"><span class="pre">num_steps</span></code> — controls when
+and how training progresses.</p>
+<p>The two components on the forward path are <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> and
+<code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code>. <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> owns everything from model call to
+prediction mapping; replace it when the default <code class="docutils literal notranslate"><span class="pre">model(batch)</span></code> call is not
+enough — multi-model workflows, distillation, or any forward pass that needs
+more than one model to produce the output. <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> controls how
+those predictions are matched to targets before <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code> is called; replace it
+when <em>targets are not in the batch directly</em>, e.g. when they come from a teacher
+model’s output or must be assembled from other sources. Together they let you
+replace the entire forward-to-loss path without touching the rest of the
+training strategy.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> is a callable that receives either <code class="docutils literal notranslate"><span class="pre">(model,</span> <span class="pre">batch)</span></code> for a
+single-model strategy or <code class="docutils literal notranslate"><span class="pre">(models,</span> <span class="pre">batch)</span></code> for a named multi-model strategy, and
+returns a <code class="docutils literal notranslate"><span class="pre">Mapping</span></code> of model outputs. That mapping is passed into
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_supervised_loss()</span></code>,
+which reads targets from the batch by <code class="docutils literal notranslate"><span class="pre">TrainingStrategy.target_keys</span></code> unless a
+<code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> is supplied. A <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> must satisfy
+<code class="xref py py-class docutils literal notranslate"><span class="pre">LossTargetAssemblyProtocol</span></code>:
+it receives <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code>, the prediction mapping, the batch, the current workflow,
+and optional <code class="docutils literal notranslate"><span class="pre">target_keys</span></code>, then returns the target mapping.</p>
+<p>The distillation example below shows both seams in use. <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> runs both
+models and returns their outputs under distinct keys; <code class="docutils literal notranslate"><span class="pre">teacher_targets</span></code>
+implements the <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> protocol and pulls
+targets from the prediction mapping rather than the batch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses</span><span class="w"> </span><span class="kn">import</span> <span class="n">ComposedLossFunction</span><span class="p">,</span> <span class="n">EnergyMSELoss</span>
+
+<span class="c1"># example that employs a student-teacher workflow; the same</span>
+<span class="c1"># batch is passed into a student and a teacher model. The</span>
+<span class="c1"># teacher output is returned in the predictions mapping and</span>
+<span class="c1"># routed into loss_fn by loss_target_assembler.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">training_fn</span><span class="p">(</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">],</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Implements the logic for computing predictions, given a set</span>
+<span class="sd">    of models and an incoming ``Batch`` object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">student_out</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s2">&quot;student&quot;</span><span class="p">](</span><span class="n">batch</span><span class="p">)</span>
+    <span class="c1"># teacher is not part of the autograd graph</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="n">teacher_out</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s2">&quot;teacher&quot;</span><span class="p">](</span><span class="n">batch</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;student_energy&quot;</span><span class="p">:</span> <span class="n">student_out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;teacher_energy&quot;</span><span class="p">:</span> <span class="n">teacher_out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">teacher_targets</span><span class="p">(</span>
+    <span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span><span class="p">,</span>
+    <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Batch&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;This method is used to inform the training workflow how</span>
+<span class="sd">    to obtain the target values to train against.</span>
+
+<span class="sd">    Normally, the values would be grabbed from the ``Batch`` object but in</span>
+<span class="sd">    this case we retrieve them from the ``predictions`` as they</span>
+<span class="sd">    were returned as part of ``training_fn``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;teacher_energy&quot;</span><span class="p">:</span> <span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;teacher_energy&quot;</span><span class="p">]}</span>
+
+
+<span class="c1"># at runtime, the loss function will rely on `teacher_targets`</span>
+<span class="c1"># to provide the labels</span>
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">(</span>
+    <span class="n">prediction_key</span><span class="o">=</span><span class="s2">&quot;student_energy&quot;</span><span class="p">,</span>
+    <span class="n">target_key</span><span class="o">=</span><span class="s2">&quot;teacher_energy&quot;</span><span class="p">,</span>
+    <span class="n">per_atom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+  <span class="p">)</span>
+</pre></div>
+</div>
+<p>In this example, <code class="docutils literal notranslate"><span class="pre">prediction_key=&quot;student_energy&quot;</span></code> is read from the mapping returned
+by <code class="docutils literal notranslate"><span class="pre">training_fn</span></code>, while <code class="docutils literal notranslate"><span class="pre">target_key=&quot;teacher_energy&quot;</span></code> names the target returned by
+<code class="docutils literal notranslate"><span class="pre">teacher_targets</span></code>. Users opt into that routing by passing
+<code class="docutils literal notranslate"><span class="pre">loss_target_assembler=teacher_targets</span></code> to <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code>. The strategy calls the
+assembler with the configured loss, predictions, batch, and current workflow, then
+passes the resulting target mapping into <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Having <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> and <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> as a mere callable that’s
+passed into <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> was
+intentional for the sake of agility: when writing a script, you could simply
+embed the function within the same script, or persist it in the package or workflow
+you are developing. For security reasons, we do <strong>not</strong> serialize the function as
+part of checkpointing, as there are no effective ways to guarantee your callable
+function is safe to execute, and that it hasn’t been replaced in-flight.</p>
+<p>For this reason, it is up to the user/developer to ensure that their training function
+is importable, and to ensure that their checkpoints and training function/recipe is
+up to date with one another.</p>
+</div>
+<p>The hooks in the loop control layer participate at different lifecycle stages.
+Hooks that need structural changes before the first optimizer is built —
+DDP wrapping, reporter initialization, profiler setup — run during <code class="docutils literal notranslate"><span class="pre">SETUP</span></code>.
+Per-batch output should wait for the batch stages that carry the relevant data.
+At <code class="docutils literal notranslate"><span class="pre">run()</span></code>, the strategy resolves this startup sequence: it moves models to
+devices, lets setup hooks mutate the workflow, normalizes update hooks into a
+single orchestrator, and builds optimizers and schedulers. The loop then begins.</p>
+<p>Understanding how the strategy tracks progress through that loop is the
+foundation for writing hooks that fire at the right time.</p>
+</section>
+<section id="training-counters">
+<h2>Training Counters<a class="headerlink" href="#training-counters" title="Link to this heading">#</a></h2>
+<p>The training workflow tracks progress using a small set of counters:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">batch_count</span></code> counts the number of completed batches on this worker,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step_count</span></code> counts completed optimizer/scheduler steps on this worker,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">global_step_count</span></code> counts completed optimizer/scheduler steps across all
+data-parallel workers,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">epoch_count</span></code> counts the number of times the dataloader has been exhausted,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">epoch_step_count</span></code> counts the number of batches consumed in the current epoch.</p></li>
+</ul>
+<p>The distinction between <code class="docutils literal notranslate"><span class="pre">batch_count</span></code> and <code class="docutils literal notranslate"><span class="pre">step_count</span></code> is important. A batch can
+finish without an optimizer step if the training workflow uses gradient
+accumulation, spike skipping, or any other update policy that defers or vetoes the
+step. Code that cares about data throughput should usually read <code class="docutils literal notranslate"><span class="pre">batch_count</span></code>,
+while code that cares about local optimizer state should usually read
+<code class="docutils literal notranslate"><span class="pre">step_count</span></code>. Distributed code that needs aggregate optimizer progress, such as
+fixed compute budgets (i.e. how many FLOPs have I utilized across all ranks) or
+world-size-independent sampler restarts, should read
+<code class="docutils literal notranslate"><span class="pre">global_step_count</span></code>; under DDP it advances by the current world size when an
+optimizer step runs and is restored from checkpoints.</p>
+<p>Inside hooks, these values are available from the
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.TrainContext.html#nvalchemi.hooks.TrainContext" title="nvalchemi.hooks.TrainContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainContext</span></code></a> passed into the hook call:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStage</span>
+
+
+<span class="c1"># this is just to illustrate how a logger hook can access state</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ProgressLogger</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_BATCH</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;epoch=</span><span class="si">%s</span><span class="s2"> batch=</span><span class="si">%s</span><span class="s2"> step=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">epoch</span><span class="p">,</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">batch_count</span><span class="p">,</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<p>Outside hooks, the same state is available on the strategy object as
+<code class="docutils literal notranslate"><span class="pre">strategy.epoch_count</span></code>, <code class="docutils literal notranslate"><span class="pre">strategy.batch_count</span></code>, <code class="docutils literal notranslate"><span class="pre">strategy.step_count</span></code>,
+<code class="docutils literal notranslate"><span class="pre">strategy.global_step_count</span></code>, and <code class="docutils literal notranslate"><span class="pre">strategy.epoch_step_count</span></code>. These values are
+part of the strategy runtime state and are restored by checkpoints.</p>
+<p>After setup, <code class="docutils literal notranslate"><span class="pre">BEFORE_TRAINING</span></code> fires once before the first batch. The epoch loop
+then starts with <code class="docutils literal notranslate"><span class="pre">BEFORE_EPOCH</span></code>. At each epoch boundary, the strategy calls
+<code class="docutils literal notranslate"><span class="pre">set_epoch(...)</span></code> on distributed samplers when available, so each epoch can use a
+deterministic but distinct sample order.</p>
+</section>
+<section id="batches-forward-loss-backward-update">
+<span id="id2"></span><h2>Batches: Forward, Loss, Backward, Update<a class="headerlink" href="#batches-forward-loss-backward-update" title="Link to this heading">#</a></h2>
+<p>With the counters and epoch loop in view, we can zoom in on what happens to a
+single batch. Before the batch stages run, the strategy moves the batch onto the
+primary training device — the device the model was placed on, which under DDP is
+the current rank’s GPU. Each stage then gives hooks access to a progressively
+richer <code class="docutils literal notranslate"><span class="pre">TrainContext</span></code>, following the natural data-availability order of the
+forward pass:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Stage</p></th>
+<th class="head"><p>Available on <code class="docutils literal notranslate"><span class="pre">ctx</span></code></p></th>
+<th class="head"><p>Extension opportunity</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_BATCH</span></code></p></td>
+<td><p>Batch, counters</p></td>
+<td><p>Per-batch setup, zero-gradient policy</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_FORWARD</span></code></p></td>
+<td><p>Batch</p></td>
+<td><p>Transform inputs before the model call</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_FORWARD</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ctx.predictions</span></code></p></td>
+<td><p>Log prediction statistics; redirect outputs before loss</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_LOSS</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ctx.loss</span></code></p></td>
+<td><p>Per-component and per-sample loss diagnostics</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_BACKWARD</span></code></p></td>
+<td><p>Gradients</p></td>
+<td><p>Gradient norm logging, gradient-based monitoring</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code></p></td>
+<td><p>Updated weights</p></td>
+<td><p>EMA updates, learning-rate logging, step metrics</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_BATCH</span></code></p></td>
+<td><p>Full context</p></td>
+<td><p>Throughput logging, reporting, checkpoint cadence</p></td>
+</tr>
+</tbody>
+</table>
+<p>The two replacement stages, <code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code> and <code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code>, are not
+observation points — they are owned by either the strategy default path or a
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateHook.html#nvalchemi.training.hooks.TrainingUpdateHook" title="nvalchemi.training.hooks.TrainingUpdateHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingUpdateHook</span></code></a>. Extending those stages
+requires the update orchestrator; see <a class="reference internal" href="#optimizer-orchestration">Optimizer Orchestration</a>.</p>
+<p>The default supervised path calls <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> to produce a prediction mapping,
+then calls
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_supervised_loss()</span></code> to
+retrieve targets and evaluate <code class="docutils literal notranslate"><span class="pre">loss_fn</span></code>. The resulting structured loss contains
+<code class="docutils literal notranslate"><span class="pre">total_loss</span></code> for backpropagation, along with per-component and per-sample
+diagnostics accessible at <code class="docutils literal notranslate"><span class="pre">AFTER_LOSS</span></code>. See <a class="reference internal" href="losses.html"><span class="doc">Losses</span></a> and
+<a class="reference internal" href="../modules/training/losses.html"><span class="doc">Losses — Training Terms</span></a> for the loss object contract.</p>
+</section>
+<section id="optimizer-orchestration">
+<span id="id3"></span><h2>Optimizer Orchestration<a class="headerlink" href="#optimizer-orchestration" title="Link to this heading">#</a></h2>
+<p>Once the loss has been computed, the <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> then needs to be able
+to handle it, as well as provide the opportunity for developers to interact
+with how backpropagation is performed, perform gradient surgery, etc.
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateHook.html#nvalchemi.training.hooks.TrainingUpdateHook" title="nvalchemi.training.hooks.TrainingUpdateHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingUpdateHook</span></code></a> is the abstraction
+for this: it owns the replacement stages <code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code> and
+<code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code>, and is the right tool for any workflow that changes how
+gradients are computed or applied — mixed precision, gradient accumulation,
+gradient clipping, spike skipping, and EMA all fit here.</p>
+<p>Optimizers and learning-rate schedulers are configured through
+<code class="docutils literal notranslate"><span class="pre">optimizer_configs</span></code>. Each entry names the model parameters it owns and the
+optimizer/scheduler objects that should be constructed for those parameters.
+During setup, <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> builds the configured optimizers and schedulers
+once, stores them on the runtime context, and exposes them to hooks as
+<code class="docutils literal notranslate"><span class="pre">ctx.optimizers</span></code> and <code class="docutils literal notranslate"><span class="pre">ctx.lr_schedulers</span></code>.</p>
+<p>When no specialized update hooks are registered (these are discussed below), the
+strategy owns the default update sequence, which runs on every batch:</p>
+<ol class="arabic simple">
+<li><p>zero gradients before the forward pass,</p></li>
+<li><p>call <code class="docutils literal notranslate"><span class="pre">loss.backward()</span></code> after <code class="docutils literal notranslate"><span class="pre">AFTER_LOSS</span></code>,</p></li>
+<li><p>call <code class="xref py py-func docutils literal notranslate"><span class="pre">step_optimizers()</span></code> to apply
+the parameter update,</p></li>
+<li><p>advance step-based learning-rate schedulers with
+<code class="xref py py-func docutils literal notranslate"><span class="pre">step_lr_schedulers()</span></code>,</p></li>
+<li><p>advance <code class="docutils literal notranslate"><span class="pre">step_count</span></code>, but only when the optimizer-step path actually executes.</p></li>
+</ol>
+<p>That last point is the one worth internalizing: because <code class="docutils literal notranslate"><span class="pre">step_count</span></code> moves only
+when an optimizer step is taken, gradient accumulation and similar policies can
+defer an update without corrupting the step bookkeeping.</p>
+<p>Metric-based schedulers, such as <code class="docutils literal notranslate"><span class="pre">ReduceLROnPlateau</span></code>, are the exception to this
+fixed cadence. Rather than stepping on every optimizer step, they require a
+validation quantity to track, and that quantity is only exposed on the
+<code class="docutils literal notranslate"><span class="pre">TrainContext</span></code> once training reaches <code class="docutils literal notranslate"><span class="pre">TrainingStage.AFTER_VALIDATION</span></code>.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">TrainingUpdateHook</span></code> can participate in four update stages: <code class="docutils literal notranslate"><span class="pre">BEFORE_BATCH</span></code>,
+<code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code>, <code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code>, and <code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code>. When one or more
+update hooks are registered, the strategy folds them into a single
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainingUpdateOrchestrator.html#nvalchemi.training.hooks.TrainingUpdateOrchestrator" title="nvalchemi.training.hooks.TrainingUpdateOrchestrator"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingUpdateOrchestrator</span></code></a>. The orchestrator
+becomes the owner of the replacement stages, so the strategy does not also call its
+default backward or optimizer-step implementation.</p>
+<p>The update stages have distinct responsibilities:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Stage</p></th>
+<th class="head"><p>Responsibility</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_BATCH</span></code></p></td>
+<td><p>Zero-gradient policy and per-batch accumulation setup</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code></p></td>
+<td><p>Backward pass or a transformed version of it</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code></p></td>
+<td><p>Optimizer and scheduler stepping; can veto the step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code></p></td>
+<td><p>Post-step updates such as EMA weights</p></td>
+</tr>
+</tbody>
+</table>
+<p>Update hooks can be registered directly in <code class="docutils literal notranslate"><span class="pre">hooks=[...]</span></code>; the strategy will wrap
+bare update hooks into one orchestrator. They can also be composed explicitly
+with <code class="docutils literal notranslate"><span class="pre">hook_a</span> <span class="pre">+</span> <span class="pre">hook_b</span></code> when a script wants to make the composition visible.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Only one object may own <code class="docutils literal notranslate"><span class="pre">DO_BACKWARD</span></code> and only one object may own
+<code class="docutils literal notranslate"><span class="pre">DO_OPTIMIZER_STEP</span></code>. The dividing line is ownership: a hook that only <em>observes</em>
+gradients, learning rates, or counters — logging gradient norms at <code class="docutils literal notranslate"><span class="pre">AFTER_BACKWARD</span></code>,
+say — should stay a standard hook, while one that <em>changes</em> whether or how
+gradients are applied belongs in the update orchestrator.</p>
+</div>
+<p>See <a class="reference internal" href="../modules/training/hooks.html"><span class="doc">Training update hooks</span></a> for the stage contract and the built-in update
+hooks.</p>
+</section>
+<section id="validation-schedulers-and-reporting">
+<h2>Validation, Schedulers, And Reporting<a class="headerlink" href="#validation-schedulers-and-reporting" title="Link to this heading">#</a></h2>
+<p>Once the update path is handling gradients and optimizer steps, the next
+question is whether the model is actually improving. Validation, metric-driven
+scheduling, and reporting all live in the outer lifecycle stages —
+<code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_EPOCH</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_BATCH</span></code> — so they observe fully
+updated weights without interfering with the update path. Some schedulers
+also cannot make their decisions without a validation signal.</p>
+<p>Validation is configured through
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.ValidationConfig.html#nvalchemi.training.ValidationConfig" title="nvalchemi.training.ValidationConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValidationConfig</span></code></a> on the strategy. It reuses the
+same model, <code class="docutils literal notranslate"><span class="pre">training_fn</span></code>/<code class="docutils literal notranslate"><span class="pre">validation_fn</span></code>, loss function, and target assembly
+language as training, but executes under validation semantics: evaluation mode by
+default, configurable autograd, optional EMA weights, and distributed reduction of
+summary metrics.</p>
+<p>Step-cadence validation is checked after <code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code>, so it observes
+the latest successfully updated weights. Epoch-cadence validation is checked
+after <code class="docutils literal notranslate"><span class="pre">AFTER_EPOCH</span></code>. When training finishes, the strategy runs a final validation
+pass if validation is configured. Immediately after each validation pass,
+<code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code> fires while the reduced summary is still available on the
+strategy.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>When using model averaging (EMA), the hook will automatically use the averaged
+model weights for computing validation. This will generally result in
+significantly smoother validation curves than the training counterparts.</p>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code> for lifecycle-level validation logging and metric-driven
+scheduler behavior. Use the per-batch callback on <code class="docutils literal notranslate"><span class="pre">ValidationConfig</span></code> only when
+you need a tap into individual validation batches, predictions, or losses for a
+custom sink or offline error analysis.</p>
+<section id="listening-to-validation-results">
+<h3>Listening to validation results<a class="headerlink" href="#listening-to-validation-results" title="Link to this heading">#</a></h3>
+<p>Register a standard hook on <code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code> to read the reduced summary.
+The summary is available on every rank; guard external side effects with a
+rank check:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStage</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SummaryLogger</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_VALIDATION</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>
+        <span class="n">summary</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">validation</span>
+        <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">global_rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">summary</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">my_tracker</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">val_loss</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">summary</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">]))</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">SummaryLogger</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="per-batch-validation-callback">
+<h3>Per-batch validation callback<a class="headerlink" href="#per-batch-validation-callback" title="Link to this heading">#</a></h3>
+<p>When you need more than the reduced summary — per-sample predictions,
+domain-level breakdowns, or a custom sink — configure a <code class="docutils literal notranslate"><span class="pre">batch_callback</span></code>
+on <code class="docutils literal notranslate"><span class="pre">ValidationConfig</span></code>. Any callable with the keyword-only signature
+<code class="docutils literal notranslate"><span class="pre">(*,</span> <span class="pre">batch,</span> <span class="pre">predictions,</span> <span class="pre">loss,</span> <span class="pre">batch_count,</span> <span class="pre">step_count,</span> <span class="pre">epoch)</span></code> satisfies
+the <a class="reference internal" href="../modules/training/generated/nvalchemi.training.BatchValidationCallback.html#nvalchemi.training.BatchValidationCallback" title="nvalchemi.training.BatchValidationCallback"><code class="xref py py-class docutils literal notranslate"><span class="pre">BatchValidationCallback</span></code></a> protocol:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationConfig</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ZarrBatchSink</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store</span> <span class="o">=</span> <span class="n">store</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">predictions</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">batch_count</span><span class="p">,</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">epoch</span><span class="p">):</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">require_group</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;step_</span><span class="si">{</span><span class="n">step_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">group</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;batch_</span><span class="si">{</span><span class="n">batch_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ValidationConfig</span><span class="p">(</span>
+    <span class="n">validation_data</span><span class="o">=</span><span class="n">val_data</span><span class="p">,</span>
+    <span class="n">batch_callback</span><span class="o">=</span><span class="n">ZarrBatchSink</span><span class="p">(</span><span class="n">my_zarr_store</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A plain function with the same keyword-only signature also satisfies the protocol.</p>
+</section>
+<section id="logging-and-reporting">
+<h3>Logging And Reporting<a class="headerlink" href="#logging-and-reporting" title="Link to this heading">#</a></h3>
+<p>Logging and reporting are observer behavior, so — unlike the update hooks above —
+they belong in standard hooks rather than the update path. The only real design
+choice is the stage at which a logger runs: late enough that the data it needs
+already exists, but no later than necessary. The lifecycle offers a natural home
+for each kind of output:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_LOSS</span></code> for loss components and per-sample loss summaries,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_BACKWARD</span></code> for gradient diagnostics,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_OPTIMIZER_STEP</span></code> for learning rate, step status, EMA state, or any
+optimizer-step-dependent metric,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_BATCH</span></code> for generic counters, throughput, and final per-batch logging,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_EPOCH</span></code> for epoch summaries,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_VALIDATION</span></code> for reduced validation summaries.</p></li>
+</ul>
+<p>Because the hook receives <code class="docutils literal notranslate"><span class="pre">TrainContext</span></code>, it can read counters, losses, models,
+optimizers, schedulers, the latest validation summary, and the owning workflow
+from whichever stage it picks. For a complete guide to writing hooks, see
+<a class="reference internal" href="hooks.html"><span class="doc">Hooks</span></a>; for the built-in reporting stack, which uses exactly these stages to
+write Rich and TensorBoard output, see <a class="reference internal" href="reporting.html"><span class="doc">Reporting</span></a>.</p>
+</section>
+</section>
+<section id="checkpointing">
+<span id="checkpoint-semantics"></span><h2>Checkpointing<a class="headerlink" href="#checkpointing" title="Link to this heading">#</a></h2>
+<p>A long run will eventually be interrupted — preemption, a crash, or a deliberate
+pause — and resuming it faithfully takes more than the latest weights. While
+this may sound straightforward to do with <code class="docutils literal notranslate"><span class="pre">pickle</span></code>, it is not recommended to do
+so for security (arbitrary code execution) and reproducibility (code changes): for
+these reasons, we designed the checkpointing workflow and abstraction heavily around
+making use of <code class="docutils literal notranslate"><span class="pre">pydantic</span></code>, to enable developers and researchers to make reloading/restarting
+training products as safely and turn-key as possible. We have tried to hide the
+<code class="docutils literal notranslate"><span class="pre">pydantic</span></code> abstraction as much as possible for checkpointing, so users do not need
+to be familiar with the framework.</p>
+<p>A checkpoint captures four categories of state. Each has a developer-facing
+requirement for the loader to reconstruct and restore it correctly:</p>
+<ul class="simple">
+<li><p><strong>Model weights and architecture</strong>: the model <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> and the
+hyperparameters needed to reconstruct the model class. Models based on the
+ALCHEMI model base classes expose a spec automatically. A custom architecture
+not derived from <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> must implement the spec protocol for its
+weights and config to be reloadable.</p></li>
+<li><p><strong>Optimizer and scheduler state</strong>: the optimizer <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> and scheduler
+construction parameters, handled automatically when using <code class="docutils literal notranslate"><span class="pre">OptimizerConfig</span></code>.
+Custom <code class="docutils literal notranslate"><span class="pre">LossWeightSchedule</span></code> instances used in composed losses must implement
+<code class="docutils literal notranslate"><span class="pre">to_spec()</span></code> for their state to be included in the checkpoint.</p></li>
+<li><p><strong>Training counters</strong>: <code class="docutils literal notranslate"><span class="pre">step_count</span></code>, <code class="docutils literal notranslate"><span class="pre">epoch_count</span></code>, <code class="docutils literal notranslate"><span class="pre">batch_count</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">global_step_count</span></code> are always saved and restored with no action required.</p></li>
+<li><p><strong>Hook state</strong>: hooks that own restart-critical state — accumulated
+diagnostics, step-conditioned buffers, custom EMA weights — must implement
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.CheckpointableHook.html#nvalchemi.hooks.CheckpointableHook" title="nvalchemi.hooks.CheckpointableHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointableHook</span></code></a>. Hooks that do not implement
+the protocol are silently skipped; their state is neither saved nor restored.
+Logging hooks generally do not need this because their artifacts are already
+flushed to an external sink.</p></li>
+</ul>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">training_fn</span></code> and <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> are not serialized (see the
+warning above). The checkpoint cannot reconstruct them; they must be supplied
+again at load time.</p>
+<p>Use <code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointHook</span></code> to write checkpoints
+periodically from <code class="docutils literal notranslate"><span class="pre">AFTER_BATCH</span></code> or <code class="docutils literal notranslate"><span class="pre">AFTER_EPOCH</span></code>. Use
+<code class="docutils literal notranslate"><span class="pre">TrainingStrategy.save_checkpoint(...)</span></code> to save at an explicit point in a
+script. See <a class="reference internal" href="../modules/training/checkpoints.html"><span class="doc">Training checkpoints</span></a> for strategy reconstruction,
+hook state, model specs, and distributed checkpoint behavior.</p>
+<section id="restart-semantics">
+<span id="id4"></span><h3>Restart semantics<a class="headerlink" href="#restart-semantics" title="Link to this heading">#</a></h3>
+<p>There are two distinct restart scenarios, and the right API depends on which
+applies.</p>
+<p><strong>Resuming an interrupted run</strong> restores the full training state: model
+weights, optimizer state, scheduler state, training counters, and any
+checkpointable hook state. The run continues from the step immediately after
+the checkpoint. Supply the same hook objects the strategy was originally
+constructed with — the loader maps saved state into those live objects:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">CheckpointHook</span><span class="p">,</span> <span class="n">TrainingStrategy</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="o">.</span><span class="n">load_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/example/checkpoints/step_1000&quot;</span><span class="p">,</span>
+    <span class="c1"># the checkpoint hook itself must be provided again for continuity</span>
+    <span class="c1"># as it is stateless and is not kept with the checkpoint</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">CheckpointHook</span><span class="p">(</span><span class="s2">&quot;runs/example/checkpoints&quot;</span><span class="p">),],</span>
+<span class="p">)</span>
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Starting fresh from pretrained weights</strong> loads only model weights. Optimizer
+state, training counters, and hook state are not restored — the run starts at
+step zero with freshly built optimizers and schedulers. This is the right path
+for fine-tuning a pretrained model on a new dataset or task:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">FineTuningStrategy</span><span class="p">,</span> <span class="n">OptimizerConfig</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="o">.</span><span class="n">from_pretrained_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/pretrained/checkpoints/final&quot;</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">lr</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">),</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">finetune_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The key difference: <code class="docutils literal notranslate"><span class="pre">load_checkpoint</span></code> resumes exactly where training stopped,
+counters and all. <code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code> gives the model its learned
+weights but otherwise treats the run as new. See <a class="reference internal" href="finetuning.html"><span class="doc">Fine-Tuning Pretrained Models</span></a> for the
+full fine-tuning API, including parameter freezing and layer-wise learning-rate
+configuration.</p>
+</section>
+</section>
+<section id="reproducibility">
+<span id="training-reproducibility"></span><h2>Reproducibility<a class="headerlink" href="#reproducibility" title="Link to this heading">#</a></h2>
+<p>Everything above assumes a checkpoint can actually rebuild the run. That is not
+automatic — it is a property your code either has or lacks, and the failure mode
+is quiet: a run that trains happily for a week and cannot be resumed.</p>
+<p>The mechanics are a cross-cutting feature of the toolkit and are documented once
+in <a class="reference internal" href="serialization.html"><span class="doc">Serialization and Reproducibility</span></a>: objects are persisted as JSON <em>recipes</em> (an importable
+path plus constructor keyword arguments) rather than pickles, and rebuilt by
+importing the target and calling it again. This section covers what that demands
+of a <strong>training</strong> run specifically.</p>
+<p>A training run is reproducible when five things hold:</p>
+<ol class="arabic simple">
+<li><p><strong>Every model can produce a spec.</strong> Models built on
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> do this automatically, by
+matching <code class="docutils literal notranslate"><span class="pre">__init__</span></code> parameters against attributes of the same name. A model
+that stores a constructor argument under a <em>different</em> attribute name loses
+it silently, so the safe habit is <code class="docutils literal notranslate"><span class="pre">self.&lt;name&gt;</span> <span class="pre">=</span> <span class="pre">&lt;name&gt;</span></code>. When the
+constructor transforms its arguments, implement <code class="docutils literal notranslate"><span class="pre">checkpoint_spec()</span></code> and
+return the spec explicitly.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">training_fn</span></code> and <code class="docutils literal notranslate"><span class="pre">loss_target_assembler</span></code> are importable.</strong> They are
+recorded as dotted paths and never as code (see the warning in
+<a class="reference internal" href="#configuring-a-training-strategy">Configuring a training strategy</a>); lambdas,
+closures, and locally-defined functions are rejected. Keep them versioned
+alongside the checkpoints they belong to, and pass them again at load time.</p></li>
+<li><p><strong>Custom loss weight schedules implement <code class="docutils literal notranslate"><span class="pre">to_spec()</span></code>.</strong> The built-in
+schedules already do. A schedule that does not is dropped from the recipe.</p></li>
+<li><p><strong>Hooks owning restart-critical state implement</strong>
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.CheckpointableHook.html#nvalchemi.hooks.CheckpointableHook" title="nvalchemi.hooks.CheckpointableHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointableHook</span></code></a>. Hooks are runtime objects
+supplied at load time; only checkpointable ones have their state restored
+into the instances you provide. Logging hooks generally need nothing, since
+their output already lives in an external sink.</p></li>
+<li><p><strong>Every model can actually be rebuilt from its spec.</strong> This one is enforced
+rather than merely encouraged: when automatic spec derivation fails, the
+framework warns (<code class="docutils literal notranslate"><span class="pre">Omitting</span> <span class="pre">model</span> <span class="pre">spec</span> <span class="pre">for</span> <span class="pre">'&lt;name&gt;'</span></code>) and
+<code class="docutils literal notranslate"><span class="pre">save_checkpoint()</span></code> then refuses to write anything at all, raising
+<code class="docutils literal notranslate"><span class="pre">ValueError:</span> <span class="pre">Cannot</span> <span class="pre">save</span> <span class="pre">strategy</span> <span class="pre">checkpoint</span> <span class="pre">because</span> <span class="pre">model</span> <span class="pre">spec</span> <span class="pre">generation</span> <span class="pre">failed</span></code>. Since checkpointing usually happens well into a run, it is worth
+proving the round trip before launching one — see
+<a class="reference internal" href="serialization.html#serialization-guide"><span class="std std-ref">Serialization and Reproducibility</span></a>.</p></li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The configuration alone — with no tensors — round-trips through
+<code class="docutils literal notranslate"><span class="pre">TrainingStrategy.to_spec_dict()</span></code> and <code class="docutils literal notranslate"><span class="pre">from_spec_dict()</span></code>. Dumping that JSON
+before a long run gives you a reviewable, diffable, version-controllable record
+of the experiment, and is the same format the <a class="reference internal" href="#training-cli"><span class="std std-ref">CLI</span></a> reads.</p>
+</div>
+<p>Two caveats worth stating plainly. First, your training script is part of the
+reproducible artifact: the checkpoint stores data and references, and the script
+supplies the code they point at. Second, <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> does not seed RNGs for you
+— faithful <em>recipe</em> reproduction is not the same as bitwise-identical results,
+which additionally requires seeding and the usual CUDA determinism caveats.</p>
+</section>
+<section id="training-cli">
+<span id="id5"></span><h2>Training CLI<a class="headerlink" href="#training-cli" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">nvalchemi-training</span></code> CLI offers a structured path to launching training
+experiments — scaffold a JSON configuration, validate it, then execute — without
+requiring a Python script. The <code class="docutils literal notranslate"><span class="pre">train</span></code> command group handles training from
+scratch using the same configuration format as fine-tuning workflows, so the
+JSON representations of hooks, optimizers, and loss functions map one-to-one
+onto the Python API described in the rest of this page.</p>
+<section id="starting-a-training-run">
+<h3>Starting a training run<a class="headerlink" href="#starting-a-training-run" title="Link to this heading">#</a></h3>
+<p>Initialize a spec scaffold for your training job:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>train<span class="w"> </span>init<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dataset<span class="w"> </span>data/train.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>runs/my-model<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--lr<span class="w"> </span>1e-4<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--num-steps<span class="w"> </span><span class="m">5000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out<span class="w"> </span>train.json
+</pre></div>
+</div>
+<p>Multiple <code class="docutils literal notranslate"><span class="pre">--dataset</span></code> flags create a <code class="docutils literal notranslate"><span class="pre">MultiDataset</span></code>-backed dataloader across
+the provided paths:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>train<span class="w"> </span>init<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dataset<span class="w"> </span>data/domain-a.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dataset<span class="w"> </span>data/domain-b.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>runs/my-model<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out<span class="w"> </span>train.json
+</pre></div>
+</div>
+<p>The generated <code class="docutils literal notranslate"><span class="pre">train.json</span></code> includes a fully populated optimizer, loss
+function, and output configuration. However, <code class="docutils literal notranslate"><span class="pre">strategy.model_specs</span></code> is left
+empty — training from scratch requires you to supply the architecture. Fill
+it in using the same <code class="docutils literal notranslate"><span class="pre">BaseSpec</span></code> JSON format used by checkpoints (<code class="docutils literal notranslate"><span class="pre">cls_path</span></code>
+plus constructor keyword fields):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;strategy&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;model_specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;main&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your.package.ModelClass&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;hidden_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">128</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;num_layers&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">jq</span></code> to merge a separately authored model spec into the base scaffold:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>-s<span class="w"> </span><span class="s1">&#39;add&#39;</span><span class="w"> </span>train.json<span class="w"> </span>model_spec.json<span class="w"> </span>&gt;<span class="w"> </span>train_merged.json
+</pre></div>
+</div>
+</section>
+<section id="validating-and-configuring-hooks">
+<h3>Validating and configuring hooks<a class="headerlink" href="#validating-and-configuring-hooks" title="Link to this heading">#</a></h3>
+<p>Before allocating compute, validate the spec and review the training intent:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>report<span class="w"> </span>train.json
+</pre></div>
+</div>
+<p>The report renders an optimizer summary, loss function configuration, hook
+list, and a learning-rate preview curve. It also surfaces warnings for
+common configuration mistakes: an empty model spec, a missing checkpoint
+hook, no validation dataset, or a learning rate that is out of the expected
+range. Resolve warnings before executing.</p>
+<p>Hooks use the same JSON spec format as the Python API objects: a <code class="docutils literal notranslate"><span class="pre">cls_path</span></code>
+and constructor kwargs serialized with <code class="docutils literal notranslate"><span class="pre">BaseSpec</span></code>. A graph-based model
+typically needs a neighbor list and a checkpoint hook at minimum:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;hooks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.hooks.neighbor_list.NeighborListHook&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;cutoff&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">6.0</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;coo&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;BEFORE_FORWARD&quot;</span><span class="p">]</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;cls_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvalchemi.training.hooks.checkpoint.CheckpointHook&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;checkpoint_dir&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;runs/my-model/checkpoints&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;step_interval&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">stages</span></code> list specifies which <code class="docutils literal notranslate"><span class="pre">TrainingStage</span></code> values the hook fires at,
+corresponding to the stages described in
+<a class="reference internal" href="#batches-forward-loss-backward-update">Batches: Forward, Loss, Backward, Update</a>.
+Omit <code class="docutils literal notranslate"><span class="pre">stages</span></code> to use the hook’s constructor default.</p>
+</section>
+<section id="executing-and-resuming">
+<h3>Executing and resuming<a class="headerlink" href="#executing-and-resuming" title="Link to this heading">#</a></h3>
+<p>Once the report shows no critical warnings, launch the run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>run<span class="w"> </span>train.json
+</pre></div>
+</div>
+<p>For distributed training, wrap with <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>-m<span class="w"> </span>nvalchemi.training.cli<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>spec<span class="w"> </span>run<span class="w"> </span>train.json<span class="w"> </span>--distributed
+</pre></div>
+</div>
+<p>If the run is interrupted, resume from the latest checkpoint:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvalchemi-training<span class="w"> </span>spec<span class="w"> </span>resume<span class="w"> </span>runs/my-model/checkpoints<span class="w"> </span>--spec<span class="w"> </span>train.json
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">spec</span> <span class="pre">resume</span></code> restores model weights, optimizer state, training counters,
+and hook state, then continues training exactly where it stopped — the same
+behavior as calling <code class="docutils literal notranslate"><span class="pre">TrainingStrategy.load_checkpoint(...)</span></code> directly from
+the Python API (described in <a class="reference internal" href="#restart-semantics">Restart semantics</a>).
+Specify <code class="docutils literal notranslate"><span class="pre">--checkpoint-index</span> <span class="pre">N</span></code> to resume from a particular checkpoint
+instead of the latest.</p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="training_finetuning.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Training &amp; Fine-tuning</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="losses.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Losses</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-structure">Minimal structure</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-overview">Lifecycle Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-a-training-strategy">Configuring a training strategy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#training-counters">Training Counters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#batches-forward-loss-backward-update">Batches: Forward, Loss, Backward, Update</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optimizer-orchestration">Optimizer Orchestration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-schedulers-and-reporting">Validation, Schedulers, And Reporting</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#listening-to-validation-results">Listening to validation results</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-batch-validation-callback">Per-batch validation callback</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#logging-and-reporting">Logging And Reporting</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpointing">Checkpointing</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#restart-semantics">Restart semantics</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reproducibility">Reproducibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#training-cli">Training CLI</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-a-training-run">Starting a training run</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#validating-and-configuring-hooks">Validating and configuring hooks</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#executing-and-resuming">Executing and resuming</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/training.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

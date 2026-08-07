@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.datapipes.backends.zarr &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.data.datapipes.backends.zarr &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/backends/zarr';</script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -439,7 +442,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
 
@@ -460,31 +463,53 @@ document.write(`
 <span class="c1"># Type alias for zarr store-like objects</span>
 <span class="n">StoreLike</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Store</span> <span class="o">|</span> <span class="n">StorePath</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 
-<span class="c1"># TODO: make classes inherit from PNM when stable</span>
-
 
 <div class="viewcode-block" id="ZarrArrayConfig">
 <a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.ZarrArrayConfig">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ZarrArrayConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for Zarr array compression, chunking, and sharding.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-array storage settings for compression, chunking, and sharding.</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    compressors : tuple[zarr.abc.codec.Codec, ...] | None</span>
-<span class="sd">        Compressor codec(s) to apply. E.g. ``(zarr.codecs.ZstdCodec(level=3),)``.</span>
-<span class="sd">    filters : tuple[zarr.abc.codec.Codec, ...] | None</span>
-<span class="sd">        Array-to-array filter codec(s). E.g. ``(zarr.codecs.TransposeCodec(order=(1, 0)),)``.</span>
-<span class="sd">    serializer : zarr.abc.codec.Codec | None</span>
-<span class="sd">        Bytes serializer codec. E.g. ``zarr.codecs.BytesCodec(endian=&quot;little&quot;)``.</span>
-<span class="sd">    chunk_size : int | None</span>
-<span class="sd">        Chunk length along dimension 0. Other dimensions use their full extent.</span>
-<span class="sd">        ``None`` uses Zarr defaults.</span>
-<span class="sd">    shard_size : int | None</span>
-<span class="sd">        Shard length along dimension 0. When set, multiple chunks are stored</span>
-<span class="sd">        in a single storage object. Must be a multiple of ``chunk_size`` when</span>
-<span class="sd">        both are specified. ``None`` disables sharding.</span>
-<span class="sd">    write_empty_chunks : bool</span>
-<span class="sd">        Whether to write chunks that are entirely fill-valued. Default ``True``.</span>
+<span class="sd">    A ``ZarrArrayConfig`` bundles the codec and layout choices applied to a</span>
+<span class="sd">    single Zarr array written by :class:`AtomicDataZarrWriter`. The codec</span>
+<span class="sd">    fields (``compressors``, ``filters``, ``serializer``) accept ``zarr`` v3</span>
+<span class="sd">    codec instances and control how bytes are transformed on write; leaving</span>
+<span class="sd">    them ``None`` uses Zarr&#39;s defaults. ``chunk_size`` sets the chunk length</span>
+<span class="sd">    along the leading (row / sample) dimension, with all other dimensions</span>
+<span class="sd">    stored at full extent, and ``shard_size`` optionally groups several chunks</span>
+<span class="sd">    into one storage object to reduce file count for object stores.</span>
+
+<span class="sd">    You rarely construct this directly for a whole store; instead you attach</span>
+<span class="sd">    one or more ``ZarrArrayConfig`` instances to a :class:`ZarrWriteConfig`,</span>
+<span class="sd">    which routes them to the metadata, core, and custom array groups (and to</span>
+<span class="sd">    per-field overrides). Tuning these settings trades write size and speed</span>
+<span class="sd">    against read throughput -- see the ``nvalchemi-zarr-perf`` guidance for</span>
+<span class="sd">    chunk/shard sizing under shuffled or random access.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Zstandard compression with 1024-row chunks::</span>
+
+<span class="sd">        from zarr.codecs import ZstdCodec</span>
+
+<span class="sd">        cfg = ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024)</span>
+
+<span class="sd">    Group four chunks into each shard (``shard_size`` must be a multiple of</span>
+<span class="sd">    ``chunk_size``)::</span>
+
+<span class="sd">        cfg = ZarrArrayConfig(chunk_size=256, shard_size=1024)</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    When both ``chunk_size`` and ``shard_size`` are set, ``shard_size`` must be</span>
+<span class="sd">    an exact multiple of ``chunk_size``; an ``after`` validator raises</span>
+<span class="sd">    ``ValueError`` otherwise. ``compressors`` and ``filters`` are tuples of</span>
+<span class="sd">    codecs applied in order, and ``arbitrary_types_allowed`` is enabled so that</span>
+<span class="sd">    native ``zarr`` codec objects can be stored as field values.</span>
+
+<span class="sd">    .. seealso::</span>
+
+<span class="sd">       :ref:`zarr_compression_guide` -- choosing codecs, chunk sizes, and shard</span>
+<span class="sd">       sizes to balance store size against read and write throughput.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">compressors</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
@@ -539,31 +564,53 @@ document.write(`
 <div class="viewcode-block" id="ZarrWriteConfig">
 <a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.ZarrWriteConfig">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ZarrWriteConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Top-level write configuration for ``AtomicDataZarrWriter``.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Top-level storage plan handed to ``AtomicDataZarrWriter``.</span>
 
-<span class="sd">    Provides per-group defaults and optional per-field overrides.</span>
+<span class="sd">    A ``ZarrWriteConfig`` collects the :class:`ZarrArrayConfig` settings for a</span>
+<span class="sd">    whole store and decides which one applies to each array the writer emits.</span>
+<span class="sd">    Arrays are grouped by role: ``meta`` covers bookkeeping arrays (pointers</span>
+<span class="sd">    and masks), ``core`` covers the standard ``AtomicData`` fields (positions,</span>
+<span class="sd">    energy, forces, ...), and ``custom`` covers any user-added arrays. Each</span>
+<span class="sd">    group defaults to a plain :class:`ZarrArrayConfig`, so an empty</span>
+<span class="sd">    ``ZarrWriteConfig()`` is a valid &quot;use Zarr defaults everywhere&quot; plan.</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    meta : ZarrArrayConfig</span>
-<span class="sd">        Config for metadata arrays (pointers, masks). Usually no compression.</span>
-<span class="sd">    core : ZarrArrayConfig</span>
-<span class="sd">        Config for core data arrays (positions, energy, etc.).</span>
-<span class="sd">    custom : ZarrArrayConfig</span>
-<span class="sd">        Config for user-added custom arrays.</span>
-<span class="sd">    field_overrides : dict[str, ZarrArrayConfig]</span>
-<span class="sd">        Per-field overrides. Keys are field names (e.g. ``&quot;positions&quot;``).</span>
-<span class="sd">        Takes precedence over group-level config.</span>
+<span class="sd">    For finer control, ``field_overrides`` maps an individual field name to its</span>
+<span class="sd">    own :class:`ZarrArrayConfig`; a matching override wins over the group-level</span>
+<span class="sd">    config for that field. This lets you, for example, compress ``positions``</span>
+<span class="sd">    differently from the rest of the core arrays while leaving everything else</span>
+<span class="sd">    on the shared ``core`` settings. Pass the completed config to the writer to</span>
+<span class="sd">    control on-disk compression, chunking, and sharding across the store.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
-<span class="sd">    &gt;&gt;&gt; from zarr.codecs import ZstdCodec, BloscCodec</span>
-<span class="sd">    &gt;&gt;&gt; config = ZarrWriteConfig(</span>
-<span class="sd">    ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),</span>
-<span class="sd">    ...     field_overrides={</span>
-<span class="sd">    ...         &quot;positions&quot;: ZarrArrayConfig(compressors=(BloscCodec(cname=&quot;lz4&quot;),))</span>
-<span class="sd">    ...     },</span>
-<span class="sd">    ... )</span>
+<span class="sd">    Compress core arrays with Zstd, but give ``positions`` its own Blosc/LZ4</span>
+<span class="sd">    codec via an override::</span>
+
+<span class="sd">        &gt;&gt;&gt; from zarr.codecs import ZstdCodec, BloscCodec</span>
+<span class="sd">        &gt;&gt;&gt; config = ZarrWriteConfig(</span>
+<span class="sd">        ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),</span>
+<span class="sd">        ...     field_overrides={</span>
+<span class="sd">        ...         &quot;positions&quot;: ZarrArrayConfig(compressors=(BloscCodec(cname=&quot;lz4&quot;),))</span>
+<span class="sd">        ...     },</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">    Accept Zarr defaults for every array group::</span>
+
+<span class="sd">        &gt;&gt;&gt; config = ZarrWriteConfig()</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``meta``, ``core``, and ``custom`` each default to a fresh</span>
+<span class="sd">    :class:`ZarrArrayConfig` via ``default_factory``, so omitting a group is</span>
+<span class="sd">    equivalent to passing an unconfigured one. ``field_overrides`` is keyed by</span>
+<span class="sd">    field name and takes precedence over the group config only for the fields</span>
+<span class="sd">    it names. ``arbitrary_types_allowed`` is enabled so nested configs may hold</span>
+<span class="sd">    native ``zarr`` codec objects.</span>
+
+<span class="sd">    .. seealso::</span>
+
+<span class="sd">       :ref:`zarr_compression_guide` -- choosing codecs, chunk sizes, and shard</span>
+<span class="sd">       sizes to balance store size against read and write throughput.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">meta</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
@@ -622,6 +669,165 @@ document.write(`
         <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
             <span class="c1"># Default to atom level for unknown keys</span>
             <span class="k">return</span> <span class="s2">&quot;atom&quot;</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Gap-merge run construction</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1"># Policy: merge adjacent sorted physical indices into contiguous ranges when</span>
+<span class="c1"># the gap between them is &lt;= *gap_threshold* (defaults to the batch size).</span>
+<span class="c1"># This reduces the number of Zarr codec-pipeline / shard-index round trips</span>
+<span class="c1"># — the dominant cost for random access — at the expense of reading some</span>
+<span class="c1"># unrequested rows (&quot;read amplification&quot;).</span>
+<span class="c1">#</span>
+<span class="c1"># To keep amplification bounded, each merged range is capped so that</span>
+<span class="c1">#   span / requested_count &lt;= max_amplification</span>
+<span class="c1"># where *span* is `last_physical - first_physical + 1` and</span>
+<span class="c1"># *requested_count* is the number of positions in the run.  Default</span>
+<span class="c1"># cap is 8x, meaning we never decompress more than 8x the data we</span>
+<span class="c1"># actually need within a single range.</span>
+<span class="n">_DEFAULT_MAX_AMPLIFICATION</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_leading_storage_size</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the leading Zarr storage-object length when available.&quot;&quot;&quot;</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">chunk_grid</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;chunk_grid&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">chunk_shape</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">chunk_grid</span><span class="p">,</span> <span class="s2">&quot;chunk_shape&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">chunk_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk_shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">chunk_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">shards</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="s2">&quot;shards&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">shards</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">shards</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">shards</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">shards</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">chunks</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="s2">&quot;chunks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">chunks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_chunk_span_for_slice</span><span class="p">(</span>
+    <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return inclusive leading-axis chunk span for a half-open row slice.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">end</span> <span class="o">&lt;=</span> <span class="n">start</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">start</span> <span class="o">//</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="n">chunk_size</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sample_chunk_spans</span><span class="p">(</span>
+    <span class="n">physical_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="n">atoms_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">edges_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return per-field chunk spans touched by one physical sample.&quot;&quot;&quot;</span>
+    <span class="n">spans</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">atom_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">atom_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">edge_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">edge_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+    <span class="k">for</span> <span class="n">field_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">_key</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">arr</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">fields</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
+            <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">atom_start</span><span class="p">,</span> <span class="n">atom_end</span>
+        <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
+            <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">chunk_size</span> <span class="o">=</span> <span class="n">_leading_storage_size</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">chunk_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">chunk_span</span> <span class="o">=</span> <span class="n">_chunk_span_for_slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">chunk_span</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">spans</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">field_idx</span><span class="p">,</span> <span class="o">*</span><span class="n">chunk_span</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">spans</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_spans_overlap</span><span class="p">(</span>
+    <span class="n">run_spans</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">sample_spans</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return True when a sample touches a chunk already covered by a run.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">field_idx</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="ow">in</span> <span class="n">sample_spans</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">run_spans</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">run_first</span><span class="p">,</span> <span class="n">run_last</span> <span class="o">=</span> <span class="n">run_spans</span><span class="p">[</span><span class="n">field_idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">first</span> <span class="o">&lt;=</span> <span class="n">run_last</span> <span class="ow">and</span> <span class="n">last</span> <span class="o">&gt;=</span> <span class="n">run_first</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_merge_chunk_spans</span><span class="p">(</span>
+    <span class="n">run_spans</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">sample_spans</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extend run chunk spans in-place with spans from another sample.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">field_idx</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="ow">in</span> <span class="n">sample_spans</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">run_spans</span><span class="p">:</span>
+            <span class="n">run_spans</span><span class="p">[</span><span class="n">field_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">run_first</span><span class="p">,</span> <span class="n">run_last</span> <span class="o">=</span> <span class="n">run_spans</span><span class="p">[</span><span class="n">field_idx</span><span class="p">]</span>
+        <span class="n">run_spans</span><span class="p">[</span><span class="n">field_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">run_first</span><span class="p">,</span> <span class="n">first</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">run_last</span><span class="p">,</span> <span class="n">last</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_merge_physical_runs_by_chunks</span><span class="p">(</span>
+    <span class="n">sorted_physical</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="n">atoms_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">edges_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_amplification</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_DEFAULT_MAX_AMPLIFICATION</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Group physical indices while preserving Zarr chunk locality.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">sorted_physical</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">gap_threshold</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">sorted_physical</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">runs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">run_first_physical</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">sample_spans</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">_sample_chunk_spans</span><span class="p">(</span><span class="n">physical_idx</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">atoms_ptr</span><span class="p">,</span> <span class="n">edges_ptr</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">physical_idx</span> <span class="ow">in</span> <span class="n">sorted_physical</span>
+    <span class="p">]</span>
+    <span class="n">run_spans</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_merge_chunk_spans</span><span class="p">(</span><span class="n">run_spans</span><span class="p">,</span> <span class="n">sample_spans</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_physical</span><span class="p">)):</span>
+        <span class="n">gap</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span><span class="p">]</span> <span class="o">-</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">span</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span><span class="p">]</span> <span class="o">-</span> <span class="n">run_first_physical</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">runs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">within_gap_policy</span> <span class="o">=</span> <span class="n">gap</span> <span class="o">&lt;=</span> <span class="n">gap_threshold</span> <span class="ow">and</span> <span class="n">span</span> <span class="o">&lt;=</span> <span class="n">count</span> <span class="o">*</span> <span class="n">max_amplification</span>
+        <span class="n">overlaps_existing_chunk</span> <span class="o">=</span> <span class="n">_spans_overlap</span><span class="p">(</span><span class="n">run_spans</span><span class="p">,</span> <span class="n">sample_spans</span><span class="p">[</span><span class="n">position</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">overlaps_existing_chunk</span> <span class="ow">or</span> <span class="n">within_gap_policy</span><span class="p">:</span>
+            <span class="n">runs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+            <span class="n">_merge_chunk_spans</span><span class="p">(</span><span class="n">run_spans</span><span class="p">,</span> <span class="n">sample_spans</span><span class="p">[</span><span class="n">position</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">runs</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">position</span><span class="p">])</span>
+            <span class="n">run_first_physical</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span><span class="p">]</span>
+            <span class="n">run_spans</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">_merge_chunk_spans</span><span class="p">(</span><span class="n">run_spans</span><span class="p">,</span> <span class="n">sample_spans</span><span class="p">[</span><span class="n">position</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">runs</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_row_indices_for_ranges</span><span class="p">(</span><span class="n">starts</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">ends</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return concatenated row indices for a sequence of half-open ranges.&quot;&quot;&quot;</span>
+    <span class="n">ranges</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">starts</span><span class="p">,</span> <span class="n">ends</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">end</span> <span class="o">&gt;</span> <span class="n">start</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ranges</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">ranges</span><span class="p">)</span>
 
 
 <span class="c1"># NOTE: the generic *index*/*face* regex fallback returning -1 is local to</span>
@@ -690,6 +896,9 @@ document.write(`
 <span class="sd">    batch writes, appending, custom fields, soft-delete, and defragmentation.</span>
 
 <span class="sd">    The Zarr store layout is:</span>
+
+<span class="sd">    .. code-block:: text</span>
+
 <span class="sd">        dataset.zarr/</span>
 <span class="sd">        ├── meta/                       # Pointer arrays + masks</span>
 <span class="sd">        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts</span>
@@ -1623,6 +1832,9 @@ document.write(`
 <span class="sd">    efficient random access using pointer arrays.</span>
 
 <span class="sd">    The Zarr store layout expected is:</span>
+
+<span class="sd">    .. code-block:: text</span>
+
 <span class="sd">        dataset.zarr/</span>
 <span class="sd">        ├── meta/                       # Pointer arrays + masks</span>
 <span class="sd">        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts</span>
@@ -1753,8 +1965,32 @@ document.write(`
         <span class="p">)</span></div>
 
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field_levels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Per-field level classification from store metadata.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, str]</span>
+<span class="sd">            Mapping of field name to ``&quot;atom&quot;``, ``&quot;edge&quot;``, or ``&quot;system&quot;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">flat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">fields</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields_metadata</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">flat</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">flat</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_logical_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve a logical index according to this store&#39;s active sample mask.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">+</span> <span class="n">index</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> out of range for reader with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> samples&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">index</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_load_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw data for a single sample.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw data for a single sample through the batch read path.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1771,59 +2007,200 @@ document.write(`
 <span class="sd">        IndexError</span>
 <span class="sd">            If index is out of range.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Map logical index to physical index</span>
-        <span class="n">physical_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active_indices</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_many_samples</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_logical_index</span><span class="p">(</span><span class="n">index</span><span class="p">)])[</span><span class="mi">0</span><span class="p">]</span>
 
-        <span class="c1"># Get slice ranges from pointer arrays</span>
-        <span class="n">atom_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-        <span class="n">atom_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-        <span class="n">edge_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-        <span class="n">edge_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_read_many_orthogonal</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">normalized_indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+        <span class="n">sorted_order</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+        <span class="n">sorted_physical</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+        <span class="n">fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load fragmented samples using one orthogonal selection per field.&quot;&quot;&quot;</span>
+        <span class="n">data_by_sorted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">sorted_order</span><span class="p">]</span>
 
-        <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">atom_starts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">atom_ends</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">edge_starts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">edge_ends</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">physical_idx</span> <span class="ow">in</span> <span class="n">sorted_physical</span><span class="p">:</span>
+            <span class="n">atom_starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+            <span class="n">atom_ends</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+            <span class="n">edge_starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+            <span class="n">edge_ends</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
 
-        <span class="c1"># Load core fields</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="n">_row_indices_for_ranges</span><span class="p">(</span><span class="n">atom_starts</span><span class="p">,</span> <span class="n">atom_ends</span><span class="p">)</span>
+                <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">oindex</span><span class="p">[</span><span class="n">rows</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="k">else</span> <span class="n">arr</span><span class="p">[:</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                    <span class="nb">zip</span><span class="p">(</span><span class="n">atom_starts</span><span class="p">,</span> <span class="n">atom_ends</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="n">count</span> <span class="o">=</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span>
+                    <span class="n">data_by_sorted</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+                    <span class="n">offset</span> <span class="o">+=</span> <span class="n">count</span>
+            <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="n">_row_indices_for_ranges</span><span class="p">(</span><span class="n">edge_starts</span><span class="p">,</span> <span class="n">edge_ends</span><span class="p">)</span>
+                <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
+                    <span class="n">arr</span><span class="o">.</span><span class="n">oindex</span><span class="p">[</span><span class="n">rows</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="k">else</span> <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="p">)</span>
+
+                <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                    <span class="nb">zip</span><span class="p">(</span><span class="n">edge_starts</span><span class="p">,</span> <span class="n">edge_ends</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="n">count</span> <span class="o">=</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span>
+                    <span class="n">tensor</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
+                        <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span> <span class="o">-</span> <span class="n">atom_starts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                    <span class="n">data_by_sorted</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+                    <span class="n">offset</span> <span class="o">+=</span> <span class="n">count</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sorted_physical</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+                <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">oindex</span><span class="p">[</span><span class="n">rows</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">sorted_physical</span><span class="p">)):</span>
+                    <span class="n">data_by_sorted</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">inverse</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_order</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">new_pos</span><span class="p">,</span> <span class="n">old_pos</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sorted_order</span><span class="p">):</span>
+            <span class="n">inverse</span><span class="p">[</span><span class="n">old_pos</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_pos</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">data_by_sorted</span><span class="p">[</span><span class="n">inverse</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">normalized_indices</span><span class="p">))]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_many_samples</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw data for multiple samples in requested order.</span>
+
+<span class="sd">        Contiguous physical samples are read as ranges so each Zarr array is</span>
+<span class="sd">        opened once and sliced once per range. The range tensors are then</span>
+<span class="sd">        split back into per-sample dictionaries. The base ``Reader`` attaches</span>
+<span class="sd">        metadata and optional pinned memory.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : Sequence[int]</span>
+<span class="sd">            Logical sample indices to load. Negative values are supported.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[dict[str, torch.Tensor]]</span>
+<span class="sd">            Ordered raw tensor dictionaries with CPU tensors.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the reader has been closed.</span>
+<span class="sd">        IndexError</span>
+<span class="sd">            If any requested index is out of range.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot read from a closed reader.&quot;</span><span class="p">)</span>
+
+        <span class="n">normalized_indices</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_logical_index</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">normalized_indices</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="n">physical_indices</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active_indices</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">normalized_indices</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Sort by physical index to maximise contiguous runs and avoid</span>
+        <span class="c1"># decompressing the same Zarr chunk more than once.  We keep a</span>
+        <span class="c1"># permutation so the output order matches the caller&#39;s request.</span>
+        <span class="n">sorted_order</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">physical_indices</span><span class="p">)),</span> <span class="n">key</span><span class="o">=</span><span class="n">physical_indices</span><span class="o">.</span><span class="fm">__getitem__</span>
+        <span class="p">)</span>
+        <span class="n">sorted_physical</span> <span class="o">=</span> <span class="p">[</span><span class="n">physical_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">sorted_order</span><span class="p">]</span>
+
+        <span class="n">data_by_sorted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">sorted_order</span><span class="p">]</span>
+
+        <span class="n">fields</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">core_group</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">[</span><span class="s2">&quot;core&quot;</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">core_group</span><span class="o">.</span><span class="n">array_keys</span><span class="p">():</span>
             <span class="n">level</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;core&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
                 <span class="n">key</span><span class="p">,</span> <span class="n">_get_field_level</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">arr</span> <span class="o">=</span> <span class="n">core_group</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">core_group</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
 
-            <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
-                <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
-            <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
-                    <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
-                <span class="p">)</span>
-
-                <span class="c1"># neighbor_list needs to be converted from global to local indices</span>
-                <span class="c1"># by subtracting the atom offset for this sample</span>
-                <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
-                    <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span> <span class="o">-</span> <span class="n">atom_start</span>
-
-                <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
-            <span class="k">else</span><span class="p">:</span>  <span class="c1"># system level</span>
-                <span class="c1"># Keep batch dim for system-level fields</span>
-                <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="p">:</span> <span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
-
-        <span class="c1"># Load custom fields if present</span>
         <span class="k">if</span> <span class="s2">&quot;custom&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">:</span>
             <span class="n">custom_group</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">[</span><span class="s2">&quot;custom&quot;</span><span class="p">]</span>
             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">custom_group</span><span class="o">.</span><span class="n">array_keys</span><span class="p">():</span>
                 <span class="n">level</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;custom&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">)</span>
-                <span class="n">arr</span> <span class="o">=</span> <span class="n">custom_group</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">custom_group</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
 
+        <span class="n">run_positions</span> <span class="o">=</span> <span class="n">_merge_physical_runs_by_chunks</span><span class="p">(</span>
+            <span class="n">sorted_physical</span><span class="p">,</span>
+            <span class="n">fields</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">run_positions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_many_orthogonal</span><span class="p">(</span>
+                <span class="n">normalized_indices</span><span class="p">,</span>
+                <span class="n">sorted_order</span><span class="p">,</span>
+                <span class="n">sorted_physical</span><span class="p">,</span>
+                <span class="n">fields</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">positions</span> <span class="ow">in</span> <span class="n">run_positions</span><span class="p">:</span>
+            <span class="n">first_physical</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">positions</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="n">last_physical</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">positions</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+
+            <span class="n">atom_range_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">first_physical</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">atom_range_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">last_physical</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">edge_range_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">first_physical</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">edge_range_end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">last_physical</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+            <span class="c1"># Precompute per-position pointer offsets once, shared across</span>
+            <span class="c1"># all fields.  Avoids O(B*F) redundant int(..item()) calls.</span>
+            <span class="n">pos_atom_starts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">pos_atom_ends</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">pos_edge_starts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">pos_edge_ends</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">:</span>
+                <span class="n">pidx</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span><span class="p">]</span>
+                <span class="n">pos_atom_starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">pidx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+                <span class="n">pos_atom_ends</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">pidx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+                <span class="n">pos_edge_starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">pidx</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+                <span class="n">pos_edge_ends</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">pidx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
-                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
+                    <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_range_start</span><span class="p">:</span><span class="n">atom_range_end</span><span class="p">])</span>
                 <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
-                        <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
+                    <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
+                        <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_range_start</span><span class="p">,</span> <span class="n">edge_range_end</span><span class="p">)</span>
                     <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>  <span class="c1"># system level</span>
-                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="p">:</span> <span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">block</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">first_physical</span> <span class="p">:</span> <span class="n">last_physical</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
 
-        <span class="k">return</span> <span class="n">data</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">position</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">positions</span><span class="p">):</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="n">data_by_sorted</span><span class="p">[</span><span class="n">position</span><span class="p">]</span>
+
+                    <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
+                        <span class="n">rel_start</span> <span class="o">=</span> <span class="n">pos_atom_starts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">atom_range_start</span>
+                        <span class="n">rel_end</span> <span class="o">=</span> <span class="n">pos_atom_ends</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">atom_range_start</span>
+                        <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">rel_start</span><span class="p">:</span><span class="n">rel_end</span><span class="p">]</span>
+                    <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
+                        <span class="n">rel_start</span> <span class="o">=</span> <span class="n">pos_edge_starts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">edge_range_start</span>
+                        <span class="n">rel_end</span> <span class="o">=</span> <span class="n">pos_edge_ends</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">edge_range_start</span>
+                        <span class="n">tensor</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">rel_start</span><span class="p">:</span><span class="n">rel_end</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
+                            <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span> <span class="o">-</span> <span class="n">pos_atom_starts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                        <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">system_offset</span> <span class="o">=</span> <span class="n">sorted_physical</span><span class="p">[</span><span class="n">position</span><span class="p">]</span> <span class="o">-</span> <span class="n">first_physical</span>
+                        <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">system_offset</span> <span class="p">:</span> <span class="n">system_offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Map sorted results back to caller&#39;s request order.</span>
+        <span class="n">inverse</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_order</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">new_pos</span><span class="p">,</span> <span class="n">old_pos</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sorted_order</span><span class="p">):</span>
+            <span class="n">inverse</span><span class="p">[</span><span class="n">old_pos</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_pos</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">data_by_sorted</span><span class="p">[</span><span class="n">inverse</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">normalized_indices</span><span class="p">))]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of active (non-deleted) samples.</span>
@@ -1835,7 +2212,7 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active_indices</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sample_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sample_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return metadata for a sample.</span>
 
 <span class="sd">        Parameters</span>
@@ -1848,11 +2225,39 @@ document.write(`
 <span class="sd">        dict[str, str]</span>
 <span class="sd">            Dictionary containing source file information.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_logical_index</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="n">physical_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active_indices</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
         <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">index</span><span class="p">,</span>
             <span class="s2">&quot;source_file&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="p">),</span>
             <span class="s2">&quot;physical_index&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">physical_idx</span><span class="p">),</span>
         <span class="p">}</span>
+
+<div class="viewcode-block" id="AtomicDataZarrReader.get_metadata">
+<a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader.get_metadata">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return atom and edge counts from cached pointer arrays.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Logical sample index. Negative values are supported.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[int, int]</span>
+<span class="sd">            ``(num_atoms, num_edges)`` for the sample.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_logical_index</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="n">physical_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active_indices</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="n">num_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">])</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="n">num_edges</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edges_ptr</span><span class="p">[</span><span class="n">physical_idx</span><span class="p">])</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">num_atoms</span><span class="p">,</span> <span class="n">num_edges</span></div>
+
 
 <div class="viewcode-block" id="AtomicDataZarrReader.close">
 <a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader.close">[docs]</a>

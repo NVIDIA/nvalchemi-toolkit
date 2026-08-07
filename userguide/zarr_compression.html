@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Zarr Compression Tuning &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Zarr Compression Tuning &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,10 +57,11 @@
     <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/zarr_compression';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Supported Models" href="../models/index.html" />
-    <link rel="prev" title="Data Sinks" href="dynamics_sinks.html" />
+    <link rel="next" title="Agent Skills" href="agent_skills.html" />
+    <link rel="prev" title="Distributed Training" href="distributed_training.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -369,6 +372,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -377,16 +381,33 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -448,10 +469,10 @@ document.write(`
 <section class="tex2jax_ignore mathjax_ignore" id="zarr-compression-tuning">
 <span id="zarr-compression-guide"></span><h1>Zarr Compression Tuning<a class="headerlink" href="#zarr-compression-tuning" title="Link to this heading">#</a></h1>
 <p>Zarr stores are the primary persistence format for atomic simulation data in the
-toolkit. Configuring compression and chunking correctly can reduce disk usage by
-2–4× and significantly improve I/O throughput for data pipelines. This
-guide covers the configuration options, codec trade-offs, and practical recipes
-for common workloads.</p>
+toolkit. Configuring compression, chunking, sharding, and read windows correctly
+can reduce disk usage and improve training-time I/O throughput. This guide covers
+the configuration options, codec trade-offs, and practical recipes for common
+workloads.</p>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
 <p>The simplest way to enable compression is to pass a
@@ -504,7 +525,7 @@ as they tell you what arguments are required, defaults, etc.</p>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">custom</span></code></p></td>
-<td><p>User-added arrays via <code class="docutils literal notranslate"><span class="pre">AtomicData.custom</span></code></p></td>
+<td><p>User-added arrays via <code class="docutils literal notranslate"><span class="pre">add_node_property</span></code> / <code class="docutils literal notranslate"><span class="pre">add_edge_property</span></code> / <code class="docutils literal notranslate"><span class="pre">add_system_property</span></code></p></td>
 <td><p>None</p></td>
 </tr>
 </tbody>
@@ -540,7 +561,8 @@ arrays are read sequentially.</p>
 <section id="codec-comparison">
 <h2>Codec comparison<a class="headerlink" href="#codec-comparison" title="Link to this heading">#</a></h2>
 <p>Zarr v3 supports pluggable codecs via the <code class="docutils literal notranslate"><span class="pre">zarr.abc.codec.Codec</span></code> interface. The
-toolkit has been tested with the following:</p>
+toolkit writer accepts any codec supported by Zarr; the benchmark CLI exposes the
+common choices <code class="docutils literal notranslate"><span class="pre">zstd</span></code>, <code class="docutils literal notranslate"><span class="pre">lz4</span></code>, and <code class="docutils literal notranslate"><span class="pre">blosc-zstd</span></code>.</p>
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Codec</p></th>
@@ -565,15 +587,9 @@ toolkit has been tested with the following:</p>
 </tr>
 <tr class="row-even"><td><p>Blosc/Zstd</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.BloscCodec(cname=&quot;zstd&quot;)</span></code></p></td>
-<td><p>Blosc multithreading + Zstd ratio</p></td>
+<td><p>Blosc blocking + Zstd ratio</p></td>
 <td><p>Slightly more complex</p></td>
-<td><p>Large arrays, parallel writes</p></td>
-</tr>
-<tr class="row-odd"><td><p>Gzip</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.GzipCodec</span></code></p></td>
-<td><p>Universal compatibility</p></td>
-<td><p>Slow</p></td>
-<td><p>Archival, interop</p></td>
+<td><p>Large arrays, balanced ratio/speed</p></td>
 </tr>
 </tbody>
 </table>
@@ -584,14 +600,14 @@ compression but slower writes. For Zstd, level 3 is a good default; level 5–9
 improves ratio modestly at the cost of write throughput. For LZ4, the level
 parameter has minimal effect—speed is consistently high.</p>
 </div>
-<section id="blosc-multithreading">
-<h3>Blosc multithreading<a class="headerlink" href="#blosc-multithreading" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">BloscCodec</span></code> can use multiple threads internally, which helps when compressing
-large chunks. By default it uses a single thread; pass <code class="docutils literal notranslate"><span class="pre">nthreads=4</span></code> (or similar)
-if your workload benefits from parallel compression:</p>
+<section id="blosc-options">
+<h3>Blosc options<a class="headerlink" href="#blosc-options" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">BloscCodec</span></code> exposes codec name, compression level, shuffle, and blocksize through
+its constructor. Keep these settings explicit in <code class="docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code> when you want
+reproducible stores:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BloscCodec</span>
 
-<span class="n">compressor</span> <span class="o">=</span> <span class="n">BloscCodec</span><span class="p">(</span><span class="n">cname</span><span class="o">=</span><span class="s2">&quot;zstd&quot;</span><span class="p">,</span> <span class="n">clevel</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nthreads</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">compressor</span> <span class="o">=</span> <span class="n">BloscCodec</span><span class="p">(</span><span class="n">cname</span><span class="o">=</span><span class="s2">&quot;zstd&quot;</span><span class="p">,</span> <span class="n">clevel</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -717,7 +733,8 @@ dtype size <code class="docutils literal notranslate"><span class="pre">d</span>
 </tr>
 </tbody>
 </table>
-<p><strong>Example: positions (float32, shape [V, 3]), 1 MB target</strong></p>
+<section id="positions-example">
+<h4>Positions Example<a class="headerlink" href="#positions-example" title="Link to this heading">#</a></h4>
 <div class="math notranslate nohighlight">
 \[
 \text{bytes\_per\_row} = 3 \times 4 = 12 \text{ bytes}
@@ -726,7 +743,9 @@ dtype size <code class="docutils literal notranslate"><span class="pre">d</span>
 \[
 \text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{12} \right\rfloor = 83{,}333
 \]</div>
-<p><strong>Example: energy (float64, shape [B]), 1 MB target</strong></p>
+</section>
+<section id="energy-example">
+<h4>Energy Example<a class="headerlink" href="#energy-example" title="Link to this heading">#</a></h4>
 <div class="math notranslate nohighlight">
 \[
 \text{bytes\_per\_row} = 1 \times 8 = 8 \text{ bytes}
@@ -736,11 +755,13 @@ dtype size <code class="docutils literal notranslate"><span class="pre">d</span>
 \text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{8} \right\rfloor = 125{,}000
 \]</div>
 </section>
+</section>
 <section id="read-amplification">
 <h3>Read amplification<a class="headerlink" href="#read-amplification" title="Link to this heading">#</a></h3>
 <p>When reading a single structure by index, the reader fetches the slice
-<code class="docutils literal notranslate"><span class="pre">positions[atoms_ptr[i]:atoms_ptr[i+1],</span> <span class="pre">:]</span></code> — typically ~50 rows (600 bytes).
-With large chunks, most of the decompressed data is discarded:</p>
+<code class="docutils literal notranslate"><span class="pre">positions[atoms_ptr[i]:atoms_ptr[i+1],</span> <span class="pre">:]</span></code> — typically about 50 rows
+(600 bytes for float32 positions). With large chunks, most of the decompressed
+data is discarded:</p>
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>chunk_size</p></th>
@@ -763,9 +784,12 @@ With large chunks, most of the decompressed data is discarded:</p>
 </tr>
 </tbody>
 </table>
-<p>For purely sequential workloads (sequential DataLoader) amplification does not
-matter — every row is consumed. For random-access workloads, prefer smaller
-chunks or consider field overrides for frequently accessed arrays.</p>
+<p>For purely sequential workloads, amplification does not matter because every row
+is consumed. For shuffled training, amplification depends on the effective read
+window: the DataLoader fuses <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code> batches into one <code class="docutils literal notranslate"><span class="pre">read_many</span></code> call,
+and the Zarr reader can group indices that share chunk locality. Larger chunks can
+still hurt fully random single-sample access, so prefer smaller chunks or field
+overrides when interactive lookup or visualization is a primary workload.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Atom-level fields (positions, forces, atomic_numbers) are stored as
@@ -1104,30 +1128,62 @@ versus only 1,000 shard files with <code class="docutils literal notranslate"><s
 </section>
 <section id="i-o-benchmark-tool">
 <span id="io-benchmark-section"></span><h2>I/O benchmark tool<a class="headerlink" href="#i-o-benchmark-tool" title="Link to this heading">#</a></h2>
-<p>The toolkit ships a command-line benchmark for measuring Zarr write throughput
-and compression ratios on synthetic data. Use it to validate configuration
-choices before committing to a production workflow.</p>
-<section id="running-the-benchmark">
-<h3>Running the benchmark<a class="headerlink" href="#running-the-benchmark" title="Link to this heading">#</a></h3>
+<p>The toolkit ships a command-line benchmark for measuring Zarr write throughput,
+readback throughput, and compression ratios on synthetic data. Use it to
+validate storage configuration and readback strategy before committing to a
+production workflow.</p>
+<p>The CLI has two subcommands:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">roundtrip</span></code></strong> — generate synthetic data, write it to a temporary Zarr
+store, then read it back and report timing.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">read</span></code></strong> — benchmark read throughput against a pre-existing Zarr store,
+without writing anything.</p></li>
+</ul>
+<p>Run <code class="docutils literal notranslate"><span class="pre">nvalchemi-io-test</span> <span class="pre">--help</span></code> to see the available subcommands. Use
+<code class="docutils literal notranslate"><span class="pre">roundtrip</span></code> when you want the benchmark to create a temporary store, and use
+<code class="docutils literal notranslate"><span class="pre">read</span></code> when you already have a representative store on the target filesystem.</p>
+<section id="running-the-roundtrip-benchmark">
+<h3>Running the roundtrip benchmark<a class="headerlink" href="#running-the-roundtrip-benchmark" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install (if not already)</span>
-$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras
+$<span class="w"> </span>uv<span class="w"> </span>sync
 
 <span class="c1"># Basic: compare codec overhead across dataset sizes</span>
-$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span>--level<span class="w"> </span><span class="m">3</span><span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">83333</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--codec<span class="w"> </span>zstd<span class="w"> </span>--level<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">83333</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">62500</span>
+
+<span class="c1"># Compare fast batch readback against one-sample-at-a-time</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-mode<span class="w"> </span>both<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">8</span>
+
+<span class="c1"># Model shuffled training reads against compressed stores</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>shuffle<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">16</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>block-shuffle<span class="w"> </span>--read-order-block-size<span class="w"> </span><span class="m">8192</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">16</span>
 
 <span class="c1"># Fast codec with smaller chunks for trajectory-style workloads</span>
-$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>lz4<span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">10000</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>lz4<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">10000</span>
 
 <span class="c1"># Larger molecules with edge-specific chunking</span>
-$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--min-atoms<span class="w"> </span><span class="m">100</span><span class="w"> </span>--max-atoms<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="se">\</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--min-atoms<span class="w"> </span><span class="m">100</span><span class="w"> </span>--max-atoms<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--codec<span class="w"> </span>zstd<span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">83333</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">62500</span>
 
 <span class="c1"># With sharding enabled</span>
-$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">1000</span><span class="w"> </span>--shard-size<span class="w"> </span><span class="m">10000</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--shard-size<span class="w"> </span><span class="m">500000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--edge-chunk-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--edge-shard-size<span class="w"> </span><span class="m">500000</span>
+
+<span class="c1"># Write a store to a specific directory for later read benchmarking</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">1024</span><span class="w"> </span>--shard-size<span class="w"> </span><span class="m">4096</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>/scratch/benchmark_stores/
 </pre></div>
 </div>
-<p>Key options:</p>
+<p>Roundtrip options:</p>
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
@@ -1172,88 +1228,378 @@ $<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class=
 <td><p>—</p></td>
 <td><p>Shard size for edge arrays</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--read-mode</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch</span></code></p></td>
+<td><p>Readback path to time: <code class="docutils literal notranslate"><span class="pre">batch</span></code>, <code class="docutils literal notranslate"><span class="pre">single</span></code>, or <code class="docutils literal notranslate"><span class="pre">both</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--batch-size</span></code></p></td>
+<td><p>64</p></td>
+<td><p>Number of samples per emitted DataLoader batch in <code class="docutils literal notranslate"><span class="pre">batch</span></code> mode</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--prefetch-factor</span></code></p></td>
+<td><p>16</p></td>
+<td><p>Number of emitted batches to fuse into each backend read in <code class="docutils literal notranslate"><span class="pre">batch</span></code> mode</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--read-order</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sequential</span></code></p></td>
+<td><p>Logical read order: <code class="docutils literal notranslate"><span class="pre">sequential</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffle</span></code>, or <code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--read-seed</span></code></p></td>
+<td><p>0</p></td>
+<td><p>Random seed for shuffled read orders</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--read-order-block-size</span></code></p></td>
+<td><p>8192</p></td>
+<td><p>Contiguous block size for <code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code> read order</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--pin-memory</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Request pinned CPU tensors in batch read mode</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--output-dir</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Persist the written store(s) here instead of a temp directory</p></td>
+</tr>
 </tbody>
 </table>
 </section>
-<section id="example-output">
-<h3>Example output<a class="headerlink" href="#example-output" title="Link to this heading">#</a></h3>
-<p><strong>Small molecules (10–100 atoms), Zstd level 3, 1 MB chunks:</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=zstd L3, chunk=83,333,
-                                             edge_chunk=62,500
-Pre-computed: 100,000 systems, 5,504,449 total atoms (avg 55.0),
-              11,062,584 total edges (avg 110.6)
-Estimated uncompressed: 484.9 MB
+<section id="read-only-benchmark">
+<h3>Read-only benchmark<a class="headerlink" href="#read-only-benchmark" title="Link to this heading">#</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">nvalchemi-io-test</span> <span class="pre">read</span></code> to benchmark against an existing Zarr store.
+This isolates read performance from generation and write overhead, and lets
+you test multiple read configurations against the same store without
+rewriting it each time.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Sequential read baseline</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span><span class="nb">read</span><span class="w"> </span>/path/to/store.zarr
 
-      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+<span class="c1"># Shuffled access at different read windows</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span><span class="nb">read</span><span class="w"> </span>/path/to/store.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>shuffle<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">8</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span><span class="nb">read</span><span class="w"> </span>/path/to/store.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>shuffle<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">64</span>
 
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   2.8 MB  1.74x     36     0.14s     7,282
-   10,000      55     112  47.1 MB  27.0 MB  1.75x     96     0.48s    20,736
-  100,000      55     111 467.5 MB 267.7 MB  1.75x    691     4.66s    21,471
+<span class="c1"># Compare batch vs. single-sample under shuffle</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span><span class="nb">read</span><span class="w"> </span>/path/to/store.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-mode<span class="w"> </span>both<span class="w"> </span>--read-order<span class="w"> </span>shuffle
 </pre></div>
 </div>
-<p><strong>Small molecules, LZ4, 120 KB chunks (trajectory-optimised):</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=lz4 L3, chunk=10,000,
-                                             edge_chunk=10,000
-
-      Zarr I/O Benchmark — lz4 L3, chunk=10,000, edge_chunk=10,000
-
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   3.0 MB  1.61x     76     0.12s     8,207
-   10,000      55     112  47.1 MB  28.9 MB  1.63x    480     0.80s    12,446
-  100,000      55     111 467.5 MB 287.5 MB  1.63x  4,509     8.10s    12,341
-</pre></div>
-</div>
-<p><strong>Small molecules, sharded (chunk=10,000 inside shard=500,000):</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=chunk=10,000,
-    shard=500,000, edge_chunk=10,000, edge_shard=500,000
-
-      Zarr I/O Benchmark — chunk=10,000, shard=500,000,
-                            edge_chunk=10,000, edge_shard=500,000
-
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   2.8 MB  1.73x     34     0.14s     6,998
-   10,000      55     112  47.1 MB  27.0 MB  1.74x     46     0.63s    15,930
-  100,000      55     111 467.5 MB 268.2 MB  1.74x    158     6.46s    15,471
-</pre></div>
-</div>
-<p>Note the dramatic file count reduction with sharding: <strong>4,509 → 158</strong> at 100k
-systems with the same chunk size, while compression ratio and disk size remain
-essentially unchanged.</p>
-<p><strong>Larger molecules (100–500 atoms), Zstd with edge-specific chunks:</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=100-500  config=zstd L3, chunk=83,333,
-                                              edge_chunk=62,500
-Pre-computed: 10,000 systems, 3,016,657 total atoms (avg 301.7),
-              6,073,861 total edges (avg 607.4)
-Estimated uncompressed: 263.5 MB
-
-      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
-
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000     303     615  25.7 MB  15.4 MB  1.67x     66     0.21s     4,737
-   10,000     302     607 254.7 MB 152.9 MB  1.67x    394     1.23s     8,138
-</pre></div>
+<p>Read options:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PATH</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Path to an existing Zarr store (directory)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--read-mode</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch</span></code>, <code class="docutils literal notranslate"><span class="pre">single</span></code>, or <code class="docutils literal notranslate"><span class="pre">both</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--batch-size</span></code></p></td>
+<td><p>64</p></td>
+<td><p>Number of samples per emitted DataLoader batch</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--prefetch-factor</span></code></p></td>
+<td><p>16</p></td>
+<td><p>Number of emitted batches to fuse into each backend read</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--read-order</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sequential</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sequential</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffle</span></code>, or <code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--read-seed</span></code></p></td>
+<td><p>0</p></td>
+<td><p>Random seed for shuffled orders</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--read-order-block-size</span></code></p></td>
+<td><p>8192</p></td>
+<td><p>Block size for <code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--pin-memory</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Request pinned CPU tensors in batch read mode</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">read</span></code> subcommand measures the public DataLoader read path by default:
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> controls emitted batches, and <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code> controls how
+many emitted batches are fused into one backend read. Use <code class="docutils literal notranslate"><span class="pre">single</span></code> mode only
+as a one-sample-at-a-time baseline.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Zarr v3 defaults to <code class="docutils literal notranslate"><span class="pre">ZstdCodec(level=0)</span></code> when no compressor is specified.
-The “Raw size” column reflects the data as written by the toolkit (including
-Zarr metadata overhead), so even runs without an explicit <code class="docutils literal notranslate"><span class="pre">--codec</span></code> flag
-will show some compression.</p>
+<p>Benchmark <code class="docutils literal notranslate"><span class="pre">batch</span></code> mode uses <code class="docutils literal notranslate"><span class="pre">Dataset(skip_validation=True)</span></code> to focus on storage
+and batching throughput for stores that are already trusted. If your training
+pipeline keeps validation enabled, expect lower end-to-end throughput.</p>
 </div>
+</section>
+<section id="readback-mode-batch-vs-single-sample">
+<h3>Readback mode: batch vs. single sample<a class="headerlink" href="#readback-mode-batch-vs-single-sample" title="Link to this heading">#</a></h3>
+<p>The benchmark reports write time plus a full-store readback. Readback uses the
+batch path by default:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">83333</span>
+</pre></div>
+</div>
+<p>In <code class="docutils literal notranslate"><span class="pre">batch</span></code> mode the benchmark uses the toolkit
+<a class="reference internal" href="../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader" title="nvalchemi.data.datapipes.dataloader.DataLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> with fused prefetch.
+The emitted batch size is controlled by <code class="docutils literal notranslate"><span class="pre">--batch-size</span></code>; the backend read window is
+controlled by <code class="docutils literal notranslate"><span class="pre">--batch-size</span> <span class="pre">*</span> <span class="pre">--prefetch-factor</span></code>. The Zarr reader then receives
+large <code class="docutils literal notranslate"><span class="pre">read_many(...)</span></code> requests and can coalesce physical I/O across the requested
+indices.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">single</span></code> mode to time a one-sample-at-a-time access pattern:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--read-mode<span class="w"> </span>single
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">both</span></code> to emit one row per read path from the same written store:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-mode<span class="w"> </span>both<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">64</span><span class="w"> </span>--prefetch-factor<span class="w"> </span><span class="m">8</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">batch</span></code> mode should be faster for DataLoader-style workloads because it amortises
+Python dispatch, Zarr array indexing, chunk lookup, decompression setup, and
+filesystem metadata access over many samples. <code class="docutils literal notranslate"><span class="pre">single</span></code> mode remains useful as a
+baseline for debugging and for estimating the penalty paid by code that reads one
+structure at a time.</p>
+</section>
+<section id="read-order-sequential-vs-shuffled-training-access">
+<h3>Read order: sequential vs. shuffled training access<a class="headerlink" href="#read-order-sequential-vs-shuffled-training-access" title="Link to this heading">#</a></h3>
+<p>For compressed Zarr stores, the logical index order can dominate throughput.
+Sequential readback gives the Zarr reader mostly contiguous physical positions.
+Fully shuffled readback models <code class="docutils literal notranslate"><span class="pre">DataLoader(shuffle=True)</span></code>: each emitted batch can
+contain unrelated samples, but fused prefetch still gives the reader a larger
+window of indices to sort and group by chunk locality.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">--read-order</span> <span class="pre">shuffle</span></code> to benchmark that worst-case training pattern:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">83333</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">62500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>shuffle
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">--read-order</span> <span class="pre">block-shuffle</span></code> to model one locality-preserving training
+order:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>roundtrip<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">83333</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">62500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--read-order<span class="w"> </span>block-shuffle<span class="w"> </span>--read-order-block-size<span class="w"> </span><span class="m">8192</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code> splits the index range into contiguous blocks of
+<code class="docutils literal notranslate"><span class="pre">--read-order-block-size</span></code> samples, shuffles the <em>blocks</em>, and leaves the
+indices inside each block in sequential order. For example, with 10,000
+samples and a block size of 2,000 the reader sees five blocks in random
+order, but within each block it reads indices 0–1,999, 2,000–3,999, etc.
+sequentially.</p>
+<p>This benchmark mode does <strong>not</strong> correspond to a specific DataLoader API;
+it is a synthetic access pattern that helps you measure how much throughput
+you recover when read locality is partially preserved. Compare
+<code class="docutils literal notranslate"><span class="pre">block-shuffle</span></code> against <code class="docutils literal notranslate"><span class="pre">shuffle</span></code> to quantify the cost of fully random
+access. In practice, a
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html#nvalchemi.dynamics.SizeAwareSampler" title="nvalchemi.dynamics.sampler.SizeAwareSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SizeAwareSampler</span></code></a> with bin-packing
+can produce similar locality as a side-effect of grouping similarly-sized
+systems.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">--read-mode</span> <span class="pre">both</span></code> is used, the two read paths run back-to-back against the
+same freshly written store. This is useful for relative comparisons, but the
+second mode may benefit from filesystem cache. For strict cold-cache numbers,
+run <code class="docutils literal notranslate"><span class="pre">batch</span></code> and <code class="docutils literal notranslate"><span class="pre">single</span></code> in separate invocations with the same benchmark
+configuration.</p>
+</div>
+<p>The following output illustrates the expected shape of the result table. Treat
+numbers as machine- and store-specific; use the CLI on the target filesystem for
+decisions.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Zarr I/O Roundtrip Benchmark — no compression
+
+  Systems   Read path   Read order   Batch   Prefetch   Read window   Write   Read   I/O/s
+ ──────────────────────────────────────────────────────────────────────────────────────────
+   10,000   batch       shuffle         64         32         2,048    0.54s   3.17s  2,695
+</pre></div>
+</div>
+</section>
+</section>
+<section id="read-performance-tuning">
+<span id="id1"></span><h2>Read performance tuning<a class="headerlink" href="#read-performance-tuning" title="Link to this heading">#</a></h2>
+<p>The benchmark commands above measure the public read paths: <code class="docutils literal notranslate"><span class="pre">batch</span></code> mode uses
+the toolkit DataLoader with fused prefetch and <code class="docutils literal notranslate"><span class="pre">single</span></code> mode calls
+<code class="docutils literal notranslate"><span class="pre">reader.read(...)</span></code> once per sample. In production, validation, batching, and
+device-transfer overhead can dominate the end-to-end pipeline. This section
+covers the knobs that matter most for read throughput, especially under shuffled
+access patterns.</p>
+<figure class="align-default" id="id2">
+<div class="graphviz"><object data="../_images/graphviz-abd16e1b6261e7a3b12b975db24c0cde9b584895.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph read_pipeline {
+    rankdir=LR
+    compound=true
+
+    subgraph cluster_dataloader {
+        label=&quot;DataLoader&quot;
+        style=rounded
+        color=&quot;#76b900&quot;
+        fontcolor=&quot;#eeeeee&quot;
+
+        sampler [label=&quot;Sampler\n(indices)&quot;]
+        fuse [label=&quot;Fuse\nprefetch_factor\nbatches&quot; fillcolor=&quot;#4a3315&quot;]
+        sampler -&gt; fuse [label=&quot;batch of\nindices&quot;]
+    }
+
+    subgraph cluster_dataset {
+        label=&quot;Dataset  (background thread)&quot;
+        style=rounded
+        color=&quot;#76b900&quot;
+        fontcolor=&quot;#eeeeee&quot;
+
+        read_many [label=&quot;reader.read_many()\ncoalesced backend read&quot;]
+        validate [label=&quot;AtomicData\nvalidation\n(Pydantic)&quot; fillcolor=&quot;#4a2222&quot;]
+        raw [label=&quot;raw tensor\ndicts&quot; fillcolor=&quot;#26351d&quot;]
+        batch_val [label=&quot;Batch.from_data_list()&quot; fillcolor=&quot;#2d2740&quot;]
+        batch_raw [label=&quot;Batch.from_raw_dicts()&quot; fillcolor=&quot;#2d2740&quot;]
+
+        read_many -&gt; validate [label=&quot;skip_validation\n= False&quot;]
+        read_many -&gt; raw [label=&quot;skip_validation\n= True&quot;]
+        validate -&gt; batch_val
+        raw -&gt; batch_raw
+    }
+
+    subgraph cluster_consumer {
+        label=&quot;Consumer&quot;
+        style=rounded
+        color=&quot;#76b900&quot;
+        fontcolor=&quot;#eeeeee&quot;
+
+        device [label=&quot;.to(device)&quot; fillcolor=&quot;#4a3315&quot;]
+        model [label=&quot;Model&quot;]
+        device -&gt; model
+    }
+
+    fuse -&gt; read_many [label=&quot;N indices\n(N = pf × bs)&quot; lhead=cluster_dataset style=bold]
+    batch_val -&gt; device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+    batch_raw -&gt; device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+}</p></object></div>
+<figcaption>
+<p><span class="caption-text">End-to-end read pipeline.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<section id="the-read-window-prefetch-factor">
+<h3>The read window: <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code><a class="headerlink" href="#the-read-window-prefetch-factor" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader" title="nvalchemi.data.datapipes.dataloader.DataLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> groups
+<code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code> consecutive batches into a single
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">prefetch_fused_batches()</span></code> call.
+The reader sees one large <code class="docutils literal notranslate"><span class="pre">read_many(...)</span></code> request containing up to
+<code class="docutils literal notranslate"><span class="pre">prefetch_factor</span> <span class="pre">*</span> <span class="pre">batch_size</span></code> indices instead of many small calls, which lets
+the Zarr backend coalesce random indices into larger physical reads.</p>
+<p>The synchronous counterpart is
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">load_batches()</span></code>, which accepts
+one or more batch-index lists and returns one
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> per list. <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> uses this same
+batch-construction path when <code class="docutils literal notranslate"><span class="pre">prefetch_factor=0</span></code>; only the async double-buffered
+prefetch is disabled. New code should prefer <code class="docutils literal notranslate"><span class="pre">load_batches(...)</span></code> for explicit
+batch reads rather than calling older one-batch helpers directly.</p>
+<p>Larger windows amortise per-call Zarr overhead across more samples.  For
+shuffled training, a <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code> of 16–32 is a good starting point, but
+the best value depends on store size, chunking, compression, filesystem, and
+whether pinned memory is enabled. Use the benchmark tool below on a
+representative store before treating any value as a default for production.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>Run with <code class="docutils literal notranslate"><span class="pre">--min-atoms</span></code> and <code class="docutils literal notranslate"><span class="pre">--max-atoms</span></code> matching your actual dataset to get
-realistic estimates. The benchmark uses uniform random atom counts; real-world
-distributions may be skewed toward smaller or larger structures.</p>
+<p>For sequential access the reader already detects contiguous runs, so
+<code class="docutils literal notranslate"><span class="pre">prefetch_factor=2</span></code> is enough.  Increase it primarily when
+<code class="docutils literal notranslate"><span class="pre">read_order=shuffle</span></code> or <code class="docutils literal notranslate"><span class="pre">read_order=block-shuffle</span></code>.</p>
+</div>
+</section>
+<section id="skipping-validation-skip-validation">
+<h3>Skipping validation: <code class="docutils literal notranslate"><span class="pre">skip_validation</span></code><a class="headerlink" href="#skipping-validation-skip-validation" title="Link to this heading">#</a></h3>
+<p>By default the <a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a>
+validates every loaded sample through
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> (Pydantic), which adds CPU overhead.
+When the backing store is known to
+contain well-formed data — for example, stores written by the toolkit’s
+own writer — you can bypass this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">InMemoryDataset</span></code> accepts the same flag when materializing a reader-backed
+resident batch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">skip_validation=True</span></code> the Dataset or InMemoryDataset constructs
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> objects directly from raw tensor
+dictionaries via
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_raw_dicts" title="nvalchemi.data.Batch.from_raw_dicts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_raw_dicts()</span></code></a>, avoiding per-sample
+Pydantic overhead. For InMemoryDataset this speeds up initial materialization;
+subsequent DataLoader iteration selects graphs from the resident batch.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">skip_validation</span></code> trusts the store contents.  Use it only with stores
+produced by
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a>
+or stores whose schema you have already validated independently.</p>
+</div>
+</section>
+<section id="how-the-zarr-reader-coalesces-random-indices">
+<h3>How the Zarr reader coalesces random indices<a class="headerlink" href="#how-the-zarr-reader-coalesces-random-indices" title="Link to this heading">#</a></h3>
+<p>The public <code class="docutils literal notranslate"><span class="pre">read_many</span></code> method delegates raw loading to the Zarr reader’s
+batch-oriented <code class="docutils literal notranslate"><span class="pre">_load_many_samples</span></code> hook. That hook applies several
+backend-specific optimisations automatically:</p>
+<ol class="arabic simple">
+<li><p><strong>Resolve logical indices</strong>: requested logical indices are mapped through the
+active-sample mask, so soft-deleted samples are skipped consistently.</p></li>
+<li><p><strong>Sort by physical position</strong>: requests are ordered by physical sample index
+so the underlying storage sees monotonic offsets where possible.</p></li>
+<li><p><strong>Group by chunk locality</strong>: samples that share Zarr chunks are grouped into
+range reads, with an amplification cap to avoid pathological over-reads when
+indices are very sparse.</p></li>
+<li><p><strong>Fallback for fragmentation</strong>: highly fragmented requests use orthogonal
+selections instead of many tiny range reads.</p></li>
+</ol>
+<p>These optimisations are transparent: <code class="docutils literal notranslate"><span class="pre">read_many</span></code> still returns results in the
+caller’s original request order.</p>
+</section>
+<section id="starting-configurations">
+<h3>Starting configurations<a class="headerlink" href="#starting-configurations" title="Link to this heading">#</a></h3>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Access pattern</p></th>
+<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code></p></th>
+<th class="head text-center"><p><code class="docutils literal notranslate"><span class="pre">skip_validation</span></code></p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Sequential training</p></td>
+<td class="text-right"><p>2–4</p></td>
+<td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">False</span></code> or <code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Small windows are usually enough because samples are already contiguous.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shuffled training (trusted store)</p></td>
+<td class="text-right"><p>16–64</p></td>
+<td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Larger windows give the Zarr reader more indices to coalesce.</p></td>
+</tr>
+<tr class="row-even"><td><p>Shuffled training (untrusted store)</p></td>
+<td class="text-right"><p>16–64</p></td>
+<td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Keeps validation enabled, but validation can dominate end-to-end time.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Block-shuffle (block ≥ chunk)</p></td>
+<td class="text-right"><p>2–8</p></td>
+<td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Preserves some locality while still mixing batches.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Treat these as starting points, not throughput guarantees.  Benchmark with
+<code class="docutils literal notranslate"><span class="pre">nvalchemi-io-test</span> <span class="pre">read</span></code> or <code class="docutils literal notranslate"><span class="pre">nvalchemi-io-test</span> <span class="pre">roundtrip</span></code> using the same
+read order, batch size, prefetch factor, compression, and storage backend you
+expect in training.</p>
 </div>
 </section>
 </section>
@@ -1287,20 +1633,20 @@ readers, datasets, and dataloaders.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="dynamics_sinks.html"
+       href="distributed_training.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Data Sinks</p>
+        <p class="prev-next-title">Distributed Training</p>
       </div>
     </a>
     <a class="right-next"
-       href="../models/index.html"
+       href="agent_skills.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Supported Models</p>
+        <p class="prev-next-title">Agent Skills</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1328,12 +1674,16 @@ readers, datasets, and dataloaders.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#codec-comparison">Codec comparison</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blosc-multithreading">Blosc multithreading</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blosc-options">Blosc options</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#chunk-size-tuning">Chunk size tuning</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#target-chunk-size">Target chunk size</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#back-of-the-envelope-formula">Back-of-the-envelope formula</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#back-of-the-envelope-formula">Back-of-the-envelope formula</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#positions-example">Positions Example</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#energy-example">Energy Example</a></li>
+</ul>
+</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#read-amplification">Read amplification</a></li>
 </ul>
 </li>
@@ -1353,8 +1703,17 @@ readers, datasets, and dataloaders.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#i-o-benchmark-tool">I/O benchmark tool</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-benchmark">Running the benchmark</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-output">Example output</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-roundtrip-benchmark">Running the roundtrip benchmark</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#read-only-benchmark">Read-only benchmark</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#readback-mode-batch-vs-single-sample">Readback mode: batch vs. single sample</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#read-order-sequential-vs-shuffled-training-access">Read order: sequential vs. shuffled training access</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-performance-tuning">Read performance tuning</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-read-window-prefetch-factor">The read window: <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#skipping-validation-skip-validation">Skipping validation: <code class="docutils literal notranslate"><span class="pre">skip_validation</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-the-zarr-reader-coalesces-random-indices">How the Zarr reader coalesces random indices</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-configurations">Starting configurations</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

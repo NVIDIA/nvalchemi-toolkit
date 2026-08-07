@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_LJ\_HALO
+=========================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_LJ_HALO

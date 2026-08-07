@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.base &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.models.base &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/base';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -420,6 +423,7 @@ document.write(`
 <span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class="c1"># See the License for the specific language governing permissions and</span>
 <span class="c1"># limitations under the License.</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
@@ -427,13 +431,17 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomsLike</span><span class="p">,</span> <span class="n">ModelOutputs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyKind</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLIPSpec</span>
 
 <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;once&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
 
@@ -460,35 +468,101 @@ document.write(`
     <span class="n">MATRIX</span> <span class="o">=</span> <span class="s2">&quot;matrix&quot;</span>
 
 
+<div class="viewcode-block" id="NeighborConfig">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.NeighborConfig.html#nvalchemi.models.base.NeighborConfig">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">NeighborConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for on-the-fly neighbor list construction.</span>
 
-<span class="sd">    An instance of this class attached to a :class:`ModelConfig` signals that</span>
-<span class="sd">    the model requires a neighbor list and describes the format and parameters</span>
-<span class="sd">    it expects.  At runtime a :class:`~nvalchemi.hooks.NeighborListHook`</span>
-<span class="sd">    reads this config to compute and cache the appropriate neighbor data.</span>
+<span class="sd">    An instance of this class attached to a :class:`ModelConfig` (via its</span>
+<span class="sd">    ``neighbor_config`` field) signals that the model requires a neighbor list</span>
+<span class="sd">    and describes the format and parameters it expects. At runtime a</span>
+<span class="sd">    :class:`~nvalchemi.hooks.NeighborListHook` reads this config to compute and</span>
+<span class="sd">    cache the appropriate neighbor data on each :class:`~nvalchemi.data.Batch`</span>
+<span class="sd">    before the model&#39;s forward pass, rebuilding only when atoms have moved</span>
+<span class="sd">    beyond the Verlet ``skin``.</span>
 
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    cutoff : float</span>
-<span class="sd">        Interaction cutoff radius in the same length units as positions.</span>
-<span class="sd">    format : NeighborListFormat</span>
-<span class="sd">        Whether to build a dense neighbor matrix (``MATRIX``) or a sparse</span>
-<span class="sd">        edge-index list (``COO``).  Defaults to ``COO``.</span>
-<span class="sd">    half_list : bool</span>
-<span class="sd">        If ``True``, each pair ``(i, j)`` with ``i &lt; j`` appears only once.</span>
-<span class="sd">        Newton&#39;s third law is applied inside the interaction kernel to recover</span>
-<span class="sd">        forces on both atoms.  Defaults to ``False``.</span>
-<span class="sd">    skin : float</span>
-<span class="sd">        Verlet skin distance.  The neighbor list is only rebuilt when any atom</span>
-<span class="sd">        has moved more than ``skin / 2`` since the last build.  Set to ``0.0``</span>
-<span class="sd">        (default) to rebuild every step.</span>
+<span class="sd">    The single required argument is ``cutoff`` (in the same length units as</span>
+<span class="sd">    ``positions``). ``format`` selects the storage layout: ``COO`` produces a</span>
+<span class="sd">    sparse ``[E, 2]`` edge index (the default, used by most GNN-based MLIPs),</span>
+<span class="sd">    while ``MATRIX`` produces a dense ``[N, max_neighbors]`` neighbor matrix</span>
+<span class="sd">    (used by Warp interaction kernels) — see :class:`NeighborListFormat`.</span>
+<span class="sd">    ``half_list`` and ``skin`` tune pair deduplication and rebuild frequency,</span>
+<span class="sd">    respectively.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    A minimal sparse (COO) neighbor list with a 5 A cutoff:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.base import NeighborConfig</span>
+<span class="sd">    &gt;&gt;&gt; nc = NeighborConfig(cutoff=5.0)</span>
+<span class="sd">    &gt;&gt;&gt; nc.format</span>
+<span class="sd">    &lt;NeighborListFormat.COO: &#39;coo&#39;&gt;</span>
+
+<span class="sd">    A dense half neighbor list with a Verlet skin, e.g. for a Warp kernel:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.base import NeighborListFormat</span>
+<span class="sd">    &gt;&gt;&gt; nc = NeighborConfig(</span>
+<span class="sd">    ...     cutoff=5.0,</span>
+<span class="sd">    ...     format=NeighborListFormat.MATRIX,</span>
+<span class="sd">    ...     half_list=True,</span>
+<span class="sd">    ...     skin=1.0,</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    Attach it to a :class:`ModelConfig` to declare a neighbor-list requirement:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.base import ModelConfig</span>
+<span class="sd">    &gt;&gt;&gt; cfg = ModelConfig(neighbor_config=NeighborConfig(cutoff=5.0))</span>
+<span class="sd">    &gt;&gt;&gt; cfg.needs_neighborlist</span>
+<span class="sd">    True</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    - ``skin=0.0`` (the default) rebuilds the neighbor list every step; a</span>
+<span class="sd">      positive skin defers rebuilds until any atom moves more than ``skin / 2``,</span>
+<span class="sd">      trading memory staleness for fewer rebuilds.</span>
+<span class="sd">    - ``half_list=True`` stores each ``(i, j)`` pair once; the interaction kernel</span>
+<span class="sd">      applies Newton&#39;s third law to recover forces on both atoms, so it is only</span>
+<span class="sd">      appropriate for kernels that expect a half list.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="nb">format</span><span class="p">:</span> <span class="n">NeighborListFormat</span> <span class="o">=</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
-    <span class="n">half_list</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">skin</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">cutoff</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Interaction cutoff radius in the same length units as positions.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="nb">format</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">NeighborListFormat</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Whether to build a dense neighbor matrix (``MATRIX``) or a sparse &quot;</span>
+                <span class="s2">&quot;edge-index list (``COO``).  Defaults to ``COO``.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
+    <span class="n">half_list</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;If ``True``, each pair ``(i, j)`` with ``i &lt; j`` appears only once. &quot;</span>
+                <span class="s2">&quot;Newton&#39;s third law is applied inside the interaction kernel to recover &quot;</span>
+                <span class="s2">&quot;forces on both atoms.  Defaults to ``False``.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">skin</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Verlet skin distance.  The neighbor list is only rebuilt when any atom &quot;</span>
+                <span class="s2">&quot;has moved more than ``skin / 2`` since the last build.  Set to ``0.0`` &quot;</span>
+                <span class="s2">&quot;(default) to rebuild every step.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span></div>
+
 
 
 <div class="viewcode-block" id="ModelConfig">
@@ -497,45 +571,75 @@ document.write(`
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Unified model configuration combining capability declaration and</span>
 <span class="sd">    runtime control.</span>
 
+<span class="sd">    ``ModelConfig`` is the contract between a model wrapper and the rest of</span>
+<span class="sd">    nvalchemi: dynamics engines, composition pipelines, loss functions, and the</span>
+<span class="sd">    :class:`BaseModelMixin` adapters all read it to decide which inputs to</span>
+<span class="sd">    prepare, which gradients to enable, and which outputs to compute. Every</span>
+<span class="sd">    :class:`BaseModelMixin` subclass must set a ``self.model_config`` instance</span>
+<span class="sd">    in its ``__init__`` (there is deliberately no class-level default, so each</span>
+<span class="sd">    wrapper owns its own config object).</span>
+
 <span class="sd">    A ``ModelConfig`` has two kinds of fields:</span>
 
 <span class="sd">    - **Capability fields** (frozen at construction) describe what the</span>
 <span class="sd">      model checkpoint can do.  These use ``frozenset`` to signal</span>
 <span class="sd">      immutability.  They are set once by the wrapper&#39;s ``__init__`` and</span>
-<span class="sd">      should not be changed at runtime.</span>
+<span class="sd">      should not be changed at runtime. Examples: ``outputs``,</span>
+<span class="sd">      ``autograd_outputs``, ``autograd_inputs``, ``required_inputs``,</span>
+<span class="sd">      ``optional_inputs``, ``supports_pbc``, ``needs_pbc``,</span>
+<span class="sd">      ``neighbor_config``.</span>
 <span class="sd">    - **Runtime fields** (mutable) control what the model should compute</span>
-<span class="sd">      on each forward pass.  These can be changed freely by the user.</span>
+<span class="sd">      on each forward pass.  These can be changed freely by the user:</span>
+<span class="sd">      ``active_outputs`` selects the subset of ``outputs`` to compute this</span>
+<span class="sd">      run, and ``gradient_keys`` enables gradients on extra input tensors.</span>
 
 <span class="sd">    ``outputs`` and ``required_inputs`` use free-form strings so new</span>
 <span class="sd">    properties can be added without modifying this class.  Well-known</span>
-<span class="sd">    output keys: ``energy``, ``forces``, ``stresses``, ``hessians``,</span>
-<span class="sd">    ``dipoles``, ``charges``, ``embeddings``.</span>
+<span class="sd">    output keys: ``energy``, ``forces``, ``stress``, ``hessian``,</span>
+<span class="sd">    ``dipole``, ``charges``, ``embeddings``. Declare a neighbor-list</span>
+<span class="sd">    requirement by attaching a :class:`NeighborConfig` (see</span>
+<span class="sd">    :attr:`needs_neighborlist`).</span>
 
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    outputs : frozenset[str]</span>
-<span class="sd">        All properties the model can produce (frozen).</span>
-<span class="sd">    autograd_outputs : frozenset[str]</span>
-<span class="sd">        Subset of ``outputs`` computed via autograd (frozen).</span>
-<span class="sd">    autograd_inputs : frozenset[str]</span>
-<span class="sd">        Input keys needing ``requires_grad_(True)`` for autograd (frozen).</span>
-<span class="sd">    required_inputs : frozenset[str]</span>
-<span class="sd">        Extra inputs beyond ``{positions, atomic_numbers}`` that the</span>
-<span class="sd">        model requires (frozen).</span>
-<span class="sd">    optional_inputs : frozenset[str]</span>
-<span class="sd">        Extra inputs the model can optionally use if present (frozen).</span>
-<span class="sd">    supports_pbc : bool</span>
-<span class="sd">        Whether the model supports periodic boundary conditions (frozen).</span>
-<span class="sd">    needs_pbc : bool</span>
-<span class="sd">        Whether the model requires PBC inputs (frozen).</span>
-<span class="sd">    neighbor_config : NeighborConfig | None</span>
-<span class="sd">        Neighbor list requirements (frozen).</span>
-<span class="sd">    active_outputs : set[str]</span>
-<span class="sd">        Properties to compute this run (mutable).  Defaults to</span>
-<span class="sd">        ``outputs`` if not explicitly set.</span>
-<span class="sd">    gradient_keys : set[str]</span>
-<span class="sd">        Extra input keys to enable gradients for beyond those implied</span>
-<span class="sd">        by ``autograd_inputs`` (mutable).</span>
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    An energy-and-forces model whose forces come from autograd on positions:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.base import ModelConfig</span>
+<span class="sd">    &gt;&gt;&gt; cfg = ModelConfig(</span>
+<span class="sd">    ...     outputs=frozenset({&quot;energy&quot;, &quot;forces&quot;}),</span>
+<span class="sd">    ...     autograd_outputs=frozenset({&quot;forces&quot;}),</span>
+<span class="sd">    ...     autograd_inputs=frozenset({&quot;positions&quot;}),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; cfg.active_outputs == {&quot;energy&quot;, &quot;forces&quot;}</span>
+<span class="sd">    True</span>
+
+<span class="sd">    Restrict a run to a single output without changing the model&#39;s capabilities:</span>
+
+<span class="sd">    &gt;&gt;&gt; cfg.active_outputs = {&quot;energy&quot;}</span>
+
+<span class="sd">    Declare a PBC-aware model that needs a neighbor list:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.base import NeighborConfig</span>
+<span class="sd">    &gt;&gt;&gt; cfg = ModelConfig(</span>
+<span class="sd">    ...     outputs=frozenset({&quot;energy&quot;, &quot;forces&quot;, &quot;stress&quot;}),</span>
+<span class="sd">    ...     autograd_outputs=frozenset({&quot;forces&quot;, &quot;stress&quot;}),</span>
+<span class="sd">    ...     supports_pbc=True,</span>
+<span class="sd">    ...     needs_pbc=True,</span>
+<span class="sd">    ...     neighbor_config=NeighborConfig(cutoff=5.0),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; cfg.needs_neighborlist</span>
+<span class="sd">    True</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    - ``extra=&quot;forbid&quot;``: unknown constructor keywords raise a</span>
+<span class="sd">      :class:`pydantic.ValidationError`, guarding against typo&#39;d field names.</span>
+<span class="sd">    - ``active_outputs`` defaults to a mutable copy of ``outputs`` when left as</span>
+<span class="sd">      ``None``; set it to narrow the per-run output set, and reset it to ``None``</span>
+<span class="sd">      to fall back to all ``outputs``.</span>
+<span class="sd">    - Capability fields are ``frozenset`` values: rebind the whole field to</span>
+<span class="sd">      change them (in-place mutation is impossible), which keeps the declared</span>
+<span class="sd">      capabilities effectively immutable after construction.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># ── Capability fields (frozen at construction) ──────────────────────</span>
@@ -670,6 +774,13 @@ document.write(`
     <span class="c1"># sharing a single ModelConfig object (which would cause mutations in one wrapper</span>
     <span class="c1"># to silently affect all others).  __init_subclass__ wraps __init__ to enforce</span>
     <span class="c1"># this at construction time — a missing model_config raises TypeError.</span>
+
+    <span class="c1"># Per-scope distributed runtime context. ``None`` outside a</span>
+    <span class="c1"># ``DistributedModel`` scope; set to the</span>
+    <span class="c1"># :class:`DistributedContext` the scope owns by</span>
+    <span class="c1"># :meth:`distributed_setup`. Read via ``self._dist_ctx`` from</span>
+    <span class="c1"># :meth:`adapt_input` to get live ``halo_meta`` / ``gather_meta``.</span>
+    <span class="n">_dist_ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Hook applied to every concrete subclass at class-creation time.</span>
@@ -929,7 +1040,10 @@ document.write(`
 <span class="sd">            OrderedDict with expected output keys and their values</span>
 <span class="sd">            (or ``None`` if not present).  Tensors may be graph-attached.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">output</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_data</span><span class="p">())</span>
+        <span class="c1"># ``output_data()`` returns a set, whose iteration order is randomized</span>
+        <span class="c1"># per process (str hashing). Sort so every rank seeds the output dict in</span>
+        <span class="c1"># an identical key order.</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_data</span><span class="p">()))</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="n">model_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
@@ -952,6 +1066,71 @@ document.write(`
 <span class="sd">            Prefix for the output head</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Distributed hooks</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="BaseModelMixin.distribution_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.distribution_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="s2">&quot;StrategyKind | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;MLIPSpec | None&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Return the :class:`MLIPSpec` describing the primitives this model</span>
+<span class="sd">        needs under domain parallelism *for the given parallelization strategy*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        strategy</span>
+<span class="sd">            The :class:`~nvalchemi.distributed.config.StrategyKind` the scope runs</span>
+<span class="sd">            under (``HALO`` / ``GRAPH_PARTITION``); ``None``</span>
+<span class="sd">            is treated as ``HALO``. The framework passes the config-selected</span>
+<span class="sd">            strategy — models must not sniff the environment. The spec content is a</span>
+<span class="sd">            joint :math:`(\mathrm{model} \times \mathrm{strategy})` product, so a model that supports graph</span>
+<span class="sd">            parallel returns a different ``(policy, adapters, shard_fields,</span>
+<span class="sd">            consolidation)`` bundle per strategy.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MLIPSpec | None</span>
+<span class="sd">            Default ``None`` = model doesn&#39;t declare distributed support.</span>
+<span class="sd">            ``DomainParallel`` raises if asked to shard a model whose spec is</span>
+<span class="sd">            ``None``. Per-model wrappers override to return a preset</span>
+<span class="sd">            (``SPEC_MPNN_HALO`` / ``SPEC_UMA_HALO``) or a custom spec.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="BaseModelMixin.distributed_setup">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.distributed_setup">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distributed_setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Called once by :class:`DistributedModel` when entering a</span>
+<span class="sd">        distributed scope, after the spec&#39;s adapters have been</span>
+<span class="sd">        installed. ``ctx`` is the :class:`DistributedContext` that the</span>
+<span class="sd">        framework will mutate per-step (``ctx.halo_meta`` /</span>
+<span class="sd">        ``ctx.gather_meta``); the wrapper should stash a reference to</span>
+<span class="sd">        ``ctx`` (commonly as ``self._dist_ctx``) so its</span>
+<span class="sd">        :meth:`adapt_input` can read the live values at forward time.</span>
+
+<span class="sd">        Override to also build per-rank closures (e.g. distributed</span>
+<span class="sd">        helper replacements that close over ``ctx.gather_meta``) at</span>
+<span class="sd">        scope-entry time.</span>
+
+<span class="sd">        Default: no-op. Simple halo-mode models (MACE, LJ) don&#39;t</span>
+<span class="sd">        override beyond stashing the ctx reference, which the default</span>
+<span class="sd">        implementation handles for them — see :attr:`_dist_ctx`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dist_ctx</span> <span class="o">=</span> <span class="n">ctx</span></div>
+
+
+<div class="viewcode-block" id="BaseModelMixin.distributed_teardown">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.distributed_teardown">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distributed_teardown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore anything :meth:`distributed_setup` mutated. Default</span>
+<span class="sd">        clears the ctx reference; override to also restore monkey-patches</span>
+<span class="sd">        the framework&#39;s adapter registry doesn&#39;t manage.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dist_ctx</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="BaseModelMixin.input_data">
@@ -1070,7 +1249,11 @@ document.write(`
 
 <div class="viewcode-block" id="BaseModelMixin.make_neighbor_hooks">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">make_neighbor_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_neighbor_hooks</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">neighbor_list_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a list of :class:`~nvalchemi.hooks.NeighborListHook` instances</span>
 <span class="sd">        for this model&#39;s neighbor configuration.</span>
 
@@ -1082,6 +1265,9 @@ document.write(`
 <span class="sd">        max_neighbors : int | None, optional</span>
 <span class="sd">            Maximum neighbors per atom for MATRIX format.  When ``None``</span>
 <span class="sd">            (default), auto-estimated from the cutoff at first use.</span>
+<span class="sd">        neighbor_list_method : str | None, optional</span>
+<span class="sd">            Explicit ``nvalchemiops`` neighbor-list method to use.  When</span>
+<span class="sd">            ``None`` (default), the hook selects an appropriate method.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>  <span class="c1"># noqa: PLC0415</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>  <span class="c1"># noqa: PLC0415</span>
@@ -1094,6 +1280,7 @@ document.write(`
                 <span class="n">nc</span><span class="p">,</span>
                 <span class="n">skin</span><span class="o">=</span><span class="n">nc</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span>
                 <span class="n">max_neighbors</span><span class="o">=</span><span class="n">max_neighbors</span><span class="p">,</span>
+                <span class="n">method</span><span class="o">=</span><span class="n">neighbor_list_method</span><span class="p">,</span>
                 <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">]</span></div>

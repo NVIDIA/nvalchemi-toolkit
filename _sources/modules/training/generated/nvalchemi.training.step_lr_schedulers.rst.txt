@@ -1,0 +1,6 @@
+﻿nvalchemi.training.step\_lr\_schedulers
+=======================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: step_lr_schedulers

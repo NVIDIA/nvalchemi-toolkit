@@ -1,0 +1,6 @@
+﻿nvalchemi.training.default\_training\_fn
+========================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: default_training_fn

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.distributed\_method
+=========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: distributed_method

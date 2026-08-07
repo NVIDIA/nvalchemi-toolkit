@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Installation Guide &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Installation Guide &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/about/install';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Introduction to ALCHEMI Toolkit" href="intro.html" />
@@ -367,6 +370,7 @@ document.write(`
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,16 +379,33 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="../reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -445,23 +466,80 @@ document.write(`
   <!-- markdownlint-disable MD025 MD033 MD014 -->
 <section class="tex2jax_ignore mathjax_ignore" id="installation-guide">
 <span id="install-guide"></span><h1>Installation Guide<a class="headerlink" href="#installation-guide" title="Link to this heading">#</a></h1>
-<section id="installation-methods">
-<h2>Installation Methods<a class="headerlink" href="#installation-methods" title="Link to this heading">#</a></h2>
+<p>There are a number of ways to download and setup a Python environment for <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code>,
+depending on whether you are a user, a developer, what optional dependencies you would like
+to include, what version of CUDA Toolkit is available, and what environment manager you use.</p>
 <section id="from-pypi">
-<h3>From PyPI<a class="headerlink" href="#from-pypi" title="Link to this heading">#</a></h3>
-<p>The most straightforward way to install ALCHEMI Toolkit is via PyPI:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>nvalchemi-toolkit
-</pre></div>
+<h2>From PyPI<a class="headerlink" href="#from-pypi" title="Link to this heading">#</a></h2>
+<p>The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
+one accelerator stack, then add any compatible optional extras.</p>
+<div class="install-matrix" id="install-matrix">
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="package-manager-label">Package manager</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="package-manager-label">
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-pip" value="pip" checked>
+      <label for="package-manager-pip">Pip</label>
+      <input class="install-matrix-input" type="radio" name="package-manager" id="package-manager-uv" value="uv">
+      <label for="package-manager-uv">uv</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="accelerator-label">Accelerator</div>
+    <div class="install-matrix-options" role="radiogroup" aria-labelledby="accelerator-label">
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-none" value="none" checked>
+      <label for="accelerator-none">No CUDA</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu12" value="cu12">
+      <label for="accelerator-cu12">CUDA 12</label>
+      <input class="install-matrix-input" type="radio" name="accelerator" id="accelerator-cu13" value="cu13">
+      <label for="accelerator-cu13">CUDA 13</label>
+    </div>
+  </div>
+  <div class="install-matrix-row">
+    <div class="install-matrix-heading" id="optional-extras-label">Optional extras</div>
+    <div class="install-matrix-options" role="group" aria-labelledby="optional-extras-label">
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-aimnet" value="aimnet">
+      <label for="extra-aimnet">AIMNet2</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-ase" value="ase">
+      <label for="extra-ase">ASE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-mace" value="mace">
+      <label for="extra-mace">MACE</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-pymatgen" value="pymatgen">
+      <label for="extra-pymatgen">pymatgen</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-tensorboard" value="tensorboard">
+      <label for="extra-tensorboard">TensorBoard</label>
+      <input class="install-matrix-input" type="checkbox" name="extra" id="extra-uma" value="uma">
+      <label for="extra-uma">UMA</label>
+    </div>
+  </div>
+  <div class="install-matrix-output">
+    <div class="install-matrix-heading">Run this command</div>
+    <div class="install-command">
+      <pre><code id="install-command">pip install nvalchemi-toolkit</code></pre>
+      <button type="button" id="copy-install-command" aria-label="Copy install command">Copy</button>
+    </div>
+  </div>
+  <p class="install-matrix-note" id="install-matrix-note" aria-live="polite"></p>
+</div>
+<noscript>
+Choose one accelerator extra and append any compatible optional extras, for
+example: <code>pip install 'nvalchemi-toolkit[cu13,mace]'</code>.
+</noscript>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The CUDA extras are mutually exclusive. The <code class="docutils literal notranslate"><span class="pre">uma</span></code> extra is also mutually
+exclusive with <code class="docutils literal notranslate"><span class="pre">cu12</span></code>, <code class="docutils literal notranslate"><span class="pre">cu13</span></code>, and <code class="docutils literal notranslate"><span class="pre">mace</span></code>; keep UMA in a separate environment.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>We recommend using <code class="docutils literal notranslate"><span class="pre">uv</span></code> for virtual environment, package management, and
 dependency resolution. <code class="docutils literal notranslate"><span class="pre">uv</span></code> can be obtained through their installation
-page found <a class="reference external" href="https://docs.astral.sh/uv/getting-started/installation/">here</a>.</p>
+page found <a class="reference external" href="https://docs.astral.sh/uv/getting-started/installation/">here</a>.
+Alternative environment managers like <code class="docutils literal notranslate"><span class="pre">pyenv</span></code> can also be used for <code class="docutils literal notranslate"><span class="pre">pip</span></code>
+exclusive commands.</p>
 </div>
 </section>
 <section id="from-github-source">
-<h3>From Github Source<a class="headerlink" href="#from-github-source" title="Link to this heading">#</a></h3>
+<h2>From Github Source<a class="headerlink" href="#from-github-source" title="Link to this heading">#</a></h2>
 <p>This approach is useful for obtain nightly builds by installing directly
 from the source repository:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
@@ -469,7 +547,7 @@ from the source repository:</p>
 </div>
 </section>
 <section id="installation-via-uv">
-<h3>Installation via <code class="docutils literal notranslate"><span class="pre">uv</span></code><a class="headerlink" href="#installation-via-uv" title="Link to this heading">#</a></h3>
+<h2>Installation via <code class="docutils literal notranslate"><span class="pre">uv</span></code><a class="headerlink" href="#installation-via-uv" title="Link to this heading">#</a></h2>
 <p>Maintainers generally use <code class="docutils literal notranslate"><span class="pre">uv</span></code>, and is the most reliable (and fastest) way
 to spin up a virtual environment to use ALCHEMI Toolkit. Assuming <code class="docutils literal notranslate"><span class="pre">uv</span></code>
 is in your path, here are a few ways to get started:</p>
@@ -479,8 +557,33 @@ is in your path, here are a few ways to get started:</p>
 ALCHEMI Toolkit as a dependency for your project. The Python version
 can be substituted for any other version supported by ALCHEMI Toolkit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>uv<span class="w"> </span>venv<span class="w"> </span>--seed<span class="w"> </span>--python<span class="w"> </span><span class="m">3</span>.12
-$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>nvalchemi-toolkit
+$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--torch-backend<span class="w"> </span>cu130<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--index-strategy<span class="w"> </span>unsafe-best-match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s1">&#39;nvalchemi-toolkit[cu13]&#39;</span>
 </pre></div>
+</div>
+<p>For MACE and cuEquivariance support, select the matching variant:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># CUDA 13 MACE stack</span>
+$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--torch-backend<span class="w"> </span>cu130<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--index-strategy<span class="w"> </span>unsafe-best-match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s1">&#39;nvalchemi-toolkit[cu13,mace]&#39;</span>
+
+<span class="c1"># CUDA 12 MACE stack</span>
+$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--torch-backend<span class="w"> </span>cu126<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--index-strategy<span class="w"> </span>unsafe-best-match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s1">&#39;nvalchemi-toolkit[cu12,mace]&#39;</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">--torch-backend</span></code> option routes <code class="docutils literal notranslate"><span class="pre">uv</span></code> to install the correct
+set of extra libraries more explicitly. For machines without accelerators,
+such as on MacOS development, this option can be omitted. Conversely, on
+machines with a GPU and for whatever reason want to force the installation
+to be CPU only, you can specify <code class="docutils literal notranslate"><span class="pre">cpu</span></code> as a backend.</p>
 </div>
 </details>
 <details>
@@ -488,8 +591,64 @@ $<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>in
 <p>This method is recommended for local development and testing.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:NVIDIA/nvalchemi-toolkit.git
 $<span class="w"> </span><span class="nb">cd</span><span class="w"> </span>nvalchemi-toolkit
-$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13
 <span class="c1"># include documentation tools with --group docs</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> creates or updates the repository <code class="docutils literal notranslate"><span class="pre">.venv</span></code>, installs the local
+<code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code> package in editable mode, installs the default dependency
+groups configured for the project, and uses <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> for reproducible versions.
+Select exactly one CUDA extra when syncing:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default development stack: CUDA 13</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13
+
+<span class="c1"># CUDA 12 stack for systems that have not moved to CUDA 13 yet</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu12
+
+<span class="c1"># MACE support follows the same split</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>--extra<span class="w"> </span>mace
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>mace
+</pre></div>
+</div>
+<p>The CUDA extras are intentionally mutually exclusive. Do not use
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span> <span class="pre">--all-extras</span></code>, because it requests both <code class="docutils literal notranslate"><span class="pre">cu12</span></code> and <code class="docutils literal notranslate"><span class="pre">cu13</span></code> in the same
+environment.</p>
+<p>Use the same CUDA extra when running commands through <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span></code>. By default,
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span></code> checks and syncs the project environment before executing the command;
+bare <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">...</span></code> does not remember that the environment was previously synced
+with <code class="docutils literal notranslate"><span class="pre">cu12</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default CUDA 13 stack</span>
+$<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>pytest<span class="w"> </span>test/
+
+<span class="c1"># CUDA 12 stack</span>
+$<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>pytest<span class="w"> </span>test/
+
+<span class="c1"># CUDA 12 stack with MACE support</span>
+$<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>mace<span class="w"> </span>pytest<span class="w"> </span>test/
+</pre></div>
+</div>
+<p>The Makefile threads the selected extra through both <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> and <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default CUDA 13 stack</span>
+$<span class="w"> </span>make<span class="w"> </span><span class="nb">test</span>
+
+<span class="c1"># CUDA 12 stack</span>
+$<span class="w"> </span>make<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="nv">CUDA_EXTRA</span><span class="o">=</span>cu12
+
+<span class="c1"># CUDA 12 stack with MACE support</span>
+$<span class="w"> </span>make<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="nv">CUDA_EXTRA</span><span class="o">=</span>cu12<span class="w"> </span><span class="nv">OPTIONAL_EXTRAS</span><span class="o">=</span>mace
+</pre></div>
+</div>
+<p>After a known-good sync, <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--no-sync</span> <span class="pre">...</span></code> can run without modifying the
+environment, but it also skips uv’s normal environment check.</p>
+<p>Additional dependency groups can be layered onto the selected CUDA stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># CUDA 13 plus documentation build dependencies</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>--group<span class="w"> </span>docs
+
+<span class="c1"># Verify the environment would sync without changing it</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>--dry-run
+
+<span class="c1"># Fail if uv.lock would need to change</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>--locked
 </pre></div>
 </div>
 </details>
@@ -501,7 +660,10 @@ $<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>-
 for production settings!</p>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>uv<span class="w"> </span>venv<span class="w"> </span>--seed<span class="w"> </span>--python<span class="w"> </span><span class="m">3</span>.13
-$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
+$<span class="w"> </span>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--torch-backend<span class="w"> </span>cu130<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--index-strategy<span class="w"> </span>unsafe-best-match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s1">&#39;nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git&#39;</span>
 </pre></div>
 </div>
 </details>
@@ -516,7 +678,6 @@ $<span class="w"> </span>uv<span class="w"> </span>add<span class="w"> </span><s
 </div>
 </details>
 </section>
-</section>
 <section id="installation-with-conda-mamba">
 <h2>Installation with Conda &amp; Mamba<a class="headerlink" href="#installation-with-conda-mamba" title="Link to this heading">#</a></h2>
 <p>The installation procedure should be similar to other environment management tools
@@ -525,7 +686,9 @@ environment:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># create a new environment named nvalchemi if needed</span>
 mamba<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>nvalchemi<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.12<span class="w"> </span>pip
 mamba<span class="w"> </span>activate<span class="w"> </span>nvalchemi
-pip<span class="w"> </span>install<span class="w"> </span>nvalchemi-toolkit
+pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu130<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s1">&#39;nvalchemi-toolkit[cu13]&#39;</span>
 </pre></div>
 </div>
 </section>
@@ -592,12 +755,9 @@ integrate ALCHEMI Toolkit into your application.</p></li>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-methods">Installation Methods</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-pypi">From PyPI</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-github-source">From Github Source</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-via-uv">Installation via <code class="docutils literal notranslate"><span class="pre">uv</span></code></a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#from-pypi">From PyPI</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#from-github-source">From Github Source</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-via-uv">Installation via <code class="docutils literal notranslate"><span class="pre">uv</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-with-conda-mamba">Installation with Conda &amp; Mamba</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>

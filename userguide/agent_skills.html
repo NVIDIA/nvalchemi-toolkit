@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Agent Skills &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Agent Skills &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/agent_skills';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Supported Models" href="../models/index.html" />
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Agent Skills</a></li>
 </ul>
@@ -452,15 +472,12 @@ get up to speed with the <code class="docutils literal notranslate"><span class=
 <p>Skills live in the repository under <code class="docutils literal notranslate"><span class="pre">.claude/skills/</span></code>.</p>
 <section id="installing-skills">
 <h2>Installing skills<a class="headerlink" href="#installing-skills" title="Link to this heading">#</a></h2>
-<p>Point your AI assistant at the repository and ask it to install the skills
-from <code class="docutils literal notranslate"><span class="pre">.claude/skills/</span></code>. Most assistants will auto-detect them once the
-repository is open.</p>
-<p><strong>Project-level install (recommended)</strong> — keeps the skills scoped to your
-<code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> project so they are loaded only when you work in this repository.</p>
-<p><strong>User-level install</strong> — if you work with <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> frequently across
-multiple checkouts or worktrees, you can install the skills in your user
-configuration directory (e.g. <code class="docutils literal notranslate"><span class="pre">~/.claude/skills/</span></code>) so they are always
-available.</p>
+<p><strong>Inside a repository clone</strong> — nothing to install. Claude Code discovers
+<code class="docutils literal notranslate"><span class="pre">.claude/skills/</span></code> automatically; other agents are routed to the right
+<code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> by the table in the repository’s <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>.</p>
+<p><strong>Outside a clone</strong> — copy the skill folders from <code class="docutils literal notranslate"><span class="pre">.claude/skills/</span></code> into
+your project’s skills directory, or your user-level one (e.g.
+<code class="docutils literal notranslate"><span class="pre">~/.claude/skills/</span></code>) if you work with <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> across many checkouts.</p>
 </section>
 <section id="available-skills">
 <h2>Available skills<a class="headerlink" href="#available-skills" title="Link to this heading">#</a></h2>
@@ -477,12 +494,28 @@ available.</p>
 <td><p><a class="reference internal" href="data.html#data-guide"><span class="std std-ref">AtomicData and Batch</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-data-storage</span></code></p></td>
-<td><p>How to write, read, and load atomic data using the composable Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).</p></td>
+<td><p>How to write, read, compose, and load atomic data using the composable Zarr-backed storage pipeline (Writer, Reader, Dataset, MultiDataset, DataLoader).</p></td>
 <td><p><a class="reference internal" href="datapipes.html#datapipes-guide"><span class="std std-ref">Data Loading Pipeline</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-model-wrapping</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-zarr-perf</span></code></p></td>
+<td><p>How to tune Zarr-backed Reader, Dataset, MultiDataset, and DataLoader throughput with fused reads, validation skipping, pinned memory, and benchmark sweeps.</p></td>
+<td><p><a class="reference internal" href="zarr_compression.html#read-performance-tuning"><span class="std std-ref">Read performance tuning</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-model-wrapping</span></code></p></td>
 <td><p>How to wrap an arbitrary MLIP using the <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> interface to standardize inputs, outputs, and embeddings.</p></td>
 <td><p><a class="reference internal" href="models.html#models-guide"><span class="std std-ref">Models: Wrapping ML Interatomic Potentials</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-training-api</span></code></p></td>
+<td><p>How to configure, run, extend, and debug <a class="reference internal" href="../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a> workflows.</p></td>
+<td><p><a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-loss-api</span></code></p></td>
+<td><p>How to use built-in loss terms, compose training objectives, and implement custom loss functions.</p></td>
+<td><p><a class="reference internal" href="losses.html#losses-guide"><span class="std std-ref">Losses</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-fine-tuning</span></code></p></td>
+<td><p>How to configure fine-tuning workflows and adapt pretrained checkpoints through the CLI or API.</p></td>
+<td><p><a class="reference internal" href="finetuning.html#finetuning-guide"><span class="std std-ref">Fine-Tuning Pretrained Models</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-api</span></code></p></td>
 <td><p>How to configure and run dynamics simulations, compose multi-stage pipelines (<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>), use inflight batching, and manage data sinks.</p></td>
@@ -495,6 +528,10 @@ available.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-hooks</span></code></p></td>
 <td><p>How to use and write dynamics hooks — callbacks that observe or modify batch state at specific points during each simulation step.</p></td>
 <td><p><a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-reporting</span></code></p></td>
+<td><p>How to add observability with <code class="docutils literal notranslate"><span class="pre">ReportingOrchestrator</span></code>, <code class="docutils literal notranslate"><span class="pre">RichReporter</span></code>, <code class="docutils literal notranslate"><span class="pre">TensorBoardReporter</span></code>, and the dynamics <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code>.</p></td>
+<td><p><a class="reference internal" href="reporting.html#reporting-guide"><span class="std std-ref">Reporting</span></a></p></td>
 </tr>
 </tbody>
 </table>

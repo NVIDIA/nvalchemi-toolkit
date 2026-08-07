@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_MPNN\_HALO
+===========================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_MPNN_HALO

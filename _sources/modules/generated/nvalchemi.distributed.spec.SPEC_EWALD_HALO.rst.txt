@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_EWALD\_HALO
+============================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_EWALD_HALO

@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.data.datapipes
 
-.. autoclass:: ZarrArrayConfig
+
+.. autopydantic_model:: ZarrArrayConfig
     :members:
+
 
 .. raw:: html
 

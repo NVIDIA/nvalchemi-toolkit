@@ -65,7 +65,7 @@ from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -258,7 +258,7 @@ class _TempLogger:
         self.storage = storage
         self.frequency = frequency
 
-    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
         batch = ctx.batch
         ke = kinetic_energy_per_graph(
             batch.velocities, batch.atomic_masses, batch.batch_idx, batch.num_graphs

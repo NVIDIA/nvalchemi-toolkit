@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.datapipes.dataloader &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.data.datapipes.dataloader &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/dataloader';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -420,29 +423,31 @@ document.write(`
 <span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class="c1"># See the License for the specific language governing permissions and</span>
 <span class="c1"># limitations under the License.</span>
-<span class="sd">&quot;&quot;&quot;AtomicData-native DataLoader with CUDA-stream prefetching.</span>
+<span class="sd">&quot;&quot;&quot;AtomicData-native DataLoader with amortized prefetching.</span>
 
 <span class="sd">The ``DataLoader`` class is designed to be a drop-in replacement</span>
 <span class="sd">for ``torch.data.DataLoader``, specializing for ``nvalchemi``</span>
 <span class="sd">and atomistic systems by emitting ``Batch`` data.</span>
 
-<span class="sd">Additionally, the ``DataLoader`` provides two mechanisms for</span>
-<span class="sd">performant data loading: an asynchronous prefetching mechanism,</span>
-<span class="sd">as well as the use of CUDA streams; both of which can be used</span>
-<span class="sd">to developer highly performance data loading and preprocessing</span>
-<span class="sd">workflows.</span>
+<span class="sd">Additionally, the ``DataLoader`` can fuse several emitted batches into one</span>
+<span class="sd">backend read. ``prefetch_factor`` controls that read window, while optional</span>
+<span class="sd">CUDA streams can overlap device transfers when available. An optional</span>
+<span class="sd">``batch_transforms`` hook applies user-supplied callables to each collated</span>
+<span class="sd">:class:`Batch` on the consumer thread.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">ceil</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">,</span> <span class="n">SequentialSampler</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchTransform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchDatasetProtocol</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
 
 
 <div class="viewcode-block" id="DataLoader">
@@ -450,13 +455,43 @@ document.write(`
 <span class="k">class</span><span class="w"> </span><span class="nc">DataLoader</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.</span>
 
-<span class="sd">    Wraps a :class:`Dataset` and yields ``Batch`` objects</span>
-<span class="sd">    built via :meth:`Batch.from_data_list`.  CUDA-stream prefetching is</span>
-<span class="sd">    supported for overlapping I/O with computation.</span>
+<span class="sd">    ``DataLoader`` is the consumer end of the pipeline</span>
+<span class="sd">    (``Reader -&gt; Dataset (-&gt; MultiDataset) -&gt; DataLoader``). It wraps a</span>
+<span class="sd">    batch-loadable dataset -- a :class:`Dataset`, a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset`, or any object</span>
+<span class="sd">    implementing :class:`BatchDatasetProtocol` -- and yields graph-collated</span>
+<span class="sd">    :class:`~nvalchemi.data.batch.Batch` objects built via</span>
+<span class="sd">    :meth:`~nvalchemi.data.batch.Batch.from_data_list`.</span>
+
+<span class="sd">    Sampling follows PyTorch&#39;s conventions. With no sampler, ``shuffle`` selects</span>
+<span class="sd">    a :class:`~torch.utils.data.RandomSampler` or</span>
+<span class="sd">    :class:`~torch.utils.data.SequentialSampler`; a custom ``sampler`` (yielding</span>
+<span class="sd">    sample indices) overrides ``shuffle``; and a ``batch_sampler`` (yielding</span>
+<span class="sd">    whole lists of indices) sets the batch composition itself and is mutually</span>
+<span class="sd">    exclusive with ``sampler``, ``shuffle``, and ``batch_size``. To mix several</span>
+<span class="sd">    datasets, pair a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` with</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` (as</span>
+<span class="sd">    ``sampler=``, per-sample rates) or</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler` (as</span>
+<span class="sd">    ``batch_sampler=``, a fixed per-batch mixture); under distributed training</span>
+<span class="sd">    :class:`~nvalchemi.training.hooks.DDPHook` swaps in the rank-sharded</span>
+<span class="sd">    variants automatically.</span>
+
+<span class="sd">    Compared with :class:`torch.utils.data.DataLoader`, this loader yields</span>
+<span class="sd">    ``Batch`` graphs rather than default-collated tensors, with graph-aware</span>
+<span class="sd">    collation. Instead of forking worker processes it prefetches on background</span>
+<span class="sd">    threads and overlaps device transfers on CUDA streams, and it *fuses* reads:</span>
+<span class="sd">    ``prefetch_factor`` emitted batches are pulled from the backend in one</span>
+<span class="sd">    windowed read (effective window ``batch_size * prefetch_factor``), which</span>
+<span class="sd">    amortizes I/O far better than one ``__getitem__`` per sample. Set</span>
+<span class="sd">    ``prefetch_factor=0`` to read a single emitted batch at a time, and</span>
+<span class="sd">    ``pin_memory=True`` to request page-locked tensors from readers that support</span>
+<span class="sd">    it.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    dataset : Dataset</span>
+<span class="sd">    dataset : BatchDatasetProtocol</span>
 <span class="sd">        AtomicData-native dataset to load from.</span>
 <span class="sd">    batch_size : int, default=1</span>
 <span class="sd">        Number of samples per batch.</span>
@@ -466,85 +501,163 @@ document.write(`
 <span class="sd">        Drop the last incomplete batch.</span>
 <span class="sd">    sampler : torch.utils.data.Sampler | None, default=None</span>
 <span class="sd">        Custom sampler (overrides ``shuffle``).</span>
+<span class="sd">    batch_sampler : torch.utils.data.Sampler | None, default=None</span>
+<span class="sd">        Custom sampler that yields batches of sample indices.</span>
 <span class="sd">    prefetch_factor : int, default=2</span>
-<span class="sd">        How many batches to prefetch ahead.</span>
+<span class="sd">        Number of emitted batches to fuse into each backend read. The effective</span>
+<span class="sd">        read window is ``batch_size * prefetch_factor``. Set to 0 to disable</span>
+<span class="sd">        fused prefetching and read one emitted batch at a time.</span>
 <span class="sd">    num_streams : int, default=4</span>
 <span class="sd">        Number of CUDA streams for prefetching.</span>
 <span class="sd">    use_streams : bool, default=True</span>
 <span class="sd">        Enable CUDA-stream prefetching.</span>
+<span class="sd">    pin_memory : bool, default=False</span>
+<span class="sd">        If True, request page-locked CPU tensors from readers that support</span>
+<span class="sd">        pinned-memory reads.</span>
+<span class="sd">    batch_transforms : Sequence[BatchTransform] | None, default=None</span>
+<span class="sd">        Optional per-batch transforms applied to each yielded</span>
+<span class="sd">        :class:`~nvalchemi.data.batch.Batch` after collation. ``None``</span>
+<span class="sd">        or an empty sequence disables the hook (zero runtime overhead</span>
+<span class="sd">        on the hot path). See the Notes section for thread placement</span>
+<span class="sd">        and CUDA-stream semantics. For per-sample transforms applied</span>
+<span class="sd">        before collation, see :class:`Dataset` (``transforms`` parameter).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : BatchDatasetProtocol</span>
+<span class="sd">        The underlying dataset.</span>
+<span class="sd">    batch_size : int</span>
+<span class="sd">        Number of samples per batch.</span>
+<span class="sd">    sampler : torch.utils.data.Sampler</span>
+<span class="sd">        Resolved sampler (``RandomSampler`` if ``shuffle=True``, else</span>
+<span class="sd">        :class:`~torch.utils.data.SequentialSampler`; user-supplied</span>
+<span class="sd">        ``sampler`` overrides both).</span>
+<span class="sd">    drop_last : bool</span>
+<span class="sd">        Whether the trailing partial batch is dropped.</span>
+<span class="sd">    prefetch_factor : int</span>
+<span class="sd">        Configured prefetch depth (see :meth:`__iter__`).</span>
+<span class="sd">    num_streams : int</span>
+<span class="sd">        Configured CUDA-stream pool size for prefetching.</span>
+<span class="sd">    use_streams : bool</span>
+<span class="sd">        Whether stream-based prefetching is actually enabled. Stored as</span>
+<span class="sd">        ``use_streams and torch.cuda.is_available()``; reflects runtime</span>
+<span class="sd">        availability, not the raw argument.</span>
+<span class="sd">    pin_memory : bool</span>
+<span class="sd">        Whether page-locked CPU tensors are requested from compatible readers.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        Raised at construction if ``batch_size &lt; 1`` or</span>
+<span class="sd">        ``prefetch_factor &lt; 0``.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        Raised at construction if ``batch_transforms`` is not a</span>
+<span class="sd">        :class:`~collections.abc.Sequence` (e.g. a single callable or a</span>
+<span class="sd">        generator was passed).</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        Raised during iteration (not construction) when any batch</span>
+<span class="sd">        transform fails; the original exception is chained via</span>
+<span class="sd">        ``__cause__``.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Batch transforms run on the consumer (main) thread after</span>
+<span class="sd">    collation, not on the prefetch workers; the fully assembled</span>
+<span class="sd">    ``Batch`` does not exist until the main thread constructs it.</span>
+<span class="sd">    Transforms are applied in order via</span>
+<span class="sd">    :class:`~nvalchemi.data.transforms.Compose` and execute on the</span>
+<span class="sd">    current CUDA stream at yield time; wrap iteration in your own</span>
+<span class="sd">    ``torch.cuda.stream(...)`` context to control placement.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
 <span class="sd">    &gt;&gt;&gt; from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader</span>
 <span class="sd">    &gt;&gt;&gt; reader = AtomicDataZarrReader(&quot;dataset.zarr&quot;)  # doctest: +SKIP</span>
 <span class="sd">    &gt;&gt;&gt; ds = Dataset(reader, device=&quot;cpu&quot;)              # doctest: +SKIP</span>
-<span class="sd">    &gt;&gt;&gt; loader = DataLoader(ds, batch_size=4)           # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; def center_positions(batch):                    # doctest: +SKIP</span>
+<span class="sd">    ...     batch.positions = batch.positions - batch.positions.mean(0)</span>
+<span class="sd">    ...     return batch</span>
+<span class="sd">    &gt;&gt;&gt; loader = DataLoader(ds, batch_size=4, batch_transforms=[center_positions])  # doctest: +SKIP</span>
 <span class="sd">    &gt;&gt;&gt; for batch in loader:                            # doctest: +SKIP</span>
 <span class="sd">    ...     print(batch.positions.shape)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">drop_last</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_sampler</span><span class="p">:</span> <span class="n">Sampler</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">prefetch_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
         <span class="n">num_streams</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">use_streams</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_transforms</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BatchTransform</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the AtomicData-native DataLoader.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        dataset : Dataset</span>
-<span class="sd">            AtomicData-native dataset to load from.</span>
-<span class="sd">        batch_size : int, default=1</span>
-<span class="sd">            Number of samples per batch.</span>
-<span class="sd">        shuffle : bool, default=False</span>
-<span class="sd">            Randomize sample order each epoch.</span>
-<span class="sd">        drop_last : bool, default=False</span>
-<span class="sd">            Drop the last incomplete batch.</span>
-<span class="sd">        sampler : torch.utils.data.Sampler | None, default=None</span>
-<span class="sd">            Custom sampler (overrides ``shuffle``).</span>
-<span class="sd">        prefetch_factor : int, default=2</span>
-<span class="sd">            How many batches to prefetch ahead.</span>
-<span class="sd">        num_streams : int, default=4</span>
-<span class="sd">            Number of CUDA streams for prefetching.</span>
-<span class="sd">        use_streams : bool, default=True</span>
-<span class="sd">            Enable CUDA-stream prefetching.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If batch_size &lt; 1.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the AtomicData-native DataLoader.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batch_size must be &gt;= 1, got </span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prefetch_factor</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;prefetch_factor must be &gt;= 0, got </span><span class="si">{</span><span class="n">prefetch_factor</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch_sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">shuffle</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;batch_sampler is mutually exclusive with sampler and shuffle&quot;</span>
+            <span class="p">)</span>
 
-        <span class="c1"># Set up attributes directly (standalone class)</span>
+        <span class="k">if</span> <span class="n">batch_transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_transforms</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;batch_transforms must be a Sequence of callables, not a &quot;</span>
+                <span class="s2">&quot;single callable or generator. Pass [fn] instead of fn.&quot;</span>
+            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="o">=</span> <span class="n">drop_last</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span> <span class="o">=</span> <span class="n">prefetch_factor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_streams</span> <span class="o">=</span> <span class="n">num_streams</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_streams</span> <span class="o">=</span> <span class="n">use_streams</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span> <span class="o">=</span> <span class="n">batch_sampler</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">pin_memory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_step_start</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">pin_memory</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_pin_memory</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_transform</span><span class="p">:</span> <span class="n">Compose</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">Compose</span><span class="p">(</span><span class="n">batch_transforms</span><span class="p">)</span> <span class="k">if</span> <span class="n">batch_transforms</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
 
         <span class="c1"># Handle sampler</span>
-        <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">sampler</span>
-        <span class="k">elif</span> <span class="n">shuffle</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">RandomSampler</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">sampler</span>
+            <span class="k">elif</span> <span class="n">shuffle</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">RandomSampler</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">SequentialSampler</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">SequentialSampler</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="c1"># Create CUDA streams for prefetching</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_streams</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_streams</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_streams</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_streams</span>
+            <span class="k">else</span> <span class="p">[]</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_pin_memory</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Request pinned-memory reads from a single dataset when supported.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s2">&quot;pin_memory&quot;</span><span class="p">):</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s2">&quot;pin_memory&quot;</span><span class="p">,</span> <span class="n">enabled</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">effective_read_window</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the maximum sample count in one fused backend read.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of batches.</span>
@@ -554,23 +667,26 @@ document.write(`
 <span class="sd">        int</span>
 <span class="sd">            Number of batches in the dataloader.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">n_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">n_samples</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">n_samples</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="k">return</span> <span class="n">ceil</span><span class="p">(</span><span class="n">n_samples</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Iterate over batches.</span>
 
-<span class="sd">        Uses stream-based prefetching when enabled to overlap IO,</span>
-<span class="sd">        GPU transfers, and computation.</span>
+<span class="sd">        Uses fused prefetching when ``prefetch_factor`` is positive, with</span>
+<span class="sd">        CUDA streams added when enabled and available.</span>
 
 <span class="sd">        Yields</span>
 <span class="sd">        ------</span>
 <span class="sd">        Batch</span>
 <span class="sd">            Batched AtomicData as a disjoint graph.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_streams</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_prefetch</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_simple</span><span class="p">()</span>
@@ -583,15 +699,58 @@ document.write(`
 <span class="sd">        list[int]</span>
 <span class="sd">            List of sample indices for each batch.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">start_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_epoch_step_start</span><span class="p">()</span>
+        <span class="n">emitted</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">batch_indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">emitted</span> <span class="o">&lt;</span> <span class="n">start_batch</span><span class="p">:</span>
+                    <span class="n">emitted</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="k">continue</span>
+                <span class="n">emitted</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">yield</span> <span class="nb">list</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
+            <span class="k">return</span>
+
         <span class="n">batch</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">:</span>
             <span class="n">batch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">batch</span>
+                <span class="k">if</span> <span class="n">emitted</span> <span class="o">&gt;=</span> <span class="n">start_batch</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">batch</span>
+                <span class="n">emitted</span> <span class="o">+=</span> <span class="mi">1</span>
                 <span class="n">batch</span> <span class="o">=</span> <span class="p">[]</span>
 
-        <span class="k">if</span> <span class="n">batch</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">batch</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="ow">and</span> <span class="n">emitted</span> <span class="o">&gt;=</span> <span class="n">start_batch</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">batch</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_consume_epoch_step_start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return and clear the pending intra-epoch batch start offset.&quot;&quot;&quot;</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_step_start</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_step_start</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">start</span>
+
+<div class="viewcode-block" id="DataLoader.set_epoch_step">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader.set_epoch_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_epoch_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Seek the next iterator to an intra-epoch batch offset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step : int</span>
+<span class="sd">            Number of complete batches to skip in sampler order before the next</span>
+<span class="sd">            iterator starts yielding. The skip advances only the sampler/index</span>
+<span class="sd">            stream; it does not load or collate skipped batches.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``step`` is negative.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">step</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;step must be &gt;= 0, got </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_step_start</span> <span class="o">=</span> <span class="n">step</span></div>
+
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_iter_simple</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Simple synchronous iteration without prefetching.</span>
@@ -601,29 +760,33 @@ document.write(`
 <span class="sd">        Batch</span>
 <span class="sd">            Collated batch of AtomicData.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_transform</span>
         <span class="k">for</span> <span class="n">batch_indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_batches</span><span class="p">():</span>
-            <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">]</span>
-            <span class="c1"># Extract AtomicData from (AtomicData, metadata) tuples</span>
-            <span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
-            <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([</span><span class="n">batch_indices</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
             <span class="k">yield</span> <span class="n">batch</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_iter_prefetch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Iteration with stream-based prefetching.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Iteration with fused prefetching.</span>
 
-<span class="sd">        Uses a lazy sliding window of size ``prefetch_factor`` over the</span>
-<span class="sd">        batch-index generator so that the full epoch plan is never</span>
-<span class="sd">        materialised in memory.</span>
+<span class="sd">        Fuses ``prefetch_factor`` consecutive batches into a single</span>
+<span class="sd">        ``read_many`` call so that Zarr reader optimisations can coalesce</span>
+<span class="sd">        scattered indices into fewer large reads.</span>
 
-<span class="sd">        Strategy:</span>
+<span class="sd">        Strategy (true double-buffered):</span>
 
-<span class="sd">        1. Fill a window of up to ``prefetch_factor`` batches, submitting</span>
-<span class="sd">           each for async prefetch.</span>
-<span class="sd">        2. Pop the front batch, yield it, then pull one more batch from</span>
-<span class="sd">           the generator and prefetch it (keeping the window full).</span>
-<span class="sd">        3. Cleanup runs in a ``finally`` block so that</span>
-<span class="sd">           ``cancel_prefetch()`` fires on normal exhaustion, early break,</span>
-<span class="sd">           and exceptions.</span>
+<span class="sd">        1. Collect and submit two chunks upfront so that one Zarr</span>
+<span class="sd">           read is always in flight while the other is being consumed.</span>
+<span class="sd">        2. Consume the oldest completed chunk, submit a fresh chunk</span>
+<span class="sd">           into the now-free queue slot, then yield the consumed</span>
+<span class="sd">           batches.  The next Zarr read runs in the background while</span>
+<span class="sd">           the caller processes each yielded batch.</span>
+<span class="sd">        3. Drain the remaining queued chunk after the sampler is</span>
+<span class="sd">           exhausted.</span>
+<span class="sd">        4. Cleanup runs in a ``finally`` block so that</span>
+<span class="sd">           ``cancel_prefetch()`` fires on normal exhaustion, early</span>
+<span class="sd">           break, and exceptions.</span>
 
 <span class="sd">        Yields</span>
 <span class="sd">        ------</span>
@@ -631,35 +794,59 @@ document.write(`
 <span class="sd">            Collated batch of AtomicData.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">stream_idx</span> <span class="o">=</span> <span class="mi">0</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">_prefetch_batch</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">nonlocal</span> <span class="n">stream_idx</span>
-            <span class="k">for</span> <span class="n">sample_idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">:</span>
-                <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="n">stream_idx</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_streams</span><span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">prefetch</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
-                <span class="n">stream_idx</span> <span class="o">+=</span> <span class="mi">1</span>
-
         <span class="n">batch_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_batches</span><span class="p">()</span>
-        <span class="n">window</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="n">transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_transform</span>
 
-        <span class="k">try</span><span class="p">:</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_collect_chunk</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Collect up to prefetch_factor batch-index lists.&quot;&quot;&quot;</span>
+            <span class="n">chunk</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span><span class="p">):</span>
                 <span class="n">batch_indices</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">batch_iter</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">batch_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">break</span>
-                <span class="n">window</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
-                <span class="n">_prefetch_batch</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
+                <span class="n">chunk</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">chunk</span>
 
-            <span class="k">while</span> <span class="n">window</span><span class="p">:</span>
-                <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">window</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-                <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">]</span>
-                <span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
-                <span class="k">yield</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_submit_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">nonlocal</span> <span class="n">stream_idx</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="n">stream_idx</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_streams</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">prefetch_fused_batches</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
+            <span class="n">stream_idx</span> <span class="o">+=</span> <span class="mi">1</span>
 
-                <span class="n">next_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">batch_iter</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">next_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">window</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">next_batch</span><span class="p">)</span>
-                    <span class="n">_prefetch_batch</span><span class="p">(</span><span class="n">next_batch</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Prime: fill both queue slots so one read is always in</span>
+            <span class="c1"># flight while the other is consumed.</span>
+            <span class="n">chunk_a</span> <span class="o">=</span> <span class="n">_collect_chunk</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">chunk_a</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="n">_submit_chunk</span><span class="p">(</span><span class="n">chunk_a</span><span class="p">)</span>
+
+            <span class="n">chunk_b</span> <span class="o">=</span> <span class="n">_collect_chunk</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">chunk_b</span><span class="p">:</span>
+                <span class="n">_submit_chunk</span><span class="p">(</span><span class="n">chunk_b</span><span class="p">)</span>
+
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="c1"># Consume oldest completed read.</span>
+                <span class="n">completed_batches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">get_fused_batches</span><span class="p">())</span>
+
+                <span class="c1"># Refill: collect and submit next chunk into the freed</span>
+                <span class="c1"># queue slot so the background thread starts reading</span>
+                <span class="c1"># immediately -- *before* we yield any batches.</span>
+                <span class="n">next_chunk</span> <span class="o">=</span> <span class="n">_collect_chunk</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">next_chunk</span><span class="p">:</span>
+                    <span class="n">_submit_chunk</span><span class="p">(</span><span class="n">next_chunk</span><span class="p">)</span>
+
+                <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">completed_batches</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">batch</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                    <span class="k">yield</span> <span class="n">batch</span>
+
+                <span class="c1"># Stop when both the sampler is exhausted and the</span>
+                <span class="c1"># queue has been drained.</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">next_chunk</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">has_pending_fused_batches</span><span class="p">():</span>
+                    <span class="k">break</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">cancel_prefetch</span><span class="p">()</span>
 
@@ -673,8 +860,19 @@ document.write(`
 <span class="sd">        epoch : int</span>
 <span class="sd">            Current epoch number.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">,</span> <span class="s2">&quot;set_epoch&quot;</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">set_epoch</span><span class="p">(</span><span class="n">epoch</span><span class="p">)</span></div>
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">,</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">,</span> <span class="s2">&quot;sampler&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">sampler</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">id</span><span class="p">(</span><span class="n">sampler</span><span class="p">)</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">sampler</span><span class="p">))</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sampler</span><span class="p">,</span> <span class="s2">&quot;set_epoch&quot;</span><span class="p">):</span>
+                <span class="n">sampler</span><span class="o">.</span><span class="n">set_epoch</span><span class="p">(</span><span class="n">epoch</span><span class="p">)</span>
+                <span class="k">return</span></div>
 </div>
 
 </pre></div>

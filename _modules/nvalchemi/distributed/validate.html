@@ -1,0 +1,1206 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.distributed.validate &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/validate';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../distributed.html" class="nav-link">nvalchemi.distributed</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.di...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.distributed.validate</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Single-call distributed-spec inference + validation.</span>
+
+<span class="sd">`trace_and_validate(model_factory, sample_batch, ...)` does:</span>
+
+<span class="sd">1. Reference run — single-process forward on the sample batch, captured</span>
+<span class="sd">   under :func:`~nvalchemi.distributed._core.dispatch_trace.dispatch_trace` so</span>
+<span class="sd">   we observe which custom ops fire and what shapes they produce. This</span>
+<span class="sd">   is also the ground-truth output the multi-rank run is compared</span>
+<span class="sd">   against.</span>
+<span class="sd">2. Spec inference — translate the trace&#39;s observed firings into a</span>
+<span class="sd">   candidate :class:`MLIPSpec`. The wrapper&#39;s existing</span>
+<span class="sd">   ``distribution_spec`` (if defined) is treated as a strong prior:</span>
+<span class="sd">   missing fields are inferred; provided fields are kept verbatim.</span>
+<span class="sd">3. Validation — spawn ``world_size`` processes on the same GPU device,</span>
+<span class="sd">   each running the wrapper through :class:`DistributedModel` with the</span>
+<span class="sd">   inferred spec. Compare per-output tensors against the reference and</span>
+<span class="sd">   produce a per-output diff.</span>
+<span class="sd">4. Auto-fix — if the validation diff exceeds tolerance, run a small</span>
+<span class="sd">   rule engine that proposes spec mutations from a corpus of patterns</span>
+<span class="sd">   we&#39;ve encountered (UMA halo-correction double-count,</span>
+<span class="sd">   under/over-reduction). Each rule is tried in turn; the first that</span>
+<span class="sd">   clears tolerance wins. The returned ``spec`` is the working one.</span>
+
+<span class="sd">The returned :class:`TraceReport` is *actionable*: it gives a single</span>
+<span class="sd">``next_action`` string and a serializable spec, so the user can either</span>
+<span class="sd">paste the spec into their wrapper or save it to disk for cache reuse.</span>
+
+<span class="sd">Module layout</span>
+<span class="sd">-------------</span>
+
+<span class="sd">``trace_and_validate`` (the public entry) lives here. The internals</span>
+<span class="sd">are split across siblings:</span>
+
+<span class="sd">* :mod:`.types` — :class:`Attempt`, :class:`TraceReport` dataclasses.</span>
+<span class="sd">* :mod:`.payloads` — Batch ↔ tensor-dict wire format + diff metric.</span>
+<span class="sd">* :mod:`.reference` — single-process reference run + NL summary.</span>
+<span class="sd">* :mod:`.halo_diagnostics` — halo-completeness check.</span>
+<span class="sd">* :mod:`.worker` — per-rank ``mp.spawn`` target.</span>
+<span class="sd">* :mod:`.inference` — spawn orchestration + spec inference.</span>
+<span class="sd">* :mod:`.autofix` — rule engine + spec signatures.</span>
+
+<span class="sd">Each sibling is independently testable; ``trace_and_validate`` is the</span>
+<span class="sd">glue that wires them in the documented order.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLIPSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.autofix</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_next_fix_candidate</span><span class="p">,</span>
+    <span class="n">_suspect_op_summary</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.inference</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_infer_spec_from_trace</span><span class="p">,</span>
+    <span class="n">_validate_spec</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.reference</span><span class="w"> </span><span class="kn">import</span> <span class="n">_reference_run</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.scripted_diagnostics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ScriptedOpReport</span><span class="p">,</span>
+    <span class="n">detect_scripted_ops</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">Attempt</span><span class="p">,</span> <span class="n">TraceReport</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;Attempt&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ScriptedOpReport&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TraceReport&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;detect_scripted_ops&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;trace_and_validate&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="n">_DEFAULT_WATCHED_HELPER_PACKAGES</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;aimnet.nbops&quot;</span><span class="p">,)</span>
+
+
+<span class="c1"># ----- Worker-error translators ------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1"># Generic torch / autograd errors are cryptic when the underlying cause</span>
+<span class="c1"># is a framework-specific dispatch interaction. We pattern-match on the</span>
+<span class="c1"># error string + the partial dispatch trace shipped from the worker and</span>
+<span class="c1"># rewrite the ``next_action`` to point at the actual root cause. New</span>
+<span class="c1"># patterns get appended here as we encounter them in the wild.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_detect_dropped_inplace_dispatch_return</span><span class="p">(</span>
+    <span class="n">error_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">handler_counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Detect the &quot;I dropped my ``scatter_add_`` return&quot; footgun.</span>
+
+<span class="sd">    Symptom (worker-side): ``torch.autograd.grad`` raises</span>
+<span class="sd">    ``RuntimeError: One of the differentiated Tensors appears to not</span>
+<span class="sd">    have been used in the graph``.</span>
+
+<span class="sd">    Mechanism: the wrapper called ``t.scatter_add_(0, idx, src)``</span>
+<span class="sd">    (or ``index_add_`` / ``index_copy_``) with a ShardTensor source.</span>
+<span class="sd">    Under domain decomposition the dispatch handler</span>
+<span class="sd">    (:func:`_halo_scatter_correction`) computes the cross-rank-corrected</span>
+<span class="sd">    output as a *new* tensor — there is no in-place primitive that also</span>
+<span class="sd">    does halo_reverse + halo_forward. The handler returns the new</span>
+<span class="sd">    tensor; the caller&#39;s ``t.scatter_add_(...)`` (no rebind) drops it.</span>
+<span class="sd">    ``t`` stays at its pre-scatter zero, the model output detaches from</span>
+<span class="sd">    its inputs, and ``autograd.grad`` finds no path back to</span>
+<span class="sd">    ``positions``.</span>
+
+<span class="sd">    Single-process: ``scatter_add_`` returns ``self``, the rebind is a</span>
+<span class="sd">    no-op, the bug is silent until the wrapper meets the validator.</span>
+
+<span class="sd">    Detection: marker is &quot;appears to not have been used in the graph&quot;</span>
+<span class="sd">    AND ``halo_scatter_correction`` (or its index_add / index_copy</span>
+<span class="sd">    siblings) fired at least once before the crash.</span>
+
+<span class="sd">    Returns the suggested-fix string, or ``None`` if the pattern</span>
+<span class="sd">    doesn&#39;t match.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;appears to not have been used in the graph&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">error_str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">inplace_handlers</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;halo_scatter_correction[scatter_add_]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;halo_scatter_correction[index_add_]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;halo_scatter_correction[index_copy_]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;halo_scatter_correction&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">fired</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">handler_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">inplace_handlers</span><span class="p">)</span> <span class="ow">and</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">fired</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">fired_summary</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">×</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">fired</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="s2">&quot;Likely cause: an in-place ``scatter_add_`` / ``index_add_`` / &quot;</span>
+        <span class="s2">&quot;``index_copy_`` inside the wrapper or model returned a *new* &quot;</span>
+        <span class="s2">&quot;tensor (cross-rank halo correction can&#39;t preserve in-place &quot;</span>
+        <span class="s2">&quot;semantics) and the caller dropped the return. Search the &quot;</span>
+        <span class="s2">&quot;model code for ``t.scatter_add_(...)`` / ``t.index_add_(...)`` &quot;</span>
+        <span class="s2">&quot;/ ``t.index_copy_(...)`` patterns where the return value is &quot;</span>
+        <span class="s2">&quot;discarded, and rebind:</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot;    G = G.scatter_add_(0, idx, src)</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot;Single-process: the rebind is a no-op (``self`` is returned). &quot;</span>
+        <span class="s2">&quot;Distributed: the rebind is mandatory for the autograd graph &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;to thread through the corrected accumulator. (Observed &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;firings: </span><span class="si">{</span><span class="n">fired_summary</span><span class="si">}</span><span class="s2">.)&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_detect_severed_autograd_graph</span><span class="p">(</span>
+    <span class="n">error_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">handler_counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Detect &quot;the distributed forward severed the positions→energy graph&quot;.</span>
+
+<span class="sd">    Symptom (worker-side): ``torch.autograd.grad`` raises</span>
+<span class="sd">    ``RuntimeError: element 0 of tensors does not require grad and does not</span>
+<span class="sd">    have a grad_fn`` — element 0 being the *output* (energy), which means the</span>
+<span class="sd">    forward graph from ``positions`` to ``energy`` is broken.</span>
+
+<span class="sd">    Mechanism: many MLIPs compute conservative forces *internally* via</span>
+<span class="sd">    ``autograd.grad(energy, positions)`` (MACE&#39;s ``compute_forces``,</span>
+<span class="sd">    AIMNet2&#39;s force head). Under domain decomposition the energy must stay</span>
+<span class="sd">    connected to the input positions through every ShardTensor op. If a</span>
+<span class="sd">    dispatch handler or a wrap-back returns a tensor detached from autograd,</span>
+<span class="sd">    the energy loses its ``grad_fn`` and the internal ``autograd.grad`` finds</span>
+<span class="sd">    no path back — even though single-process works (the graph is intact</span>
+<span class="sd">    there).</span>
+
+<span class="sd">    Returns the suggested-fix string, or ``None`` if the pattern doesn&#39;t</span>
+<span class="sd">    match.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">markers</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;does not require grad and does not have a grad_fn&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;does not have a grad_fn&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">m</span> <span class="ow">in</span> <span class="n">error_str</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">markers</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">fired</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">×</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">handler_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span> <span class="ow">or</span> <span class="s2">&quot;none&quot;</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="s2">&quot;Likely cause: the model computes conservative forces *internally* &quot;</span>
+        <span class="s2">&quot;via ``torch.autograd.grad(energy, positions)``, but the distributed &quot;</span>
+        <span class="s2">&quot;forward severed the autograd graph between ``positions`` and &quot;</span>
+        <span class="s2">&quot;``energy`` — the energy output reached ``autograd.grad`` without a &quot;</span>
+        <span class="s2">&quot;``grad_fn``. Single-process works because the graph is intact there; &quot;</span>
+        <span class="s2">&quot;under distribution one of the ShardTensor dispatch handlers or a &quot;</span>
+        <span class="s2">&quot;wrap-back returned a tensor detached from autograd. Check that every &quot;</span>
+        <span class="s2">&quot;op on the energy path preserves autograd (the per-system reduction / &quot;</span>
+        <span class="s2">&quot;halo-correction handlers are autograd.Functions; a plain re-wrap that &quot;</span>
+        <span class="s2">&quot;drops ``grad_fn`` is the usual culprit). &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;(Dispatch handlers that fired before the crash: </span><span class="si">{</span><span class="n">fired</span><span class="si">}</span><span class="s2">.)&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_detect_scripted_op_shardtensor_ima</span><span class="p">(</span>
+    <span class="n">error_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">handler_counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Detect the ``@torch.jit.script`` + ShardTensor CUDA illegal-memory-access.</span>
+
+<span class="sd">    Symptom (worker-side): a ``RuntimeError`` from &quot;the TorchScript interpreter&quot;</span>
+<span class="sd">    whose payload is an &quot;illegal memory access&quot; / &quot;CUDA driver error&quot; — often</span>
+<span class="sd">    surfacing as a Warp ``wp_free_device_async`` fault on the next allocation.</span>
+
+<span class="sd">    Mechanism: a scripted op (e.g. e3nn&#39;s ``_spherical_harmonics``) received a</span>
+<span class="sd">    requires-grad ShardTensor on the halo path. TorchScript bypasses</span>
+<span class="sd">    ``__torch_function__``, so the storage-less wrapper enters the JIT graph</span>
+<span class="sd">    raw; its TensorExpr-fused kernel reads the near-null ``data_ptr`` → IMA.</span>
+<span class="sd">    Marshalling the op across the boundary (Route C) fixes it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">markers</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;illegal memory access&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda driver error&quot;</span><span class="p">,</span> <span class="s2">&quot;wp_free_device_async&quot;</span><span class="p">)</span>
+    <span class="n">lowered</span> <span class="o">=</span> <span class="n">error_str</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">m</span> <span class="ow">in</span> <span class="n">lowered</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">markers</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">scripted_context</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;torchscript&quot;</span> <span class="ow">in</span> <span class="n">lowered</span>
+        <span class="ow">or</span> <span class="s2">&quot;jit interpreter&quot;</span> <span class="ow">in</span> <span class="n">lowered</span>
+        <span class="ow">or</span> <span class="s2">&quot;wp_free_device_async&quot;</span> <span class="ow">in</span> <span class="n">lowered</span>
+        <span class="ow">or</span> <span class="s2">&quot;spherical_harmonics&quot;</span> <span class="ow">in</span> <span class="n">lowered</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">scripted_context</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="s2">&quot;Likely cause: a ``@torch.jit.script`` op received a requires-grad &quot;</span>
+        <span class="s2">&quot;ShardTensor on the distributed halo path. TorchScript bypasses &quot;</span>
+        <span class="s2">&quot;``__torch_function__``, so the storage-less ShardTensor enters the JIT &quot;</span>
+        <span class="s2">&quot;graph raw and its TensorExpr-fused CUDA kernel reads a near-null &quot;</span>
+        <span class="s2">&quot;``data_ptr`` → illegal memory access (the Warp ``wp_free_device_async`` &quot;</span>
+        <span class="s2">&quot;fault is usually the *next* allocation tripping over the corrupted &quot;</span>
+        <span class="s2">&quot;context, not the real site). Fix by MARSHALLING the scripted op across &quot;</span>
+        <span class="s2">&quot;the boundary (Route C): unwrap ShardTensor→local, run the still-scripted &quot;</span>
+        <span class="s2">&quot;op, re-wrap. Scripted *submodules* are auto-marshalled by the default &quot;</span>
+        <span class="s1">&#39;``DomainConfig.scripted_marshal=&quot;auto&quot;``; a module-level scripted &#39;</span>
+        <span class="s2">&quot;*function* (the usual culprit, e.g. ``e3nn.o3._spherical_harmonics``) &quot;</span>
+        <span class="s1">&#39;must be DECLARED — add ``JitAdapter(module_path, attr, mode=&quot;marshal&quot;)`` &#39;</span>
+        <span class="s2">&quot;to the spec&#39;s ``distribution.third_party_helpers``. Run the pre-flight &quot;</span>
+        <span class="s2">&quot;``detect_scripted_ops(model, spec)`` to list undeclared scripted &quot;</span>
+        <span class="s2">&quot;functions and get a paste-able delta.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_translate_worker_error</span><span class="p">(</span>
+    <span class="n">error_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">handler_counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run all worker-error translators in priority order; return the</span>
+<span class="sd">    first match, or ``None`` if no translator fires.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">translator</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="n">_detect_scripted_op_shardtensor_ima</span><span class="p">,</span>
+        <span class="n">_detect_dropped_inplace_dispatch_return</span><span class="p">,</span>
+        <span class="n">_detect_severed_autograd_graph</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">hint</span> <span class="o">=</span> <span class="n">translator</span><span class="p">(</span><span class="n">error_str</span><span class="p">,</span> <span class="n">handler_counts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">hint</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">hint</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_format_partition_health</span><span class="p">(</span>
+    <span class="n">ph</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">degenerate_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render the partition-health verdict for ``next_action``.</span>
+
+<span class="sd">    ``degenerate_only`` (used on the success path) returns text ONLY when the</span>
+<span class="sd">    partition is degenerate — a clean pass on a healthy partition needs no</span>
+<span class="sd">    note. On the failure path it always appends the per-rank composition as</span>
+<span class="sd">    diagnostic context.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ph</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">degenerate_only</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">ph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;degenerate&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">lines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">ph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;degenerate&quot;</span><span class="p">):</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="s2">&quot;Partition is DEGENERATE — this run did not meaningfully exercise &quot;</span>
+            <span class="s2">&quot;domain decomposition, so the result is not evidence the spec is &quot;</span>
+            <span class="s2">&quot;correct. Pick a larger system / different world_size so every rank &quot;</span>
+            <span class="s2">&quot;has non-trivial owned + halo + remote atoms:&quot;</span>
+        <span class="p">)</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="s2">&quot;  - &quot;</span> <span class="o">+</span> <span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">ph</span><span class="p">[</span><span class="s2">&quot;degenerate&quot;</span><span class="p">])</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="s2">&quot;  Rule of thumb: a partitioned axis only develops remote atoms once &quot;</span>
+            <span class="s2">&quot;its per-rank domain exceeds two ghost widths, i.e. &quot;</span>
+            <span class="s2">&quot;box_axis / ranks_on_axis &gt; 2 * ghost_width  (ghost_width ~= &quot;</span>
+            <span class="s2">&quot;cutoff + skin). Below that every rank ghosts its neighbour&#39;s entire &quot;</span>
+            <span class="s2">&quot;domain (remote == 0). E.g. ghost_width 6 Ang with a 2-way split &quot;</span>
+            <span class="s2">&quot;needs box &gt; 24 Ang on that axis.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">comp</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;rank</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">(owned=</span><span class="si">{</span><span class="n">d</span><span class="p">[</span><span class="s1">&#39;owned&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, halo=</span><span class="si">{</span><span class="n">d</span><span class="p">[</span><span class="s1">&#39;halo&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, remote=</span><span class="si">{</span><span class="n">d</span><span class="p">[</span><span class="s1">&#39;remote&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">ph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;per_rank&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">comp</span><span class="p">:</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Partition composition: </span><span class="si">{</span><span class="n">comp</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="trace_and_validate">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.trace_and_validate.html#nvalchemi.distributed.trace_and_validate">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">trace_and_validate</span><span class="p">(</span>
+    <span class="n">model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">sample_batch</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+    <span class="n">atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-5</span><span class="p">,</span>
+    <span class="n">rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+    <span class="n">auto_fix</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">max_fix_attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">timeout_sec</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">120.0</span><span class="p">,</span>
+    <span class="n">watched_helper_packages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">helper_sample_every</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="n">layer_diagnostic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TraceReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer a distribution spec, validate it on a single-GPU multi-process</span>
+<span class="sd">    run, and (optionally) auto-fix when validation fails.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model_factory</span>
+<span class="sd">        Callable returning a freshly-constructed wrapper. Called once</span>
+<span class="sd">        in the launcher process for the reference run, and once per</span>
+<span class="sd">        rank in each spawned worker. Pristine state every time —</span>
+<span class="sd">        no shared module graph between processes.</span>
+<span class="sd">    sample_batch</span>
+<span class="sd">        A :class:`~nvalchemi.data.Batch` (or compatible) carrying</span>
+<span class="sd">        positions / cell / pbc on the target ``device``. Small enough</span>
+<span class="sd">        that ``world_size`` copies fit in memory at once.</span>
+<span class="sd">    world_size</span>
+<span class="sd">        Virtual ranks to spawn on the same GPU. The default (2) is</span>
+<span class="sd">        sufficient to flush the dispatch logic; larger values catch</span>
+<span class="sd">        partition-dependent bugs but cost spawn overhead linearly.</span>
+<span class="sd">    device</span>
+<span class="sd">        CUDA device all ranks bind to. Default ``&quot;cuda:0&quot;``. CPU</span>
+<span class="sd">        validation is *not* supported by this entry point — CPU/GPU</span>
+<span class="sd">        numerical drift makes it unreliable; if you need it, call</span>
+<span class="sd">        the harness in ``test_dispatch_trace_gloo.py`` directly.</span>
+<span class="sd">    atol</span>
+<span class="sd">        Per-output absolute tolerance. Pass criterion (per output) is</span>
+<span class="sd">        ``abs_diff &lt;= atol OR rel_diff &lt;= rtol`` — same convention</span>
+<span class="sd">        :func:`torch.testing.assert_close` uses, so extensive</span>
+<span class="sd">        quantities (energy scales linearly with atom count) compare</span>
+<span class="sd">        correctly across system sizes.</span>
+<span class="sd">    rtol</span>
+<span class="sd">        Per-output relative tolerance. Default ``1e-4`` covers fp32</span>
+<span class="sd">        round-off accumulation across collective reductions on the</span>
+<span class="sd">        ``cpu:gloo,cuda:gloo`` backend; tighten to e.g. ``1e-5`` when</span>
+<span class="sd">        running NCCL or fp64.</span>
+<span class="sd">    auto_fix</span>
+<span class="sd">        When the initial inferred spec fails validation, try</span>
+<span class="sd">        rule-based mutations. Disable to get a single-attempt report.</span>
+<span class="sd">    max_fix_attempts</span>
+<span class="sd">        Cap on the number of distinct specs auto-fix will try.</span>
+<span class="sd">    backend</span>
+<span class="sd">        ``&quot;nccl&quot;``, ``&quot;gloo&quot;``, or ``&quot;auto&quot;`` (NCCL when CUDA is</span>
+<span class="sd">        available, else Gloo). Both correctly route over CUDA tensors;</span>
+<span class="sd">        NCCL is faster.</span>
+<span class="sd">    timeout_sec</span>
+<span class="sd">        Per-spawn join timeout.</span>
+<span class="sd">    watched_helper_packages</span>
+<span class="sd">        Fully-qualified module paths whose top-level Python helpers</span>
+<span class="sd">        get instrumented during the reference and per-rank runs. The</span>
+<span class="sd">        :mod:`~nvalchemi.distributed._core.helper_trace` proxy records each</span>
+<span class="sd">        call&#39;s input / output shapes + sums; the</span>
+<span class="sd">        :mod:`~nvalchemi.distributed._core.helper_diagnosis` classifier then</span>
+<span class="sd">        flags helpers that look like distribution gaps (per-system</span>
+<span class="sd">        reductions whose per-rank outputs sum to the reference output</span>
+<span class="sd">        but aren&#39;t declared in ``spec.distribution.third_party_helpers``).</span>
+<span class="sd">        Defaults to ``(&quot;aimnet.nbops&quot;,)``. Pass an explicit empty</span>
+<span class="sd">        tuple to disable. Unimportable packages are skipped silently.</span>
+<span class="sd">    helper_sample_every</span>
+<span class="sd">        Record every Nth call after the first call per</span>
+<span class="sd">        ``(module, function)``. Default 8 keeps overhead bounded for</span>
+<span class="sd">        hot helpers (``mol_sum`` runs multiple times per layer); set</span>
+<span class="sd">        to 1 for exhaustive recording (debug only).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    TraceReport</span>
+<span class="sd">        Carries the working (or best-guess) spec, every attempt&#39;s</span>
+<span class="sd">        diff/handler-counts, and a one-line ``next_action``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;trace_and_validate requires CUDA — single-GPU multi-process &quot;</span>
+            <span class="s2">&quot;spawn is the validation primitive (CPU validation is &quot;</span>
+            <span class="s2">&quot;explicitly out of scope).&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Warp kernel cache: ensure both the launcher&#39;s reference run and</span>
+    <span class="c1"># spawned workers can write JIT artefacts. Default</span>
+    <span class="c1"># ``~/.cache/warp/`` may be read-only (sandboxed dev envs); route</span>
+    <span class="c1"># to a writable temp location. Set at the launcher level so spawned</span>
+    <span class="c1"># children inherit it before any nvalchemiops/warp import runs.</span>
+    <span class="k">if</span> <span class="s2">&quot;WARP_CACHE_PATH&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;WARP_CACHE_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">(),</span> <span class="s2">&quot;nvalchemi-validate-warp-cache&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Suppress noisy external warnings during the validator run:</span>
+    <span class="c1"># Gloo connection messages, Warp&#39;s ``warp.context`` deprecation,</span>
+    <span class="c1"># and the ``.grad attribute of a non-leaf`` warning fired inside</span>
+    <span class="c1"># ``warp/_src/torch.py``. None are actionable from user code.</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">_warnings</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;GLOO_LOG_LEVEL&quot;</span><span class="p">,</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;GLOG_minloglevel&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">)</span>
+    <span class="c1"># Silences PyTorch&#39;s C++-side ``ProcessGroup`` teardown warnings</span>
+    <span class="c1"># (``No backend of type 0 found``). Gloo&#39;s C++ ``Pair::connect``</span>
+    <span class="c1"># rank-connect log line still leaks through — those come from</span>
+    <span class="c1"># ``transport/tcp/pair.cc`` which doesn&#39;t honour any of these env</span>
+    <span class="c1"># vars; they&#39;re cosmetic-only and harmless.</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;TORCH_CPP_LOG_LEVEL&quot;</span><span class="p">,</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;TORCH_DISTRIBUTED_DEBUG&quot;</span><span class="p">,</span> <span class="s2">&quot;OFF&quot;</span><span class="p">)</span>
+    <span class="n">_warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+        <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+        <span class="n">message</span><span class="o">=</span><span class="s2">&quot;.*warp</span><span class="se">\\</span><span class="s2">.context.*&quot;</span><span class="p">,</span>
+        <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">_warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+        <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+        <span class="n">message</span><span class="o">=</span><span class="s2">&quot;.*</span><span class="se">\\</span><span class="s2">.grad attribute of a Tensor that is not a leaf.*&quot;</span><span class="p">,</span>
+        <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Warp&#39;s deprecation warnings bypass the Python ``warnings`` machinery</span>
+    <span class="c1"># (they call ``sys.stdout.write`` directly via ``warp_showwarning``)</span>
+    <span class="c1"># but DO consult the package-internal ``warnings_seen`` dedupe set</span>
+    <span class="c1"># — pre-populating that set is the only reliable way to keep the</span>
+    <span class="c1"># noise out of the validator&#39;s output. Both the launcher and each</span>
+    <span class="c1"># spawned worker pre-populate independently (the workers inherit</span>
+    <span class="c1"># ``warnings_seen`` clean since it&#39;s process-local state).</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">warp._src.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">_wu</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">_warnings_seen</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_wu</span><span class="p">,</span> <span class="s2">&quot;warnings_seen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_warnings_seen</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_msg</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;The namespace `warp.context` will soon be removed from the &quot;</span>
+                <span class="s2">&quot;public API. It can still be accessed from `warp._src.context` &quot;</span>
+                <span class="s2">&quot;but might be changed or removed without notice.&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;The symbol `warp.context.Device` will soon be removed from &quot;</span>
+                <span class="s2">&quot;the public API. Use `warp.Device` instead.&quot;</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="n">_warnings_seen</span><span class="o">.</span><span class="n">add</span><span class="p">((</span><span class="ne">DeprecationWarning</span><span class="p">,</span> <span class="n">_msg</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># The validator spawns every virtual rank on the SAME device, so NCCL is</span>
+    <span class="c1"># off the table (it rejects multiple ranks sharing one device, &quot;Duplicate</span>
+    <span class="c1"># GPU detected&quot;). A plain ``backend=&quot;gloo&quot;`` still routes cuda-tensor</span>
+    <span class="c1"># collectives through NCCL (PyTorch&#39;s default ``cpu:gloo,cuda:nccl`` map), so</span>
+    <span class="c1"># pin BOTH device classes to gloo. Real multi-GPU NCCL runs go through the</span>
+    <span class="c1"># benchmark scripts&#39; torchrun launchers, not this debugging harness.</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+        <span class="n">backend_resolved</span> <span class="o">=</span> <span class="s2">&quot;cpu:gloo,cuda:gloo&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">backend_resolved</span> <span class="o">=</span> <span class="n">backend</span>
+
+    <span class="k">if</span> <span class="n">watched_helper_packages</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">watched_helper_packages</span> <span class="o">=</span> <span class="n">_DEFAULT_WATCHED_HELPER_PACKAGES</span>
+    <span class="n">watched_helper_packages</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">watched_helper_packages</span><span class="p">)</span>
+
+    <span class="c1"># Reference run + initial inference.</span>
+    <span class="p">(</span>
+        <span class="n">ref_outputs</span><span class="p">,</span>
+        <span class="n">initial_trace</span><span class="p">,</span>
+        <span class="n">ref_helper_calls</span><span class="p">,</span>
+        <span class="n">ref_nl_summary</span><span class="p">,</span>
+        <span class="n">ref_layer_records</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">=</span> <span class="n">_reference_run</span><span class="p">(</span>
+        <span class="n">model_factory</span><span class="p">,</span>
+        <span class="n">sample_batch</span><span class="p">,</span>
+        <span class="n">watched_helper_packages</span><span class="o">=</span><span class="n">watched_helper_packages</span><span class="p">,</span>
+        <span class="n">helper_sample_every</span><span class="o">=</span><span class="n">helper_sample_every</span><span class="p">,</span>
+        <span class="n">layer_diagnostic</span><span class="o">=</span><span class="n">layer_diagnostic</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">initial_spec</span> <span class="o">=</span> <span class="n">_infer_spec_from_trace</span><span class="p">(</span><span class="n">model_factory</span><span class="p">(),</span> <span class="n">initial_trace</span><span class="p">)</span>
+
+    <span class="c1"># Scripted-op pre-flight (static; no GPU). Flag module-level</span>
+    <span class="c1"># ``@torch.jit.script`` functions auto-discovery can&#39;t wrap — the</span>
+    <span class="c1"># @torch.jit.script + ShardTensor illegal-memory-access vector — and, when</span>
+    <span class="c1"># auto-fixing, declare a marshalling JitAdapter for each so the spawn run</span>
+    <span class="c1"># doesn&#39;t IMA.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.scripted_diagnostics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">apply_marshal_adapters</span><span class="p">,</span>
+        <span class="n">detect_scripted_ops</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">scripted_report</span> <span class="o">=</span> <span class="n">detect_scripted_ops</span><span class="p">(</span><span class="n">model_factory</span><span class="p">(),</span> <span class="n">initial_spec</span><span class="p">)</span>
+    <span class="n">preflight_hint</span> <span class="o">=</span> <span class="n">scripted_report</span><span class="o">.</span><span class="n">format_hint</span><span class="p">()</span>
+    <span class="n">rationale</span> <span class="o">=</span> <span class="s2">&quot;initial inference from single-rank trace&quot;</span>
+    <span class="k">if</span> <span class="n">scripted_report</span><span class="o">.</span><span class="n">has_risk</span> <span class="ow">and</span> <span class="n">auto_fix</span><span class="p">:</span>
+        <span class="n">initial_spec</span> <span class="o">=</span> <span class="n">apply_marshal_adapters</span><span class="p">(</span>
+            <span class="n">initial_spec</span><span class="p">,</span> <span class="n">scripted_report</span><span class="o">.</span><span class="n">undeclared_functions</span>
+        <span class="p">)</span>
+        <span class="n">_injected</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">mp</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">mp</span><span class="p">,</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">scripted_report</span><span class="o">.</span><span class="n">undeclared_functions</span>
+        <span class="p">)</span>
+        <span class="n">rationale</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;initial inference + auto-marshalled undeclared scripted &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;function(s): </span><span class="si">{</span><span class="n">_injected</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">attempts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Attempt</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">initial_spec</span>
+
+    <span class="k">for</span> <span class="n">attempt_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_fix_attempts</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_validate_spec</span><span class="p">(</span>
+            <span class="n">model_factory</span><span class="p">,</span>
+            <span class="n">sample_batch</span><span class="p">,</span>
+            <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="n">backend_resolved</span><span class="p">,</span>
+            <span class="n">timeout_sec</span><span class="o">=</span><span class="n">timeout_sec</span><span class="p">,</span>
+            <span class="n">ref_outputs</span><span class="o">=</span><span class="n">ref_outputs</span><span class="p">,</span>
+            <span class="n">atol</span><span class="o">=</span><span class="n">atol</span><span class="p">,</span>
+            <span class="n">rtol</span><span class="o">=</span><span class="n">rtol</span><span class="p">,</span>
+            <span class="n">watched_helper_packages</span><span class="o">=</span><span class="n">watched_helper_packages</span><span class="p">,</span>
+            <span class="n">helper_sample_every</span><span class="o">=</span><span class="n">helper_sample_every</span><span class="p">,</span>
+            <span class="n">ref_helper_calls</span><span class="o">=</span><span class="n">ref_helper_calls</span><span class="p">,</span>
+            <span class="n">ref_nl_summary</span><span class="o">=</span><span class="n">ref_nl_summary</span><span class="p">,</span>
+            <span class="n">ref_layer_records</span><span class="o">=</span><span class="n">ref_layer_records</span><span class="p">,</span>
+            <span class="n">layer_diagnostic</span><span class="o">=</span><span class="n">layer_diagnostic</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">attempts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Attempt</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="n">rationale</span><span class="o">=</span><span class="n">rationale</span><span class="p">,</span> <span class="o">**</span><span class="n">result</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">attempts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">passed</span><span class="p">:</span>
+            <span class="n">ok_action</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;OK — paste spec from report.spec (passed at attempt &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;#</span><span class="si">{</span><span class="n">attempt_idx</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">preflight_hint</span><span class="p">:</span>
+                <span class="c1"># The run passed; if undeclared scripted functions were</span>
+                <span class="c1"># auto-marshalled, tell the user to make it permanent.</span>
+                <span class="n">ok_action</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Scripted-op pre-flight (auto-marshalled for this run &quot;</span>
+                    <span class="s2">&quot;— declare these on your wrapper&#39;s spec to make it &quot;</span>
+                    <span class="s2">&quot;permanent):</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">preflight_hint</span>
+                <span class="p">)</span>
+            <span class="c1"># A green result on a degenerate partition is a trap — surface it.</span>
+            <span class="n">degen</span> <span class="o">=</span> <span class="n">_format_partition_health</span><span class="p">(</span>
+                <span class="n">attempts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">partition_health</span><span class="p">,</span> <span class="n">degenerate_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">degen</span><span class="p">:</span>
+                <span class="n">ok_action</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">WARNING: &quot;</span> <span class="o">+</span> <span class="n">degen</span>
+            <span class="k">return</span> <span class="n">TraceReport</span><span class="p">(</span>
+                <span class="n">ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+                <span class="n">attempts</span><span class="o">=</span><span class="n">attempts</span><span class="p">,</span>
+                <span class="n">next_action</span><span class="o">=</span><span class="n">ok_action</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">auto_fix</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="c1"># Pick the next rule to try. Returns ``None`` when no rule&#39;s</span>
+        <span class="c1"># predicate matches — we&#39;ve exhausted what the engine knows.</span>
+        <span class="n">candidate</span> <span class="o">=</span> <span class="n">_next_fix_candidate</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">attempts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">candidate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="n">spec</span><span class="p">,</span> <span class="n">rationale</span> <span class="o">=</span> <span class="n">candidate</span>
+
+    <span class="c1"># Failed. Best guess + actionable next step.</span>
+    <span class="n">last</span> <span class="o">=</span> <span class="n">attempts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">last</span><span class="o">.</span><span class="n">error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">next_action</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;FAIL — worker raised before completing forward.</span><span class="se">\n</span><span class="si">{</span><span class="n">last</span><span class="o">.</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># Translate generic torch errors into framework-specific hints</span>
+        <span class="c1"># using the partial dispatch trace shipped from the worker.</span>
+        <span class="c1"># When this fires it usually pinpoints the root cause directly,</span>
+        <span class="c1"># so it goes BEFORE the helper-gap branch.</span>
+        <span class="n">translated</span> <span class="o">=</span> <span class="n">_translate_worker_error</span><span class="p">(</span><span class="n">last</span><span class="o">.</span><span class="n">error</span><span class="p">,</span> <span class="n">last</span><span class="o">.</span><span class="n">handler_counts</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="n">translated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Diagnosis: &quot;</span> <span class="o">+</span> <span class="n">translated</span>
+        <span class="k">if</span> <span class="n">last</span><span class="o">.</span><span class="n">handler_counts</span><span class="p">:</span>
+            <span class="n">counts_summary</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">×</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">last</span><span class="o">.</span><span class="n">handler_counts</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="p">)</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Dispatch trace before the crash: </span><span class="si">{</span><span class="n">counts_summary</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;An empty trace usually means the wrapper crashed in &quot;</span>
+                <span class="s2">&quot;construction or before any ShardTensor reached a &quot;</span>
+                <span class="s2">&quot;registered op; a non-empty trace tells you which &quot;</span>
+                <span class="s2">&quot;dispatch paths the wrapper exercised.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">helper_gaps</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">last</span><span class="o">.</span><span class="n">helper_diagnostics</span> <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">suspected_gap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">helper_gaps</span><span class="p">:</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Partial helper-trace before the crash flagged &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">helper_gaps</span><span class="p">)</span><span class="si">}</span><span class="s2"> suspected gap(s): &quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">module</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">function</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">helper_gaps</span><span class="p">)</span>
+                <span class="o">+</span> <span class="s2">&quot;. An unwrapped third-party helper that should have &quot;</span>
+                <span class="s2">&quot;been distributed is the typical root cause of this &quot;</span>
+                <span class="s2">&quot;failure mode. Inspect &quot;</span>
+                <span class="s2">&quot;``report.attempts[-1].helper_diagnostics`` for details.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">suspect</span> <span class="o">=</span> <span class="n">_suspect_op_summary</span><span class="p">(</span><span class="n">last</span><span class="o">.</span><span class="n">handler_counts</span><span class="p">)</span>
+        <span class="n">next_action</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;FAIL — auto-fix exhausted after </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">attempts</span><span class="p">)</span><span class="si">}</span><span class="s2"> attempts. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Closest variant in report.spec; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;ΔE_max=</span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="n">last</span><span class="o">.</span><span class="n">max_abs_diff</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span><span class="w"> </span><span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">suspect</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">helper_gaps</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">last</span><span class="o">.</span><span class="n">helper_diagnostics</span> <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">suspected_gap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">helper_gaps</span><span class="p">:</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Suspected third-party helper gaps &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">helper_gaps</span><span class="p">)</span><span class="si">}</span><span class="s2">): &quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">module</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">function</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">helper_gaps</span><span class="p">)</span>
+                <span class="o">+</span> <span class="s2">&quot;. Inspect ``report.attempts[-1].helper_diagnostics`` &quot;</span>
+                <span class="s2">&quot;for per-helper details (pattern, consistency check, &quot;</span>
+                <span class="s2">&quot;suggested remedy template).&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Surface free-form divergence notes too — these fire even</span>
+        <span class="c1"># when the formal classifier can&#39;t reach a verdict, giving the</span>
+        <span class="c1"># user a starting point (&quot;rank values agree but disagree with</span>
+        <span class="c1"># ref by 12% — likely local-edge-graph computation&quot;). Filter</span>
+        <span class="c1"># to helpers without a formal gap so we don&#39;t double-report.</span>
+        <span class="n">helper_notes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">last</span><span class="o">.</span><span class="n">helper_diagnostics</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">suspected_gap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>  <span class="c1"># already mentioned above</span>
+            <span class="n">helper_notes</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">module</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">function</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">note</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">note</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">divergence_notes</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">helper_notes</span><span class="p">:</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Watched-helper divergences (no formal classifier &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;verdict; informational, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">helper_notes</span><span class="p">)</span><span class="si">}</span><span class="s2"> total):</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">helper_notes</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="c1"># Partition health is the FIRST thing to rule out: a degenerate</span>
+        <span class="c1"># partition (no halo / no remote / empty shard) makes every</span>
+        <span class="c1"># downstream verdict suspect, and a too-small system is a common</span>
+        <span class="c1"># cause of &quot;halo coverage incomplete&quot;.</span>
+        <span class="n">ph_note</span> <span class="o">=</span> <span class="n">_format_partition_health</span><span class="p">(</span><span class="n">last</span><span class="o">.</span><span class="n">partition_health</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ph_note</span><span class="p">:</span>
+            <span class="n">next_action</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">ph_note</span>
+        <span class="c1"># Halo-completeness verdict comes BEFORE helper-trace</span>
+        <span class="c1"># interpretation in causal order — if halo is missing edges,</span>
+        <span class="c1"># downstream output divergences trace to that, not to the</span>
+        <span class="c1"># combine rule. Surface it prominently so the reader sees the</span>
+        <span class="c1"># root-cause line first; surface the *positive* case too so</span>
+        <span class="c1"># readers know halo has been ruled out as a cause.</span>
+        <span class="n">hc</span> <span class="o">=</span> <span class="n">last</span><span class="o">.</span><span class="n">halo_completeness</span>
+        <span class="k">if</span> <span class="n">hc</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">hc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;matches&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">next_action</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Halo coverage check: &quot;</span> <span class="o">+</span> <span class="n">hc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="s2">&quot;interpretation&quot;</span><span class="p">,</span> <span class="s2">&quot;halo coverage incomplete&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">ref_total</span> <span class="o">=</span> <span class="n">hc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ref_total_valid_edges&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)</span>
+                <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Halo coverage check: VERIFIED — every owned atom &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;on every rank sees the same neighbor count as &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;single-process (</span><span class="si">{</span><span class="n">ref_total</span><span class="si">}</span><span class="s2"> edges total, owned &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;sums match per-rank). Halo construction is &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;correct; output divergences originate elsewhere &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(combine rule, autograd graph topology, or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;non-decomposable computation).&quot;</span>
+                <span class="p">)</span>
+        <span class="n">ld</span> <span class="o">=</span> <span class="n">last</span><span class="o">.</span><span class="n">layer_divergence</span>
+        <span class="k">if</span> <span class="n">ld</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fd</span> <span class="o">=</span> <span class="n">ld</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;first_divergent&quot;</span><span class="p">)</span>
+            <span class="n">checked</span> <span class="o">=</span> <span class="n">ld</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;checked&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fd</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Layer-by-layer diagnostic: first divergent module &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;is ``</span><span class="si">{</span><span class="n">fd</span><span class="p">[</span><span class="s1">&#39;module&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">`` at rel_diff=&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">fd</span><span class="p">[</span><span class="s1">&#39;rel_diff&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2"> (sum-of-ranks &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">fd</span><span class="p">[</span><span class="s1">&#39;ranks_sum&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.4e</span><span class="si">}</span><span class="s2"> vs ref </span><span class="si">{</span><span class="n">fd</span><span class="p">[</span><span class="s1">&#39;ref_sum&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.4e</span><span class="si">}</span><span class="s2">). &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Look for a missing distribution wrapper here, or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;upstream input plumbing — checked </span><span class="si">{</span><span class="n">checked</span><span class="si">}</span><span class="s2"> modules &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;in execution order.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">checked</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">next_action</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Layer-by-layer diagnostic: every module&#39;s &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;sum-of-ranks matched ref to within tolerance &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">checked</span><span class="si">}</span><span class="s2"> modules checked, max rel_diff=&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ld</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;max_rel_diff&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">). The divergence &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;is in a non-Module computation (autograd-derived &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;output like forces/stress, post-model consolidation, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;or a kernel that bypasses sub-module hooks).&quot;</span>
+                <span class="p">)</span>
+    <span class="k">if</span> <span class="n">preflight_hint</span><span class="p">:</span>
+        <span class="n">next_action</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Scripted-op pre-flight: &quot;</span> <span class="o">+</span> <span class="n">preflight_hint</span>
+    <span class="k">return</span> <span class="n">TraceReport</span><span class="p">(</span>
+        <span class="n">ok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">spec</span><span class="o">=</span><span class="n">attempts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">spec</span><span class="p">,</span>
+        <span class="n">attempts</span><span class="o">=</span><span class="n">attempts</span><span class="p">,</span>
+        <span class="n">next_action</span><span class="o">=</span><span class="n">next_action</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

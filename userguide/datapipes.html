@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Data Loading Pipeline &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Data Loading Pipeline &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/datapipes';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Models: Wrapping ML Interatomic Potentials" href="models.html" />
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
@@ -451,8 +471,10 @@ workloads. It is built from four composable pieces: a <strong>Reader</strong> th
 tensors from storage, a <strong>Dataset</strong> that validates them into
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> objects, a <strong>DataLoader</strong> that batches them
 into <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> objects, and an optional <strong>Sampler</strong> that
-controls batching strategy. Each layer adds exactly one concern, and you can swap
-any of them independently.</p>
+controls batching strategy. An <strong>InMemoryDataset</strong> can replace Dataset when the
+full dataset fits comfortably in host memory, and a <strong>MultiDataset</strong> can compose
+several datasets behind one global index space. Each layer adds exactly one concern,
+and you can swap any of them independently.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">datapipes</span></code> abstraction is shared with <code class="docutils literal notranslate"><span class="pre">physicsnemo</span></code>: there are some
@@ -467,21 +489,51 @@ reading, and loading atomic data through the Zarr-backed storage pipeline.</p>
 </div>
 <section id="reader-raw-tensor-i-o">
 <h2>Reader: raw tensor I/O<a class="headerlink" href="#reader-raw-tensor-i-o" title="Link to this heading">#</a></h2>
-<p>A <a class="reference internal" href="../modules/generated/nvalchemi.data.Reader.html#nvalchemi.data.Reader" title="nvalchemi.data.datapipes.backends.base.Reader"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code></a> is the simplest
-abstraction in the pipeline. It knows how to load a single sample from storage and
-return it as a plain <code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code> — no validation, no device
-transfers, no threading. Readers are intentionally minimal so that adding a new
-storage backend only requires implementing two methods:</p>
+<p>A <a class="reference internal" href="../modules/generated/nvalchemi.data.Reader.html#nvalchemi.data.Reader" title="nvalchemi.data.datapipes.backends.base.Reader"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code></a> is the storage-facing
+layer of the pipeline. It returns plain <code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code> objects on CPU:
+no <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> validation, no device transfers, no batching policy, and no
+threading. That separation keeps storage backends focused on I/O and lets
+samplers decide <em>which</em> samples to request without also needing to know how the
+store should be read efficiently.</p>
+<p>Readers expose two public loading methods:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">_load_sample(index)</span> <span class="pre">-&gt;</span> <span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code>: Reads one sample into CPU tensors.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">__len__()</span> <span class="pre">-&gt;</span> <span class="pre">int</span></code>: Returns the total number of available samples.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read(index)</span></code>: Load one sample and return <code class="docutils literal notranslate"><span class="pre">(raw_tensor_dict,</span> <span class="pre">metadata)</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read_many(indices)</span></code>: Load several samples in the requested order and return one
+<code class="docutils literal notranslate"><span class="pre">(raw_tensor_dict,</span> <span class="pre">metadata)</span></code> pair per requested index.</p></li>
 </ul>
+<p>Both public methods attach per-sample metadata and optionally pin CPU tensors when
+<code class="docutils literal notranslate"><span class="pre">pin_memory=True</span></code>. Index validity is a backend concern: for example, the Zarr
+reader supports negative logical indices and maps them through its active-sample
+mask, while another backend may choose different index semantics.</p>
+<p><code class="docutils literal notranslate"><span class="pre">read_many</span></code> has an ordered contract: results must align one-for-one with the
+requested indices. Backends can reorder internally for physical I/O, but they must
+restore the caller’s requested order before returning.</p>
+<p>Backend authors implement one or both raw loading hooks:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_load_sample(index)</span> <span class="pre">-&gt;</span> <span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code>: Simple single-sample path.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_load_many_samples(indices)</span> <span class="pre">-&gt;</span> <span class="pre">list[dict[str,</span> <span class="pre">torch.Tensor]]</span></code>: Batch-oriented
+path for amortizing I/O across many requested samples.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">__len__()</span> <span class="pre">-&gt;</span> <span class="pre">int</span></code>: Total number of available logical samples.</p></li>
+</ul>
+<p>For simple formats, implementing <code class="docutils literal notranslate"><span class="pre">_load_sample</span></code> is enough; the base <code class="docutils literal notranslate"><span class="pre">Reader</span></code>
+implements <code class="docutils literal notranslate"><span class="pre">read_many</span></code> by looping over <code class="docutils literal notranslate"><span class="pre">_load_sample</span></code>. Readers that only have an
+efficient batch path can implement <code class="docutils literal notranslate"><span class="pre">_load_many_samples</span></code>; the base single-sample
+hook can call it with a one-index request. For storage formats with high per-call
+overhead or chunk locality, implement <code class="docutils literal notranslate"><span class="pre">_load_many_samples</span></code> so the backend can
+sort, merge, cache, or otherwise coalesce physical reads before returning samples
+in the caller’s original order.</p>
 <p>The built-in reader is
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code></a>, which
 reads from the structured Zarr stores produced by the toolkit’s
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a>. The Zarr
 layout uses separate groups for core fields, metadata, and custom attributes, and
 supports soft-deletes via a validity mask.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code> implements <code class="docutils literal notranslate"><span class="pre">_load_many_samples</span></code> as the fast path. Given a
+shuffled list of logical indices, it maps them to physical sample positions, sorts
+by physical order, groups reads by Zarr chunk locality, loads each array in
+coalesced ranges or orthogonal selections, and then restores the caller’s requested
+sample order. This is why downstream code should prefer <code class="docutils literal notranslate"><span class="pre">read_many</span></code> for batches
+instead of looping over <code class="docutils literal notranslate"><span class="pre">read</span></code>.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>The writer supports per-group compression and chunking via
@@ -490,8 +542,36 @@ supports soft-deletes via a validity mask.</p>
 recommendations and storage estimates.</p>
 </div>
 <p>If your data lives in a different format (HDF5, LMDB, a collection of files), you
-can subclass <code class="docutils literal notranslate"><span class="pre">Reader</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_load_sample</span></code> and <code class="docutils literal notranslate"><span class="pre">__len__</span></code>. Everything
+can subclass <code class="docutils literal notranslate"><span class="pre">Reader</span></code> and implement the hook that matches the backend. Everything
 downstream — Dataset, DataLoader, Sampler — will work without changes.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Reader</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyReader</span><span class="p">(</span><span class="n">Reader</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">10_000</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="c1"># Good enough for simple formats or true random-access stores.</span>
+        <span class="k">return</span> <span class="n">load_one_sample</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyBatchOptimizedReader</span><span class="p">(</span><span class="n">Reader</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">10_000</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_many_samples</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
+        <span class="c1"># Use backend-specific locality here, then return results in the same</span>
+        <span class="c1"># logical order as ``indices``.</span>
+        <span class="k">return</span> <span class="n">load_samples_with_coalesced_io</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
 <section id="dataset-validation-and-prefetching">
 <h2>Dataset: validation and prefetching<a class="headerlink" href="#dataset-validation-and-prefetching" title="Link to this heading">#</a></h2>
@@ -499,28 +579,58 @@ downstream — Dataset, DataLoader, Sampler — will work without changes.</p>
 responsibilities:</p>
 <ol class="arabic simple">
 <li><p><strong>Validation</strong>: Raw dictionaries are validated into
-<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> objects, catching schema issues early.</p></li>
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> objects, catching schema issues early.
+Pass <code class="docutils literal notranslate"><span class="pre">skip_validation=True</span></code> to bypass Pydantic validation when the backing
+store is already known to be well-formed (see
+<a class="reference internal" href="zarr_compression.html#read-performance-tuning"><span class="std std-ref">Read performance tuning</span></a>).</p></li>
 <li><p><strong>Async prefetching</strong>: A background <code class="docutils literal notranslate"><span class="pre">ThreadPoolExecutor</span></code> loads and transfers
-samples to the target device ahead of time, so the GPU is never starved.</p></li>
+samples to the target device ahead of time, reducing stalls while the model
+consumes previous batches.</p></li>
 </ol>
+<p>The Dataset talks to readers through public <code class="docutils literal notranslate"><span class="pre">reader.read_many(...)</span></code>. This is true
+even when a caller asks for one sample: single-sample Dataset access is
+represented as a one-element read request, so batch-capable readers keep their
+optimized path and Dataset does not need to know backend-specific private hooks.
+Duck-typed readers can be used without inheriting from <code class="docutils literal notranslate"><span class="pre">Reader</span></code> if they implement
+<code class="docutils literal notranslate"><span class="pre">read_many</span></code>, <code class="docutils literal notranslate"><span class="pre">__len__</span></code>, and <code class="docutils literal notranslate"><span class="pre">close</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span>
 
 <span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;/path/to/store.zarr&quot;</span><span class="p">)</span>
-<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+    <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># use for trusted stores written by the toolkit</span>
+<span class="p">)</span>
 
 <span class="c1"># Fetch a single sample (AtomicData on GPU)</span>
 <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 </pre></div>
 </div>
-<section id="cuda-stream-prefetching">
-<h3>CUDA stream prefetching<a class="headerlink" href="#cuda-stream-prefetching" title="Link to this heading">#</a></h3>
-<p>When called by a DataLoader, the Dataset uses
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">prefetch()</span></code> to overlap
-host-to-device data transfers with compute. The DataLoader issues prefetch calls on
-non-default CUDA streams; the Dataset records the transfer and synchronises the
-stream before returning the data. This means the next batch is already on the GPU
-while the model is processing the current one.</p>
+<section id="batch-loading-and-cuda-stream-prefetching">
+<h3>Batch loading and CUDA stream prefetching<a class="headerlink" href="#batch-loading-and-cuda-stream-prefetching" title="Link to this heading">#</a></h3>
+<p>When called by a DataLoader, the Dataset can overlap host-to-device transfers with
+compute. The DataLoader issues prefetch calls on non-default CUDA streams; the
+Dataset records the transfer and synchronises the stream before returning the data.
+This means the next batch can already be on the GPU while the model is processing
+the current one.</p>
+<p>The canonical synchronous batch API is
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">load_batches()</span></code>. It accepts a
+sequence of batch-index lists and returns one <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> per
+input list. Even for a single emitted batch, this path goes through one
+<code class="docutils literal notranslate"><span class="pre">reader.read_many(...)</span></code> request so batch-capable readers can use the same
+coalesced I/O implementation everywhere:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">batches</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">]])</span>
+<span class="n">batch0</span><span class="p">,</span> <span class="n">batch1</span> <span class="o">=</span> <span class="n">batches</span>
+</pre></div>
+</div>
+<p>For asynchronous loader iteration, the important path is fused prefetch:
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">prefetch_fused_batches()</span></code>
+accepts several upcoming DataLoader batches, flattens their indices into one
+<code class="docutils literal notranslate"><span class="pre">reader.read_many(...)</span></code> request, and then splits the loaded samples back into the
+original batch boundaries. This improves I/O throughput without requiring the
+sampler to choose storage-friendly windows.</p>
 </section>
 <section id="lightweight-metadata-access">
 <h3>Lightweight metadata access<a class="headerlink" href="#lightweight-metadata-access" title="Link to this heading">#</a></h3>
@@ -529,6 +639,56 @@ deciding which samples to group into a batch.
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_metadata()</span></code> returns
 <code class="docutils literal notranslate"><span class="pre">(num_atoms,</span> <span class="pre">num_edges)</span></code> for a given index without constructing the full
 <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code>, keeping the overhead low.</p>
+</section>
+<section id="in-memory-datasets">
+<h3>In-memory datasets<a class="headerlink" href="#in-memory-datasets" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.InMemoryDataset.html#nvalchemi.data.InMemoryDataset" title="nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">InMemoryDataset</span></code></a> keeps the
+entire dataset as one <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> and serves graph selections
+from that resident batch. Use it when a dataset is small enough to keep in host
+memory — as a rule of thumb, on the order of a few GB after batching — when
+data has already been materialized by another pipeline stage, or when
+benchmarking/training should avoid storage I/O after startup. For larger datasets
+that do not fit comfortably in host memory, use the regular
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> so samples are loaded from
+storage on demand.</p>
+<p>You can pass a fully loaded batch directly, or provide a Reader and let the
+dataset materialize it once at construction time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span><span class="p">,</span> <span class="n">DataLoader</span><span class="p">,</span> <span class="n">InMemoryDataset</span>
+
+<span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;/path/to/store.zarr&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">32768</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+    <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># use for trusted stores written by the toolkit</span>
+<span class="p">)</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">InMemoryDataset</span></code> implements the same DataLoader-facing batch contract as
+<code class="docutils literal notranslate"><span class="pre">Dataset</span></code>: <code class="docutils literal notranslate"><span class="pre">load_batches(...)</span></code>, <code class="docutils literal notranslate"><span class="pre">prefetch_fused_batches(...)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_fused_batches()</span></code>, <code class="docutils literal notranslate"><span class="pre">has_pending_fused_batches()</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">cancel_prefetch(...)</span></code>.
+Reader-backed in-memory datasets keep the resident cache on CPU, while
+<code class="docutils literal notranslate"><span class="pre">device</span></code> controls the emitted batch target device. With a CPU cache and CUDA
+target, fused prefetch enqueues the CPU-to-GPU transfer on the DataLoader CUDA
+stream. Per-batch transforms supplied at construction are applied while
+materializing Reader chunks; DataLoader <code class="docutils literal notranslate"><span class="pre">batch_transforms</span></code> still run on each
+emitted batch. Keep <code class="docutils literal notranslate"><span class="pre">pin_memory=True</span></code> for CPU-resident in-memory datasets that
+feed CUDA training; disable pinning if the in-memory batch already lives on CUDA.</p>
+<p>Like <code class="docutils literal notranslate"><span class="pre">Dataset</span></code>, <code class="docutils literal notranslate"><span class="pre">InMemoryDataset</span></code> validates reader samples by default while it
+materializes the resident batch. Pass <code class="docutils literal notranslate"><span class="pre">skip_validation=True</span></code> for trusted stores
+written by the toolkit to build chunks directly from raw tensor dictionaries via
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_raw_dicts" title="nvalchemi.data.Batch.from_raw_dicts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_raw_dicts()</span></code></a>. This avoids per-sample
+Pydantic overhead during startup and matches the fastest Dataset loading path.
+Do not use it for untrusted stores or data whose schema has not already been
+validated.</p>
 </section>
 </section>
 <section id="dataloader-batching-and-iteration">
@@ -541,9 +701,11 @@ consumption by the model.</p>
 
 <span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
     <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
-    <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
     <span class="n">num_streams</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">use_streams</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">:</span>
@@ -563,19 +725,213 @@ consumption by the model.</p>
 <td><p>Number of graphs per batch</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code></p></td>
-<td><p>How many <strong>batches</strong> to load ahead of the current one</p></td>
+<td><p>How many <strong>batches</strong> to fuse into each background read (<a class="reference internal" href="zarr_compression.html#read-performance-tuning"><span class="std std-ref">tuning guide</span></a>)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_streams</span></code></p></td>
 <td><p>Number of CUDA streams used for overlapping transfers</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">use_streams</span></code></p></td>
+<td><p>Whether to enable CUDA-stream prefetching when CUDA is available</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pin_memory</span></code></p></td>
+<td><p>Request page-locked CPU tensors from readers that support pinned memory</p></td>
+</tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sampler</span></code></p></td>
 <td><p>Controls index ordering (defaults to sequential or random)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">batch_sampler</span></code></p></td>
+<td><p>Supplies complete batches of indices and overrides <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffle</span></code>, and <code class="docutils literal notranslate"><span class="pre">sampler</span></code></p></td>
 </tr>
 </tbody>
 </table>
 <p>Unlike PyTorch’s <code class="docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code>, this implementation returns
 <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> objects (disjoint graphs with proper node-index
 offsets) rather than generic collated tensors.</p>
+<section id="batch-throughput-and-fused-prefetch">
+<h3>Batch throughput and fused prefetch<a class="headerlink" href="#batch-throughput-and-fused-prefetch" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">batch_size</span></code> controls the number of samples emitted to the training loop.
+<code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code> controls how many emitted batches are fused into one background
+backend read. For positive <code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code>, together they define the effective
+read window:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>effective_read_window = batch_size * prefetch_factor
+</pre></div>
+</div>
+<p>For example, <code class="docutils literal notranslate"><span class="pre">batch_size=64</span></code> and <code class="docutils literal notranslate"><span class="pre">prefetch_factor=16</span></code> produces batches of 64
+graphs for the model, but the reader sees read requests of up to 1,024 logical
+indices. The model-facing batch size stays unchanged; only the storage access
+window grows.</p>
+<p>This distinction is useful for graph-like data with shuffled access:</p>
+<ul class="simple">
+<li><p>Samplers remain semantic: they decide ordering and batch membership based on
+training needs, size limits, or distributed partitioning.</p></li>
+<li><p>Readers remain physical: they can exploit chunk locality, sort by physical
+position, merge adjacent ranges, and amortize per-call overhead.</p></li>
+<li><p>Dataset and DataLoader connect the two by converting several upcoming batches
+into one larger <code class="docutils literal notranslate"><span class="pre">read_many</span></code> request, then yielding the original batch sequence.</p></li>
+</ul>
+<p>Use <code class="docutils literal notranslate"><span class="pre">prefetch_factor=0</span></code> to disable fused prefetch and issue one backend read per
+emitted batch. This is useful for debugging or for stores where large read windows
+do not help. For shuffled Zarr training reads, start with <code class="docutils literal notranslate"><span class="pre">prefetch_factor=16</span></code> or
+<code class="docutils literal notranslate"><span class="pre">32</span></code>, then benchmark with <code class="docutils literal notranslate"><span class="pre">nvalchemi-io-test</span></code> on a representative store. Enable
+<code class="docutils literal notranslate"><span class="pre">pin_memory=True</span></code> for CUDA training so the DataLoader requests page-locked CPU
+tensors before asynchronous transfer. See
+<a class="reference internal" href="zarr_compression.html#read-performance-tuning"><span class="std std-ref">Read performance tuning</span></a> and the
+<a class="reference internal" href="zarr_compression.html#io-benchmark-section"><span class="std std-ref">I/O benchmark tool</span></a> for concrete commands.</p>
+</section>
+</section>
+<section id="multidataset-composing-datasets">
+<h2>MultiDataset: composing datasets<a class="headerlink" href="#multidataset-composing-datasets" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.MultiDataset.html#nvalchemi.data.datapipes.MultiDataset" title="nvalchemi.data.datapipes.multidataset.MultiDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiDataset</span></code></a> concatenates
+multiple batch-loadable datasets, such as
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.InMemoryDataset.html#nvalchemi.data.InMemoryDataset" title="nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">InMemoryDataset</span></code></a>, behind
+one global index space. It follows the PhysicsNeMo multidataset indexing contract
+while preserving the nvalchemi batch fast path: <code class="docutils literal notranslate"><span class="pre">load_batches(...)</span></code> routes each
+global batch to the relevant child datasets and recombines mixed-child batches in
+the requested sample order.</p>
+<p>You can mix reader-backed <code class="docutils literal notranslate"><span class="pre">Dataset</span></code> children with <code class="docutils literal notranslate"><span class="pre">InMemoryDataset</span></code> children in
+the same <code class="docutils literal notranslate"><span class="pre">MultiDataset</span></code>. This is covered by unit tests for correctness, but
+mixed in-memory/on-demand performance depends on the workload and has not yet
+been benchmarked.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AtomicDataZarrReader</span><span class="p">,</span>
+    <span class="n">DataLoader</span><span class="p">,</span>
+    <span class="n">Dataset</span><span class="p">,</span>
+    <span class="n">MultiDataset</span><span class="p">,</span>
+    <span class="n">MultiDatasetBatchSampler</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">dataset_a</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;dataset_a.zarr&quot;</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+<span class="n">dataset_b</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;dataset_b.zarr&quot;</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">MultiDataset</span><span class="p">(</span><span class="n">dataset_a</span><span class="p">,</span> <span class="n">dataset_b</span><span class="p">,</span> <span class="n">output_strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">batch_sampler</span> <span class="o">=</span> <span class="n">MultiDatasetBatchSampler</span><span class="o">.</span><span class="n">balanced</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">epoch_policy</span><span class="o">=</span><span class="s2">&quot;max_size&quot;</span><span class="p">,</span>
+    <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">,</span>
+    <span class="n">batch_sampler</span><span class="o">=</span><span class="n">batch_sampler</span><span class="p">,</span>
+    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>By default, <code class="docutils literal notranslate"><span class="pre">output_strict=True</span></code> requires all non-empty child datasets to expose
+the same field names. Empty children are skipped when choosing the reference
+field set. Use <code class="docutils literal notranslate"><span class="pre">output_strict=False</span></code> only when downstream code can handle
+source-specific fields.</p>
+<section id="multidataset-sampler-policies">
+<h3>Multidataset sampler policies<a class="headerlink" href="#multidataset-sampler-policies" title="Link to this heading">#</a></h3>
+<p>The multidataset samplers operate on global indices but allocate samples at the
+child-dataset level:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Sampler</p></th>
+<th class="head"><p>Use case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.MultiDatasetSampler.html#nvalchemi.data.datapipes.MultiDatasetSampler" title="nvalchemi.data.datapipes.samplers.MultiDatasetSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiDatasetSampler</span></code></a></p></td>
+<td><p>Draw individual samples from child datasets at custom rates</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html#nvalchemi.data.datapipes.MultiDatasetBatchSampler" title="nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiDatasetBatchSampler</span></code></a></p></td>
+<td><p>Build batches with explicit or weighted per-dataset allocations</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">balanced()</span></code></p></td>
+<td><p>Build dataset-balanced batches</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">samples_per_dataset</span></code> accepts integer counts or floating-point relative ratios.
+For example, <code class="docutils literal notranslate"><span class="pre">[1.0,</span> <span class="pre">3.0]</span></code> allocates roughly one quarter of each batch to the first
+dataset and three quarters to the second dataset.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">num_batches</span></code> is omitted, <code class="docutils literal notranslate"><span class="pre">epoch_policy</span></code> controls the default epoch length:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">epoch_policy</span></code></p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;dataset_size&quot;</span></code></p></td>
+<td><p>Preserve the historical default based on total dataset size</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;min_size&quot;</span></code></p></td>
+<td><p>Stop when the smallest contributing dataset would be exhausted</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;max_size&quot;</span></code></p></td>
+<td><p>Run until the largest contributing dataset is covered, oversampling smaller datasets when <code class="docutils literal notranslate"><span class="pre">replacement=True</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Use <code class="docutils literal notranslate"><span class="pre">&quot;max_size&quot;</span></code> for balanced training over datasets of different sizes when you
+want smaller datasets to be oversampled instead of dominated by the largest
+dataset. Without replacement, <code class="docutils literal notranslate"><span class="pre">&quot;max_size&quot;</span></code> raises if oversampling would be
+required.</p>
+<p>For data-parallel training, the multidataset samplers can shard sample or batch
+orders across ranks. See <a class="reference internal" href="distributed_training.html#distributed-manager-guide"><span class="std std-ref">Distributed Training</span></a> for examples ranging
+from the default <code class="docutils literal notranslate"><span class="pre">DDPHook</span></code> sampler injection to distributed
+<code class="docutils literal notranslate"><span class="pre">MultiDatasetBatchSampler</span></code> composition.</p>
+</section>
+</section>
+<section id="transforms-per-sample-and-per-batch-hooks">
+<h2>Transforms: per-sample and per-batch hooks<a class="headerlink" href="#transforms-per-sample-and-per-batch-hooks" title="Link to this heading">#</a></h2>
+<p>Both <a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader" title="nvalchemi.data.datapipes.dataloader.DataLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> accept user-supplied
+transforms that run on the output path. A <em>per-sample</em> transform operates on
+individual <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> objects (plus a metadata dict)
+after device transfer but before collation, while a <em>per-batch</em> transform
+operates on the collated <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> before it is yielded
+to the caller. Note, however, that <code class="xref py py-class docutils literal notranslate"><span class="pre">Compose</span></code>
+dispatches based on function arguments; their signatures should (must) match
+the examples given below:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Per-sample: runs inside Dataset, one AtomicData at a time</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">shift_positions</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span><span class="n">update</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">}),</span> <span class="n">metadata</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">transforms</span><span class="o">=</span><span class="p">[</span><span class="n">shift_positions</span><span class="p">])</span>
+
+<span class="c1"># Per-batch: runs inside Dataloader, once per yielded Batch.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">center_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+    <span class="c1"># compute the mean position per sample</span>
+    <span class="n">mean_pos</span> <span class="o">=</span> <span class="n">segmented_mean</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">)</span>
+    <span class="c1"># subtract the mean per graph with broadcasting</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span> <span class="o">-</span> <span class="n">mean_pos</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">batch</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">batch_transforms</span><span class="o">=</span><span class="p">[</span><span class="n">center_batch</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Prefer per-batch transforms over per-sample transforms for anything
+compute-heavy. Per-sample transforms run once per graph on whatever device the
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> produces and cannot amortize
+launch overhead across graphs. A vectorized per-batch transform that uses
+segmented / scatter-reduce operations on the fully collated
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> will be significantly more efficient on GPU. Reserve
+per-sample transforms for light, sample-specific bookkeeping (e.g. attaching
+metadata, filtering keys) that genuinely cannot be batched.</p>
+</div>
+<p>Each sequence is composed left-to-right via
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Compose</span></code>, so the output of transform <em>i</em>
+becomes the input of transform <em>i + 1</em>. Transforms must <strong>return</strong> their
+(possibly mutated) output —- in-place mutation without a return value is not
+supported. The two hooks are independent: you can use one, both, or neither.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>A single <code class="xref py py-class docutils literal notranslate"><span class="pre">Compose</span></code> is either a sample
+composition or a batch composition; mixing the two shapes inside one
+sequence raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> at construction. In practice you never
+instantiate <code class="docutils literal notranslate"><span class="pre">Compose</span></code> yourself — pass the list to <code class="docutils literal notranslate"><span class="pre">Dataset(transforms=...)</span></code>
+or <code class="docutils literal notranslate"><span class="pre">DataLoader(batch_transforms=...)</span></code> and the right wrapper is built for you.</p>
+</div>
 </section>
 <section id="sizeawaresampler-memory-safe-batching">
 <h2>SizeAwareSampler: memory-safe batching<a class="headerlink" href="#sizeawaresampler-memory-safe-batching" title="Link to this heading">#</a></h2>
@@ -622,15 +978,22 @@ batch full without reallocation.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">SizeAwareSampler</span>
 
 <span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;/path/to/store.zarr&quot;</span><span class="p">)</span>
-<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+    <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="n">sampler</span> <span class="o">=</span> <span class="n">SizeAwareSampler</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">max_atoms</span><span class="o">=</span><span class="mi">4096</span><span class="p">)</span>
 
 <span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
     <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
     <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>      <span class="c1"># upper bound; sampler may produce smaller batches</span>
     <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
-    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
     <span class="n">num_streams</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">use_streams</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">:</span>
@@ -650,8 +1013,8 @@ SizeAwareSampler integrate with simulation pipelines.</p></li>
 <li><p><strong>Compression</strong>: The <a class="reference internal" href="zarr_compression.html#zarr-compression-guide"><span class="std std-ref">Zarr Compression Tuning Guide</span></a>
 covers how to configure compression and chunking when writing Zarr stores.</p></li>
 <li><p><strong>I/O benchmark</strong>: The <a class="reference internal" href="zarr_compression.html#io-benchmark-section"><span class="std std-ref">I/O benchmark tool</span></a> lets you
-measure write throughput and compression ratios on synthetic data before
-choosing a configuration.</p></li>
+measure write throughput, readback throughput, and compression ratios on
+synthetic data before choosing a configuration.</p></li>
 </ul>
 </section>
 </section>
@@ -704,11 +1067,20 @@ choosing a configuration.</p></li>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reader-raw-tensor-i-o">Reader: raw tensor I/O</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dataset-validation-and-prefetching">Dataset: validation and prefetching</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cuda-stream-prefetching">CUDA stream prefetching</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-loading-and-cuda-stream-prefetching">Batch loading and CUDA stream prefetching</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lightweight-metadata-access">Lightweight metadata access</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#in-memory-datasets">In-memory datasets</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dataloader-batching-and-iteration">DataLoader: batching and iteration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dataloader-batching-and-iteration">DataLoader: batching and iteration</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-throughput-and-fused-prefetch">Batch throughput and fused prefetch</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multidataset-composing-datasets">MultiDataset: composing datasets</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multidataset-sampler-policies">Multidataset sampler policies</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transforms-per-sample-and-per-batch-hooks">Transforms: per-sample and per-batch hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sizeawaresampler-memory-safe-batching">SizeAwareSampler: memory-safe batching</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-memory-heuristic">GPU memory heuristic</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inflight-replacement">Inflight replacement</a></li>

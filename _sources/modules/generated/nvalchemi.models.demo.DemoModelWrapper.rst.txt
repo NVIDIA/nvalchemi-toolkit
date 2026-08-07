@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.demo
 
+
 .. autoclass:: DemoModelWrapper
     :members:
+
 
 .. raw:: html
 

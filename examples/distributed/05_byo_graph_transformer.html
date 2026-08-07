@@ -1,0 +1,1452 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Bring your own model with a Warp kernel: from architecture to spec &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/05_byo_graph_transformer';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="MACE NPT: domain-decomposed constant-pressure MD with a barostat" href="06_mace_npt_distributed.html" />
+    <link rel="prev" title="Bring your own PyTorch model: from architecture to a saved spec" href="04_byo_pytorch_mpnn.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Distributed Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Bring your...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-distributed-05-byo-graph-transformer-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="bring-your-own-model-with-a-warp-kernel-from-architecture-to-spec">
+<span id="sphx-glr-examples-distributed-05-byo-graph-transformer-py"></span><h1>Bring your own model with a Warp kernel: from architecture to spec<a class="headerlink" href="#bring-your-own-model-with-a-warp-kernel-from-architecture-to-spec" title="Link to this heading">#</a></h1>
+<p>The same arc as <a class="reference internal" href="04_byo_pytorch_mpnn.html"><span class="doc">Bring your own PyTorch model: from architecture to a saved spec</span></a>, but now the model embeds
+one performance-critical Warp kernel — the case where
+<code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code> carries weight.</p>
+<p>A Warp kernel is opaque to ShardTensor’s <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code>: it
+calls <code class="docutils literal notranslate"><span class="pre">wp.from_torch(t)</span></code> internally, bypassing the dispatch
+machinery. <code class="xref py py-func docutils literal notranslate"><span class="pre">trace_and_validate()</span></code>’s auto-fix rules can’t
+synthesise the wrap because they don’t know how to read the kernel’s
+input/output semantics. The wrapper author declares those semantics
+once on the spec via an <code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code>, the registry installs a
+distribution-aware handler, and from there everything flows.</p>
+<p>Walkthrough:</p>
+<ol class="arabic simple">
+<li><p><strong>Architecture.</strong> A pairwise interaction kernel computed in Warp:
+<code class="docutils literal notranslate"><span class="pre">E_ij</span> <span class="pre">=</span> <span class="pre">ε</span> <span class="pre">*</span> <span class="pre">exp(-(r_ij</span> <span class="pre">/</span> <span class="pre">σ)²)</span></code> summed per receiver. Wrapped as
+<code class="docutils literal notranslate"><span class="pre">&#64;torch.library.custom_op</span></code> so PyTorch sees it as a regular op.</p></li>
+<li><p><strong>Wrapper.</strong> <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> adapter — distribution-unaware.
+Same shape as example 04: model_config + adapt_input + adapt_output.</p></li>
+<li><p><strong>Single-process verification.</strong> Confirm the Warp op + autograd
+forces work on a small cluster.</p></li>
+<li><p><strong>First validation attempt — without OpAdapter.</strong> Show what
+<code class="docutils literal notranslate"><span class="pre">trace_and_validate</span></code> reports when the spec doesn’t carry the
+kernel’s distribution semantics.</p></li>
+<li><p><strong>Author the OpAdapter + retry.</strong> Declare <code class="docutils literal notranslate"><span class="pre">output_transforms={0:</span>
+<span class="pre">ScatterOutputs()}</span></code> on the spec; re-run validation.</p></li>
+<li><p><strong>Persist the working spec</strong> for production use.</p></li>
+<li><p><strong>Run under DomainParallel.</strong> Drive the validated model with NVE dynamics —
+single-process here, and (under <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>) eager vs compiled under real
+domain decomposition, showing the fixed-shape caps that keep the compiled
+graph reused across MD steps.</p></li>
+</ol>
+<p>For the easy path (pure PyTorch, no opaque kernels), see
+<a class="reference internal" href="04_byo_pytorch_mpnn.html"><span class="doc">Bring your own PyTorch model: from architecture to a saved spec</span></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Read-oriented walkthrough. The <code class="docutils literal notranslate"><span class="pre">main()</span></code> block at the bottom is
+runnable; everything above it is illustrative. Two launch modes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code> — the
+build → validate → save → run-under-DomainParallel walkthrough.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">torchrun</span> <span class="pre">--nproc_per_node=2</span> <span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code>
+— the eager-vs-compiled demo under real multi-rank domain decomposition
+(<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> + fixed-shape caps engage only on the DD path).</p></li>
+</ul>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+
+<span class="c1"># Warp&#39;s default kernel cache (~/.cache/warp/) may be read-only in</span>
+<span class="c1"># sandboxed dev environments; route to a writable temp location so</span>
+<span class="c1"># the kernel below compiles on first launch. Mirrors the same shim</span>
+<span class="c1"># the validator harness installs in spawned workers.</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+    <span class="s2">&quot;WARP_CACHE_PATH&quot;</span><span class="p">,</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">(),</span> <span class="s2">&quot;nvalchemi-tutorial-warp-cache&quot;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>  <span class="c1"># noqa: E402</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">wp</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">,</span> <span class="n">nn</span>  <span class="c1"># noqa: E402</span>
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 1. The Warp kernel + custom_op wrap</span>
+<span class="c1"># ====================================================================</span>
+<span class="c1">#</span>
+<span class="c1"># The kernel computes a Gaussian pairwise interaction summed</span>
+<span class="c1"># per-receiver. One thread per edge:</span>
+<span class="c1">#</span>
+<span class="c1">#   E[receiver] += ε * exp(-(r_ij / σ)²)</span>
+<span class="c1">#</span>
+<span class="c1"># A real production kernel would be richer (multi-channel, learnable</span>
+<span class="c1"># parameters, fused gradient). The semantics that matter for</span>
+<span class="c1"># distribution are the same:</span>
+<span class="c1">#</span>
+<span class="c1"># * **Per-edge, write-to-receiver scatter pattern.** Halo rows of the</span>
+<span class="c1">#   output buffer accumulate partial sums when the receiver is a halo</span>
+<span class="c1">#   atom — exactly the case :class:`ScatterOutputs` reverse-exchanges.</span>
+<span class="c1"># * **Reads sender + receiver positions.** Under halo storage,</span>
+<span class="c1">#   positions cover (owned + halo) rows on each rank, so cross-rank</span>
+<span class="c1">#   pairs are served by local halo copies — no input transformation</span>
+<span class="c1">#   needed.</span>
+
+
+<span class="nd">@wp</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_gaussian_pair_kernel</span><span class="p">(</span>
+    <span class="n">edge_sender</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>  <span class="c1"># (E,)</span>
+    <span class="n">edge_receiver</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>  <span class="c1"># (E,)</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">array2d</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>  <span class="c1"># (n_atoms, 3)</span>
+    <span class="n">epsilon</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">inv_sigma</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">cutoff_sq</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">energy_per_atom</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>  <span class="c1"># (n_atoms,) — accumulator</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One thread per edge. Adds ``ε exp(-(r/σ)²)`` into the</span>
+<span class="sd">    receiver&#39;s slot. Skips edges with ``r² &gt; cutoff²``.&quot;&quot;&quot;</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">wp</span><span class="o">.</span><span class="n">tid</span><span class="p">()</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="n">edge_sender</span><span class="p">[</span><span class="n">e</span><span class="p">]</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="n">edge_receiver</span><span class="p">[</span><span class="n">e</span><span class="p">]</span>
+
+    <span class="n">dx</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">dy</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">dz</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+    <span class="n">r2</span> <span class="o">=</span> <span class="n">dx</span> <span class="o">*</span> <span class="n">dx</span> <span class="o">+</span> <span class="n">dy</span> <span class="o">*</span> <span class="n">dy</span> <span class="o">+</span> <span class="n">dz</span> <span class="o">*</span> <span class="n">dz</span>
+
+    <span class="k">if</span> <span class="n">r2</span> <span class="o">&gt;</span> <span class="n">cutoff_sq</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="n">r_over_sigma</span> <span class="o">=</span> <span class="n">wp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">r2</span><span class="p">)</span> <span class="o">*</span> <span class="n">inv_sigma</span>
+    <span class="n">contribution</span> <span class="o">=</span> <span class="n">epsilon</span> <span class="o">*</span> <span class="n">wp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">r_over_sigma</span> <span class="o">*</span> <span class="n">r_over_sigma</span><span class="p">)</span>
+    <span class="n">wp</span><span class="o">.</span><span class="n">atomic_add</span><span class="p">(</span><span class="n">energy_per_atom</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">contribution</span><span class="p">)</span>
+
+
+<span class="nd">@torch</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">custom_op</span><span class="p">(</span>
+    <span class="s2">&quot;tutorial::gaussian_pair_energy&quot;</span><span class="p">,</span>
+    <span class="n">mutates_args</span><span class="o">=</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">gaussian_pair_energy</span><span class="p">(</span>
+    <span class="n">edge_index</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">,</span>  <span class="c1"># (2, E) — (sender, receiver), int64</span>
+    <span class="n">positions</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">,</span>  <span class="c1"># (n_atoms, 3), float32</span>
+    <span class="n">epsilon</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-atom Gaussian-pair energy. Output shape ``(n_atoms,)``.</span>
+
+<span class="sd">    For each receiver atom, accumulates ``ε exp(-(r/σ)²)`` over its</span>
+<span class="sd">    incoming edges within the cutoff. Halo-storage friendly:</span>
+<span class="sd">    ``positions`` is read rank-locally from a halo-padded tensor; the</span>
+<span class="sd">    spec&#39;s :class:`OpAdapter` reverse-exchanges the per-atom output&#39;s</span>
+<span class="sd">    halo rows back to owners after the kernel returns.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">dev</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+    <span class="n">wp_dev</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="n">dev</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">dev</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+
+    <span class="n">energy_per_atom</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">)</span>
+    <span class="n">wp</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+        <span class="n">kernel</span><span class="o">=</span><span class="n">_gaussian_pair_kernel</span><span class="p">,</span>
+        <span class="n">dim</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">edge_index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">int64</span></a><span class="p">)),</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">int64</span></a><span class="p">)),</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">)),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">epsilon</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">sigma</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span> <span class="o">*</span> <span class="n">cutoff</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">energy_per_atom</span><span class="p">)],</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">wp_dev</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">energy_per_atom</span>
+
+
+<span class="nd">@gaussian_pair_energy</span><span class="o">.</span><span class="n">register_fake</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_gaussian_pair_energy_fake</span><span class="p">(</span>
+    <span class="n">edge_index</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">,</span>
+    <span class="n">positions</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">,</span>
+    <span class="n">epsilon</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Meta-tensor implementation for ``torch.compile``. Returns a</span>
+<span class="sd">    correctly-shaped tensor of zeros without launching the kernel.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+
+<span class="c1"># Why register a fake / meta path?</span>
+<span class="c1"># ``register_fake`` lets PyTorch&#39;s tracing machinery (``torch.compile``,</span>
+<span class="c1"># ``torch.export``, FakeTensor mode) reason about output shapes</span>
+<span class="c1"># without launching the kernel. A custom_op without a fake kernel</span>
+<span class="c1"># silently breaks under any tracing path that hits the op. Strictly</span>
+<span class="c1"># optional for the eager-mode validator, but cheap to add.</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 1.5. Backward via ``register_autograd``</span>
+<span class="c1"># ====================================================================</span>
+<span class="c1">#</span>
+<span class="c1"># Autograd through the Warp op needs an explicit backward formula. A</span>
+<span class="c1"># real production kernel would supply a Warp-implemented backward</span>
+<span class="c1"># (``wp.atomic_add`` into a per-atom grad buffer, paired with</span>
+<span class="c1"># ``wp.tape``); for the walkthrough we use a PyTorch-implemented</span>
+<span class="c1"># backward — readable, autograd-correct, good enough for the</span>
+<span class="c1"># OpAdapter pedagogy. Choice of Warp vs PyTorch backward is</span>
+<span class="c1"># orthogonal to distribution semantics; the OpAdapter on the spec</span>
+<span class="c1"># governs both forward and backward distributed plumbing.</span>
+<span class="c1">#</span>
+<span class="c1"># Closed-form gradient. For each edge ``(i → j)`` with</span>
+<span class="c1"># ``r = ‖x_i − x_j‖`` and ``r² &lt; cutoff²``::</span>
+<span class="c1">#</span>
+<span class="c1">#   ∂E_j / ∂x_i = (-2 ε / σ²) · exp(−(r/σ)²) · (x_i − x_j)</span>
+<span class="c1">#   ∂E_j / ∂x_j = -∂E_j / ∂x_i</span>
+<span class="c1">#</span>
+<span class="c1"># Multiply by the upstream gradient ``grad_E[j]`` and scatter into</span>
+<span class="c1"># per-atom ``grad_positions``.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gaussian_pair_energy_setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">output</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Save the inputs we need for backward. ``custom_op`` doesn&#39;t</span>
+<span class="sd">    automatically save anything (unlike ``torch.autograd.Function``);</span>
+<span class="sd">    the setup_context callback is where the explicit save lives.&quot;&quot;&quot;</span>
+    <span class="n">edge_index</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">cutoff</span> <span class="o">=</span> <span class="n">inputs</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">save_for_backward</span><span class="p">(</span><span class="n">edge_index</span><span class="p">,</span> <span class="n">positions</span><span class="p">)</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">epsilon</span><span class="p">)</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">sigma</span><span class="p">)</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gaussian_pair_energy_backward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Backward formula. Computes ``∂L/∂positions`` from</span>
+<span class="sd">    ``∂L/∂energy_per_atom``; non-tensor inputs return ``None``.&quot;&quot;&quot;</span>
+    <span class="n">edge_index</span><span class="p">,</span> <span class="n">positions</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">saved_tensors</span>
+    <span class="n">epsilon</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">cutoff</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">epsilon</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">sigma</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">cutoff</span>
+
+    <span class="n">sender</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+    <span class="n">receiver</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+    <span class="n">rij</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">sender</span><span class="p">]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">receiver</span><span class="p">]</span>  <span class="c1"># (E, 3)</span>
+    <span class="n">r2</span> <span class="o">=</span> <span class="p">(</span><span class="n">rij</span> <span class="o">*</span> <span class="n">rij</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (E,)</span>
+    <span class="n">cutoff_sq</span> <span class="o">=</span> <span class="n">cutoff</span> <span class="o">*</span> <span class="n">cutoff</span>
+
+    <span class="c1"># ε exp(-(r/σ)²) for valid (within-cutoff) edges; zero otherwise.</span>
+    <span class="n">inv_sigma_sq</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">sigma</span> <span class="o">*</span> <span class="n">sigma</span><span class="p">)</span>
+    <span class="n">energy_per_edge</span> <span class="o">=</span> <span class="n">epsilon</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.exp.html#torch.exp" title="torch.exp" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">exp</span></a><span class="p">(</span><span class="o">-</span><span class="n">r2</span> <span class="o">*</span> <span class="n">inv_sigma_sq</span><span class="p">)</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">r2</span> <span class="o">&lt;</span> <span class="n">cutoff_sq</span>
+    <span class="n">energy_per_edge</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="torch.where" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">where</span></a><span class="p">(</span>
+        <span class="n">valid</span><span class="p">,</span> <span class="n">energy_per_edge</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">energy_per_edge</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># ∂(grad·E_per_edge)/∂x_sender = (−2/σ²) · grad_output[receiver]</span>
+    <span class="c1">#                                · energy_per_edge · (x_sender − x_receiver)</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">inv_sigma_sq</span><span class="p">)</span> <span class="o">*</span> <span class="n">grad_output</span><span class="p">[</span><span class="n">receiver</span><span class="p">]</span> <span class="o">*</span> <span class="n">energy_per_edge</span>
+    <span class="n">edge_grad</span> <span class="o">=</span> <span class="n">factor</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">rij</span>  <span class="c1"># (E, 3)</span>
+
+    <span class="n">grad_positions</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="c1"># Rebind the return: single-process ``index_add_`` is in-place, but</span>
+    <span class="c1"># under domain decomposition the halo-correction handler returns a</span>
+    <span class="c1"># *new* cross-rank-corrected tensor.</span>
+    <span class="n">grad_positions</span> <span class="o">=</span> <span class="n">grad_positions</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">edge_grad</span><span class="p">)</span>
+    <span class="n">grad_positions</span> <span class="o">=</span> <span class="n">grad_positions</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">receiver</span><span class="p">,</span> <span class="o">-</span><span class="n">edge_grad</span><span class="p">)</span>
+
+    <span class="c1"># Order matches the forward ABI: (edge_index, positions, eps, σ, c).</span>
+    <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">grad_positions</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+
+<a href="https://docs.pytorch.org/docs/stable/library.html#torch.library.register_autograd" title="torch.library.register_autograd" class="sphx-glr-backref-module-torch-library sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">register_autograd</span></a><span class="p">(</span>
+    <span class="s2">&quot;tutorial::gaussian_pair_energy&quot;</span><span class="p">,</span>
+    <span class="n">_gaussian_pair_energy_backward</span><span class="p">,</span>
+    <span class="n">setup_context</span><span class="o">=</span><span class="n">_gaussian_pair_energy_setup_context</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 2. Architecture — model on top of the Warp op</span>
+<span class="c1"># ====================================================================</span>
+<span class="c1">#</span>
+<span class="c1"># The model trivially wraps the kernel: positions + edge_index in,</span>
+<span class="c1"># energy out. Forces come from autograd. A real model would have</span>
+<span class="c1"># more bells and whistles (per-element parameters, multi-body terms);</span>
+<span class="c1"># the point of this example is the *kernel*&#39;s integration, not the</span>
+<span class="c1"># physics.</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">GaussianPairModel</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Energy + forces via the registered Warp op. Forces flow through</span>
+<span class="sd">    :func:`register_autograd`&#39;s backward formula.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">epsilon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">sigma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">=</span> <span class="n">epsilon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="n">sigma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">positions</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">,</span>
+        <span class="n">edge_index</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">,</span>
+        <span class="n">n_graphs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">]:</span>
+        <span class="c1"># Warp custom op. Output shape (n_atoms,) — per-atom Gaussian</span>
+        <span class="c1"># pair energy. Autograd path through this call uses the</span>
+        <span class="c1"># backward registered above.</span>
+        <span class="n">atomic_energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">tutorial</span><span class="o">.</span><span class="n">gaussian_pair_energy</span><span class="o">.</span><span class="n">default</span><span class="p">(</span>
+            <span class="n">edge_index</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Per-graph total via scatter_add. Rebind the return — under</span>
+        <span class="c1"># domain decomposition the per_system_reduce dispatch returns a</span>
+        <span class="c1"># new cross-rank-corrected tensor.</span>
+        <span class="n">total_energy</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span>
+            <span class="n">n_graphs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="n">total_energy</span> <span class="o">=</span> <span class="n">total_energy</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">total_energy</span><span class="p">,</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span> <span class="n">atomic_energies</span><span class="p">}</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 3. Wrapper — BaseModelMixin</span>
+<span class="c1"># ====================================================================</span>
+<span class="c1">#</span>
+<span class="c1"># Same shape as the BP wrapper in example 04. The wrapper has zero</span>
+<span class="c1"># distribution-aware code. Distribution-specific behaviour is declared</span>
+<span class="c1"># entirely on the spec, separately, in a later step.</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>  <span class="c1"># noqa: E402</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">BaseModelMixin</span><span class="p">,</span>
+    <span class="n">ModelConfig</span><span class="p">,</span>
+    <span class="n">NeighborConfig</span><span class="p">,</span>
+    <span class="n">NeighborListFormat</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">GaussianPairWrapper</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairModel</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">neighbor_config</span><span class="o">=</span><span class="n">NeighborConfig</span><span class="p">(</span>
+                <span class="n">cutoff</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="o">.</span><span class="n">cutoff</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">neighbor_list</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>  <span class="c1"># (2, E)</span>
+        <span class="c1"># Drop NL sentinel rows. Distribution-agnostic: the framework&#39;s</span>
+        <span class="c1"># halo NL filter rewrites halo-receiver rows to the same</span>
+        <span class="c1"># sentinel ``compute_neighbors`` already uses for genuine</span>
+        <span class="c1"># padding rows, so this single line covers both regimes.</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_atoms</span><span class="p">)</span>
+        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[:,</span> <span class="n">valid</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;edge_index&quot;</span><span class="p">:</span> <span class="n">edge_index</span><span class="p">,</span>
+            <span class="s2">&quot;batch&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+            <span class="s2">&quot;n_graphs&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">Tensor</span></a><span class="p">],</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span>
+        <span class="n">compute_forces</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+
+        <span class="k">if</span> <span class="n">compute_forces</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">positions</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="n">positions</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">positions</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">compute_forces</span><span class="p">:</span>
+            <span class="p">(</span><span class="n">forces_grad</span><span class="p">,)</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html#torch.autograd.grad" title="torch.autograd.grad" class="sphx-glr-backref-module-torch-autograd sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span></a><span class="p">(</span>
+                <span class="n">outputs</span><span class="o">=</span><span class="n">raw</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+                <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">forces_grad</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 4. The OpAdapter that makes the kernel distribution-aware</span>
+<span class="c1"># ====================================================================</span>
+<span class="c1">#</span>
+<span class="c1"># This is the only distribution-aware code in the whole walkthrough,</span>
+<span class="c1"># and it lives on the *spec*, not on the wrapper. The wrapper author</span>
+<span class="c1"># writes the spec once and either returns it from the wrapper&#39;s</span>
+<span class="c1"># ``distribution_spec`` property (the canonical pattern — see MACE /</span>
+<span class="c1"># UMA wrappers) or attaches it after construction. ``trace_and_validate``&#39;s</span>
+<span class="c1"># auto-fix rules can polish the surrounding settings (output_kinds,</span>
+<span class="c1"># all_reduce_outputs) but cannot synthesise the :class:`OpAdapter`</span>
+<span class="c1"># itself because they don&#39;t know what the kernel does.</span>
+<span class="c1">#</span>
+<span class="c1"># Spec hierarchy at a glance::</span>
+<span class="c1">#</span>
+<span class="c1">#     MLIPSpec          ← top-level: chemistry-aware (output_kinds,</span>
+<span class="c1">#       │                  all_reduce_outputs, owned_only_outputs).</span>
+<span class="c1">#       │                  Serializable; this is what gets saved as JSON.</span>
+<span class="c1">#       ├── core: DistributionSpec      ← chemistry-free: storage policy</span>
+<span class="c1">#       │     │                    + custom-op declarations. The piece</span>
+<span class="c1">#       │     │                    a hypothetical non-MLIP user would</span>
+<span class="c1">#       │     │                    still need.</span>
+<span class="c1">#       │     ├── policy        ← HaloStoragePolicy / PlainShard (or None)</span>
+<span class="c1">#       │     │                    — declares *how* local storage relates to</span>
+<span class="c1">#       │     │                    placement and how scatters/gathers are</span>
+<span class="c1">#       │     │                    dispatched (covered below).</span>
+<span class="c1">#       │     └── custom_ops    ← tuple of OpAdapter, one per opaque</span>
+<span class="c1">#       │                          (Warp/Triton) kernel that needs</span>
+<span class="c1">#       │                          distribution-aware wrapping.</span>
+<span class="c1">#       └── output_kinds        ← per-output classification used by</span>
+<span class="c1">#                                  consolidation (covered below).</span>
+<span class="c1">#</span>
+<span class="c1"># What every section of the spec means is explained inline next to</span>
+<span class="c1"># its construction.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_distribution_spec</span><span class="p">(</span><span class="n">wrapper</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairWrapper</span></a><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct the spec for this wrapper. Centralised here so</span>
+<span class="sd">    ``main()`` can attach it to the wrapper before the validation</span>
+<span class="sd">    block, and the production sketch in ``main()`` can reload it from</span>
+<span class="sd">    disk without rebuilding.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">HaloStoragePolicy</span><span class="p">,</span> <span class="n">ScatterOutputs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+        <span class="n">DistributionSpec</span><span class="p">,</span>
+        <span class="n">MLIPSpec</span><span class="p">,</span>
+        <span class="n">OpAdapter</span><span class="p">,</span>
+        <span class="n">OutputKind</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">MLIPSpec</span><span class="p">(</span>
+        <span class="c1"># DistributionSpec carries the chemistry-free pieces: storage layout</span>
+        <span class="c1"># (``policy``) and per-op distribution declarations</span>
+        <span class="c1"># (``custom_ops``). A non-MLIP user of the same machinery would</span>
+        <span class="c1"># still need this; everything chemistry-aware lives one layer</span>
+        <span class="c1"># up on the MLIPSpec.</span>
+        <span class="n">distribution</span><span class="o">=</span><span class="n">DistributionSpec</span><span class="p">(</span>
+            <span class="c1"># ``policy`` — the per-field storage policy. The shipped</span>
+            <span class="c1"># policies (all from ``nvalchemi.distributed.ops``):</span>
+            <span class="c1">#</span>
+            <span class="c1"># * ``HaloStoragePolicy`` — each rank stores ``[owned | halo]``</span>
+            <span class="c1">#                           rows of every per-atom tensor. Halo</span>
+            <span class="c1">#                           rows duplicate owners on neighbouring</span>
+            <span class="c1">#                           ranks, refreshed per layer. Used by</span>
+            <span class="c1">#                           MACE / MPNN wrappers, LJ, Ewald, PME,</span>
+            <span class="c1">#                           UMA, and this example.</span>
+            <span class="c1"># * ``PlainShard``        — each rank stores only its ``n_owned``</span>
+            <span class="c1">#                           rows; cross-rank lookups go through</span>
+            <span class="c1">#                           ``all_to_all_v``. Used by AIMNet2.</span>
+            <span class="c1"># * ``None``              — single-process / no cross-rank comms.</span>
+            <span class="c1">#</span>
+            <span class="c1"># ``HaloStoragePolicy`` accepts ``scatter_mode`` /</span>
+            <span class="c1"># ``gather_mode`` overrides (default ``&quot;halo_correction&quot;`` /</span>
+            <span class="c1"># ``&quot;halo_read&quot;``): the per-atom ``scatter_add_`` does a local</span>
+            <span class="c1"># scatter then ``halo_reverse_exchange`` + ``halo_forward_exchange``</span>
+            <span class="c1"># to push halo-row partials to their owners and refresh copies</span>
+            <span class="c1"># (the MACE pattern), and ``index_select`` is served from the</span>
+            <span class="c1"># refreshed local halo rows. The defaults are right here.</span>
+            <span class="n">policy</span><span class="o">=</span><span class="n">HaloStoragePolicy</span><span class="p">(),</span>
+            <span class="c1"># ``custom_ops`` — one :class:`OpAdapter` per opaque kernel</span>
+            <span class="c1"># (Warp / Triton / any ``@torch.library.custom_op``</span>
+            <span class="c1"># registered with no native ShardTensor support). The</span>
+            <span class="c1"># framework&#39;s __torch_function__ dispatch can&#39;t see *into*</span>
+            <span class="c1"># such kernels (they call ``wp.from_torch(t)`` etc., which</span>
+            <span class="c1"># strips the ShardTensor subclass), so the OpAdapter</span>
+            <span class="c1"># declares the distribution semantics from the outside.</span>
+            <span class="n">custom_ops</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">OpAdapter</span><span class="p">(</span>
+                    <span class="c1"># Handle to the registered op. The dispatch</span>
+                    <span class="c1"># registry installs a wrapper on this handle that</span>
+                    <span class="c1"># runs the transforms below before/after each</span>
+                    <span class="c1"># call.</span>
+                    <span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">tutorial</span><span class="o">.</span><span class="n">gaussian_pair_energy</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+                    <span class="c1"># ``arg_transforms`` adapt input tensors before</span>
+                    <span class="c1"># the kernel sees them. Map ``arg_index -&gt;</span>
+                    <span class="c1"># transform``. Available transforms:</span>
+                    <span class="c1">#</span>
+                    <span class="c1"># * ``GatherInputs()``     — halo-pad an</span>
+                    <span class="c1">#   owned-shape input ``(n_owned, *F)`` to</span>
+                    <span class="c1">#   ``(n_padded, *F)`` via ``halo_forward_exchange``.</span>
+                    <span class="c1">#   Use when the kernel needs to read halo rows</span>
+                    <span class="c1">#   that aren&#39;t yet on this rank.</span>
+                    <span class="c1"># * ``GatherInputsFull()`` — full-gather a sharded</span>
+                    <span class="c1">#   input to global shape ``(n_global, *F)`` via</span>
+                    <span class="c1">#   ``distributed_index_select``. The</span>
+                    <span class="c1">#   sharded-storage analogue of ``GatherInputs``.</span>
+                    <span class="c1"># * ``SliceOwned()``       — slice a halo-padded</span>
+                    <span class="c1">#   ``(n_padded, *F)`` to ``(n_owned, *F)`` so the</span>
+                    <span class="c1">#   kernel only sees owned rows. Pair with</span>
+                    <span class="c1">#   ``AllReduceSum`` on the output for a</span>
+                    <span class="c1">#   one-contribution-per-atom-globally pattern</span>
+                    <span class="c1">#   (Ewald structure factor, PME charge spread).</span>
+                    <span class="c1">#</span>
+                    <span class="c1"># Empty here because our positions input is</span>
+                    <span class="c1"># already halo-padded by the framework before</span>
+                    <span class="c1"># ``DistributedModel`` calls the wrapper; the</span>
+                    <span class="c1"># kernel reads it as-is.</span>
+                    <span class="n">arg_transforms</span><span class="o">=</span><span class="p">{},</span>
+                    <span class="c1"># ``output_transforms`` adapt output tensors after</span>
+                    <span class="c1"># the kernel returns. Map ``output_index -&gt;</span>
+                    <span class="c1"># transform``. Available transforms:</span>
+                    <span class="c1">#</span>
+                    <span class="c1"># * ``ScatterOutputs()``    — halo-correct a</span>
+                    <span class="c1">#   per-atom output: ``halo_reverse_exchange``</span>
+                    <span class="c1">#   pushes halo-row partial sums to owners, then</span>
+                    <span class="c1">#   ``halo_forward_exchange`` refreshes halo</span>
+                    <span class="c1">#   copies. The right choice for any kernel that</span>
+                    <span class="c1">#   writes into per-atom slots from edges. **This</span>
+                    <span class="c1">#   is what we need here.**</span>
+                    <span class="c1"># * ``AllReduceSum()``      — sum the per-rank</span>
+                    <span class="c1">#   partial output across the mesh. Pair with</span>
+                    <span class="c1">#   ``SliceOwned`` on the input side.</span>
+                    <span class="c1"># * ``SliceOutputsOwned()`` — slice a sharded</span>
+                    <span class="c1">#   global-shape output back to owned-only.</span>
+                    <span class="c1">#   Inverse of ``GatherInputsFull``.</span>
+                    <span class="c1">#</span>
+                    <span class="c1"># Output 0 is the per-atom energy. Halo rows of</span>
+                    <span class="c1"># that buffer hold partial scatter sums (each rank</span>
+                    <span class="c1"># only sees its halo atom&#39;s edges); ScatterOutputs</span>
+                    <span class="c1"># routes them to the receiver&#39;s owner.</span>
+                    <span class="n">output_transforms</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="n">ScatterOutputs</span><span class="p">()},</span>
+                <span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="c1"># ``output_kinds`` classifies each named output for</span>
+        <span class="c1"># consolidation. The consolidation step (after the wrapper&#39;s</span>
+        <span class="c1"># forward returns) needs to know whether to halo-reverse</span>
+        <span class="c1"># forces, all-reduce stress, or pass an already-global value</span>
+        <span class="c1"># through unchanged.</span>
+        <span class="c1">#</span>
+        <span class="c1"># OutputKind values:</span>
+        <span class="c1">#</span>
+        <span class="c1"># * ``PER_NODE``  — one row per atom. Combine rule depends on</span>
+        <span class="c1">#   whether the output is autograd-derived and whether it&#39;s</span>
+        <span class="c1">#   declared in ``owned_only_outputs`` /</span>
+        <span class="c1">#   ``all_reduce_outputs``. Forces, atomic_energies.</span>
+        <span class="c1"># * ``PER_GRAPH`` — one row per system. Energy, stress.</span>
+        <span class="c1"># * ``GLOBAL``    — already globally correct on every rank;</span>
+        <span class="c1">#   consolidation passes it through. Rare; usually scalar</span>
+        <span class="c1">#   metadata or replicated config tensors.</span>
+        <span class="c1"># * ``UNKNOWN``   — migration default. Consolidation falls</span>
+        <span class="c1">#   back to a shape-based heuristic and emits a warning. Avoid</span>
+        <span class="c1">#   in production — declare every output explicitly.</span>
+        <span class="n">output_kinds</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_GRAPH</span><span class="p">,</span>
+            <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">OutputKind</span><span class="o">.</span><span class="n">PER_NODE</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># 5. Validation harness — single-process check + trace_and_validate</span>
+<span class="c1"># ====================================================================</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_lattice_batch</span><span class="p">(</span><span class="n">n_per_side</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Same dense non-periodic cluster the BP example uses — see example 04 for</span>
+<span class="sd">    design notes. Non-periodic on purpose: the kernel computes</span>
+<span class="sd">    ``positions[i] - positions[j]`` with no minimum-image shift, so it is only</span>
+<span class="sd">    correct without periodic wraparound (under PBC the single-process neighbor</span>
+<span class="sd">    list and the domain-decomposed halo resolve cross-boundary edges</span>
+<span class="sd">    differently). The cell is kept so the partitioner has a box to decompose.&quot;&quot;&quot;</span>
+    <span class="n">spacing</span> <span class="o">=</span> <span class="mf">2.5</span>
+    <span class="n">coords</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.arange.html#torch.arange" title="torch.arange" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">arange</span></a><span class="p">(</span><span class="n">n_per_side</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span> <span class="o">*</span> <span class="n">spacing</span>
+    <span class="n">gx</span><span class="p">,</span> <span class="n">gy</span><span class="p">,</span> <span class="n">gz</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.meshgrid.html#torch.meshgrid" title="torch.meshgrid" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span></a><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">&quot;ij&quot;</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="torch.stack" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">stack</span></a><span class="p">([</span><span class="n">gx</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gy</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gz</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn_like.html#torch.randn_like" title="torch.randn_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span></a><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="n">box</span> <span class="o">=</span> <span class="n">n_per_side</span> <span class="o">*</span> <span class="n">spacing</span>
+    <span class="n">atomic_numbers</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randint.html#torch.randint" title="torch.randint" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randint</span></a><span class="p">(</span>
+        <span class="n">low</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a>
+    <span class="p">)</span>
+    <span class="n">cell</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.eye.html#torch.eye" title="torch.eye" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">eye</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">)</span> <span class="o">*</span> <span class="n">box</span>
+    <span class="n">pbc</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">]],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">,</span>
+        <span class="n">cell</span><span class="o">=</span><span class="n">cell</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="n">pbc</span><span class="o">=</span><span class="n">pbc</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+
+<span class="c1"># Module-level holder so the model factory below can attach a freshly</span>
+<span class="c1"># built spec to each replica&#39;s ``distribution_spec`` property without</span>
+<span class="c1"># re-deriving it. ``trace_and_validate`` calls the factory once in the</span>
+<span class="c1"># launcher and once per spawned worker; reading the spec from a</span>
+<span class="c1"># module-global keeps every replica in sync.</span>
+<span class="n">_SPEC_CACHE</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_GaussianPairWrapperWithSpec</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairWrapper</span></a><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Subclass that exposes the cached spec via the</span>
+<span class="sd">    ``distribution_spec`` property — what production wrappers do via</span>
+<span class="sd">    a hand-authored property. We split the subclass out so the</span>
+<span class="sd">    section-3 :class:`GaussianPairWrapper` stays distribution-unaware</span>
+<span class="sd">    (the example&#39;s pedagogical point).&quot;&quot;&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_SPEC_CACHE</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_model_factory</span><span class="p">():</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">_GaussianPairWrapperWithSpec</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairModel</span></a><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="mf">5.0</span><span class="p">))</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Two ways to run this file:</span>
+
+<span class="sd">    * ``python 05_byo_graph_transformer.py`` — the single-process walkthrough</span>
+<span class="sd">      (Part 1): build the model, validate its distribution spec, and save it.</span>
+<span class="sd">      This is what the docs build renders.</span>
+<span class="sd">    * ``torchrun --nproc_per_node=2 05_byo_graph_transformer.py`` — Part 2:</span>
+<span class="sd">      drive the *validated* model under real domain decomposition, eager vs</span>
+<span class="sd">      compiled, showing the fixed-shape caps that keep the compiled graph reused.</span>
+
+<span class="sd">    Requires CUDA (the Warp kernel is CUDA-only; ``trace_and_validate`` is a</span>
+<span class="sd">    single-GPU multi-process spawn).&quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">():</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;This example requires CUDA.&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">global</span> <span class="n">_SPEC_CACHE</span>
+    <span class="c1"># Default to a genuinely-decomposed (non-degenerate) system so</span>
+    <span class="c1"># ``trace_and_validate`` is real evidence; override with NVALCHEMI_GP_N_PER_SIDE.</span>
+    <span class="n">n_per_side</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_GP_N_PER_SIDE&quot;</span><span class="p">,</span> <span class="s2">&quot;10&quot;</span><span class="p">))</span>
+    <span class="n">distributed</span> <span class="o">=</span> <span class="s2">&quot;RANK&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="s2">&quot;WORLD_SIZE&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
+
+    <span class="c1"># ================================================================</span>
+    <span class="c1"># Part 1 — single-process walkthrough: build -&gt; validate -&gt; save</span>
+    <span class="c1"># ================================================================</span>
+    <span class="c1"># ``trace_and_validate`` spawns its own worker processes, so it can&#39;t nest</span>
+    <span class="c1"># inside a torchrun launch; Part 1 runs only as a plain ``python`` script.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">distributed</span><span class="p">:</span>
+        <span class="n">device</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+
+        <span class="c1"># ----- Stage A: single-process verification -----</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stage A: single-process verification.&quot;</span><span class="p">)</span>
+        <span class="n">sample_batch</span> <span class="o">=</span> <span class="n">_build_lattice_batch</span><span class="p">(</span><span class="n">n_per_side</span><span class="o">=</span><span class="n">n_per_side</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Plain wrapper (no spec) for the structural sanity check — just</span>
+        <span class="c1"># confirming the Warp op + autograd force path runs.</span>
+        <span class="n">plain_wrapper</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairWrapper</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GaussianPairModel</span></a><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="mf">5.0</span><span class="p">))</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate.reference</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ensure_neighbors</span>
+
+        <span class="n">_ensure_neighbors</span><span class="p">(</span><span class="n">sample_batch</span><span class="p">,</span> <span class="n">plain_wrapper</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">plain_wrapper</span><span class="p">(</span><span class="n">sample_batch</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;  forward OK: energy=</span><span class="si">{e:.4f}</span><span class="s2">  |  forces shape=</span><span class="si">{fs}</span><span class="s2">, ‖forces‖∞=</span><span class="si">{fmax:.4f}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">e</span><span class="o">=</span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+            <span class="n">fs</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span>
+            <span class="n">fmax</span><span class="o">=</span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># ----- Stage B: declare the OpAdapter spec on the wrapper -----</span>
+        <span class="c1"># In a production wrapper this lives in a ``distribution_spec`` property;</span>
+        <span class="c1"># here we cache it module-globally so every spawned worker&#39;s factory sees</span>
+        <span class="c1"># the same spec instance.</span>
+        <span class="n">_SPEC_CACHE</span> <span class="o">=</span> <span class="n">_build_distribution_spec</span><span class="p">(</span><span class="n">plain_wrapper</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Stage B: spec declared with one OpAdapter on &quot;</span>
+            <span class="s2">&quot;torch.ops.tutorial.gaussian_pair_energy.&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># ----- Stage C: validate -----</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stage C: trace_and_validate.&quot;</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.validate</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace_and_validate</span>
+
+        <span class="n">report</span> <span class="o">=</span> <span class="n">trace_and_validate</span><span class="p">(</span>
+            <span class="n">model_factory</span><span class="o">=</span><span class="n">_model_factory</span><span class="p">,</span>
+            <span class="n">sample_batch</span><span class="o">=</span><span class="n">sample_batch</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+            <span class="n">atol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+            <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">report</span><span class="o">.</span><span class="n">log_summary</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+
+        <span class="c1"># ----- Stage D: persist the spec -----</span>
+        <span class="n">spec_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;gaussian_pair_spec.json&quot;</span><span class="p">)</span>
+        <span class="n">report</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">spec_path</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stage D: spec written to </span><span class="si">{p}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">spec_path</span><span class="p">)</span>
+
+        <span class="c1"># ----- Stage E: load round-trip -----</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLIPSpec</span>
+
+        <span class="n">loaded_spec</span> <span class="o">=</span> <span class="n">MLIPSpec</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">spec_path</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">loaded_spec</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">custom_ops</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="n">loaded_spec</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">custom_ops</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">scatter_outputs</span> <span class="o">==</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Stage E: loaded spec round-trips cleanly; OpAdapter scatter_outputs &quot;</span>
+            <span class="s2">&quot;preserved through the JSON form. Use &quot;</span>
+            <span class="s2">&quot;``DistributedModel(wrapper, cfg, spec=loaded_spec)`` in production.&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Walkthrough done. To drive this validated model under real domain &quot;</span>
+            <span class="s2">&quot;decomposition (eager vs compiled), launch it under torchrun:</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;    torchrun --nproc_per_node=2 &quot;</span>
+            <span class="s2">&quot;examples/distributed/05_byo_graph_transformer.py&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># ================================================================</span>
+    <span class="c1"># Part 2 — under torchrun: run the model under DD, eager vs compiled</span>
+    <span class="c1"># ================================================================</span>
+    <span class="c1"># ``torch.compile`` + the fixed-shape caps only engage on the real</span>
+    <span class="c1"># domain-decomposed forward, so this half needs a genuine multi-process</span>
+    <span class="c1"># launch. ``DistributedManager`` owns the process group, device binding, and</span>
+    <span class="c1"># device mesh — exactly as in examples 03/06/07.</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">counters</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span><span class="p">,</span> <span class="n">DomainConfig</span><span class="p">,</span> <span class="n">DomainParallel</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompilePolicy</span><span class="p">,</span> <span class="n">ForceStrategy</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVE</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>
+
+    <span class="n">DistributedManager</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+    <span class="n">dm</span> <span class="o">=</span> <span class="n">DistributedManager</span><span class="p">()</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">dm</span><span class="o">.</span><span class="n">rank</span><span class="p">)</span>
+    <span class="n">device</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="n">dm</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">mesh</span> <span class="o">=</span> <span class="n">dm</span><span class="o">.</span><span class="n">initialize_mesh</span><span class="p">(</span>
+        <span class="n">mesh_shape</span><span class="o">=</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">dm</span><span class="o">.</span><span class="n">world_size</span><span class="p">),),</span> <span class="n">mesh_dim_names</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;domain&quot;</span><span class="p">,)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># The MD system: the same lattice, now with the per-atom velocities + masses</span>
+    <span class="c1"># NVE integrates (forces/energy seeded for velocity-Verlet&#39;s first half-step).</span>
+    <span class="c1"># Rank 0 holds the full batch; ``partition`` scatters each rank&#39;s subdomain.</span>
+    <span class="n">lattice</span> <span class="o">=</span> <span class="n">_build_lattice_batch</span><span class="p">(</span><span class="n">n_per_side</span><span class="o">=</span><span class="n">n_per_side</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">lattice</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">system</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">lattice</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">lattice</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">,</span>
+        <span class="n">atomic_masses</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.ones.html#torch.ones" title="torch.ones" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">ones</span></a><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">cell</span><span class="o">=</span><span class="n">lattice</span><span class="o">.</span><span class="n">cell</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="o">=</span><span class="n">lattice</span><span class="o">.</span><span class="n">pbc</span><span class="p">,</span>
+        <span class="n">forces</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">system</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">lattice</span><span class="o">.</span><span class="n">positions</span><span class="p">))</span>
+    <span class="n">full_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">system</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># A LoggingHook prints each step&#39;s energy/temperature on rank 0 (the same</span>
+    <span class="c1"># hook examples 03/06 use). Under DD it lives on the *outer* DomainParallel,</span>
+    <span class="c1"># where the AFTER_STEP hooks fire.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_log_step</span><span class="p">(</span><span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;    step </span><span class="si">{s:&gt;2}</span><span class="s2">: E=</span><span class="si">{e:.4f}</span><span class="s2"> eV  T=</span><span class="si">{t:.1f}</span><span class="s2"> K&quot;</span><span class="p">,</span>
+                <span class="n">s</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">step</span><span class="p">)),</span>
+                <span class="n">e</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                <span class="n">t</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="p">)</span>
+
+    <span class="n">energy_log</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
+        <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;custom&quot;</span><span class="p">,</span>
+        <span class="n">writer_fn</span><span class="o">=</span><span class="n">_log_step</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+        <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># The eager and compiled runs differ by ONE thing: the compiled run&#39;s spec</span>
+    <span class="c1"># carries a ``CompilePolicy``. ``FRAMEWORK_FROM_NODE_ENERGY`` tells the</span>
+    <span class="c1"># framework to run an energy-only forward over the per-node ``atomic_energies``</span>
+    <span class="c1"># and take the force autograd itself; the built-in ``COOPadder`` pads</span>
+    <span class="c1"># ``edge_index`` to a stable capacity so ``torch.compile`` reuses one graph.</span>
+    <span class="n">base_spec</span> <span class="o">=</span> <span class="n">_build_distribution_spec</span><span class="p">(</span><span class="n">_model_factory</span><span class="p">())</span>
+    <span class="n">compiled_spec</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+        <span class="n">base_spec</span><span class="p">,</span>
+        <span class="n">node_energy_key</span><span class="o">=</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+        <span class="nb">compile</span><span class="o">=</span><span class="n">CompilePolicy</span><span class="p">(</span><span class="n">force_strategy</span><span class="o">=</span><span class="n">ForceStrategy</span><span class="o">.</span><span class="n">FRAMEWORK_FROM_NODE_ENERGY</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">n_steps</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">spec</span><span class="p">,</span> <span class="n">use_compile</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">&quot;eager&quot;</span><span class="p">,</span> <span class="n">base_spec</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;compiled&quot;</span><span class="p">,</span> <span class="n">compiled_spec</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Running </span><span class="si">{n}</span><span class="s2"> NVE steps under DD — </span><span class="si">{l}</span><span class="s2">:&quot;</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">l</span><span class="o">=</span><span class="n">label</span><span class="p">)</span>
+        <span class="n">_SPEC_CACHE</span> <span class="o">=</span> <span class="n">spec</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">_model_factory</span><span class="p">()</span>
+        <span class="n">counters</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">nl_hook</span> <span class="o">=</span> <span class="n">NeighborListHook</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+            <span class="n">skin</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="n">energy_log</span><span class="p">,</span>
+            <span class="n">DomainParallel</span><span class="p">(</span>
+                <span class="n">dynamics</span><span class="o">=</span><span class="n">NVE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">nl_hook</span><span class="p">],</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">),</span>
+                <span class="n">config</span><span class="o">=</span><span class="n">DomainConfig</span><span class="p">(</span>
+                    <span class="n">cutoff</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">),</span> <span class="n">skin</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">mesh</span><span class="o">=</span><span class="n">mesh</span><span class="p">,</span> <span class="nb">compile</span><span class="o">=</span><span class="n">use_compile</span>
+                <span class="p">),</span>
+                <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+                <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">energy_log</span><span class="p">],</span>
+            <span class="p">)</span> <span class="k">as</span> <span class="n">dyn</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">owned</span> <span class="o">=</span> <span class="n">dyn</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="n">full_batch</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">dyn</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">owned</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">use_compile</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;  compiled: torch.compile built </span><span class="si">{g}</span><span class="s2"> graph(s) and reused them for &quot;</span>
+                <span class="s2">&quot;the whole trajectory — the fixed-shape caps hold shapes constant, &quot;</span>
+                <span class="s2">&quot;so there are no per-step recompiles.&quot;</span><span class="p">,</span>
+                <span class="n">g</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">counters</span><span class="p">[</span><span class="s2">&quot;stats&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;unique_graphs&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+            <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Eager and compiled produced the same trajectory (force-equivalent); &quot;</span>
+            <span class="s2">&quot;the compiled DD forward is reused across steps. The compile win grows &quot;</span>
+            <span class="s2">&quot;with model size and trajectory length.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">DistributedManager</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.798 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-distributed-05-byo-graph-transformer-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/9f2c8fb807904c758d8a90a46812d03f/05_byo_graph_transformer.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">05_byo_graph_transformer.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/a5bcbb1cc71ec726124abf8f92e94e73/05_byo_graph_transformer.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">05_byo_graph_transformer.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/214a6ee4bb99a63ad1e95f08d53cd19f/05_byo_graph_transformer.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">05_byo_graph_transformer.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="04_byo_pytorch_mpnn.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Bring your own PyTorch model: from architecture to a saved spec</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="06_mace_npt_distributed.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MACE NPT: domain-decomposed constant-pressure MD with a barostat</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/distributed/05_byo_graph_transformer.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

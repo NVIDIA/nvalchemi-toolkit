@@ -1,30 +1,18 @@
-﻿nvalchemi.hooks.HookRegistryMixin
-=================================
+﻿..
+    The empty line below should not be removed. It is added such that the `rst_prolog`
+    is added before the :mod: directive. Otherwise, the rendering will show as a
+    paragraph instead of a header.
+
+:mod:`nvalchemi.hooks`.HookRegistryMixin
+===============================================
 
 .. currentmodule:: nvalchemi.hooks
 
+
 .. autoclass:: HookRegistryMixin
+    :members:
 
-   
-   .. automethod:: __init__
 
-   
-   .. rubric:: Methods
+.. raw:: html
 
-   .. autosummary::
-   
-      ~HookRegistryMixin.__init__
-      ~HookRegistryMixin.register_hook
-   
-   
-
-   
-   
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~HookRegistryMixin.hooks
-      ~HookRegistryMixin.step_count
-   
-   
+    <div class="clearer"></div>

@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.resolve\_world\_size
+==========================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: resolve_world_size

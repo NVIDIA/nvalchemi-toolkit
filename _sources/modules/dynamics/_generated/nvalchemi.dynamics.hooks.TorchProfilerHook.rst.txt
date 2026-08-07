@@ -1,0 +1,68 @@
+﻿nvalchemi.dynamics.hooks.TorchProfilerHook
+==========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: TorchProfilerHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~TorchProfilerHook.__init__
+      ~TorchProfilerHook.close
+      ~TorchProfilerHook.construct
+      ~TorchProfilerHook.copy
+      ~TorchProfilerHook.dict
+      ~TorchProfilerHook.from_orm
+      ~TorchProfilerHook.json
+      ~TorchProfilerHook.model_construct
+      ~TorchProfilerHook.model_copy
+      ~TorchProfilerHook.model_dump
+      ~TorchProfilerHook.model_dump_json
+      ~TorchProfilerHook.model_json_schema
+      ~TorchProfilerHook.model_parametrized_name
+      ~TorchProfilerHook.model_post_init
+      ~TorchProfilerHook.model_rebuild
+      ~TorchProfilerHook.model_validate
+      ~TorchProfilerHook.model_validate_json
+      ~TorchProfilerHook.model_validate_strings
+      ~TorchProfilerHook.parse_file
+      ~TorchProfilerHook.parse_obj
+      ~TorchProfilerHook.parse_raw
+      ~TorchProfilerHook.schema
+      ~TorchProfilerHook.schema_json
+      ~TorchProfilerHook.update_forward_refs
+      ~TorchProfilerHook.validate
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~TorchProfilerHook.model_computed_fields
+      ~TorchProfilerHook.model_config
+      ~TorchProfilerHook.model_extra
+      ~TorchProfilerHook.model_fields
+      ~TorchProfilerHook.model_fields_set
+      ~TorchProfilerHook.stage
+      ~TorchProfilerHook.output_dir
+      ~TorchProfilerHook.activities
+      ~TorchProfilerHook.schedule
+      ~TorchProfilerHook.record_shapes
+      ~TorchProfilerHook.profile_memory
+      ~TorchProfilerHook.with_flops
+      ~TorchProfilerHook.with_stack
+      ~TorchProfilerHook.on_trace_ready_path
+      ~TorchProfilerHook.frequency
+      ~TorchProfilerHook.name
+      ~TorchProfilerHook.rank_subdirs
+   
+   

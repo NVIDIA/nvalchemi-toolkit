@@ -1,0 +1,25 @@
+﻿nvalchemi.dynamics.hooks.StageTimingHook
+========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: StageTimingHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~StageTimingHook.__init__
+      ~StageTimingHook.close
+      ~StageTimingHook.reset
+      ~StageTimingHook.summary
+   
+   
+
+   
+   
+   

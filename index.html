@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>NVIDIA ALCHEMI Toolkit &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>NVIDIA ALCHEMI Toolkit &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="_static/documentation_options.js?v=38b66d78"></script>
+    <script src="_static/documentation_options.js?v=95e61db4"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,6 +55,7 @@
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
+    <script defer="defer" src="_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="User Guide" href="userguide/index.html" />
@@ -460,6 +463,7 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 <li class="toctree-l2"><a class="reference internal" href="userguide/index.html#quick-start">Quick Start</a></li>
 <li class="toctree-l2"><a class="reference internal" href="userguide/index.html#about">About</a></li>
 <li class="toctree-l2"><a class="reference internal" href="userguide/index.html#core-components">Core Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="userguide/index.html#distributed-simulations">Distributed Simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="userguide/index.html#advanced-usage">Advanced Usage</a></li>
 </ul>
 </li>
@@ -488,10 +492,12 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 <li class="toctree-l1"><a class="reference internal" href="examples/index.html#basic-examples">Basic Examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/index.html#intermediate-examples">Intermediate Examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/index.html#advanced-examples">Advanced Examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples/index.html#distributed-pipeline-examples">Distributed Pipeline Examples</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="examples/index.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/index.html#distributed-examples">Distributed Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="examples/index.html#pipeline-architecture-overview">Pipeline Architecture Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="examples/index.html#running-the-examples">Running the Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="examples/index.html#example-descriptions">Example Descriptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/index.html#domain-decomposition-examples">Domain-Decomposition Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/index.html#benchmarks">Benchmarks</a></li>
 </ul>
 </li>
 </ul>
@@ -506,6 +512,9 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 <li class="toctree-l2"><a class="reference internal" href="modules/hooks.html">Hooks — Core Framework</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/dynamics/index.html">Dynamics module</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules/training/index.html">Training module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules/distributed.html">Distributed (spatial domain decomposition)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules/distributed_runtime.html">Distributed runtime utilities</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/typing.html">Typing module (type aliases, enums, protocols)</a></li>
 </ul>
 </li>

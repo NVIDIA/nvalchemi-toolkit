@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.dynamics.demo &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>nvalchemi.dynamics.demo &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -30,19 +30,21 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -52,6 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/demo';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -516,8 +519,6 @@ document.write(`
 
     <span class="n">_prev_accelerations</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="DemoDynamics.__init__">
-<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html#nvalchemi.dynamics.DemoDynamics.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
@@ -557,9 +558,10 @@ document.write(`
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="o">=</span> <span class="kc">None</span>
 
-
+<div class="viewcode-block" id="DemoDynamics.pre_update">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html#nvalchemi.dynamics.DemoDynamics.pre_update">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Perform the position update (first half of Velocity Verlet).</span>
@@ -603,8 +605,11 @@ document.write(`
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># No forces computed yet — simple Euler position update</span>
                 <span class="c1"># x(t+dt) = x(t) + v(t)*dt</span>
-                <span class="n">positions</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">velocities</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span>
+                <span class="n">positions</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">velocities</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span></div>
 
+
+<div class="viewcode-block" id="DemoDynamics.post_update">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html#nvalchemi.dynamics.DemoDynamics.post_update">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">post_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Perform the velocity update (second half of Velocity Verlet).</span>
@@ -644,6 +649,7 @@ document.write(`
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># First step fallback — Euler: v(t+dt) = v(t) + a(t+dt)*dt</span>
                 <span class="n">velocities</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">new_accelerations</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span></div>
+</div>
 
 </pre></div>
 

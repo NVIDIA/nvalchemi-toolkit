@@ -1,30 +1,18 @@
-﻿nvalchemi.dynamics.DynamicsStage
-================================
+﻿..
+    The empty line below should not be removed. It is added such that the `rst_prolog`
+    is added before the :mod: directive. Otherwise, the rendering will show as a
+    paragraph instead of a header.
+
+:mod:`nvalchemi.dynamics`.DynamicsStage
+==============================================
 
 .. currentmodule:: nvalchemi.dynamics
 
+
 .. autoclass:: DynamicsStage
+    :members:
 
-   
-   .. automethod:: __init__
 
-   
-   
+.. raw:: html
 
-   
-   
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~DynamicsStage.BEFORE_STEP
-      ~DynamicsStage.BEFORE_PRE_UPDATE
-      ~DynamicsStage.AFTER_PRE_UPDATE
-      ~DynamicsStage.BEFORE_COMPUTE
-      ~DynamicsStage.AFTER_COMPUTE
-      ~DynamicsStage.BEFORE_POST_UPDATE
-      ~DynamicsStage.AFTER_POST_UPDATE
-      ~DynamicsStage.AFTER_STEP
-      ~DynamicsStage.ON_CONVERGE
-   
-   
+    <div class="clearer"></div>

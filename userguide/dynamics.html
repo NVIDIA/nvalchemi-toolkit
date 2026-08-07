@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Dynamics: Optimization and Molecular Dynamics &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Dynamics: Optimization and Molecular Dynamics &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Optimization and Integrators" href="dynamics_simulations.html" />
-    <link rel="prev" title="Hooks" href="hooks.html" />
+    <link rel="prev" title="Reporting" href="reporting.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
@@ -527,7 +547,7 @@ what frequency, so you have fine-grained control over when callbacks execute.</p
 <h2>Using dynamics as a context manager<a class="headerlink" href="#using-dynamics-as-a-context-manager" title="Link to this heading">#</a></h2>
 <p>All dynamics objects (optimizers, integrators, fused stages) support Python’s
 context manager protocol. The <code class="docutils literal notranslate"><span class="pre">with</span></code> block manages a dedicated
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stream</span></code></a> for the simulation and ensures hooks are
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stream</span></code></a> for the simulation and ensures hooks are
 properly opened and closed:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
@@ -651,7 +671,7 @@ patterns are planned for a future release.</p>
 <h3>Sizing the buffer<a class="headerlink" href="#sizing-the-buffer" title="Link to this heading">#</a></h3>
 <p>NCCL point-to-point transfers require fixed-size tensors, so each communicating stage
 pre-allocates a send buffer and a receive buffer whose dimensions are set by
-<code class="xref py py-class docutils literal notranslate"><span class="pre">BufferConfig</span></code>. The three fields control how much
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.base.BufferConfig.html#nvalchemi.dynamics.base.BufferConfig" title="nvalchemi.dynamics.base.BufferConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">BufferConfig</span></code></a>. The three fields control how much
 data a single transfer can carry:</p>
 <table class="table">
 <thead>
@@ -683,7 +703,7 @@ step — this is the back-pressure mechanism described below.</p>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <p>Every pair of communicating stages <strong>must</strong> share an identical
-<code class="xref py py-class docutils literal notranslate"><span class="pre">BufferConfig</span></code>.
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.base.BufferConfig.html#nvalchemi.dynamics.base.BufferConfig" title="nvalchemi.dynamics.base.BufferConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">BufferConfig</span></code></a>.
 <code class="docutils literal notranslate"><span class="pre">DistributedPipeline.setup()</span></code> validates this and raises an error on mismatch.</p>
 </div>
 </section>
@@ -693,22 +713,20 @@ step — this is the back-pressure mechanism described below.</p>
 send and receive buffers during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><img src="../_images/graphviz-26e3b6bad913f32a1d138565dc5d855b0773e649.png" alt="digraph buffer_sync {
+<div class="graphviz"><object data="../_images/graphviz-e44be71c694bb31418d75d6d6495182a969da951.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph buffer_sync {
     rankdir=LR
     compound=true
-    fontname=&quot;Helvetica&quot;
-    node [fontname=&quot;Helvetica&quot; fontsize=11]
-    edge [fontname=&quot;Helvetica&quot; fontsize=10]
 
     subgraph cluster_upstream {
         label=&quot;Rank 0  (upstream)&quot;
         style=rounded
-        color=&quot;#4a90d9&quot;
-        fontcolor=&quot;#4a90d9&quot;
+        color=&quot;#76b900&quot;
+        fontcolor=&quot;#eeeeee&quot;
 
-        u_batch [label=&quot;active_batch&quot; shape=box style=filled fillcolor=&quot;#dce6f1&quot;]
-        u_send  [label=&quot;send_buffer&quot;  shape=box style=filled fillcolor=&quot;#f9e2ae&quot;]
-        u_sinks [label=&quot;sinks\n(overflow)&quot; shape=box style=dashed]
+        u_batch [label=&quot;active_batch&quot;]
+        u_send  [label=&quot;send_buffer&quot; fillcolor=&quot;#4a3315&quot;]
+        u_sinks [label=&quot;sinks\n(overflow)&quot; style=dashed]
 
         u_batch -&gt; u_send [label=&quot;converged\nsamples&quot; style=bold]
         u_batch -&gt; u_sinks [label=&quot;excess\n(back-pressure)&quot; style=dotted]
@@ -717,20 +735,26 @@ samples; the downstream rank pulls them into its active batch.</p>
     subgraph cluster_downstream {
         label=&quot;Rank 1  (downstream)&quot;
         style=rounded
-        color=&quot;#5bb35b&quot;
-        fontcolor=&quot;#5bb35b&quot;
+        color=&quot;#76b900&quot;
+        fontcolor=&quot;#eeeeee&quot;
 
-        d_recv  [label=&quot;recv_buffer&quot;  shape=box style=filled fillcolor=&quot;#f9e2ae&quot;]
-        d_batch [label=&quot;active_batch&quot; shape=box style=filled fillcolor=&quot;#dce6f1&quot;]
-        d_sinks [label=&quot;sinks\n(results)&quot; shape=box style=dashed]
+        d_recv  [label=&quot;recv_buffer&quot; fillcolor=&quot;#4a3315&quot;]
+        d_batch [label=&quot;active_batch&quot;]
+        d_sinks [label=&quot;sinks\n(results)&quot; style=dashed]
 
         d_recv -&gt; d_batch [label=&quot;incoming\nsamples&quot; style=bold]
         d_batch -&gt; d_sinks [label=&quot;converged\nresults&quot; style=bold]
         d_sinks -&gt; d_batch [label=&quot;drain when\ncapacity available&quot; style=dotted]
     }
 
-    u_send -&gt; d_recv [label=&quot;isend / irecv\n(NCCL)&quot; style=bold color=&quot;#c0392b&quot; fontcolor=&quot;#c0392b&quot; penwidth=2]
-}" class="graphviz" /></div>
+    u_send -&gt; d_recv [
+        label=&quot;isend / irecv\n(NCCL)&quot;;
+        style=bold;
+        color=&quot;#ee9040&quot;;
+        fontcolor=&quot;#eeeeee&quot;;
+        penwidth=2;
+    ]
+}</p></object></div>
 <figcaption>
 <p><span class="caption-text">Buffer synchronization between two adjacent ranks in a DistributedPipeline.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
@@ -792,7 +816,7 @@ launcher):</p>
 termination across ranks via an <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code> on per-rank done flags.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p>The <a class="reference internal" href="../examples/distributed/index.html"><span class="doc">Distributed Pipeline Examples</span></a> gallery contains end-to-end examples,
+<p>The <a class="reference internal" href="../examples/distributed/index.html"><span class="doc">Distributed Examples</span></a> gallery contains end-to-end examples,
 including multi-pipeline topologies and monitoring with persistent storage.</p>
 </div>
 </section>
@@ -837,12 +861,12 @@ structures consumed by dynamics.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="hooks.html"
+       href="reporting.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Hooks</p>
+        <p class="prev-next-title">Reporting</p>
       </div>
     </a>
     <a class="right-next"

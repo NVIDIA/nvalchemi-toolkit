@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Advanced Examples &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Advanced Examples &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,10 +55,11 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/index';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Biased Sampling with BiasedPotentialHook" href="01_biased_potential.html" />
-    <link rel="prev" title="Defensive MD: Safety Hooks and Performance Monitoring" href="../intermediate/05_safety_and_monitoring.html" />
+    <link rel="prev" title="Rich Training Reporting" href="../intermediate/07_rich_training_reporting.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -378,6 +381,8 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -389,11 +394,18 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
 </ul>
 </li>
 </ul>
@@ -472,6 +484,12 @@ _init_state for stateful integrators.</p>
 the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator; PipelineModelWrapper for dependent pipelines.</p>
 <p><strong>08 — AIMNet2 + Ewald Pipeline</strong>: Composing AIMNet2 with Ewald
 electrostatics and DFTD3 dispersion in a multi-group pipeline.</p>
+<p><strong>09 — UMA NVE/NVT</strong>: Driving the fairchem UMA foundation model through
+NVE / NVT dynamics with energy-drift tracking; OMat crystals and OMol
+molecules via task selection on <code class="docutils literal notranslate"><span class="pre">UMAWrapper.from_checkpoint</span></code>.</p>
+<p><strong>10 — MACE Training</strong>: Training a ScaleShiftMACE model with the ALCHEMI
+training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
+validation, and distributed launch patterns.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="Standard MD explores configuration space according to the Boltzmann distribution, which concentrates sampling near free-energy minima.  Many physically important processes — protein folding, nucleation, diffusion across a barrier — are rare events on MD timescales.  Biased sampling adds an external potential that encourages the system to explore regions it would not visit spontaneously."><img alt="" src="../../_images/sphx_glr_01_biased_potential_thumb.png" />
 <p><a class="reference internal" href="01_biased_potential.html"><span class="doc">Biased Sampling with BiasedPotentialHook</span></a></p>
   <div class="sphx-glr-thumbnail-title">Biased Sampling with BiasedPotentialHook</div>
@@ -493,9 +511,15 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="    This is an intermediate-level example.  It assumes familiarity with     the basic model wrapping concepts covered in the     models_guide and in     examples/advanced/08_custom_model_wrapper.py.  Here we focus on     composing existing wrappers rather than building them from scratch."><img alt="" src="../../_images/sphx_glr_07_composable_model_composition_thumb.png" />
 <p><a class="reference internal" href="07_composable_model_composition.html"><span class="doc">Additive Model Composition (LJ + Ewald)</span></a></p>
   <div class="sphx-glr-thumbnail-title">Additive Model Composition (LJ + Ewald)</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — the most powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters."><img alt="" src="../../_images/sphx_glr_08_aimnet2_ewald_pipeline_thumb.png" />
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — a powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters."><img alt="" src="../../_images/sphx_glr_08_aimnet2_ewald_pipeline_thumb.png" />
 <p><a class="reference internal" href="08_aimnet2_ewald_pipeline.html"><span class="doc">AIMNet2 + Ewald Pipeline Geometry Optimization</span></a></p>
   <div class="sphx-glr-thumbnail-title">AIMNet2 + Ewald Pipeline Geometry Optimization</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="UMA (Universal Models for Atoms, from fairchem-core) is a multi-task foundation model: a single checkpoint ships heads for molecules (OMol), bulk crystals (OMat), catalysis (OC20), direct air capture (ODAC), and molecular crystals (OMC).  UMAWrapper exposes one task head at a time and computes conservative forces (and, for periodic tasks, stress) via autograd."><img alt="" src="../../_images/sphx_glr_09_uma_nve_thumb.png" />
+<p><a class="reference internal" href="09_uma_nve.html"><span class="doc">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</span></a></p>
+  <div class="sphx-glr-thumbnail-title">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example walks through a complete model-training lifecycle on the ALCHEMI Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN dataset as the reference workflow. The training script run configuration is loaded with Hydra from 10_vanilla_mace.yaml."><img alt="" src="../../_images/sphx_glr_10_mace_training_thumb.png" />
+<p><a class="reference internal" href="10_mace_training.html"><span class="doc">MACE Training with ALCHEMI Training Utilities</span></a></p>
+  <div class="sphx-glr-thumbnail-title">MACE Training with ALCHEMI Training Utilities</div>
 </div></div><div class="toctree-wrapper compound">
 </div>
 </section>
@@ -511,12 +535,12 @@ electrostatics and DFTD3 dispersion in a multi-group pipeline.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../intermediate/05_safety_and_monitoring.html"
+       href="../intermediate/07_rich_training_reporting.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Defensive MD: Safety Hooks and Performance Monitoring</p>
+        <p class="prev-next-title">Rich Training Reporting</p>
       </div>
     </a>
     <a class="right-next"

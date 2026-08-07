@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.spec.SPEC\_PME\_HALO
+==========================================
+
+.. currentmodule:: nvalchemi.distributed.spec
+
+.. autodata:: SPEC_PME_HALO

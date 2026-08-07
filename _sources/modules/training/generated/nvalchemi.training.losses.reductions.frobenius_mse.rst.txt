@@ -1,0 +1,6 @@
+﻿nvalchemi.training.losses.reductions.frobenius\_mse
+===================================================
+
+.. currentmodule:: nvalchemi.training.losses.reductions
+
+.. autofunction:: frobenius_mse

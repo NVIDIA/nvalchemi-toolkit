@@ -1,0 +1,6 @@
+﻿nvalchemi.training.losses.reductions.per\_graph\_sum
+====================================================
+
+.. currentmodule:: nvalchemi.training.losses.reductions
+
+.. autofunction:: per_graph_sum

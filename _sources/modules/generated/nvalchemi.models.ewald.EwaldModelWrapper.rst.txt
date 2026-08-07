@@ -8,8 +8,10 @@
 
 .. currentmodule:: nvalchemi.models.ewald
 
+
 .. autoclass:: EwaldModelWrapper
     :members:
+
 
 .. raw:: html
 

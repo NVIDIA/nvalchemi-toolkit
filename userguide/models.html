@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Models: Wrapping ML Interatomic Potentials &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+    <title>Models: Wrapping ML Interatomic Potentials &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
   
   
   
@@ -31,19 +31,21 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/documentation_options.js?v=95e61db4"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -53,9 +55,10 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/models';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Hooks" href="hooks.html" />
+    <link rel="next" title="Training &amp; Fine-tuning" href="training_finetuning.html" />
     <link rel="prev" title="Data Loading Pipeline" href="datapipes.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -367,6 +370,7 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
 </ul>
@@ -375,15 +379,31 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 <li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
@@ -489,46 +509,216 @@ potentials:</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a></p></td>
 <td><p>Any MACE variant</p></td>
-<td><p>Requires the <code class="docutils literal notranslate"><span class="pre">mace-torch</span></code> optional dependency</p></td>
+<td><p>Requires the <code class="docutils literal notranslate"><span class="pre">mace</span></code> optional dependency with a CUDA extra, such as <code class="docutils literal notranslate"><span class="pre">cu13</span></code> or <code class="docutils literal notranslate"><span class="pre">cu12</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper" title="nvalchemi.models.uma.UMAWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">UMAWrapper</span></code></a></p></td>
+<td><p>fairchem-core UMA (<code class="docutils literal notranslate"><span class="pre">MLIPPredictUnit</span></code>)</p></td>
+<td><p>Requires the <code class="docutils literal notranslate"><span class="pre">uma</span></code> optional dependency; conflicts with <code class="docutils literal notranslate"><span class="pre">mace</span></code> (incompatible <code class="docutils literal notranslate"><span class="pre">e3nn</span></code> pins)</p></td>
 </tr>
 </tbody>
 </table>
-<p><a class="reference internal" href="../modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="nvalchemi.models.aimnet2.AIMNet2Wrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">AIMNet2Wrapper</span></code></a> and <a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="nvalchemi.models.aimnet2.AIMNet2Wrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">AIMNet2Wrapper</span></code></a>, <a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a>,
+and <a class="reference internal" href="../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper" title="nvalchemi.models.uma.UMAWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">UMAWrapper</span></code></a>
 are lazily imported — they only load when accessed, so missing dependencies will not
 break other imports.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>UMA resolves to a different torch than the <code class="docutils literal notranslate"><span class="pre">cu12</span></code> / <code class="docutils literal notranslate"><span class="pre">cu13</span></code> GPU stack.</strong>
+<code class="docutils literal notranslate"><span class="pre">fairchem-core</span></code> caps torch below 2.9 (<code class="docutils literal notranslate"><span class="pre">fairchem-core&gt;=2.8</span></code> requires
+<code class="docutils literal notranslate"><span class="pre">torch&gt;=2.8,&lt;2.9</span></code>), while the <code class="docutils literal notranslate"><span class="pre">cu12</span></code> / <code class="docutils literal notranslate"><span class="pre">cu13</span></code> extras pull
+<code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit-ops[torch-cuXX]</span></code>, which floors torch at <code class="docutils literal notranslate"><span class="pre">&gt;=2.11</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">uma</span></code> extra is therefore declared mutually exclusive with <code class="docutils literal notranslate"><span class="pre">cu12</span></code>, <code class="docutils literal notranslate"><span class="pre">cu13</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">mace</span></code>, and <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span> <span class="pre">--extra</span> <span class="pre">uma</span></code> forks a standalone resolution that
+installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
+<code class="docutils literal notranslate"><span class="pre">cuXX</span></code> build. Keep UMA in its own environment, e.g.:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>venv<span class="w"> </span>.venv-uma<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>uma<span class="w">           </span><span class="c1"># UMA (fairchem&#39;s torch)</span>
+uv<span class="w"> </span>venv<span class="w"> </span>.venv-mace<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cu13<span class="w"> </span>--extra<span class="w"> </span>mace<span class="w">   </span><span class="c1"># MACE on the cu13 GPU stack</span>
+</pre></div>
+</div>
+<p>The core <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit-ops</span></code> package (and its Warp kernels) is still
+installed in the UMA environment — only the <code class="docutils literal notranslate"><span class="pre">cuXX</span></code> GPU-acceleration
+extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
+none of which UMA uses, since it builds its neighbor graph inside
+fairchem. The toolkit-ops <code class="docutils literal notranslate"><span class="pre">torch-cuXX</span></code> extras pin <code class="docutils literal notranslate"><span class="pre">torch&gt;=2.11</span></code>, but that
+tracks the <code class="docutils literal notranslate"><span class="pre">cuXX</span></code> wheel builds rather than a toolkit-ops API requirement
+— the base package already declares <code class="docutils literal notranslate"><span class="pre">torch&gt;=2.8</span></code>, so the Warp path is
+expected to work against the ~2.8 torch in the UMA environment.</p>
+</div>
+<section id="mace-checkpoints-in-training">
+<h3>MACE checkpoints in training<a class="headerlink" href="#mace-checkpoints-in-training" title="Link to this heading">#</a></h3>
+<p>When starting from an existing MACE checkpoint, prefer
+<a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.from_checkpoint" title="nvalchemi.models.mace.MACEWrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_checkpoint()</span></code></a> over manually
+loading the underlying MACE module and wrapping it. The wrapper records a
+factory-based reconstruction spec that strategy checkpoints can use later.
+This matters for optimized variants such as cuEquivariance, where the live
+transformed module is not reliably reconstructible from its Python constructor.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <span class="n">MACEWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">EMAHook</span><span class="p">,</span> <span class="n">TrainingStrategy</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;small-0b&quot;</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">enable_cueq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">ema</span> <span class="o">=</span> <span class="n">EMAHook</span><span class="p">(</span><span class="n">model_key</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span> <span class="n">decay</span><span class="o">=</span><span class="mf">0.999</span><span class="p">)</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="o">...</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ema</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">strategy</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span><span class="n">checkpoint_dir</span><span class="p">)</span>
+
+<span class="n">restored_ema</span> <span class="o">=</span> <span class="n">EMAHook</span><span class="p">(</span><span class="n">model_key</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span> <span class="n">decay</span><span class="o">=</span><span class="mf">0.999</span><span class="p">)</span>
+<span class="n">restored</span> <span class="o">=</span> <span class="n">TrainingStrategy</span><span class="o">.</span><span class="n">load_checkpoint</span><span class="p">(</span>
+    <span class="n">checkpoint_dir</span><span class="p">,</span>
+    <span class="n">map_location</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">restored_ema</span><span class="p">],</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">training_fn</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Avoid saving only <code class="docutils literal notranslate"><span class="pre">ema.state_dict()</span></code> for MACE training restarts. Strategy
+checkpoints preserve the model reconstruction recipe, model weights, optimizer
+state, runtime counters, and checkpointable hook state together.</p>
+</section>
+<section id="repairing-methods-on-ema-copies">
+<h3>Repairing methods on EMA copies<a class="headerlink" href="#repairing-methods-on-ema-copies" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.EMAHook.html#nvalchemi.training.hooks.EMAHook" title="nvalchemi.training.hooks.EMAHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EMAHook</span></code></a> uses
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.swa_utils.AveragedModel.html#torch.optim.swa_utils.AveragedModel" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.optim.swa_utils.AveragedModel</span></code></a>, which deep-copies the live model
+when constructing its averaged copy. Most wrappers require no special handling.
+If a third-party model attaches runtime methods that do not survive
+<code class="docutils literal notranslate"><span class="pre">deepcopy</span></code>, its wrapper can optionally implement <code class="docutils literal notranslate"><span class="pre">modify_ema_methods()</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyPotentialWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">modify_ema_methods</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore runtime methods on this EMA model copy.&quot;&quot;&quot;</span>
+        <span class="n">my_method_to_patch_runtime_methods</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The hook calls this method once on the copied wrapper immediately after EMA
+construction and before applying any pending EMA checkpoint weights. The method
+must modify only <code class="docutils literal notranslate"><span class="pre">self</span></code>, must not change parameters or buffers, and should be
+safe when called on a freshly copied model.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a> implements this
+interface to restore cuEquivariance’s fused convolution method.
+Take a look at the <code class="docutils literal notranslate"><span class="pre">MACEWrapper.modify_ema_methods</span></code> to see
+how this is done.</p>
+</div>
+</section>
+<section id="using-uma-fairchem-core">
+<h3>Using UMA (fairchem-core)<a class="headerlink" href="#using-uma-fairchem-core" title="Link to this heading">#</a></h3>
+<p>UMA (Universal Models for Atoms) is a multi-task foundation model: one
+checkpoint ships task heads for molecules (<code class="docutils literal notranslate"><span class="pre">omol</span></code>), bulk crystals (<code class="docutils literal notranslate"><span class="pre">omat</span></code>),
+catalysis (<code class="docutils literal notranslate"><span class="pre">oc20</span></code>), direct air capture (<code class="docutils literal notranslate"><span class="pre">odac</span></code>), and molecular crystals
+(<code class="docutils literal notranslate"><span class="pre">omc</span></code>). <a class="reference internal" href="../modules/generated/nvalchemi.models.uma.UMAWrapper.html#nvalchemi.models.uma.UMAWrapper" title="nvalchemi.models.uma.UMAWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">UMAWrapper</span></code></a> pins a single task at
+construction; <code class="docutils literal notranslate"><span class="pre">active_outputs</span></code> is <code class="docutils literal notranslate"><span class="pre">{energy,</span> <span class="pre">forces}</span></code> for molecular tasks and
+<code class="docutils literal notranslate"><span class="pre">{energy,</span> <span class="pre">forces,</span> <span class="pre">stress}</span></code> for periodic ones.</p>
+<p><strong>1. Install the optional dependency</strong> (in its own environment, per the note
+above):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>venv<span class="w"> </span>.venv-uma<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>uma
+<span class="c1"># or, with pip:  pip install &#39;nvalchemi-toolkit[uma]&#39;</span>
+</pre></div>
+</div>
+<p><strong>2. Get HuggingFace access.</strong> UMA checkpoints live in the <strong>gated</strong>
+<a class="reference external" href="https://huggingface.co/facebook/UMA"><code class="docutils literal notranslate"><span class="pre">facebook/UMA</span></code></a> repository, so a (free)
+HuggingFace account and a one-time access approval are required:</p>
+<ol class="arabic">
+<li><p>Sign in and click <strong>“Agree and access repository”</strong> on the
+<a class="reference external" href="https://huggingface.co/facebook/UMA">model page</a>.</p></li>
+<li><p>Create a <strong>read</strong> token at
+<a class="reference external" href="https://huggingface.co/settings/tokens">https://huggingface.co/settings/tokens</a>.</p></li>
+<li><p>Make the token available to your shell, either by logging in once (it is
+cached under <code class="docutils literal notranslate"><span class="pre">~/.cache/huggingface</span></code>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>huggingface-cli<span class="w"> </span>login
+</pre></div>
+</div>
+<p>or by exporting it for the session:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span>hf_xxxxxxxxxxxxxxxxxxxxxxxx
+</pre></div>
+</div>
+</li>
+</ol>
+<p><strong>3. Load a checkpoint.</strong> The first call downloads and caches the weights
+(under <code class="docutils literal notranslate"><span class="pre">~/.cache/fairchem</span></code>); later calls reuse the cache and need no network:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.uma</span><span class="w"> </span><span class="kn">import</span> <span class="n">UMAWrapper</span>
+
+<span class="c1"># Molecular potential (OMol head)</span>
+<span class="n">mol</span> <span class="o">=</span> <span class="n">UMAWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span><span class="s2">&quot;uma-s-1p1&quot;</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">&quot;omol&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+
+<span class="c1"># Bulk-crystal potential (OMat head, same checkpoint family)</span>
+<span class="n">mat</span> <span class="o">=</span> <span class="n">UMAWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span><span class="s2">&quot;uma-m-1p1&quot;</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">&quot;omat&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Registered checkpoint names (see
+<code class="docutils literal notranslate"><span class="pre">fairchem.core.calculate.pretrained_mlip.available_models</span></code> for the full list):</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Checkpoint</p></th>
+<th class="head"><p>Size</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">uma-s-1p1</span></code></p></td>
+<td><p>small</p></td>
+<td><p>Default in the examples / tests</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">uma-s-1p2</span></code></p></td>
+<td><p>small</p></td>
+<td><p>Updated small release</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">uma-m-1p1</span></code></p></td>
+<td><p>medium</p></td>
+<td><p>Higher accuracy, larger / slower</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> / turbo.</strong> <code class="docutils literal notranslate"><span class="pre">UMAWrapper</span></code> does not add a <code class="docutils literal notranslate"><span class="pre">compile_model</span></code>
+flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
+internally as a field on its <code class="docutils literal notranslate"><span class="pre">InferenceSettings</span></code>. Reach it through
+<code class="docutils literal notranslate"><span class="pre">from_checkpoint</span></code>’s <code class="docutils literal notranslate"><span class="pre">inference_settings</span></code> argument — pass <code class="docutils literal notranslate"><span class="pre">&quot;turbo&quot;</span></code> for
+fairchem’s compiled preset (<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> + TF32 + MoLE merge, for runs
+with fixed atomic composition), or an <code class="docutils literal notranslate"><span class="pre">InferenceSettings</span></code> instance for finer
+control:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fast</span> <span class="o">=</span> <span class="n">UMAWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;uma-s-1p1&quot;</span><span class="p">,</span> <span class="n">task_name</span><span class="o">=</span><span class="s2">&quot;omat&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">inference_settings</span><span class="o">=</span><span class="s2">&quot;turbo&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="../examples/advanced/09_uma_nve.html"><span class="doc">the UMA NVE/NVT example</span></a> for a
+runnable end-to-end molecular-dynamics walkthrough.</p>
+</section>
 </section>
 <section id="architecture-overview">
 <h2>Architecture overview<a class="headerlink" href="#architecture-overview" title="Link to this heading">#</a></h2>
-<p>A wrapped model uses <strong>multiple inheritance</strong>: your existing <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
+<p>A wrapped model uses <strong>multiple inheritance</strong>: your existing <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
 subclass provides the forward pass, while
 <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> adds the standardized interface.</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><img src="../_images/graphviz-5f252d28fd54f31d9113eee1c415837f9cb10776.png" alt="digraph model_inheritance {
+<div class="graphviz"><object data="../_images/graphviz-b85fd04db8ca72011d8481bf1c54b756e573b375.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph model_inheritance {
     rankdir=BT
     compound=true
-    fontname=&quot;Helvetica&quot;
-    node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;filled,rounded&quot;]
-    edge [fontname=&quot;Helvetica&quot; fontsize=10]
 
     YourModel [
         label=&quot;YourModel(nn.Module)\l- forward()\l- your layers\l&quot;
-        fillcolor=&quot;#E8F4FD&quot;
-        color=&quot;#4A90D9&quot;
     ]
     BaseModelMixin [
         label=&quot;BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l&quot;
-        fillcolor=&quot;#E8F4FD&quot;
-        color=&quot;#4A90D9&quot;
     ]
     YourModelWrapper [
         label=&quot;YourModelWrapper\l(YourModel, BaseModelMixin)\l&quot;
-        fillcolor=&quot;#D5E8D4&quot;
-        color=&quot;#82B366&quot;
+        fillcolor=&quot;#26351d&quot;
     ]
 
     YourModelWrapper -&gt; YourModel
     YourModelWrapper -&gt; BaseModelMixin
-}" class="graphviz" /></div>
+}</p></object></div>
 <figcaption>
 <p><span class="caption-text">Multiple-inheritance pattern for model wrapping.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
@@ -597,7 +787,7 @@ the schema.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neighbor_config</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code> describing neighbor list requirements, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the model does not use a neighbor list.</p></td>
+<td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.base.NeighborConfig.html#nvalchemi.models.base.NeighborConfig" title="nvalchemi.models.base.NeighborConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code></a> describing neighbor list requirements, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the model does not use a neighbor list.</p></td>
 </tr>
 </tbody>
 </table>
@@ -732,8 +922,8 @@ will raise <code class="docutils literal notranslate"><span class="pre">TypeErro
 <td><p>Implement the three-step pipeline</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">export_model()</span></code></p></td>
-<td><p>No (has default)</p></td>
-<td><p>Override if needed</p></td>
+<td><p>No (base default raises <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>)</p></td>
+<td><p>Override to enable export</p></td>
 </tr>
 </tbody>
 </table>
@@ -750,7 +940,7 @@ methods:</p>
 </section>
 <section id="step-1-create-the-wrapper-class">
 <h3>Step 1 — Create the wrapper class<a class="headerlink" href="#step-1-create-the-wrapper-class" title="Link to this heading">#</a></h3>
-<p>Subclass <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> and mix in
+<p>Subclass <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> and mix in
 <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>, then hold the underlying model as <code class="docutils literal notranslate"><span class="pre">self.model</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
@@ -874,7 +1064,7 @@ any keys whose names already match:</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">3,</span> <span class="pre">3]</span></code></p></td>
 <td><p>Per-graph stress tensor</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hessians</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hessian</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">[V,</span> <span class="pre">3,</span> <span class="pre">3]</span></code></p></td>
 <td><p>Per-atom Hessian</p></td>
 </tr>
@@ -1145,13 +1335,21 @@ computation.</p></li>
 <h3>Tier 3: Fully custom composition (utility functions)<a class="headerlink" href="#tier-3-fully-custom-composition-utility-functions" title="Link to this heading">#</a></h3>
 <p>For total control, write a custom <code class="docutils literal notranslate"><span class="pre">nn.Module,</span> <span class="pre">BaseModelMixin</span></code> subclass and
 use the utility functions in <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models._utils</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">autograd_forces</span><span class="p">,</span> <span class="n">autograd_stresses</span><span class="p">,</span> <span class="n">prepare_strain</span><span class="p">,</span> <span class="n">sum_outputs</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">autograd_forces</span><span class="p">,</span>
+    <span class="n">autograd_forces_and_stresses</span><span class="p">,</span>
+    <span class="n">autograd_stresses</span><span class="p">,</span>
+    <span class="n">prepare_strain</span><span class="p">,</span>
+    <span class="n">sum_outputs</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">autograd_forces(energy,</span> <span class="pre">positions)</span></code> — compute forces as <code class="docutils literal notranslate"><span class="pre">-dE/dr</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">autograd_forces_and_stresses(energy,</span> <span class="pre">positions,</span> <span class="pre">displacement,</span> <span class="pre">cell,</span> <span class="pre">num_graphs)</span></code>
+— compute forces and stresses from one autograd call.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">autograd_stresses(energy,</span> <span class="pre">displacement,</span> <span class="pre">cell,</span> <span class="pre">num_graphs)</span></code> — compute
-stresses as <code class="docutils literal notranslate"><span class="pre">-1/V</span> <span class="pre">*</span> <span class="pre">dE/d(strain)</span></code>.</p></li>
+tensile-positive Cauchy stresses as <code class="docutils literal notranslate"><span class="pre">1/V</span> <span class="pre">*</span> <span class="pre">dE/d(strain)</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">prepare_strain(positions,</span> <span class="pre">cell,</span> <span class="pre">batch_idx)</span></code> — set up the affine strain
 trick for autograd stress computation (see below).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">sum_outputs(*outputs)</span></code> — element-wise sum on additive keys (energies,
@@ -1201,7 +1399,7 @@ however you choose to compute them.</p>
 non-trivial setup step that scales positions and cell through a
 displacement tensor.  The
 <code class="xref py py-func docutils literal notranslate"><span class="pre">prepare_strain()</span></code> helper handles this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_strain</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">autograd_forces_and_stresses</span><span class="p">,</span> <span class="n">prepare_strain</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
@@ -1217,21 +1415,23 @@ displacement tensor.  The
 
     <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">energy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)}</span>
 
-    <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
-        <span class="n">positions_for_grad</span> <span class="o">=</span> <span class="n">scaled_pos</span> <span class="k">if</span> <span class="n">compute_stresses</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span>
+    <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="ow">and</span> <span class="n">compute_stresses</span><span class="p">:</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">autograd_forces_and_stresses</span><span class="p">(</span>
+            <span class="n">energy</span><span class="p">,</span> <span class="n">scaled_pos</span><span class="p">,</span> <span class="n">displacement</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
-            <span class="n">energy</span><span class="p">,</span> <span class="n">positions_for_grad</span><span class="p">,</span>
+            <span class="n">energy</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
             <span class="n">grad_outputs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">energy</span><span class="p">),</span>
-            <span class="n">retain_graph</span><span class="o">=</span><span class="n">compute_stresses</span><span class="p">,</span>
         <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="n">compute_stresses</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">compute_stresses</span> <span class="ow">and</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
         <span class="n">grad</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
             <span class="n">energy</span><span class="p">,</span> <span class="n">displacement</span><span class="p">,</span>
             <span class="n">grad_outputs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">energy</span><span class="p">),</span>
         <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">grad</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">/</span> <span class="n">volume</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">grad</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">/</span> <span class="n">volume</span>
 
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
 </pre></div>
@@ -1240,6 +1440,8 @@ displacement tensor.  The
 uses its own internal displacement trick via <code class="docutils literal notranslate"><span class="pre">compute_displacement=True</span></code>.
 The only requirement is that your <code class="docutils literal notranslate"><span class="pre">forward()</span></code> returns the requested
 outputs.</p>
+<p>See <a class="reference internal" href="about/conventions.html"><span class="doc">Conventions</span></a> for the project-wide virial, stress, and pressure
+sign conventions.</p>
 </section>
 <section id="example-hessians-and-jacobians">
 <h4>Example: Hessians and Jacobians<a class="headerlink" href="#example-hessians-and-jacobians" title="Link to this heading">#</a></h4>
@@ -1342,24 +1544,54 @@ control.  If you want stresses, use
 </section>
 <section id="neighbor-list-handling-and-make-neighbor-hooks">
 <h3>Neighbor list handling and <code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code><a class="headerlink" href="#neighbor-list-handling-and-make-neighbor-hooks" title="Link to this heading">#</a></h3>
-<p>All composition tiers handle neighbor lists transparently:</p>
+<p>All composition tiers handle neighbor lists centrally:</p>
 <ol class="arabic simple">
-<li><p>The pipeline (or <code class="docutils literal notranslate"><span class="pre">+</span></code> result) synthesizes a single
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code> at the <strong>maximum
-cutoff</strong> across all sub-models, using MATRIX format if any sub-model
-needs it.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code> returns <strong>one</strong>
-<a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> at that max
-cutoff.</p></li>
-<li><p>Each sub-model’s <code class="docutils literal notranslate"><span class="pre">adapt_input()</span></code> calls <code class="docutils literal notranslate"><span class="pre">prepare_neighbors_for_model()</span></code>
-which filters the max-cutoff neighbor list down to the model’s own
-cutoff and converts formats as needed.</p></li>
+<li><p>The pipeline (or <code class="docutils literal notranslate"><span class="pre">+</span></code> result) builds a private neighbor-list plan from
+sub-model <code class="docutils literal notranslate"><span class="pre">NeighborConfig</span></code> values.</p></li>
+<li><p>By default (<code class="docutils literal notranslate"><span class="pre">neighbor_adaptation=&quot;auto&quot;</span></code>), a source neighbor list can serve
+a smaller target cutoff only when
+<code class="docutils literal notranslate"><span class="pre">source_cutoff</span> <span class="pre">&lt;=</span> <span class="pre">target_cutoff</span> <span class="pre">*</span> <span class="pre">max_cutoff_ratio</span></code>. The default ratio is
+<code class="docutils literal notranslate"><span class="pre">1.5</span></code>.</p></li>
+<li><p>If the cutoff gap is larger, the pipeline creates a separate source list
+for that cutoff group.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code> returns all hooks needed by the plan. This is the
+recommended registration API for composed models.</p></li>
+<li><p>Before each sub-model call, the pipeline temporarily shadows the selected
+neighbor tensors onto the batch and filters/converts them only when the
+step plan requires it.</p></li>
 </ol>
+<p><code class="docutils literal notranslate"><span class="pre">neighbor_adaptation</span></code> accepts:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>: default. Adapt only when the source cutoff is at most
+<code class="docutils literal notranslate"><span class="pre">max_cutoff_ratio</span></code> times the target cutoff; otherwise build another source
+list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;always&quot;</span></code>: build one max-cutoff source and adapt every tighter model from it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;never&quot;</span></code>: do not perform cutoff filtering. The pipeline builds exact cutoff
+source groups. Runtime format conversion is still allowed.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pipe</span> <span class="o">=</span> <span class="n">PipelineModelWrapper</span><span class="p">(</span>
+    <span class="n">groups</span><span class="o">=</span><span class="p">[</span><span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">short_range</span><span class="p">,</span> <span class="n">long_range</span><span class="p">])],</span>
+    <span class="n">neighbor_adaptation</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">max_cutoff_ratio</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">pipe</span><span class="o">.</span><span class="n">make_neighbor_hooks</span><span class="p">():</span>
+    <span class="n">dynamics</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Compile behavior: exact source lists use the same <code class="docutils literal notranslate"><span class="pre">NeighborListHook</span></code>
+preallocation model as single-model dynamics. First use, shape changes, and
+K resizing may allocate; steady-state rebuilds reuse persistent buffers.
+Runtime cutoff filtering and MATRIX/COO conversion still use the existing
+adapter utilities and may allocate intermediate tensors.</p>
+<p>The pipeline synthesizes one or more source lists according to
+<code class="docutils literal notranslate"><span class="pre">neighbor_adaptation</span></code>. <code class="docutils literal notranslate"><span class="pre">model_config.neighbor_config</span></code> exposes the largest
+(default) source for compatibility.</p>
 <p><strong>Choosing a registration pattern:</strong></p>
 <p><code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code> works for both single models and composed models.
 For a single model it is equivalent to constructing a
 <a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> manually from the model’s
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code>:</p>
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.NeighborConfig.html#nvalchemi.models.base.NeighborConfig" title="nvalchemi.models.base.NeighborConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code></a>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># These two are equivalent for a single model:</span>
 
 <span class="c1"># (a) make_neighbor_hooks — recommended</span>
@@ -1375,11 +1607,12 @@ For a single model it is equivalent to constructing a
 </pre></div>
 </div>
 <p>For <strong>composed models</strong> (pipeline), <code class="docutils literal notranslate"><span class="pre">composed.make_neighbor_hooks()</span></code>
-reads the already-synthesized maximum cutoff from the pipeline’s
-<code class="docutils literal notranslate"><span class="pre">model_config.neighbor_config</span></code>.  Manual construction from
-<code class="docutils literal notranslate"><span class="pre">composed.model_config.neighbor_config</span></code> is equally valid.</p>
-<p>Hooks returned by <code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code> have <code class="docutils literal notranslate"><span class="pre">stage=None</span></code> by default —
-provide the stage when registering.</p>
+returns every hook required by the pipeline’s neighbor-list plan.
+Manual construction from <code class="docutils literal notranslate"><span class="pre">composed.model_config.neighbor_config</span></code> only
+covers the largest/default source and is not sufficient when the plan
+builds multiple source lists.</p>
+<p>Hooks returned by <code class="docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code> are configured for
+<code class="docutils literal notranslate"><span class="pre">DynamicsStage.BEFORE_COMPUTE</span></code>, matching the usual dynamics registration stage.</p>
 </section>
 </section>
 <section id="how-models-integrate-with-dynamics">
@@ -1436,11 +1669,11 @@ inside optimization and MD workflows.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="hooks.html"
+       href="training_finetuning.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Hooks</p>
+        <p class="prev-next-title">Training &amp; Fine-tuning</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1462,7 +1695,12 @@ inside optimization and MD workflows.</p></li>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#supported-models">Supported models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#supported-models">Supported models</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mace-checkpoints-in-training">MACE checkpoints in training</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#repairing-methods-on-ema-copies">Repairing methods on EMA copies</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#using-uma-fairchem-core">Using UMA (fairchem-core)</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture-overview">Architecture overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#modelconfig-capability-declaration-and-runtime-control">ModelConfig: capability declaration and runtime control</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#capability-fields-frozen">Capability fields (frozen)</a></li>

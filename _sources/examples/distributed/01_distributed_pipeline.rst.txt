@@ -33,22 +33,23 @@ running in parallel across 4 GPUs using
    digraph topology {
        rankdir=LR
        fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
        r0 [label="Rank 0\nFIRE + sampler_a"]
-       r1 [label="Rank 1\nNVTLangevin + sink_a" fillcolor="#f9e2ae"]
+       r1 [label="Rank 1\nNVTLangevin + sink_a" fillcolor="#f9e2ae" fontcolor="#111111"]
        r2 [label="Rank 2\nFIRE + sampler_b"]
-       r3 [label="Rank 3\nNVTLangevin + sink_b" fillcolor="#f9e2ae"]
+       r3 [label="Rank 3\nNVTLangevin + sink_b" fillcolor="#f9e2ae" fontcolor="#111111"]
 
        r0 -> r1 [style=bold color="#c0392b" penwidth=2]
        r2 -> r3 [style=bold color="#c0392b" penwidth=2]
    }
 
 Each FIRE rank draws molecules from a dataset, optimises them until
-convergence, and sends them to the paired Langevin rank for short MD
-production.  A :class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook`
-on the Langevin ranks writes completed trajectories to a
+convergence or a 50-step limit, and sends them to the paired Langevin rank
+for 20 steps of short MD production. A
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook` on the Langevin ranks writes
+the trajectories to a
 :class:`~nvalchemi.dynamics.HostMemory` sink.
 
 .. note::
@@ -59,7 +60,7 @@ on the Langevin ranks writes completed trajectories to a
 
     For CPU-only testing, change ``backend="nccl"`` to ``backend="gloo"``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-170
+.. GENERATED FROM PYTHON SOURCE LINES 58-141
 
 .. code-block:: Python
 
@@ -79,22 +80,22 @@ on the Langevin ranks writes completed trajectories to a
         FIRE,
         ConvergenceHook,
         DistributedPipeline,
+        FusedStage,
         HostMemory,
         NVTLangevin,
         SizeAwareSampler,
     )
-    from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
-    from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
-    from nvalchemi.hooks import HookContext
+    from nvalchemi.dynamics.base import BufferConfig
+    from nvalchemi.dynamics.hooks import SnapshotHook
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     logging.basicConfig(level=logging.INFO)
 
-    # When run outside ``torchrun`` (e.g. during a Sphinx docs build), the
-    # distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.
-    # We detect this and skip the pipeline launch so the example renders in
-    # the gallery without requiring multiple GPUs.
+    # Distributed examples are launcher-only. Sphinx sets this flag during docs
+    # builds, and torchrun sets rank/world-size variables during real launches.
+    _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
     _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
+    _RUN_DISTRIBUTED_EXAMPLE = _DISTRIBUTED_ENV and not _DOCS_BUILD
 
     # ---------------------------------------------------------------------------
     # Helpers
@@ -130,36 +131,6 @@ on the Langevin ranks writes completed trajectories to a
             return d.num_nodes, d.num_edges
 
 
-    class DownstreamDoneHook:
-        """Set ``stage.done = True`` after *patience* consecutive idle steps.
-
-        Downstream (non-inflight) stages never set ``done`` on their own.
-        This hook counts consecutive steps where the batch is empty (no
-        graphs to integrate) and marks the stage as finished once the
-        patience limit is reached.
-
-        Because :class:`~nvalchemi.hooks.HookContext` does not carry a
-        reference to the dynamics engine, the ``dynamics`` attribute must
-        be set after the engine is constructed (see ``make_langevin``).
-        """
-
-        stage = DynamicsStage.AFTER_STEP
-        frequency = 1
-
-        def __init__(self, patience: int = 5) -> None:
-            self.patience = patience
-            self._idle_steps = 0
-            self.dynamics: object | None = None
-
-        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
-            if ctx.batch.num_graphs == 0:
-                self._idle_steps += 1
-            else:
-                self._idle_steps = 0
-            if self._idle_steps >= self.patience and self.dynamics is not None:
-                self.dynamics.done = True
-
-
     # ---------------------------------------------------------------------------
     # Build molecules
     # ---------------------------------------------------------------------------
@@ -183,7 +154,7 @@ on the Langevin ranks writes completed trajectories to a
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-184
+.. GENERATED FROM PYTHON SOURCE LINES 142-155
 
 DistributedPipeline topology
 ----------------------------------
@@ -199,7 +170,7 @@ The ``stages`` dict is built on every rank but only the local stage is
 ever executed; constructing all stages on every rank keeps the code
 identical across processes, which simplifies debugging.
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-194
+.. GENERATED FROM PYTHON SOURCE LINES 157-165
 
 Dataset and samplers
 -------------------------
@@ -210,7 +181,7 @@ owns its own sampler and dataset partition so that work is distributed
 evenly.  Downstream ranks (the Langevin stages) do not need a sampler —
 they receive systems directly from the paired FIRE rank via NCCL.
 
-.. GENERATED FROM PYTHON SOURCE LINES 197-206
+.. GENERATED FROM PYTHON SOURCE LINES 168-177
 
 BufferConfig: fixed-size communication
 -------------------------------------------
@@ -222,7 +193,7 @@ values that are at least as large as the largest batch you expect to send
 in a single step; excess capacity is padded with zeros and stripped on
 receipt.
 
-.. GENERATED FROM PYTHON SOURCE LINES 208-215
+.. GENERATED FROM PYTHON SOURCE LINES 179-186
 
 Stage construction
 -----------------------
@@ -232,15 +203,15 @@ a downstream stage has ``prior_rank=<upstream>`` and ``next_rank=None``.
 The ``buffer_config`` must be identical for all stages that communicate
 with each other.
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-271
+.. GENERATED FROM PYTHON SOURCE LINES 186-226
 
 .. code-block:: Python
 
 
 
-    def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
-        """Create a FIRE optimiser stage."""
-        return FIRE(
+    def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FusedStage:
+        """Create a convergence- or step-limited FIRE optimiser stage."""
+        dynamics = FIRE(
             model=model,
             dt=1.0,
             n_steps=50,
@@ -254,8 +225,8 @@ with each other.
                     }
                 ],
             ),
-            **kwargs,
         )
+        return FusedStage(sub_stages=[(0, dynamics)], **kwargs)
 
 
     def make_langevin(
@@ -263,33 +234,17 @@ with each other.
         sink: HostMemory,
         rank: int,
         **kwargs,
-    ) -> NVTLangevin:
-        """Create an NVTLangevin MD stage with a snapshot hook."""
-        done_hook = DownstreamDoneHook(patience=10)
-        stage = NVTLangevin(
+    ) -> FusedStage:
+        """Create a fixed-duration NVTLangevin stage with trajectory snapshots."""
+        dynamics = NVTLangevin(
             model=model,
             dt=0.5,
             temperature=300.0,
             friction=0.01,
             n_steps=20,
-            hooks=[
-                ConvergedSnapshotHook(sink=sink, frequency=1),
-                done_hook,
-            ],
-            convergence_hook=ConvergenceHook(
-                criteria=[
-                    {
-                        "key": "forces",
-                        "threshold": 0.01,
-                        "reduce_op": "norm",
-                        "reduce_dims": -1,
-                    }
-                ],
-            ),
-            **kwargs,
+            hooks=[SnapshotHook(sink=sink, frequency=1)],
         )
-        done_hook.dynamics = stage
-        return stage
+        return FusedStage(sub_stages=[(0, dynamics)], **kwargs)
 
 
 
@@ -299,7 +254,7 @@ with each other.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 272-283
+.. GENERATED FROM PYTHON SOURCE LINES 227-237
 
 Running the pipeline
 -------------------------
@@ -308,12 +263,11 @@ manager.  On ``__enter__`` it initialises the PyTorch process group
 (``dist.init_process_group``) and assigns each rank its GPU device.
 On ``__exit__`` it tears down the process group gracefully.
 
-``pipeline.run()`` blocks until the local stage signals completion
-(``dynamics.done = True``).  Upstream ranks finish when their sampler
-is exhausted; downstream ranks finish via ``DownstreamDoneHook`` after
-a configurable number of idle steps with no incoming systems.
+``pipeline.run()`` blocks until every stage signals completion. Upstream
+ranks finish when their sampler is exhausted. Downstream ranks finish after
+the upstream rank is done and all fixed-duration MD work has drained.
 
-.. GENERATED FROM PYTHON SOURCE LINES 283-381
+.. GENERATED FROM PYTHON SOURCE LINES 237-342
 
 .. code-block:: Python
 
@@ -392,7 +346,7 @@ a configurable number of idle steps with no incoming systems.
             ),
         }
 
-        if not _DISTRIBUTED_ENV:
+        if not _RUN_DISTRIBUTED_EXAMPLE:
             logger.info(
                 "Not running under torchrun — skipping pipeline launch. "
                 "Run with: torchrun --nproc_per_node=4 "
@@ -405,12 +359,19 @@ a configurable number of idle steps with no incoming systems.
         pipeline = DistributedPipeline(stages=stages, backend=backend, debug_mode=True)
         with pipeline:
             pipeline.run()
-
-        rank = dist.get_rank() if dist.is_initialized() else 0
-        if rank == 1:
-            logger.info(f"Rank 1 sink collected {len(sink_a)} samples")
-        elif rank == 3:
-            logger.info(f"Rank 3 sink collected {len(sink_b)} samples")
+            rank = dist.get_rank()
+            if rank == 1:
+                expected_frames = len(dataset_a) * 20
+                assert len(sink_a) == expected_frames, (
+                    f"rank 1 collected {len(sink_a)} of {expected_frames} frames"
+                )
+                logger.info(f"Rank 1 sink collected {len(sink_a)} trajectory frames")
+            elif rank == 3:
+                expected_frames = len(dataset_b) * 20
+                assert len(sink_b) == expected_frames, (
+                    f"rank 3 collected {len(sink_b)} of {expected_frames} frames"
+                )
+                logger.info(f"Rank 3 sink collected {len(sink_b)} trajectory frames")
 
 
     if __name__ == "__main__":
@@ -425,7 +386,7 @@ a configurable number of idle steps with no incoming systems.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.341 seconds)
+   **Total running time of the script:** (0 minutes 0.005 seconds)
 
 
 .. _sphx_glr_download_examples_distributed_01_distributed_pipeline.py:
