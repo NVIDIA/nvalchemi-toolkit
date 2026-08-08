@@ -21,3 +21,4 @@ forward:
   cutoff_attr: cutoff
   upfront_halo_exchange: true
   seed_force_energy: true
+  has_stress: true

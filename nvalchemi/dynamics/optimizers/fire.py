@@ -77,7 +77,7 @@ _FIRE_DEFAULTS = dict(
 
 
 class FIRE(BaseDynamics):
-    """Fixed-cell FIRE geometry optimizer.
+    r"""Fixed-cell FIRE geometry optimizer.
 
     Drives atomic coordinates to a local energy minimum using the Fast
     Inertial Relaxation Engine algorithm (Bitzek et al., 2006).
@@ -89,9 +89,9 @@ class FIRE(BaseDynamics):
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
-        Maximum timestep ``[M]`` or scalar.  Default ``10 × dt``.
+        Maximum timestep ``[M]`` or scalar.  Default :math:`10 \times dt`.
     dt_min : float or torch.Tensor, optional
-        Minimum timestep ``[M]`` or scalar.  Default ``0.02 × dt``.
+        Minimum timestep ``[M]`` or scalar.  Default :math:`0.02 \times dt`.
     maxstep : float
         Maximum displacement per step.  Default 0.2.
     n_min : int
@@ -291,7 +291,7 @@ class FIRE(BaseDynamics):
 
 
 class FIREVariableCell(BaseDynamics):
-    """Variable-cell FIRE geometry optimizer.
+    r"""Variable-cell FIRE geometry optimizer.
 
     Extends FIRE to simultaneously relax atomic coordinates and the
     simulation cell.  Cell forces are derived from the model's stress
@@ -310,9 +310,9 @@ class FIREVariableCell(BaseDynamics):
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
-        Maximum timestep ``[M]`` or scalar.  Default ``10 × dt``.
+        Maximum timestep ``[M]`` or scalar.  Default :math:`10 \times dt`.
     dt_min : float or torch.Tensor, optional
-        Minimum timestep ``[M]`` or scalar.  Default ``0.02 × dt``.
+        Minimum timestep ``[M]`` or scalar.  Default :math:`0.02 \times dt`.
     maxstep : float
         Maximum displacement per step.  Default 0.2.
     n_min : int

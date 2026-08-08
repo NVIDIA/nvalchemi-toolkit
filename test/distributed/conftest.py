@@ -20,8 +20,15 @@ packages can import them; this file holds only the pytest fixture."""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 import torch.distributed as dist
+
+# Equivalence tests only mean something at matched precision. The env var rather
+# than the torch flags because ranks run under ``mp.spawn`` and inherit the
+# environment, not the flags; ``setdefault`` so a TF32 run can still be asked for.
+os.environ.setdefault("NVIDIA_TF32_OVERRIDE", "0")
 
 # ----------------------------------------------------------------------
 # Function-scoped 1-rank gloo init for tests that construct a ShardTensor

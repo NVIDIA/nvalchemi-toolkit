@@ -20,7 +20,7 @@ import pytest
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import Batch
+from nvalchemi.data.batch import Batch, set_transient
 from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
 
 
@@ -247,6 +247,29 @@ class TestBatchZero:
 
         assert batch.num_graphs == 0
         assert batch.system_capacity == 5
+
+    def test_batch_zero_preserves_capacity_after_smaller_put(self):
+        """A reused buffer accepts a larger payload after a smaller one."""
+        template = _minimal_atomic_data(2)
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=16,
+            num_edges=0,
+            template=template,
+        )
+        small = Batch.from_data_list([_minimal_atomic_data(2)])
+        larger = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)]
+        )
+
+        buffer.put(small, torch.ones(1, dtype=torch.bool))
+        assert buffer.num_graphs == 1
+
+        buffer.zero()
+        buffer.put(larger, torch.ones(2, dtype=torch.bool))
+
+        assert buffer.num_graphs == 2
+        assert buffer.num_nodes_list == [2, 2]
 
 
 # -----------------------------------------------------------------------------
@@ -1350,3 +1373,38 @@ class TestBatchFromRawDicts:
         # field_levels is provided but doesn't mention unknown_scalar
         batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
         assert "unknown_scalar" in batch.keys["system"]
+
+
+class TestSetTransient:
+    """``set_transient`` overlays a value without disturbing stored state.
+
+    The distinction is load-bearing: a strain applied for one forward must not
+    become the batch's real geometry, or a later rebuild deforms an already
+    deformed cell. Plain assignment routes tensors into storage and would.
+    """
+
+    def _batch(self) -> Batch:
+        data = AtomicData(
+            positions=torch.zeros(4, 3),
+            atomic_numbers=torch.ones(4, dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0),
+            pbc=torch.ones(1, 3, dtype=torch.bool),
+        )
+        return Batch.from_data_list([data])
+
+    def test_overlay_is_visible_to_readers(self) -> None:
+        batch = self._batch()
+        set_transient(batch, "cell", batch.cell * 7.0)
+        assert batch.cell[0, 0, 0].item() == pytest.approx(7.0)
+
+    def test_overlay_leaves_storage_untouched(self) -> None:
+        batch = self._batch()
+        stored = batch._storage["cell"].clone()
+        set_transient(batch, "cell", batch.cell * 7.0)
+        torch.testing.assert_close(batch._storage["cell"], stored)
+
+    def test_plain_assignment_writes_through_to_storage(self) -> None:
+        """Contrast: the reason ``set_transient`` exists rather than ``setattr``."""
+        batch = self._batch()
+        batch.cell = batch.cell * 7.0
+        assert batch._storage["cell"][0, 0, 0].item() == pytest.approx(7.0)

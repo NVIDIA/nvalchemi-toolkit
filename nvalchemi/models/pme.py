@@ -50,7 +50,7 @@ Notes
   ``(dE/dq)(dq/d(strain))``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
 * Input charges are read from ``data.charges`` (shape ``[N]``).
-* The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
+* The Coulomb constant defaults to ``14.3996`` :math:`\\mathrm{eV}\\cdot\\mathrm{\\AA}/e^2`, which gives energies
   in eV when positions are in Å and charges are in elementary charge units.
 * PME achieves :math:`O(N \\log N)` scaling via FFT-based reciprocal space
   calculations, making it more efficient than Ewald for large systems.
@@ -109,7 +109,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         Target accuracy for automatic parameter estimation.  Defaults to
         ``1e-6``.
     coulomb_constant : float, optional
-        Coulomb prefactor :math:`k_e` in eV·Å/e².
+        Coulomb prefactor :math:`k_e` in :math:`\\mathrm{eV}\\cdot\\mathrm{\\AA}/e^2`.
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
     slab_correction : bool, optional
         Whether to enable the two-dimensional slab correction. Defaults to
@@ -124,6 +124,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     atol : float or None, optional
         Absolute tolerance for cell change detection.
         See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
+    hybrid_forces : bool, optional
+        When ``True`` (default), direct kernel forces (``dE/dR|_q``) are used
+        and ``forces`` is kept in ``autograd_outputs`` only to add the charge
+        chain-rule term; when ``False``, forces come entirely from autograd.
 
     Attributes
     ----------
@@ -148,7 +152,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         alpha: float | None = None,
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
-        hybrid_forces: bool = True,
+        hybrid_forces: bool = False,
         slab_correction: bool = False,
         rtol: float = 1e-5,
         atol: float | None = None,
@@ -235,6 +239,16 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         if strategy == StrategyKind.GRAPH_PARTITION:
             return self._distribution_spec_gp()
 
+        if self.hybrid_forces:
+            raise NotImplementedError(
+                "PME under domain decomposition requires hybrid_forces=False. "
+                "The analytic direct-output path returns a virial that fuses the "
+                "per-rank real-space and the globally-replicated reciprocal terms, "
+                "which cannot be reduced correctly across ranks; it is also being "
+                "retired in nvalchemi-toolkit-ops. Construct the wrapper with "
+                "hybrid_forces=False (the default)."
+            )
+
         import torch  # noqa: PLC0415
 
         # Force op registration before grabbing the handles.
@@ -271,10 +285,15 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         nvops = torch.ops.nvalchemiops  # type: ignore[attr-defined]
         ops = torch.ops.alchemiops  # type: ignore[attr-defined]
         custom_ops = (
+            # The reduced charge mesh drives the whole reciprocal pipeline
+            # (FFT, Green's function, IFFT) identically on every rank, so its
+            # incoming gradient is already global — hence the replicated
+            # adjoint. The total-charge and slab moments below are folded into
+            # each rank's own owned-atom terms and keep the symmetric one.
             OpAdapter(
                 op=nvops.spline_spread,  # (positions, values, ...)
                 arg_transforms={0: SliceOwned(), 1: SliceOwned()},
-                output_transforms={0: AllReduceSum()},
+                output_transforms={0: AllReduceSum(replicated_consumer=True)},
             ),
             OpAdapter(
                 op=nvops.batch_spline_spread,  # (positions, values, batch_idx, ...)
@@ -283,7 +302,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                     1: SliceOwned(),
                     2: SliceOwned(),
                 },
-                output_transforms={0: AllReduceSum()},
+                output_transforms={0: AllReduceSum(replicated_consumer=True)},
             ),
             OpAdapter(
                 op=ops._pme_compute_partial_total_charge,  # (charges)
@@ -321,20 +340,14 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         # Compiled DD needs differentiable forces, so it is enabled only when
         # hybrid_forces=False: the framework then derives forces via autograd
         # over the global energy.
-        compile_policy = (
-            None
-            if self.hybrid_forces
-            else CompilePolicy(
-                static_shapes=True,
-                force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
-                graph_padder=DenseBatchPadder(),
-                # The framework strains positions + cell and takes the virial by
-                # autograd of the consolidated global energy. PME's reciprocal is
-                # fully differentiable in the cell (k-vectors + volume + FFT), so
-                # this is correct (requires the nvalchemiops convolve-backward
-                # grad_k_squared rank fix).
-                stress_via_strain=True,
-            )
+        compile_policy = CompilePolicy(
+            static_shapes=True,
+            force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
+            graph_padder=DenseBatchPadder(),
+            # The framework strains positions + cell and takes the virial by
+            # autograd of the consolidated global energy. PME's reciprocal is
+            # fully differentiable in the cell (k-vectors + volume + FFT).
+            stress_via_strain=True,
         )
         # Eager kernel forces are complete per owned atom, so slice off the halo
         # duplicates. (The compiled path instead derives forces by autograd over
@@ -353,11 +366,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 # strain-autograd of the consolidated GLOBAL energy: a per-rank
                 # virial that ALL_REDUCE sums across ranks (correct for real +
                 # reciprocal, since PME's reciprocal is differentiable in the cell).
-                # The eager analytic kernel virial (hybrid_forces=True) needs a
-                # reciprocal-aware split, so it stays unreduced.
-                "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE)
-                if not self.hybrid_forces
-                else OutputSpec(OutputKind.PER_GRAPH),
+                "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE),
             },
             node_energy_key="atomic_energies",
@@ -402,6 +411,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             outputs={
                 "energy": OutputSpec(OutputKind.PER_GRAPH),
                 "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+                # The framework strains the replicated geometry and sums each
+                # rank's owned-energy virial, so the value it returns is global.
+                "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.OWNED_ONLY),
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
             },
             node_energy_key="atomic_energies",
@@ -543,9 +555,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         every rank agrees on ``alpha`` / mesh despite holding a different
         per-rank padded count; otherwise the local ``positions`` are used.
         """
-        from nvalchemiops.torch.interactions.electrostatics.k_vectors import (  # lazy
-            generate_k_vectors_pme,
-        )
         from nvalchemiops.torch.interactions.electrostatics.parameters import (  # lazy
             estimate_pme_parameters,
         )
@@ -581,13 +590,34 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         # Build per-system alpha tensor.
         alpha_tensor = torch.full((B,), alpha_val, dtype=cell.dtype, device=cell.device)
 
-        k_vectors, k_squared = generate_k_vectors_pme(cell, dims)
-
         self._cache_valid = True
         self._cached_alpha = alpha_tensor
+        self._cached_mesh_dims = dims
+        self._update_k_vectors(cell)
+
+    def _update_k_vectors(self, cell: torch.Tensor) -> None:
+        """Rebuild the k-vectors from *cell* against the cached mesh.
+
+        Separate from :meth:`_update_cache` because ``alpha`` and the mesh depend
+        only on the cell's value, while the k-vectors are differentiable
+        functions of the cell tensor itself.
+
+        Parameters
+        ----------
+        cell : torch.Tensor
+            Live cell ``[B, 3, 3]``; gradients flow through the result.
+
+        Returns
+        -------
+        None
+        """
+        from nvalchemiops.torch.interactions.electrostatics.k_vectors import (  # lazy  # noqa: PLC0415
+            generate_k_vectors_pme,
+        )
+
+        k_vectors, k_squared = generate_k_vectors_pme(cell, self._cached_mesh_dims)
         self._cached_k_vectors = k_vectors
         self._cached_k_squared = k_squared
-        self._cached_mesh_dims = dims
 
     # ------------------------------------------------------------------
     # Input adaptation
@@ -759,7 +789,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``"stress"`` (shape ``[B, 3, 3]``, :math:`\\mathrm{eV}/\\mathrm{\\AA}^3` — Cauchy stress
             ``-W/V``).
         """
         from nvalchemi.models._ops.electrostatics.pme import (  # lazy, PLC0415
@@ -815,6 +845,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
 
         if self._cache_is_stale():
             self._update_cache(positions, cell, batch_idx)
+        elif cell.requires_grad:
+            # Cached k-vectors belong to the graph of the cell they were built
+            # from, so a grad-carrying cell needs its own.
+            self._update_k_vectors(cell)
 
         # Non-PBC runs have no shifts; reuse a cached zero buffer.
         if neighbor_matrix_shifts is None:

@@ -65,26 +65,36 @@ class _PendingInMemoryBatches:
 
 
 class InMemoryDataset:
-    """Dataset that keeps the full dataset in memory as one :class:`Batch`.
+    """Resident dataset that holds the whole dataset in memory as one :class:`Batch`.
 
-    The entire dataset is stored in ``in_memory_batch``. Provide it directly if
-    you have already loaded the data, or pass a ``reader`` to materialize the
-    full dataset during initialization.
+    ``InMemoryDataset`` is the memory-resident counterpart to
+    :class:`~nvalchemi.data.datapipes.dataset.Dataset` in the same pipeline
+    (``Reader -> Dataset / InMemoryDataset (-> MultiDataset) -> DataLoader``).
+    Instead of streaming from a
+    :class:`~nvalchemi.data.datapipes.backends.base.Reader` on every access, it
+    materializes the entire dataset once into a single resident
+    :class:`~nvalchemi.data.batch.Batch` and then serves batches by slicing that
+    cache. Because it implements
+    :class:`~nvalchemi.data.datapipes.dataset.BatchDatasetProtocol`, a
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` and
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consume it
+    interchangeably with ``Dataset``.
 
-    Once loaded, iteration and :meth:`load_batches` select graphs from that
-    in-memory batch instead of reading from storage on each access.
-    ``InMemoryDataset`` follows
-    :class:`~nvalchemi.data.datapipes.dataset.BatchDatasetProtocol`, exposing
-    the same DataLoader-facing batch methods as ``Dataset``: :meth:`__len__`,
-    :meth:`load_batches`, :meth:`prefetch_fused_batches`,
-    :meth:`get_fused_batches`, :meth:`has_pending_fused_batches`, and
-    :meth:`cancel_prefetch`. These methods use in-memory implementations rather
-    than reader-backed implementations. The :meth:`__getitem__` and
-    :meth:`__iter__` methods are provided for
-    dataset-style access, but normal
-    :class:`~nvalchemi.data.datapipes.DataLoader` iteration loads whole
-    :class:`Batch` objects through the aforementioned methods instead of calling
-    :meth:`__getitem__` for each sample.
+    Prefer it over ``Dataset`` when the dataset fits in (CPU or GPU) memory and
+    is iterated many times -- small-to-medium training sets over many epochs, or
+    repeated in-loop evaluation -- since after the one-time materialization there
+    is no per-access storage I/O. Prefer ``Dataset`` when the data is too large
+    to hold resident or is read only once. Construct it from either a pre-built
+    ``in_memory_batch`` or a ``reader`` that materializes the full dataset (pass
+    exactly one).
+
+    Like ``Dataset``, it exposes the DataLoader-facing batch API
+    (:meth:`load_batches`, :meth:`prefetch_fused_batches`,
+    :meth:`get_fused_batches`, :meth:`has_pending_fused_batches`,
+    :meth:`cancel_prefetch`) backed by in-memory implementations, so a
+    ``DataLoader`` loads whole :class:`Batch` objects through those methods
+    rather than calling :meth:`__getitem__` per sample; :meth:`__getitem__` and
+    :meth:`__iter__` remain available for direct, dataset-style access.
 
     Parameters
     ----------

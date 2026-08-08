@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Unified tensor-based data containers for ML workflows on atomic simulations.
+r"""Unified tensor-based data containers for ML workflows on atomic simulations.
 
 This module provides efficient, torch-only data management for molecular dynamics
 and quantum chemistry calculations. Data is organized by **level**: per-atom (node),
@@ -227,15 +227,15 @@ class LevelSchema:
 
     Parameters
     ----------
-    group_to_attrs : dict[str, set[str]], optional
+    group_to_attrs : dict[str, set[str]] | None, optional
         Mapping from group names to sets of attribute names.
-        Defaults to ``DEFAULT_ATTRIBUTE_MAP``.
-    segmented_groups : set[str], optional
+        Defaults to ``None`` (uses ``DEFAULT_ATTRIBUTE_MAP``).
+    segmented_groups : set[str] | None, optional
         Group names whose data has variable segment lengths.
-        Defaults to ``DEFAULT_SEGMENTED_GROUPS``.
-    dtypes : dict[str, str], optional
+        Defaults to ``None`` (uses ``DEFAULT_SEGMENTED_GROUPS``).
+    dtypes : dict[str, str] | None, optional
         Per-attribute dtype strings (keys of ``TORCH_DTYPE_MAP``).
-        Defaults to ``DEFAULT_DTYPES``.
+        Defaults to ``None`` (uses ``DEFAULT_DTYPES``).
 
     Raises
     ------
@@ -616,8 +616,8 @@ class BaseLevelStorage(ABC):
     ----------
     data : dict[str, Tensor], optional
         Initial attribute tensors keyed by name.
-    device : DeviceType, optional
-        Target device (defaults to ``"cpu"``).
+    device : DeviceType | None, optional
+        Target device.  Defaults to ``None`` (uses ``"cpu"``).
     attr_map : LevelSchema, optional
         Shared attribute registry.
     validate : bool
@@ -1921,8 +1921,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
             )
         if new_num_dest is not None:
             new_n = int(new_num_dest.item())
-            object.__setattr__(self, "_batch_ptr", dest_batch_ptr[: new_n + 1].clone())
-            self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
+            self.segment_lengths = (
+                dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n]
+            )
             object.__setattr__(self, "_batch_ptr_np", None)
             if hasattr(self, "_num_segments"):
                 object.__delattr__(self, "_num_segments")

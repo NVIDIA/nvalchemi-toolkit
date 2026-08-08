@@ -237,6 +237,26 @@ def _num_batches_from_policy(
 class MultiDatasetSampler(Sampler[int]):
     """Sample global indices from a :class:`MultiDataset` at dataset-level rates.
 
+    ``MultiDatasetSampler`` yields individual global sample indices (it is a
+    :class:`torch.utils.data.Sampler` of ``int``), choosing which child dataset
+    each sample is drawn from according to per-dataset ``weights`` -- defaulting
+    to the child lengths, which reproduces proportional sampling from the
+    concatenated index space. Pass it to a
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` as ``sampler=``;
+    the loader then groups the emitted indices into batches of ``batch_size``,
+    so batch composition is *stochastic*. Use
+    :class:`MultiDatasetBatchSampler` instead when each batch must contain a
+    guaranteed number of samples from each child.
+
+    The sampler is distributed-aware: it shards the epoch across
+    ``num_replicas`` ranks (inferred from an initialized ``distributed_manager``
+    when one is supplied), and :meth:`set_epoch` reseeds shuffling per epoch for
+    correct cross-rank ordering -- the same contract as
+    :class:`torch.utils.data.DistributedSampler`. ``replacement`` controls
+    whether a child's samples may repeat within an epoch; with
+    ``replacement=False`` the requested per-child counts may not exceed the
+    child sizes.
+
     Parameters
     ----------
     dataset : MultiDataset
@@ -266,6 +286,20 @@ class MultiDatasetSampler(Sampler[int]):
         ``generator`` is ``None``.
     drop_last : bool, default=False
         Drop tail samples to make the epoch evenly divisible across ranks.
+
+    Examples
+    --------
+    Oversample a small child dataset by weighting it above its natural share::
+
+        >>> from nvalchemi.data.datapipes import DataLoader  # doctest: +SKIP
+        >>> from nvalchemi.data.datapipes.samplers import MultiDatasetSampler
+        >>> sampler = MultiDatasetSampler(multi, weights=(1.0, 3.0))  # doctest: +SKIP
+        >>> loader = DataLoader(multi, batch_size=8, sampler=sampler)  # doctest: +SKIP
+
+    See Also
+    --------
+    MultiDatasetBatchSampler : Fix the per-child composition of every batch.
+    MultiDataset : The concatenated dataset these global indices address.
     """
 
     def __init__(
@@ -423,6 +457,27 @@ class MultiDatasetSampler(Sampler[int]):
 class MultiDatasetBatchSampler(Sampler[list[int]]):
     """Sample full global-index batches from a :class:`MultiDataset`.
 
+    ``MultiDatasetBatchSampler`` yields whole batches -- each a ``list`` of
+    global indices (it is a :class:`torch.utils.data.Sampler` of ``list[int]``)
+    -- and is passed to a
+    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader` as
+    ``batch_sampler=`` (mutually exclusive with ``sampler``, ``shuffle``, and
+    the loader's ``batch_size``). Unlike :class:`MultiDatasetSampler`, it fixes
+    the *composition* of every batch: each batch holds a deterministic number of
+    samples from each child dataset, set either by ``samples_per_dataset``
+    (explicit integer counts, or floats read as relative rates) or by
+    ``weights`` (rates that split ``batch_size`` across children). Use this class
+    for ratio- or curriculum-controlled multi-source training where every
+    optimizer step must see a guaranteed mixture ratio.
+
+    Epoch length (``num_batches``) can be given directly or derived from
+    ``epoch_policy``: ``"dataset_size"`` sizes the epoch by the combined length,
+    ``"min_size"`` stops when the smallest contributing child is exhausted, and
+    ``"max_size"`` runs until the largest is exhausted (oversampling smaller
+    children when ``replacement=True``). Like :class:`MultiDatasetSampler`, it
+    shards across ``num_replicas`` ranks and honors :meth:`set_epoch`, mirroring
+    :class:`torch.utils.data.DistributedSampler`.
+
     Parameters
     ----------
     dataset : MultiDataset
@@ -469,6 +524,23 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         ``generator`` is ``None``.
     drop_last : bool, default=False
         Drop tail batches to make the epoch evenly divisible across ranks.
+
+    Examples
+    --------
+    Guarantee three samples from the first child and one from the second in
+    every batch of four::
+
+        >>> from nvalchemi.data.datapipes import DataLoader  # doctest: +SKIP
+        >>> from nvalchemi.data.datapipes.samplers import MultiDatasetBatchSampler
+        >>> sampler = MultiDatasetBatchSampler(  # doctest: +SKIP
+        ...     multi, batch_size=4, samples_per_dataset=(3, 1)
+        ... )
+        >>> loader = DataLoader(multi, batch_sampler=sampler)  # doctest: +SKIP
+
+    See Also
+    --------
+    MultiDatasetSampler : Emit single indices for stochastic per-sample mixing.
+    MultiDataset : The concatenated dataset these global indices address.
     """
 
     def __init__(

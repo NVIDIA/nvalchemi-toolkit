@@ -45,6 +45,7 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+from _dd_harness import free_port
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
@@ -56,9 +57,6 @@ from nvalchemi.neighbors import compute_neighbors
 
 _N_ATOMS = 24
 _CUTOFF = 2.5
-
-# Per-toy rendezvous port so concurrently-parametrized spawns do not collide.
-_PORTS = {"mpnn": "29903", "dense": "29904", "dense_full": "29905"}
 
 
 def _full_batch() -> Batch:
@@ -88,6 +86,25 @@ def _reference(model):
     energy = model(batch)["energy"]
     (grad,) = torch.autograd.grad(energy.sum(), pos)
     return energy.detach(), -grad
+
+
+def _reference_stress(model):
+    """Single-process stress by the same strain trick the framework applies."""
+    batch = _full_batch()
+    compute_neighbors(batch, config=model.model_config.neighbor_config)
+    pos = batch._atoms_group["positions"].detach()
+    strain = torch.zeros(batch.num_graphs, 3, 3, dtype=pos.dtype, requires_grad=True)
+    eps = 0.5 * (strain + strain.transpose(-1, -2))
+    bidx = batch.batch_idx.long()
+    batch._atoms_group["positions"] = pos + torch.einsum(
+        "nij,nj->ni", eps.index_select(0, bidx), pos
+    )
+    cell0 = batch.cell
+    object.__setattr__(batch, "cell", cell0 + torch.einsum("bij,bjk->bik", cell0, eps))
+    energy = model(batch)["energy"]
+    (virial,) = torch.autograd.grad(energy.sum(), strain)
+    volume = torch.linalg.det(cell0).abs().reshape(-1, 1, 1)
+    return (virial / volume).detach()
 
 
 def _owned_counts(n: int, world: int) -> list[int]:
@@ -120,8 +137,8 @@ def _build_toy(kind: str):
 
 
 def _worker(rank: int, world: int, kind: str, port: str) -> None:
-    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
-    os.environ.setdefault("MASTER_PORT", port)
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = port
     dist.init_process_group("gloo", rank=rank, world_size=world)
     from torch.distributed.device_mesh import init_device_mesh  # noqa: PLC0415
 
@@ -131,6 +148,10 @@ def _worker(rank: int, world: int, kind: str, port: str) -> None:
     model, spec = _build_toy(kind)
 
     e_ref, f_ref = _reference(model)
+    # Stress rides the framework's strain trick over the replicated geometry;
+    # each rank differentiates only its owned energy, so the virials sum.
+    model.model_config.active_outputs = {"energy", "forces", "stress"}
+    s_ref = _reference_stress(model)
 
     cfg = DomainConfig(cutoff=_CUTOFF, mesh=mesh)
     full = _full_batch() if rank == 0 else None
@@ -145,6 +166,20 @@ def _worker(rank: int, world: int, kind: str, port: str) -> None:
     n_owned = counts[rank]
 
     torch.testing.assert_close(out["energy"], e_ref, rtol=1e-9, atol=1e-9)
+    # A near-zero reference would let any distributed value pass.
+    assert s_ref.abs().max() > 1e-9, (
+        f"reference stress {s_ref.abs().max().item():.3e} is at the tolerance "
+        f"floor; the comparison would not detect a wrong stress"
+    )
+    torch.testing.assert_close(
+        out["stress"].reshape(s_ref.shape),
+        s_ref,
+        rtol=1e-8,
+        atol=1e-10,
+        msg=lambda m: (
+            f"rank {rank}: graph-parallel stress disagrees with single-process\n{m}"
+        ),
+    )
     torch.testing.assert_close(
         out["forces"], f_ref[offset : offset + n_owned], rtol=1e-8, atol=1e-8
     )
@@ -157,10 +192,10 @@ def _worker(rank: int, world: int, kind: str, port: str) -> None:
 @pytest.mark.parametrize("kind", ["mpnn", "dense", "dense_full"])
 @pytest.mark.parametrize("world", [2, 3])
 def test_graph_parallel_model(kind: str, world: int) -> None:
-    mp.spawn(_worker, args=(world, kind, _PORTS[kind]), nprocs=world)
+    mp.spawn(_worker, args=(world, kind, free_port()), nprocs=world)
 
 
 if __name__ == "__main__":
     for _kind in ("mpnn", "dense", "dense_full"):
         for _w in (2, 3):
-            mp.spawn(_worker, args=(_w, _kind, _PORTS[_kind]), nprocs=_w)
+            mp.spawn(_worker, args=(_w, _kind, free_port()), nprocs=_w)

@@ -93,6 +93,7 @@ def _make_partitioner(
         part.cells_per_dim = SpatialPartitioner.balance_cells_for_ranks(
             part.cells_per_dim, part.rank_grid
         )
+    part._span = part.neighbor_span()
     part._neighbor_ranks = part._compute_all_neighbor_ranks()
     # __init__ caches the cell-matrix inverse for ``assign_atoms_to_ranks``;
     # mirror it here since this helper bypasses __init__.
@@ -453,3 +454,64 @@ class TestRankToGridCoords:
         for rank in range(total):
             rx, ry, rz = part.rank_to_grid_coords(rank)
             assert rx + Px * (ry + Py * rz) == rank
+
+
+class TestNeighborSpan:
+    """Ghost shells wider than one rank domain must reach past adjacent ranks.
+
+    A shell that spans two or more domains but only ever talks to +/-1 silently
+    drops every interaction crossing the gap. Two ways in: many ranks over a
+    small cell, and a barostat contracting the box under a fixed rank grid.
+    """
+
+    def test_span_is_one_when_ghost_fits_in_a_domain(self):
+        """The common case stays at +/-1 — no extra communication."""
+        cell = _make_orthorhombic_cell(28.0, 28.0, 28.0)
+        part = _make_partitioner(cell, cutoff=5.0, world_size=8)
+        assert part.neighbor_span() == (1, 1, 1)
+
+    def test_span_grows_when_ghost_exceeds_domain(self):
+        """Many ranks over a small cell push the shell past one domain."""
+        cell = _make_orthorhombic_cell(28.0, 28.0, 28.0)
+        part = _make_partitioner(cell, cutoff=5.0, world_size=216)
+        widths = part.domain_widths()
+        ghost = part.config.effective_ghost_width()
+        # At least one axis must be narrower than the ghost for this to bite.
+        assert min(widths) < ghost
+        assert max(part.neighbor_span()) > 1
+
+    def test_wide_ghost_reaches_ranks_two_domains_away(self):
+        """The neighbour list must contain the rank two domains along an axis."""
+        cell = _make_orthorhombic_cell(24.0, 24.0, 24.0)
+        # 8 ranks along x: domain = 3.0 A, ghost = 5.5 A -> span 2.
+        part = _make_partitioner(cell, cutoff=5.0, world_size=8, grid_dims=(8, 1, 1))
+        assert part.rank_grid == (8, 1, 1)
+        assert part.neighbor_span()[0] >= 2
+        neighbors = part.get_neighbor_ranks(3)
+        for expected in (1, 2, 4, 5):  # +/-1 AND +/-2 along x
+            assert expected in neighbors, (
+                f"rank {expected} is within the ghost shell of rank 3 but is "
+                f"not a neighbour; got {sorted(neighbors)}"
+            )
+
+    def test_contraction_rebuilds_the_neighbor_set(self):
+        """A barostat shrinking the box must widen the neighbour set."""
+        cell = _make_orthorhombic_cell(48.0, 48.0, 48.0)
+        part = _make_partitioner(cell, cutoff=5.0, world_size=8, grid_dims=(8, 1, 1))
+        assert part.neighbor_span()[0] == 1
+        before = set(part.get_neighbor_ranks(3))
+
+        part.update_cell(_make_orthorhombic_cell(20.0, 20.0, 20.0))
+
+        assert part.neighbor_span()[0] >= 2
+        after = set(part.get_neighbor_ranks(3))
+        assert after > before, (
+            "contraction narrowed every domain but the neighbour set did not "
+            f"grow: {sorted(before)} -> {sorted(after)}"
+        )
+
+    def test_raises_when_shell_wraps_onto_own_image(self):
+        """Stop clearly rather than silently dropping the self-image ghost."""
+        cell = _make_orthorhombic_cell(6.0, 6.0, 6.0)
+        with pytest.raises(ValueError, match="own\\s+periodic image"):
+            _make_partitioner(cell, cutoff=5.0, world_size=4, grid_dims=(4, 1, 1))

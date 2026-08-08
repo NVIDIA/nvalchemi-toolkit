@@ -120,14 +120,6 @@ class BaseSpec(BaseModel):
     ``__init__`` kwarg of its target class plus the two metadata fields
     defined here.
 
-    Attributes
-    ----------
-    cls_path
-        Dotted path (``"module.submodule.QualName"``) identifying the target
-        callable. Validated at assignment time by :func:`_import_callable`.
-    timestamp
-        ISO-8601 UTC timestamp recording when the spec was created.
-
     Notes
     -----
     ``revalidate_instances="never"`` is deliberate: specs are immutable

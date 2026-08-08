@@ -424,4 +424,4 @@ def test_from_batch_honors_partition_2ranks() -> None:
 
 
 def test_from_batch_honors_partition_4ranks() -> None:
-    _gloo_spawn(4, "29681", "_from_batch_rank_assignment_worker")
+    _gloo_spawn(4, "29710", "_from_batch_rank_assignment_worker")

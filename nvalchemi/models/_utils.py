@@ -37,6 +37,7 @@ from nvalchemi._typing import (
 )
 
 __all__ = [
+    "apply_strain",
     "autograd_forces",
     "autograd_forces_and_stresses",
     "autograd_stresses",
@@ -188,18 +189,54 @@ def prepare_strain(
         device=positions.device,
     )
     displacement.requires_grad_(True)
-    symmetric_displacement = 0.5 * (displacement + displacement.mT)
-    deformation = (
-        torch.eye(3, dtype=positions.dtype, device=positions.device)
-        + symmetric_displacement
+    scaled_positions, scaled_cell = apply_strain(
+        positions, cell, batch_idx, displacement
     )
-    # Scale positions: pos'[n] = pos[n] @ deformation[system_of_atom[n]]
-    # Index into deformation per-atom, then batch-matmul each atom's row.
-    per_atom_deformation = deformation[batch_idx]  # [N, 3, 3]
-    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_deformation)
-    # Scale cell: cell'[b] = cell[b] @ deformation[b]
-    scaled_cell = torch.einsum("bij,bjk->bik", cell, deformation)
     return scaled_positions, scaled_cell, displacement
+
+
+def apply_strain(
+    positions: NodePositions,
+    cell: LatticeVectors,
+    batch_idx: BatchIndices,
+    displacement: StrainDisplacement,
+    cell_displacement: "StrainDisplacement | None" = None,
+) -> tuple[NodePositions, LatticeVectors]:
+    """Scale positions and cell through an existing strain leaf.
+
+    The half of :func:`prepare_strain` that does the deformation, split out for
+    callers that must strain against a leaf they already hold — a distributed
+    forward reapplies the same strain after every halo refresh, and a composed
+    pipeline shares one leaf across its models.
+
+    Parameters
+    ----------
+    positions : torch.Tensor
+        Atomic positions, shape ``[N, 3]``.
+    cell : torch.Tensor
+        Unit cell, shape ``[B, 3, 3]``.
+    batch_idx : torch.Tensor
+        Graph index per atom, shape ``[N]``.
+    displacement : torch.Tensor
+        Strain leaf, shape ``[B, 3, 3]``. Only its symmetric part is applied.
+    cell_displacement : torch.Tensor, optional
+        Separate leaf for the cell, when the position and cell halves of the
+        virial are read separately. Defaults to ``displacement``.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        ``(scaled_positions, scaled_cell)``.
+    """
+    eye = torch.eye(3, dtype=positions.dtype, device=positions.device)
+    deformation = eye + 0.5 * (displacement + displacement.mT)
+    if cell_displacement is None:
+        cell_deformation = deformation
+    else:
+        cell_deformation = eye + 0.5 * (cell_displacement + cell_displacement.mT)
+    scaled_positions = torch.einsum("ni,nij->nj", positions, deformation[batch_idx])
+    scaled_cell = torch.einsum("bij,bjk->bik", cell, cell_deformation)
+    return scaled_positions, scaled_cell
 
 
 def autograd_stresses(
@@ -210,9 +247,9 @@ def autograd_stresses(
     training: bool = False,
     retain_graph: bool = False,
 ) -> Stress:
-    """Compute tensile-positive Cauchy stress via autograd.
+    r"""Compute tensile-positive Cauchy stress via autograd.
 
-    Returns ``1/V * dE/d(strain)`` in eV/Å³.
+    Returns ``1/V * dE/d(strain)`` in :math:`\mathrm{eV}/\mathrm{\AA}^3`.
 
     Parameters
     ----------
@@ -232,7 +269,7 @@ def autograd_stresses(
     Returns
     -------
     torch.Tensor
-        Cauchy stress tensor of shape ``[B, 3, 3]`` in eV/Å³.
+        Cauchy stress tensor of shape ``[B, 3, 3]`` in :math:`\mathrm{eV}/\mathrm{\AA}^3`.
     """
     effective_retain = retain_graph or training
     grad = torch.autograd.grad(

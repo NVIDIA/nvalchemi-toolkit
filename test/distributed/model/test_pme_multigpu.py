@@ -209,7 +209,7 @@ def _pme_equivalence_worker(rank: int, world_size: int) -> None:
     # fp32 + FFT-based PME: tolerances slightly looser than Ewald's
     # direct k-sum because of accumulated rounding in the mesh pipeline.
     torch.testing.assert_close(
-        e_local.view(1),
+        e_local.view(1).to(e_ref.dtype),
         e_ref,
         rtol=5e-4,
         atol=5e-4,
@@ -248,7 +248,7 @@ def test_pme_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29574", _pme_equivalence_worker),
+        args=(WORLD_SIZE, "29706", _pme_equivalence_worker),
         nprocs=WORLD_SIZE,
     )
 

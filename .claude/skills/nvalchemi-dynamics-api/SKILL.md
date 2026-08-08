@@ -112,7 +112,7 @@ dynamics = DemoDynamics(
     dt=0.5,
     hooks=[
         MaxForceClampHook(max_force=10.0),
-        LoggingHook(frequency=100),
+        LoggingHook(backend="csv", log_path="md_log.csv", frequency=100),
     ],
 )
 ```
@@ -185,7 +185,8 @@ fused_3 = fused + extra_stage   # append to existing FusedStage
 
 `DistributedPipeline` chains dynamics stages across multiple ranks using
 `torch.distributed`. Each rank runs one stage; converged samples are sent
-to the next rank.
+to the next rank. This is pipeline parallelism for dynamics, distinct from
+data-parallel multi-GPU *training* (DDP).
 
 ### Composition with `|` operator
 
@@ -541,7 +542,7 @@ md = DemoDynamics(
         criteria=[{"key": "fmax", "threshold": 0.01}],
     ),
     hooks=[
-        LoggingHook(frequency=100),
+        LoggingHook(backend="csv", log_path="md_log.csv", frequency=100),
         SnapshotHook(sink=output, frequency=50),
     ],
 )

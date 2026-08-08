@@ -26,13 +26,21 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from nvalchemi.distributed._core.adapter import (
+    _ARG_TRANSFORM_REGISTRY,
+    _OUTPUT_TRANSFORM_REGISTRY,
     JitAdapter,
     MethodAdapter,
     OpAdapter,
     PythonAdapter,
+    _arg_transform_from_dict,
+    _arg_transform_to_dict,
+    _output_transform_from_dict,
+    _output_transform_to_dict,
 )
 from nvalchemi.distributed._core.op_transforms import (
     AllReduceSum,
@@ -256,7 +264,11 @@ class TestOpSpecDict:
             "0": {"type": "slice_owned"},
             "1": {"type": "slice_owned"},
         }
-        assert d["output_transforms"] == {"0": {"type": "all_reduce_sum"}}
+        # A transform carries its fields, not just its name: they select
+        # behaviour, so encoding the name alone loses the adjoint rule.
+        assert d["output_transforms"] == {
+            "0": {"type": "all_reduce_sum", "replicated_consumer": False}
+        }
         # Property accessors still work.
         assert os.owned_slice_inputs == (0, 1)
         assert os.all_reduce_outputs == (0,)
@@ -380,3 +392,57 @@ class TestMLIPSpecOutputsCollapse:
             compile=CompilePolicy(static_shapes=False),
         )
         assert plain == with_compile  # compile is compare=False
+
+
+class TestTransformFieldsSurviveRoundTrip:
+    """Every transform field must cross a process boundary.
+
+    A transform's fields change what it *does* — ``replicated_consumer`` selects
+    the all-reduce adjoint — so a field that silently reverts to its default on
+    reload changes the maths while the transform's name still matches. The walk
+    below is generic, so a newly added field is covered without anyone
+    remembering to extend this test.
+    """
+
+    @staticmethod
+    def _non_default(cls: type) -> object:
+        """Instantiate *cls* with every boolean field flipped off its default."""
+        import dataclasses
+
+        overrides = {
+            field.name: not field.default
+            for field in dataclasses.fields(cls)
+            if isinstance(field.default, bool)
+        }
+        return cls(**overrides)
+
+    @pytest.mark.parametrize(
+        ("registry", "to_dict", "from_dict"),
+        [
+            (_ARG_TRANSFORM_REGISTRY, _arg_transform_to_dict, _arg_transform_from_dict),
+            (
+                _OUTPUT_TRANSFORM_REGISTRY,
+                _output_transform_to_dict,
+                _output_transform_from_dict,
+            ),
+        ],
+    )
+    def test_every_registered_transform_round_trips(
+        self, registry, to_dict, from_dict
+    ) -> None:
+        for kind, cls in registry.items():
+            original = self._non_default(cls)
+            restored = from_dict(json.loads(json.dumps(to_dict(original))))
+            assert restored == original, (
+                f"{kind}: {original} did not survive a round trip; got {restored}. "
+                "A transform field that reverts to its default changes behaviour "
+                "on the far side of a process boundary."
+            )
+
+    def test_all_reduce_sum_keeps_its_adjoint_rule(self) -> None:
+        """The specific case: the flag selects the backward, not just metadata."""
+        original = AllReduceSum(replicated_consumer=True)
+        restored = _output_transform_from_dict(
+            json.loads(json.dumps(_output_transform_to_dict(original)))
+        )
+        assert restored.replicated_consumer is True

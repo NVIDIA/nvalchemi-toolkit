@@ -145,7 +145,9 @@ def consolidate_sharded_outputs(
     Returns
     -------
     dict[str, Any]
-        Output dict with per-rank-correct tensors. Key order preserved.
+        Output dict with per-rank-correct tensors. Keys are emitted in sorted
+        (rank-independent) order so the per-key collective schedule is identical
+        on every rank.
     """
     autograd_outputs = model_config.autograd_outputs
     if owned_only_outputs is None:
@@ -162,7 +164,8 @@ def consolidate_sharded_outputs(
     debug = _consolidation_debug_enabled() or os.environ.get("NVALCHEMI_REDUCE_DEBUG")
 
     reduced: OrderedDict[str, Any] = OrderedDict()
-    for key, value in output.items():
+    # Iterate in a rank-independent (sorted) key order:
+    for key, value in sorted(output.items()):
         if not isinstance(value, torch.Tensor):
             reduced[key] = value
             continue
@@ -266,7 +269,8 @@ def consolidate_padded_outputs(
         output_kinds = {}
 
     reduced: OrderedDict[str, Any] = OrderedDict()
-    for key, value in output.items():
+    # Rank-independent (sorted) key order
+    for key, value in sorted(output.items()):
         if not isinstance(value, torch.Tensor):
             reduced[key] = value
             continue

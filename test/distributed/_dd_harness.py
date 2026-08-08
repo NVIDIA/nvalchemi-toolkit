@@ -23,12 +23,31 @@ top-level and ``model/`` test packages can ``from _dd_harness import ...``."""
 from __future__ import annotations
 
 import os
+import socket
 from typing import Any
 
 import torch
 import torch.distributed as dist
 
-__all__ = ["init_nccl", "nccl_worker"]
+__all__ = ["free_port", "init_nccl", "nccl_worker"]
+
+
+def free_port() -> str:
+    """Return a currently-unused localhost TCP port for a rendezvous.
+
+    A hardcoded port only separates test *files*; two concurrent runs of the
+    same file (``pytest-xdist``, or a second run started by hand) still collide
+    and fail with ``EADDRINUSE``. Asking the OS for an unused port each time
+    removes that coupling.
+
+    Returns
+    -------
+    str
+        The port number, as ``init_process_group`` wants it.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return str(sock.getsockname()[1])
 
 
 def init_nccl(rank: int, world_size: int, port: str) -> None:
