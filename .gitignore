@@ -115,3 +115,4 @@ slurm-*.out
 # testmon files
 .testmondata*
 .agents/
+.vale/

@@ -64,3 +64,13 @@ repos:
         language: python
         files: \.(py|yaml|ci|release)$|Dockerfile$
         exclude: ^(docs/)
+
+  - repo: https://github.com/vale-cli/vale
+    rev: v3.17.0
+    hooks:
+      - id: vale
+        name: vale sync
+        pass_filenames: false
+        args: [sync]
+      - id: vale
+        args: [--output=line, --minAlertLevel=error]
