@@ -22,8 +22,6 @@ dynamics, hooks/reporting, and training/finetuning workflows.
   `git commit -s -m "fix: describe change"`. Pre-commit hooks are required;
   PRs that skip them are not expected to be reviewed. See `CONTRIBUTING.md`
   for DCO details, hook setup, and CI stages.
-- The PR template expects a short description, testing notes, changelog updates,
-  docstring/docs updates where applicable, and the relevant type-of-change box.
 - Keep work tightly scoped; read `docs/userguide/about/` before broad changes.
 - Pull requests must follow the template provided in `.github/pull_request_template.md`.
 Do not prose wrap when using the template.
