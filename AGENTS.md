@@ -25,6 +25,7 @@ dynamics, hooks/reporting, and training/finetuning workflows.
 - The PR template expects a short description, testing notes, changelog updates,
   docstring/docs updates where applicable, and the relevant type-of-change box.
 - Keep work tightly scoped; read `docs/userguide/about/` before broad changes.
+- Pull requests must follow the template provided in `.github/pull_request_template.md`.
 
 ## CUDA And Environment Setup
 
@@ -117,9 +118,9 @@ separately. Interrogate docstring coverage requires 95%.
 - Ruff ignores: `E501`, `S311`, `F722`, and `F821`.
 - Per-file ignores: `F401` in `__init__.py` and `docs/*.py`; `E402` and `S101`
   in `examples/*.py`; `S101` in `test/*.py`.
-- Pre-commit also runs large-file checks, trailing-whitespace, end-of-file fixer,
-  YAML checks, debug-statements, Ruff, interrogate, markdownlint with `MD024`
-  disabled, and the local license hook.
+- Make sure `pre-commit` workflow is enabled. In particular, work with
+the `vale` feedback to improve writing style. Never adjust `.vale.ini`
+unless you are given permission to do so by the user.
 - Every `.py` file must start with the exact SPDX header in
   `test/_license/header.txt`.
 - New source files should use `from __future__ import annotations`.
