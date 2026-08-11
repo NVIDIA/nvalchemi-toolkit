@@ -26,6 +26,7 @@ dynamics, hooks/reporting, and training/finetuning workflows.
   docstring/docs updates where applicable, and the relevant type-of-change box.
 - Keep work tightly scoped; read `docs/userguide/about/` before broad changes.
 - Pull requests must follow the template provided in `.github/pull_request_template.md`.
+Do not prose wrap when using the template.
 
 ## CUDA And Environment Setup
 
