@@ -72,5 +72,7 @@ repos:
         name: vale sync
         pass_filenames: false
         args: [sync]
+        files: \.(py|md|rst)$
       - id: vale
         args: [--output=line, --minAlertLevel=suggestion]
+        files: \.(py|md|rst)$
