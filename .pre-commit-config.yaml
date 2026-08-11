@@ -73,4 +73,4 @@ repos:
         pass_filenames: false
         args: [sync]
       - id: vale
-        args: [--output=line, --minAlertLevel=error]
+        args: [--output=line, --minAlertLevel=suggestion]
