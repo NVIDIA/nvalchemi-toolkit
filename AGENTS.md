@@ -117,9 +117,12 @@ separately. Interrogate docstring coverage requires 95%.
 - Ruff ignores: `E501`, `S311`, `F722`, and `F821`.
 - Per-file ignores: `F401` in `__init__.py` and `docs/*.py`; `E402` and `S101`
   in `examples/*.py`; `S101` in `test/*.py`.
-- Make sure `pre-commit` workflow is enabled. In particular, work with
-the `vale` feedback to improve writing style. Never adjust `.vale.ini`
-unless you are given permission to do so by the user.
+- Run the `pre-commit` workflow. Vale provides non-gating,
+  opinionated writing feedback, so its hook can report `Passed` while still
+  printing findings. Read the Vale output, address valid findings in prose you
+  changed, and report any findings you intentionally leave unresolved. Never
+  treat a passing Vale hook as evidence that Vale produced no feedback, and
+  never adjust `.vale.ini` unless the user gives permission.
 - Every `.py` file must start with the exact SPDX header in
   `test/_license/header.txt`.
 - New source files should use `from __future__ import annotations`.
