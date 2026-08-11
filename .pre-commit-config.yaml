@@ -27,6 +27,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        files: \.(yml|yaml)$
         exclude: .gitlab-ci.yml
       - id: debug-statements
 
