@@ -188,6 +188,15 @@ docs-clean:  ## Clean documentation build
 .PHONY: docs-rebuild
 docs-rebuild: docs-clean docs  ## Clean and rebuild documentation
 
+.PHONY: vale
+vale:  # run vale only on staged files
+	pre-commit run vale
+
+.PHONY: vale-unstaged
+vale-unstaged:  # run vale writing style linter on unstaged files
+	pre-commit run vale --files $(git diff --name-only) \
+		$(git ls-files --others --exclude-standard)
+
 # ==============================================================================
 # BUILD & PACKAGING
 # ==============================================================================
