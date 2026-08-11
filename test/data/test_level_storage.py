@@ -773,8 +773,8 @@ class TestSegmentedLevelStorage:
         assert len(src) == 0
         assert src.num_elements() == 0
 
-    def test_put_twice_restores_batch_ptr_capacity(self):
-        """put re-extends batch_ptr from the stored capacity, so repeated puts append."""
+    def test_repeated_put_appends_within_capacity(self):
+        """Repeated puts into a buffer with spare batch_ptr capacity keep appending."""
         device = "cpu"
         dest = SegmentedLevelStorage(
             data={"x": torch.zeros(10, 1, device=device, dtype=torch.float32)},
