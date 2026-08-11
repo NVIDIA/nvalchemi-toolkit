@@ -1,0 +1,192 @@
+{
+  "fixWithAI": false,
+  "commentTypes": [
+    "logic",
+    "syntax",
+    "style"
+  ],
+  "ignorePatterns": ".greptile/**\n",
+  "excludeAuthors": [
+    "dependabot[bot]"
+  ],
+  "summarySection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": false
+  },
+  "confidenceScoreSection": {
+    "included": false,
+    "defaultOpen": false,
+    "collapsible": false
+  },
+  "sequenceDiagramSection": {
+    "included": false,
+    "defaultOpen": false,
+    "collapsible": false
+  },
+  "instructions": "In addition to the regular code review, run every applicable agent-skill alignment rule. Compare the scoped skill with the implementation and public documentation as they exist after the PR. Only report concrete mismatches introduced or left in place by the PR; do not require a skill edit for an internal change that preserves the documented API and workflow. For each mismatch, identify the outdated claim, import, signature, example, or behavior and request that the skill be refreshed in the same PR.",
+  "rules": [
+    {
+      "id": "skill-data-structures-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-data-structures/SKILL.md` against the AtomicData and Batch implementation and data user guide. Verify its imports, fields, shapes, dtype/device behavior, serialization, batching, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-structures/SKILL.md",
+        "nvalchemi/_serialization.py",
+        "nvalchemi/_typing.py",
+        "nvalchemi/data/atomic_data.py",
+        "nvalchemi/data/batch.py",
+        "nvalchemi/data/data.py",
+        "docs/userguide/data.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-data-storage-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-data-storage/SKILL.md` against the Zarr-backed reader, writer, dataset, dataloader, sampler, and level-storage implementation. Verify its imports, constructor arguments, append/read semantics, composition, custom-reader contract, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-storage/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-zarr-performance-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-zarr-perf/SKILL.md` against the current Zarr storage, Dataset, DataLoader, sampler, and `nvalchemi-io-test` implementation. Verify tuning knobs, defaults, benchmark commands, read modes, and performance guidance remain supported and accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-zarr-perf/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/io_test.py",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-model-wrapping-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-model-wrapping/SKILL.md` against BaseModelMixin, ModelConfig, model adapters, and model documentation. Verify configuration fields, input/output adaptation, autograd behavior, embedding hooks, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-model-wrapping/SKILL.md",
+        "nvalchemi/models/**",
+        "docs/userguide/models.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-training-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-training-api/SKILL.md` against the training strategy, runtime, specs, hooks, checkpointing, optimizer, validation, CLI, and distributed-training implementation. Verify construction, lifecycle, extension points, resume behavior, DDP guidance, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-training-api/SKILL.md",
+        "nvalchemi/training/**",
+        "docs/userguide/training.md",
+        "docs/userguide/distributed_training.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-fine-tuning-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-fine-tuning/SKILL.md` against FineTuningStrategy, model specs, checkpoint loading, CLI, and fine-tuning hooks. Verify pretrained initialization, patch/freeze behavior, serialization, resume distinctions, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-fine-tuning/SKILL.md",
+        "nvalchemi/training/_checkpoint.py",
+        "nvalchemi/training/_spec.py",
+        "nvalchemi/training/_spec_utils.py",
+        "nvalchemi/training/cli.py",
+        "nvalchemi/training/finetune.py",
+        "nvalchemi/training/hooks/checkpoint.py",
+        "nvalchemi/training/hooks/finetune.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/finetuning.md",
+        "docs/userguide/training_finetuning.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-loss-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-loss-api/SKILL.md` against the loss base classes, composition, reductions, schedules, terms, and loss documentation. Verify loss names, template-method hooks, masking, weighting, dtype policy, layout dispatch, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-loss-api/SKILL.md",
+        "nvalchemi/training/losses/**",
+        "docs/userguide/losses.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-api/SKILL.md` against the public dynamics, pipeline, sampler, sink, and hook integration APIs. Verify available classes, configuration, composition operators, execution lifecycle, convergence, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-api/SKILL.md",
+        "nvalchemi/dynamics/**",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md",
+        "docs/userguide/dynamics_sinks.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-hooks-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-hooks/SKILL.md` against the shared hook protocol, registry, contexts, stages, and dynamics hook implementations. Verify registration, ordering, frequency, lifecycle, callback signatures, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-hooks/SKILL.md",
+        "nvalchemi/hooks/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/**",
+        "docs/userguide/hooks.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-implementation-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-implementation/SKILL.md` against BaseDynamics, integrators, optimizers, low-level dynamics operations, and samplers. Verify subclass contracts, step ordering, required state, composition, distributed behavior, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-implementation/SKILL.md",
+        "nvalchemi/dynamics/_ops/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/integrators/**",
+        "nvalchemi/dynamics/optimizers/**",
+        "nvalchemi/dynamics/sampler.py",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-reporting-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-reporting/SKILL.md` against reporting protocols, orchestrator, Rich and TensorBoard reporters, layouts, scalars, and dynamics logging. Verify stages, lifecycle ownership, distributed behavior, callback contracts, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-reporting/SKILL.md",
+        "nvalchemi/hooks/reporting/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/logging.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/reporting.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-distributed-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-distributed/SKILL.md` against domain decomposition, ShardTensor, distribution specs, adapters, compilation, validation, distributed dynamics, and runtime utilities. Verify supported strategies, storage policies, hook scopes, global reductions, imports, launch guidance, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-distributed/SKILL.md",
+        "nvalchemi/distributed/**",
+        "examples/distributed/**",
+        "docs/userguide/distributed.md",
+        "docs/userguide/distributed_byo.md",
+        "docs/userguide/distributed_design.md",
+        "docs/userguide/distributed_shardtensor.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-catalog-alignment",
+      "rule": "When a skill is added, removed, renamed, or its routing description changes, check that `.claude/skills/README.md`, the Agent Skills table in `AGENTS.md`, and `docs/userguide/agent_skills.md` expose the same skill names and routing guidance. Do not require catalog edits for content-only changes that leave routing unchanged.",
+      "scope": [
+        ".claude/skills/**",
+        "AGENTS.md",
+        "docs/userguide/agent_skills.md"
+      ],
+      "severity": "medium"
+    }
+  ]
+}
