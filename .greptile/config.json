@@ -63,6 +63,22 @@
       "severity": "medium"
     },
     {
+      "id": "keep-inline-comments-concise",
+      "rule": "Review inline comments in newly added or substantially changed function and method bodies. Prefer comments that explain intent in one or two concise lines. Flag long comment blocks that can be shortened, moved to a docstring or design document, or replaced by clearer names and structure, and flag dense stretches where comments narrate nearly every small operation (for example, comments on roughly every other line) instead of documenting a few important decisions. Ask the author to consolidate or rewrite the comments while preserving essential rationale. Do not enforce a rigid line or density limit when a precise mathematical derivation, distributed invariant, safety constraint, or non-obvious workaround genuinely needs more explanation. Ignore SPDX/license headers, section headings, tool directives such as `noqa` and `type: ignore`, generated code, and vendored or upstream code.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "explain-non-obvious-intent",
+      "rule": "Review newly added or substantially changed code and its immediate context for decisions whose intent cannot be inferred reliably from the code alone. Request a short inline comment explaining why when behavior depends on a non-obvious ordering, synchronization or collective constraint, shape/dtype/device workaround, cache invalidation rule, compatibility requirement, exception-safety concern, or performance tradeoff. The comment should normally be one or two lines and explain the reason, not restate what the next statement does. Sparse comments alone are not a defect: do not apply a comment quota, request narration of straightforward code, or use inline comments in place of public API docstrings or user documentation.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
       "id": "skill-data-structures-alignment",
       "rule": "Check `.claude/skills/nvalchemi-data-structures/SKILL.md` against the AtomicData and Batch implementation and data user guide. Verify its imports, fields, shapes, dtype/device behavior, serialization, batching, and examples are accurate.",
       "scope": [
