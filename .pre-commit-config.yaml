@@ -75,5 +75,7 @@ repos:
         args: [sync]
         files: \.(py|md|rst)$
       - id: vale
-        args: [--output=line, --minAlertLevel=suggestion]
+        entry: uv run --no-project --with docutils==0.22.4 vale
+        args: [--no-exit, --output=line, --minAlertLevel=suggestion]
         files: \.(py|md|rst)$
+        verbose: true
