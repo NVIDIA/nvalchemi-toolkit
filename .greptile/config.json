@@ -24,8 +24,44 @@
     "defaultOpen": false,
     "collapsible": false
   },
-  "instructions": "In addition to the regular code review, run every applicable agent-skill alignment rule. Compare the scoped skill with the implementation and public documentation as they exist after the PR. Only report concrete mismatches introduced or left in place by the PR; do not require a skill edit for an internal change that preserves the documented API and workflow. For each mismatch, identify the outdated claim, import, signature, example, or behavior and request that the skill be refreshed in the same PR.",
+  "instructions": "In addition to the regular code review, run every applicable custom rule. For agent-skill alignment rules, compare the scoped skill with the implementation and public documentation as they exist after the PR. Only report concrete mismatches introduced or left in place by the PR; do not require a skill edit for an internal change that preserves the documented API and workflow. For each mismatch, identify the outdated claim, import, signature, example, or behavior and request that the skill be refreshed in the same PR.",
   "rules": [
+    {
+      "id": "prefer-composition-syntactic-sugar",
+      "rule": "Prefer the toolkit's established composition operators at call sites when they exactly match the intended semantics instead of manually constructing an equivalent wrapper or orchestrator. Examples include `fused = fire2 + nve` for same-device `BaseDynamics` stages, `pipeline = stage_a | stage_b` for a `DistributedPipeline`, `model_a + model_b` for additive model pipelines, arithmetic composition for weighted losses, and `hook_a + hook_b` for training-update hooks. Do not recommend syntactic sugar when explicit construction is needed for non-default status codes, rank mappings, synchronization, configuration, or when the changed code implements or demonstrates the lower-level constructor itself.",
+      "scope": [
+        "nvalchemi/**",
+        "examples/**",
+        "docs/userguide/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "prefer-lifecycle-context-managers",
+      "rule": "Prefer `with` at call sites for lifecycle-aware toolkit objects when their context manager owns meaningful setup or teardown, such as CUDA streams, lazy compilation, distributed initialization and cleanup, hooks, reporters, readers, datasets, or other resources. For example, use `with fused:` or `with pipeline:` around dynamics execution when that lifecycle behavior is needed. Do not suggest redundant nesting when `run()` already manages the relevant resource, when explicit lifecycle calls are intentional, or when the changed code implements or tests the context-manager protocol; any manual lifecycle must remain exception-safe.",
+      "scope": [
+        "nvalchemi/**",
+        "examples/**",
+        "docs/userguide/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "avoid-over-private-user-apis",
+      "rule": "Review newly added or substantially changed private functions and methods for behavior that should be part of the public API. Recommend a documented public function, method, protocol, or extension point only when there is a concrete user need to call, override, configure, or compose that behavior and exposing it is consistent with nearby public APIs. Do not recommend exposing internal invariants, low-level kernels, lifecycle plumbing, compatibility shims, or implementation details that would unnecessarily freeze the design; do not flag a helper merely because its name starts with an underscore.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "avoid-one-off-private-helpers",
+      "rule": "Review newly introduced private helpers that are short, perform one obvious operation, and have exactly one call site in the PR with no other direct or indirect repository usage. Suggest inlining the helper into its caller when that improves locality and consolidation without duplicating logic. Before commenting, check for decorators, callbacks, dispatch registration, overrides, compile boundaries, tests, or likely reuse. Do not suggest inlining when the helper names a meaningful domain concept, isolates non-trivial validation, error handling, cleanup, or performance-sensitive code, or creates a useful testing or extension seam.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
     {
       "id": "skill-data-structures-alignment",
       "rule": "Check `.claude/skills/nvalchemi-data-structures/SKILL.md` against the AtomicData and Batch implementation and data user guide. Verify its imports, fields, shapes, dtype/device behavior, serialization, batching, and examples are accurate.",
