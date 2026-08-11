@@ -1,0 +1,1 @@
+# Intentionally empty; this vocabulary only provides spelling exceptions.

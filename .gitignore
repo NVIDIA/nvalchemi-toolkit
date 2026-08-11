@@ -115,4 +115,12 @@ slurm-*.out
 # testmon files
 .testmondata*
 .agents/
-.vale/
+.vale/*
+!.vale/styles/
+.vale/styles/*
+!.vale/styles/config/
+.vale/styles/config/*
+!.vale/styles/config/vocabularies/
+.vale/styles/config/vocabularies/*
+!.vale/styles/config/vocabularies/Toolkit/
+!.vale/styles/config/vocabularies/Toolkit/**
