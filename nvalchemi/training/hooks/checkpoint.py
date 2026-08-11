@@ -53,36 +53,6 @@ class CheckpointHook(BaseModel):
     previous write before capturing the next snapshot so manifest indices stay
     ordered.
 
-    Parameters
-    ----------
-    checkpoint_dir : Path | str
-        Directory where checkpoint manifests and component state files are
-        written.
-    step_interval : int | None, optional
-        Save every N completed optimizer steps. Skipped optimizer steps do not
-        advance this cadence. Exactly one of ``step_interval`` or
-        ``epoch_interval`` must be provided.
-    epoch_interval : int | None, optional
-        Save every N completed epochs. Exactly one of ``step_interval`` or
-        ``epoch_interval`` must be provided.
-    async_save : bool, optional
-        If ``True``, write captured snapshots on a background thread. If
-        ``False``, write synchronously during hook dispatch. Default ``True``.
-    rank_zero_only : bool, optional
-        If ``True``, only distributed rank 0 writes checkpoints. Default
-        ``True``.
-    save_trainable_state_only : bool, optional
-        If ``True``, save optimizer-selected model parameters plus buffers and
-        restore model weights non-strictly. Use this only when untrained model
-        weights are reproducible from the saved model specs. Set ``False`` otherwise.
-        Default ``False``.
-
-    Attributes
-    ----------
-    last_checkpoint_index : int | None
-        Most recent checkpoint index known to have been written. In async mode,
-        this updates when the background future completes.
-
     Raises
     ------
     ValueError
@@ -129,7 +99,15 @@ class CheckpointHook(BaseModel):
     ] = False
     last_checkpoint_index: Annotated[
         int | None,
-        Field(default=None, ge=0, exclude=True),
+        Field(
+            default=None,
+            ge=0,
+            exclude=True,
+            description=(
+                "Most recent checkpoint index known to have been written. In "
+                "async mode, this updates when the background future completes."
+            ),
+        ),
     ] = None
 
     frequency: ClassVar[int] = 1

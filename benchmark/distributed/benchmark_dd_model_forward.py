@@ -60,6 +60,7 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
     """Build the ``build_harness`` callback for a forward benchmark config."""
     fwd = cfg.forward
     has_stress = fwd.get("has_stress", False)
+    is_pipeline = fwd.get("pipeline", False)
     upfront_halo = fwd.get("upfront_halo_exchange", True)
     dd_compile_capable = fwd.get("dd_compile_capable", False)
     cutoff_attr = fwd.get("cutoff_attr", "cutoff")
@@ -76,6 +77,12 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
         mesh: Any = None,
     ) -> tuple[Callable, int, torch.Tensor, torch.Tensor, torch.Tensor, Any | None]:
         from nvalchemi.data import AtomicData, Batch
+
+        # ``has_stress`` gates the stress equivalence check, so the wrapper has to
+        # be asked for it.
+        if has_stress:
+            mc = wrapper.model_config
+            mc.active_outputs = set(mc.active_outputs) | {"stress"}
 
         system = build_system(cfg, n_atoms, dtype)
         n_actual = system.positions.shape[0]
@@ -130,10 +137,20 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
         # ShardedBatch partition layout is kept consistent with it.
         strategy_kind, default_part_mode = resolve_strategy(cfg.system.strategy)
         domain_config = DomainConfig(cutoff=cutoff, mesh=mesh, strategy=strategy_kind)
-        # DD-compile (whole-forward compile over an eager model) is owned by
-        # DistributedModel and only offered by the compile-capable models.
-        dm_kwargs = {"compile": dd_compile} if dd_compile_capable else {}
-        dist_model = DistributedModel(wrapper, domain_config, **dm_kwargs)
+        if is_pipeline:
+            # A composed model decomposes over ONE shared owned partition built
+            # at the max sub-model cutoff; each sub-model then layers its own
+            # right-sized halo over it, so there is no single halo to pre-exchange.
+            from nvalchemi.distributed.distributed_pipeline import (
+                DistributedPipelineModel,
+            )
+
+            dist_model = DistributedPipelineModel(wrapper, domain_config)
+        else:
+            # DD-compile (whole-forward compile over an eager model) is owned by
+            # DistributedModel and only offered by the compile-capable models.
+            dm_kwargs = {"compile": dd_compile} if dd_compile_capable else {}
+            dist_model = DistributedModel(wrapper, domain_config, **dm_kwargs)
 
         full_batch = (
             Batch.from_data_list([_data(device)], device=device) if rank == 0 else None
@@ -145,8 +162,8 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
             partition_mode=cfg.system.partition_mode or default_part_mode,
         )
         dist_model(sharded)  # warm lazy global-NL metadata
-        halo_cfg = dist_model._halo_config
-        needs_forces = dist_model._needs_forces()
+        halo_cfg = None if is_pipeline else dist_model._halo_config
+        needs_forces = False if is_pipeline else dist_model._needs_forces()
 
         def step_dist() -> tuple:
             # Halo-storage models that don't refresh internally need an upfront

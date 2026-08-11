@@ -42,6 +42,7 @@ run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
     "1",
     "yes",
 )
+skip_gallery = os.getenv("SKIP_GALLERY", "False").lower() in ("true", "1", "yes")
 filename_pattern = os.getenv(
     "FILENAME_PATTERN", r"/[0-9]+.*\.py"
 )  # Match numbered .py files
@@ -77,12 +78,31 @@ extensions = [
     "sphinx_design",
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
-    "sphinx_gallery.gen_gallery",
     "sphinxext",
+    "sphinxcontrib.autodoc_pydantic",
 ]
+if not skip_gallery:
+    extensions.append("sphinx_gallery.gen_gallery")
 
 source_suffix = [".rst", ".md"]
 myst_enable_extensions = ["colon_fence", "dollarmath"]
+graphviz_output_format = "svg"
+graphviz_dot_args = [
+    "-Gbgcolor=#111111",
+    "-Gfontcolor=#eeeeee",
+    "-Gfontname=Arial",
+    "-Ncolor=#76b900",
+    "-Nfillcolor=#1a1a1a",
+    "-Nfontcolor=#eeeeee",
+    "-Nfontname=Arial",
+    "-Nfontsize=11",
+    "-Nshape=box",
+    "-Nstyle=rounded,filled",
+    "-Ecolor=#999999",
+    "-Efontcolor=#eeeeee",
+    "-Efontname=Arial",
+    "-Efontsize=10",
+]
 templates_path = ["_templates"]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -97,6 +117,29 @@ suppress_warnings = ["config.cache"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 
+# -- autodoc-pydantic: render models as user-facing schemas ------------------
+# Focus each model on its validated fields. Descriptions come from
+# ``Field(description=...)`` (single source of truth), so the redundant
+# constructor signature and validator/config noise are hidden.
+autodoc_pydantic_model_show_json = False
+autodoc_pydantic_model_show_config_summary = False
+autodoc_pydantic_model_show_validator_summary = False
+autodoc_pydantic_model_show_validator_members = False
+autodoc_pydantic_model_show_field_summary = False
+autodoc_pydantic_model_hide_paramlist = True
+autodoc_pydantic_model_member_order = "bysource"
+autodoc_pydantic_field_doc_policy = "description"
+autodoc_pydantic_field_show_constraints = True
+autodoc_pydantic_field_show_default = True
+autodoc_pydantic_field_list_validators = False
+autodoc_pydantic_field_swap_name_and_alias = False
+
+# Let the autosummary class template route pydantic models to autopydantic_model
+# (autodoc-pydantic does not auto-claim the plain autoclass autosummary emits).
+import sphinxext as _sphinxext  # noqa: E402
+
+autosummary_context = {"is_pydantic_model": _sphinxext.is_pydantic_model}
+
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
@@ -104,7 +147,9 @@ html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 html_css_files = [
     "css/nvidia-sphinx-theme.css",
+    "css/custom.css",
 ]
+html_js_files = [("js/install-matrix.js", {"defer": "defer"})]
 html_theme_options = {
     "logo": {
         "text": "ALCHEMI Toolkit",

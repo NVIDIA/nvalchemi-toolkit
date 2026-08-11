@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import torch
 from pydantic import Field, PrivateAttr, model_validator
@@ -160,48 +160,6 @@ class FineTuningStrategy(TrainingStrategy):
     afterward. Use ``freeze_mode="optimizer_only"`` when excluded parameters
     should still receive gradients but must not be updated by optimizers.
 
-    Parameters
-    ----------
-    peft_config : PeftConfig | None, optional
-        Parameter-efficient fine-tuning configuration. When provided, PEFT
-        registration hooks are prepended before module patches and trainable
-        parameter selection. Defaults to ``None``.
-    module_patches : dict[str, BaseSpec | torch.nn.Module], optional
-        Ordered module patches applied before optimizer construction.
-    freeze_patterns : tuple[str, ...], optional
-        Glob patterns excluded from training. Exclusions can be re-included by
-        ``trainable_patterns``. Must be empty when ``peft_config`` is provided.
-    trainable_patterns : tuple[str, ...], optional
-        Glob patterns included in the trainable parameter allow-list. When no
-        ``freeze_patterns`` are supplied, this is the complete allow-list for
-        parameters not already registered as trainable, such as module patch
-        parameters. With ``peft_config``, use only for extra parameters beyond
-        adapters and module patches.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Whether excluded parameters are temporarily frozen via
-        ``requires_grad=False`` or only excluded from optimizers. Defaults to
-        ``"requires_grad"``.
-    compute_base_fingerprints : bool, optional
-        Used only when ``peft_config`` is provided. If ``True``, compute
-        base-model fingerprints and include them in strategy metadata for
-        compatibility checks when loading PEFT checkpoints into a fresh base
-        model. Defaults to ``True``.
-
-    Attributes
-    ----------
-    peft_config : PeftConfig | None
-        Parameter-efficient fine-tuning configuration.
-    module_patches : dict[str, BaseSpec | torch.nn.Module]
-        User-declared module patches.
-    freeze_patterns : tuple[str, ...]
-        Parameter exclusion patterns.
-    trainable_patterns : tuple[str, ...]
-        Trainable parameter allow-list patterns.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Parameter-freezing mode.
-    compute_base_fingerprints : bool
-        Whether PEFT base-model fingerprints are computed and serialized.
-
     Examples
     --------
     Replace a readout head, train only that head, and serialize the workflow
@@ -256,12 +214,58 @@ class FineTuningStrategy(TrainingStrategy):
         )
     """
 
-    peft_config: PeftConfig | None = None
-    module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(default_factory=dict)
-    freeze_patterns: tuple[str, ...] = ()
-    trainable_patterns: tuple[str, ...] = ()
-    freeze_mode: FreezeMode = "requires_grad"
-    compute_base_fingerprints: bool = True
+    peft_config: PeftConfig | None = Field(
+        default=None,
+        description=(
+            "Parameter-efficient fine-tuning configuration. When provided, PEFT "
+            "registration hooks are prepended before module patches and trainable "
+            "parameter selection."
+        ),
+    )
+    module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(
+        default_factory=dict,
+        description="Ordered module patches applied before optimizer construction.",
+    )
+    freeze_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns excluded from training. Exclusions can be "
+                "re-included by ``trainable_patterns``. Must be empty when "
+                "``peft_config`` is provided."
+            )
+        ),
+    ] = ()
+    trainable_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns included in the trainable parameter allow-list. "
+                "When no ``freeze_patterns`` are supplied, this is the complete "
+                "allow-list for parameters not already registered as trainable, "
+                "such as module patch parameters. With ``peft_config``, use only "
+                "for extra parameters beyond adapters and module patches."
+            )
+        ),
+    ] = ()
+    freeze_mode: Annotated[
+        FreezeMode,
+        Field(
+            description=(
+                "Whether excluded parameters are temporarily frozen via "
+                "``requires_grad=False`` or only excluded from optimizers. "
+                'Defaults to ``"requires_grad"``.'
+            )
+        ),
+    ] = "requires_grad"
+    compute_base_fingerprints: bool = Field(
+        default=True,
+        description=(
+            "Used only when peft_config is provided. If True, compute base-model "
+            "fingerprints and include them in strategy metadata for compatibility "
+            "checks when loading PEFT checkpoints into a fresh base model."
+        ),
+    )
 
     # Run-time states populated by hooks (e.g., ModulePatchHook and TrainableParameterHook) to keep track
     # of trainable and managed parameter names so that the individual hook implementations can be kept modular.
@@ -277,7 +281,7 @@ class FineTuningStrategy(TrainingStrategy):
     _trainable_parameter_summary: dict[str, dict[str, int]] = PrivateAttr(
         default_factory=dict
     )
-
+      
     @property
     def trainable_parameter_summary(self) -> Mapping[str, dict[str, int]]:
         """Return trainable parameter counts grouped by registration source."""

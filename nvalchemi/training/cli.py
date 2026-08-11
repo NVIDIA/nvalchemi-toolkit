@@ -163,7 +163,33 @@ def _training_stage(value: Any) -> TrainingStage:
 
 
 class HookSpec(BaseModel):
-    """JSON-ready constructor spec for a runtime hook."""
+    """Serialized constructor payload for a single runtime training hook.
+
+    A ``HookSpec`` is the innermost hook layer in the CLI job envelope: it
+    mirrors the ``BaseSpec`` JSON emitted for a hook, carrying the dotted
+    ``cls_path`` to import and a ``timestamp``, while ``extra="allow"`` retains
+    the remaining keyword fields that get unpacked into the hook constructor
+    at build time. It is wrapped by :class:`RuntimeHookSpec`, which pairs it
+    with optional stage overrides; execution code turns it into a live hook via
+    ``create_model_spec_from_json(...).build()`` (see ``_build_checked_hook``).
+
+    Examples
+    --------
+    A checkpoint hook spec as it appears inside ``source.hooks``::
+
+        HookSpec(
+            cls_path="nvalchemi.training.hooks.checkpoint.CheckpointHook",
+            timestamp="2026-01-01T00:00:00Z",
+            checkpoint_dir="runs/mace-ft/checkpoints",
+        )
+
+    Notes
+    -----
+    Extra keys beyond ``cls_path`` and ``timestamp`` are preserved (not
+    rejected) and are forwarded as constructor keyword arguments; the built
+    object must satisfy :class:`Hook`, :class:`CheckpointableHook`, or
+    :class:`TrainingUpdateHook` or validation of the enclosing spec fails.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -178,7 +204,37 @@ class HookSpec(BaseModel):
 
 
 class RuntimeHookSpec(BaseModel):
-    """Runtime hook specification carried by CLI job JSON."""
+    """Runtime hook entry with optional training-stage overrides.
+
+    Each element of ``SourceSpec.hooks`` is a ``RuntimeHookSpec``: it wraps one
+    :class:`HookSpec` (the ``spec`` constructor payload) and an optional list of
+    :class:`TrainingStage` names in ``stages`` that override where the hook
+    fires. When several stages are listed, execution builds one hook instance
+    per stage. These hooks are attached at run time by CLI execution code and
+    are deliberately not part of ``FineTuningStrategy.to_spec_dict()``.
+
+    Examples
+    --------
+    Fire a logging hook before and after each forward pass::
+
+        RuntimeHookSpec(
+            spec={
+                "cls_path": "nvalchemi.training.hooks.logging.LoggingHook",
+                "timestamp": "2026-01-01T00:00:00Z",
+            },
+            stages=["BEFORE_FORWARD", "AFTER_FORWARD"],
+        )
+
+    Notes
+    -----
+    A ``before`` validator accepts two JSON shapes: the explicit
+    ``{"spec": ..., "stages": ...}`` form above, or a bare ``BaseSpec`` object
+    (one containing ``cls_path``) whose ``stages``/``stage`` keys are lifted out
+    automatically. Stage names are normalized and the hook is trial-built during
+    validation, so an unimportable ``cls_path`` or a wrong hook type fails fast.
+    Omitting ``stages`` falls back to the stage stored in the spec or the hook
+    constructor default.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -230,7 +286,28 @@ class RuntimeHookSpec(BaseModel):
 
 
 class MaceSourceOptions(BaseModel):
-    """MACE-specific source options for CLI execution."""
+    """MACE-only source knobs parsed from the ``source.mace`` block.
+
+    This is the architecture-specific options model referenced in the module
+    docstring: rather than adding MACE-only fields to the shared
+    :class:`SourceSpec`, MACE options live under a namespaced ``source.mace``
+    object and are read out with :meth:`from_source`. It currently exposes the
+    atomic-energy (E0) override, either inline per-element values or a path to a
+    JSON file of them, consumed by ``MACEWrapper.from_checkpoint`` during
+    ``spec run``.
+
+    Examples
+    --------
+    Override E0 values for two elements inline::
+
+        MaceSourceOptions(atomic_energies={1: -13.6, 8: -2043.9})
+
+    Notes
+    -----
+    ``atomic_energies`` and ``atomic_energies_path`` are mutually exclusive; a
+    validator rejects setting both. :class:`TrainingJobSpec` only accepts a
+    ``source.mace`` block when ``source.model == "mace"``.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -266,7 +343,32 @@ class MaceSourceOptions(BaseModel):
 
 
 class SourceSpec(BaseModel):
-    """Model source intent for a training job."""
+    """Where the job's model comes from, plus runtime hooks to attach.
+
+    ``SourceSpec`` is the ``source`` member of :class:`TrainingJobSpec` and the
+    flat, model-agnostic envelope described in the module docstring. ``model``
+    selects the family (``native-checkpoint``, ``mace``, ``aimnet2``, or
+    ``custom``) and the shared fields cover checkpoint location, model id,
+    compile behavior, and optimizer reuse. Architecture-specific knobs are not
+    fields here: ``extra="allow"`` lets them ride along under a namespaced block
+    such as ``source.mace``, parsed by :class:`MaceSourceOptions`. ``hooks`` is a
+    list of :class:`RuntimeHookSpec` attached at execution time.
+
+    Examples
+    --------
+    Fine-tune a supported MACE model by id::
+
+        SourceSpec(model="mace", model_id="small-0b", compile_model=False)
+
+    Notes
+    -----
+    A ``before`` validator accepts a deprecated ``endpoint`` alias for
+    ``model`` and errors if the two disagree. Which fields are required is
+    enforced by :class:`TrainingJobSpec`, not here: e.g. ``native-checkpoint``
+    and ``custom`` require ``checkpoint_path``, ``mace``/``aimnet2`` require
+    ``model_id`` or ``checkpoint_path``, and the ``train`` workflow forbids both
+    ``checkpoint_path`` and ``model_id``.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -367,7 +469,32 @@ def _build_checked_hook(spec: HookSpec) -> Any:
 
 
 class DatasetSpec(BaseModel):
-    """Dataset intent for a training job."""
+    """Training (and optional validation) dataset intent for a job.
+
+    ``DatasetSpec`` is the ``dataset`` member of :class:`TrainingJobSpec`. It
+    records one training source via ``path`` or several via ``paths``, the
+    loader ``format``, an optional ``validation_path``, and a requested
+    ``batch_size``. During ``spec run`` these become a :class:`Dataset` or
+    :class:`MultiDataset` wrapped in a :class:`DataLoader`.
+
+    Examples
+    --------
+    A single-dataset intent::
+
+        DatasetSpec(path="data/domain.zarr", validation_path="data/val.zarr")
+
+    A multi-dataset intent (normalizes to the MultiDataset format)::
+
+        DatasetSpec(paths=["data/a.zarr", "data/b.zarr"])
+
+    Notes
+    -----
+    An ``after`` validator requires at least one of ``path``/``paths`` and
+    normalizes them: a single-element ``paths`` populates ``path``; more than
+    one path clears ``path`` and upgrades the default ``alchemi-zarr`` format to
+    ``alchemi-zarr-multidataset``. Setting ``path`` to a value absent from a
+    populated ``paths`` list is rejected.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -413,7 +540,24 @@ class DatasetSpec(BaseModel):
 
 
 class OutputSpec(BaseModel):
-    """Output path intent for a training job."""
+    """Filesystem destinations for a job's artifacts.
+
+    ``OutputSpec`` is the ``output`` member of :class:`TrainingJobSpec`. The
+    required ``run_dir`` holds logs and artifacts; ``checkpoint_dir`` is where
+    restartable training checkpoints are written, and ``report_path`` optionally
+    persists intent reports. These are recorded intent: writing restart
+    checkpoints still requires a ``CheckpointHook`` in ``source.hooks`` (the
+    report surfaces a warning when ``checkpoint_dir`` is set without one).
+
+    Examples
+    --------
+    ::
+
+        OutputSpec(
+            run_dir="runs/mace-ft",
+            checkpoint_dir="runs/mace-ft/checkpoints",
+        )
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -429,7 +573,26 @@ class OutputSpec(BaseModel):
 
 
 class ValidationSpec(BaseModel):
-    """Validation cadence intent for CLI-owned validation data."""
+    """How often CLI-owned validation runs during a job.
+
+    ``ValidationSpec`` is the optional ``validation`` member of
+    :class:`TrainingJobSpec`. It records only the cadence, either
+    ``every_n_epochs`` or ``every_n_steps``; the validation dataset itself comes
+    from ``DatasetSpec.validation_path``. At run time this cadence and that path
+    build the strategy's :class:`ValidationConfig`.
+
+    Examples
+    --------
+    Validate once per epoch::
+
+        ValidationSpec(every_n_epochs=1)
+
+    Notes
+    -----
+    ``every_n_epochs`` and ``every_n_steps`` are mutually exclusive (a validator
+    rejects both). Supplying a ``ValidationSpec`` requires
+    ``dataset.validation_path`` to be set, enforced by :class:`TrainingJobSpec`.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -453,7 +616,57 @@ class ValidationSpec(BaseModel):
 
 
 class TrainingJobSpec(BaseModel):
-    """CLI planning envelope around a training strategy spec dictionary."""
+    """Top-level CLI envelope describing one training or fine-tuning job.
+
+    ``TrainingJobSpec`` is the object the CLI reads from and writes to disk as a
+    single JSON file (see ``_load_job_spec`` / ``schema template``). It bundles
+    the intent needed to review and run a job: ``workflow`` (``train`` vs.
+    ``finetune``), a :class:`SourceSpec` (``source``), a :class:`DatasetSpec`
+    (``dataset``), an :class:`OutputSpec` (``output``), an optional
+    :class:`ValidationSpec` (``validation``), and ``strategy``, the JSON-ready
+    ``FineTuningStrategy.to_spec_dict()`` bundle that carries optimizers, loss,
+    devices, and trainable/freeze patterns. ``spec report`` renders this intent
+    and ``spec run`` builds the dataset, source model, hooks, and strategy from
+    it, then calls ``run(...)``. Runtime hooks live under ``source.hooks`` rather
+    than in ``strategy``, since they are attached at execution time.
+
+    Examples
+    --------
+    Because jobs are loaded from a JSON config, a minimal fine-tuning envelope
+    looks like:
+
+    .. code-block:: json
+
+        {
+          "name": "mace-fine-tune",
+          "workflow": "finetune",
+          "source": {"model": "mace", "model_id": "small-0b"},
+          "dataset": {"path": "data/domain.zarr", "format": "alchemi-zarr"},
+          "output": {"run_dir": "runs/mace-ft"},
+          "strategy": {
+            "optimizer_configs": {"main": [{"optimizer_cls": "torch.optim.AdamW",
+                                            "optimizer_kwargs": {"lr": 1e-5}}]},
+            "num_steps": 1000,
+            "devices": ["cuda"],
+            "loss_fn_spec": {"...": "ComposedLossFunction spec"}
+          }
+        }
+
+    Prefer :meth:`template` to construct a validated scaffold rather than hand-
+    writing the ``strategy`` bundle.
+
+    Notes
+    -----
+    Two ``after`` validators cross-check the pieces. ``_validate_workflow_source``
+    enforces source rules per workflow: ``train`` requires
+    ``source.model == "custom"`` and forbids ``source.checkpoint_path`` /
+    ``source.model_id``; fine-tune sources require the appropriate checkpoint or
+    model id, and a ``source.mace`` block is rejected unless the model is MACE.
+    ``_validate_strategy`` requires ``strategy`` to contain ``optimizer_configs``,
+    ``devices``, and ``loss_fn_spec`` plus exactly one of ``num_epochs`` or
+    ``num_steps``, and requires ``dataset.validation_path`` whenever
+    ``validation`` is set. ``model_config`` forbids unknown top-level keys.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

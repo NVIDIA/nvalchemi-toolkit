@@ -83,6 +83,40 @@ _FLOAT_DTYPE_TO_CODE: dict[torch.dtype, int] = {
 }
 
 
+# Per-system fields the scatter broadcasts explicitly; discovery skips them.
+_EXPLICIT_SYSTEM_FIELDS: frozenset[str] = frozenset({"cell", "pbc"})
+
+
+def _discover_system_schema(batch: Batch) -> list[dict[str, Any]]:
+    """Enumerate replicated per-system fields on *batch*.
+
+    Reads the system group directly so graph-level model inputs the producer
+    attached (total ``charge``, ``spin`` multiplicity, custom user fields via
+    ``add_system_property``) reach every rank. Without them a wrapper falls back
+    to its neutral defaults and computes a different physical system.
+    ``cell`` / ``pbc`` are excluded because the scatter broadcasts them ahead of
+    the partitioner build.
+
+    Parameters
+    ----------
+    batch : Batch
+        Source batch on the scatter rank.
+
+    Returns
+    -------
+    list[dict]
+        One entry per field with ``name``, ``dtype`` and ``shape``.
+    """
+    system = batch._system_group
+    if system is None:
+        return []
+    return [
+        {"name": name, "dtype": tensor.dtype, "shape": tuple(tensor.shape)}
+        for name, tensor in system.items()
+        if name not in _EXPLICIT_SYSTEM_FIELDS and isinstance(tensor, torch.Tensor)
+    ]
+
+
 def _discover_atom_schema(batch: Batch) -> list[dict[str, Any]]:
     """Enumerate scatter-eligible per-atom fields on *batch*.
 
@@ -153,7 +187,8 @@ class ShardedBatch(ShardedCollection):
 
     Per-atom fields are ``ShardTensor(Shard(0))`` of global shape
     ``(n_global, ...)`` with each rank physically holding ``n_owned``
-    rows. Per-system fields (``cell``, ``pbc``) are replicated.
+    rows. Per-system fields (``cell``, ``pbc``, and everything else in the
+    batch's system group, e.g. ``charge`` / ``spin``) are replicated.
 
     Obtained via :meth:`from_batch` (scatter from the source rank) and
     consumed by :class:`~nvalchemi.distributed.distributed_model.DistributedModel`
@@ -169,6 +204,7 @@ class ShardedBatch(ShardedCollection):
         pbc: torch.Tensor,
         n_global: int,
         partition_mode: str = "spatial",
+        system_fields: dict[str, torch.Tensor] | None = None,
     ) -> None:
         super().__init__(
             mesh,
@@ -177,6 +213,9 @@ class ShardedBatch(ShardedCollection):
         )
         self.cell = cell
         self.pbc = pbc
+        # Replicated per-system inputs beyond cell/pbc (total charge, spin
+        # multiplicity, custom system properties). Every rank holds all systems.
+        self.system_fields: dict[str, torch.Tensor] = system_fields or {}
         self._n_global = n_global
         # Storage flavour. ``"spatial"`` / ``"contiguous_block"`` both use
         # ShardTensor with ``Shard(0)`` placement (per-rank ``n_owned`` rows);
@@ -270,7 +309,7 @@ class ShardedBatch(ShardedCollection):
         # Single all_gather into a flat (world_size,) tensor, one sync.
         n_owned_t = torch.tensor([self.n_owned], dtype=torch.int64, device=device)
         sizes_t = torch.empty(world_size, dtype=torch.int64, device=device)
-        dist.all_gather_into_tensor(sizes_t, n_owned_t)
+        dist.all_gather_into_tensor(sizes_t, n_owned_t, group=mesh_group(self.mesh))
 
         # Build the block-constant assignment via repeat_interleave — no
         # per-rank Python loop or slicing.
@@ -340,16 +379,22 @@ class ShardedBatch(ShardedCollection):
             )
         local_rank = mesh.get_local_rank()
         # All scatter broadcasts run on the mesh's own group (the domain sub-mesh's
-        # group when this is a sliced sub-mesh of a larger pipeline × domain mesh),
+        # group when this is a sliced sub-mesh of a larger pipeline x domain mesh),
         # with the group-local ``src`` mapped to its global rank for the collective.
         # 1-D whole-mesh: group is the world group and the map is the identity.
         group = mesh_group(mesh)
 
         # --- Resolve device ---
+        # Non-src ranks have no batch to read the device from. The mesh's device
+        # type is what the collectives below run on, so preferring CUDA here
+        # would put them on a different device than a CPU-mesh src rank and
+        # deadlock the first broadcast.
         if batch is not None:
             device = batch.positions.device
-        elif torch.cuda.is_available():
-            device = torch.device(f"cuda:{torch.cuda.current_device()}")
+        elif (
+            getattr(mesh, "device_type", "cpu") == "cuda" and torch.cuda.is_available()
+        ):
+            device = torch.device("cuda", torch.cuda.current_device())
         else:
             device = torch.device("cpu")
 
@@ -468,6 +513,15 @@ class ShardedBatch(ShardedCollection):
             src=src,
         )
 
+        # --- Replicate the remaining per-system fields (charge, spin, custom
+        # system properties) so every rank models the same physical system. ---
+        system_fields = ShardedBatch._broadcast_system_fields(
+            batch if local_rank == src else None,
+            device=device,
+            src=src,
+            group=group,
+        )
+
         # Each strategy gets its natural ShardState: the spatial-halo layout
         # carries the partitioner + ghost view (:class:`HaloShardState`); graph
         # parallel gets the generic base (no halo baggage).
@@ -478,10 +532,57 @@ class ShardedBatch(ShardedCollection):
             pbc=pbc,
             n_global=n_global,
             partition_mode=partition_mode,
+            system_fields=system_fields,
         )
         if partition_mode == "spatial":
             return HaloShardState(partitioner=partitioner, **common)
         return ShardedBatch(**common)
+
+    @staticmethod
+    def _broadcast_system_fields(
+        batch: Batch | None,
+        *,
+        device: torch.device,
+        src: int,
+        group: Any,
+    ) -> dict[str, torch.Tensor]:
+        """Replicate *batch*'s per-system fields from *src* onto every rank.
+
+        Parameters
+        ----------
+        batch : Batch | None
+            Source batch on the scatter rank; ``None`` elsewhere.
+        device : torch.device
+            Device to allocate the replicated tensors on.
+        src : int
+            Group-local source rank.
+        group : Any
+            Process group to broadcast over.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Field name -> replicated tensor, identical on every rank.
+        """
+        schema = _discover_system_schema(batch) if batch is not None else None
+        holder: list[Any] = [schema]
+        if dist.is_initialized():
+            dist.broadcast_object_list(holder, src=_global_src(group, src), group=group)
+        schema = holder[0] or []
+
+        fields: dict[str, torch.Tensor] = {}
+        for entry in schema:
+            name = entry["name"]
+            if batch is not None:
+                tensor = getattr(batch, name).to(device=device).contiguous()
+            else:
+                tensor = torch.zeros(
+                    entry["shape"], dtype=entry["dtype"], device=device
+                )
+            if dist.is_initialized():
+                dist.broadcast(tensor, src=_global_src(group, src), group=group)
+            fields[name] = tensor
+        return fields
 
     # ------------------------------------------------------------------
     # Local view: per-rank owned rows as a plain Batch
@@ -540,6 +641,12 @@ class ShardedBatch(ShardedCollection):
                 ctor_kwargs[name] = tensor
             else:
                 extras[name] = tensor
+        system_extras: dict[str, torch.Tensor] = {}
+        for name, tensor in self.system_fields.items():
+            if name in ctor_known:
+                ctor_kwargs[name] = tensor
+            else:
+                system_extras[name] = tensor
         data = AtomicData.model_construct(**ctor_kwargs)
         # Custom fields (not on the model) still need add_node_property
         # for the level_storage bookkeeping. Those don't carry the
@@ -547,6 +654,9 @@ class ShardedBatch(ShardedCollection):
         # own field-validator chain, which extras bypass entirely.
         for name, tensor in extras.items():
             data.add_node_property(name, tensor)
+
+        for name, tensor in system_extras.items():
+            data.add_system_property(name, tensor)
 
         if node_properties:
             for name, tensor in node_properties.items():
@@ -595,9 +705,17 @@ class ShardedBatch(ShardedCollection):
         extras: dict[str, torch.Tensor] = {}
         for name, tensor in tensors.items():
             (ctor if name in known else extras)[name] = tensor
+        system_extras: dict[str, torch.Tensor] = {}
+        for name, tensor in self.system_fields.items():
+            if name in known:
+                ctor[name] = tensor
+            else:
+                system_extras[name] = tensor
         data = AtomicData.model_construct(**ctor)
         for name, tensor in extras.items():
             data.add_node_property(name, tensor)
+        for name, tensor in system_extras.items():
+            data.add_system_property(name, tensor)
 
         return BatchCls.from_data_list([data], device=device)
 
@@ -712,6 +830,7 @@ class HaloShardState(ShardedBatch):
         n_global: int,
         partitioner: SpatialPartitioner | None = None,
         partition_mode: str = "spatial",
+        system_fields: dict[str, torch.Tensor] | None = None,
     ) -> None:
         super().__init__(
             mesh=mesh,
@@ -720,6 +839,7 @@ class HaloShardState(ShardedBatch):
             pbc=pbc,
             n_global=n_global,
             partition_mode=partition_mode,
+            system_fields=system_fields,
         )
         # Spatial decomposition built from the broadcast geometry during
         # :meth:`ShardedBatch.from_batch`. Cached so downstream consumers
@@ -734,6 +854,20 @@ class HaloShardState(ShardedBatch):
         # ``None`` until ``halo_exchange`` runs.
         self.padded_batch: Batch | None = None
         self.halo_meta: ParticleHaloMetadata | None = None
+        # Owned-shape autograd leaves, by per-atom field name, shared by every
+        # halo built while set. ``halo_exchange`` otherwise mints a fresh
+        # ``positions`` leaf per call and gathers other fields through a plain
+        # collective, so two halos over one owned set land in disjoint graphs
+        # and non-position fields carry no gradient at all. A pinned field is
+        # instead gathered through the autograd-aware primitive, which routes
+        # each ghost row's gradient back to the owning rank. Set for the
+        # duration of such a caller's forward and cleared after.
+        self.grad_fields: dict[str, torch.Tensor] | None = None
+        # Symmetric per-system strain leaves ``(positions, cell)`` applied to
+        # the padded view by every halo built while set, so a caller taking
+        # ``d(energy)/d(strain)`` for the virial keeps them across the model's
+        # own halo refreshes. ``None`` leaves the geometry unstrained.
+        self.grad_strain: "tuple[torch.Tensor, torch.Tensor] | None" = None
 
     @property
     def partitioner(self) -> SpatialPartitioner | None:

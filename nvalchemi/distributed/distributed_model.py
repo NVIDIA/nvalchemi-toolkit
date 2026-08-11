@@ -51,8 +51,8 @@ from nvalchemi.neighbors import compute_neighbors
 
 if TYPE_CHECKING:
     from nvalchemi.distributed.sharded_batch import ShardedBatch
-    from nvalchemi.models.base import BaseModelMixin
-
+from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["DistributedModel", "DistributionError"]
 
@@ -165,6 +165,12 @@ def _prepare_dd_compile(spec: "Any", compile_kwargs: "dict | None") -> dict:
         import torch._functorch.config as _fcfg  # noqa: PLC0415
 
         _fcfg.activation_memory_budget = float(_actb)
+    # A wired consumer backwards through this graph twice; AOT's donated-buffer
+    # optimisation frees buffers the second pass needs.
+    import torch._functorch.config as _fcfg2  # noqa: PLC0415
+
+    _fcfg2.donated_buffer = False
+
     ck = dict(compile_kwargs or {})
     ck.setdefault("dynamic", False)
     return ck
@@ -182,19 +188,42 @@ def _wrapper_is_precompiled(wrapper: "Any") -> bool:
     the message-passing ops sealed inside the loader's compiled graph, so every
     rank returns an uncorrected owned-only forward.
     """
-    modules = getattr(wrapper, "modules", None)
-    if not callable(modules):
-        return False
     try:
         from torch._dynamo.eval_frame import OptimizedModule  # noqa: PLC0415
     except Exception:  # pragma: no cover - torch internal layout changed
         OptimizedModule = None
-    for m in modules():
-        if OptimizedModule is not None and isinstance(m, OptimizedModule):
+
+    def _is_optimized(obj: "Any") -> bool:
+        if OptimizedModule is not None and isinstance(obj, OptimizedModule):
             return True
-        if type(m).__name__ == "OptimizedModule":
-            return True
-    return False
+        return type(obj).__name__ == "OptimizedModule"
+
+    modules = getattr(wrapper, "modules", None)
+    if callable(modules):
+        for m in modules():
+            if _is_optimized(m):
+                return True
+    # The compiled module need not sit in the ``nn.Module`` tree — a wrapper may
+    # hold it on a plain helper object — so also scan non-Module attributes.
+    seen: set[int] = set()
+
+    def _scan(obj: "Any", depth: int) -> bool:
+        if depth < 0 or id(obj) in seen:
+            return False
+        seen.add(id(obj))
+        state = getattr(obj, "__dict__", None)
+        if not isinstance(state, dict):
+            return False
+        for value in state.values():
+            if _is_optimized(value):
+                return True
+            if isinstance(value, torch.nn.Module):
+                continue  # already covered by the tree walk
+            if hasattr(value, "__dict__") and _scan(value, depth - 1):
+                return True
+        return False
+
+    return _scan(wrapper, 2)
 
 
 def _partition_health_verdict(
@@ -453,6 +482,19 @@ class DistributedModel:
         Shared simulation config carrying the cutoff, skin, mesh, and
         optional grid_dims. The partitioner and halo config are built
         lazily from the first :class:`ShardedBatch`'s geometry.
+    spec : MLIPSpec, optional, keyword-only
+        Explicit distribution spec (the joint model x strategy product). When
+        ``None`` (default), it is obtained from
+        ``wrapper.distribution_spec(domain_config.strategy)``; a wrapper with
+        ``distribution_spec=None`` requires this argument.
+    compile : bool, optional, keyword-only
+        When ``True``, compile the energy-autograd forward path (fixed-shape
+        padded, per-rank). The spec carries only the compile contract; this
+        switch enables it. Default ``False``.
+    compile_kwargs : dict, optional, keyword-only
+        Extra keyword arguments forwarded to the compile of the distributed
+        forward, merged with the spec's compile contract. Only consulted when
+        ``compile=True``. Default ``None``.
 
     Notes
     -----
@@ -489,7 +531,7 @@ class DistributedModel:
             )
 
         # Explicit ``spec=`` wins, else ask the wrapper for the spec matching the
-        # config-selected strategy (the spec is a joint model×strategy product).
+        # config-selected strategy (the spec is a joint model x strategy product).
         if spec is None:
             _ds = getattr(wrapper, "distribution_spec", None)
             spec = (
@@ -554,6 +596,12 @@ class DistributedModel:
         # recompiles under DD and needs the raised ceiling + cross-rank-safe caches
         # (see :func:`_configure_dd_dynamo`). A no-op when nothing compiles.
         _configure_dd_dynamo()
+        # Reduced-precision fp32 breaks DD/single-process agreement; say so once.
+        from nvalchemi.distributed._runtime import (
+            warn_if_reduced_precision,  # noqa: PLC0415
+        )
+
+        warn_if_reduced_precision()
         # Fixed-shape graph padder for the compiled halo path. A model may
         # declare a custom padder via its CompilePolicy; the default is the
         # generic COO ``edge_index`` padder, so a standard MPNN declares nothing.
@@ -1006,6 +1054,19 @@ class DistributedModel:
         pos = atoms["positions"].detach().requires_grad_(True)
         atoms["positions"] = pos
 
+        # Strained before the neighbour build so the whole forward sees it.
+        want_stress = "stress" in self._wrapper.model_config.active_outputs
+        strain = cell_local = None
+        if want_stress:
+            cell_local = full.cell
+            cell_local = (
+                cell_local.to_local() if hasattr(cell_local, "to_local") else cell_local
+            )
+            atoms["positions"], strained_cell, strain = prepare_strain(
+                pos, cell_local, full.batch_idx.long()
+            )
+            object.__setattr__(full, "cell", strained_cell)
+
         assignment = sharded.rank_assignment.to(pos.device)
         counts_t = torch.bincount(assignment, minlength=world)
         counts = [int(c) for c in counts_t.tolist()]
@@ -1066,22 +1127,44 @@ class DistributedModel:
             if grp is not None
             else None
         )
-        if self._needs_forces():
-            (grad,) = torch.autograd.grad(
-                [e_partial.sum()], [pos], create_graph=False, allow_unused=True
+        want_forces = self._needs_forces()
+        if want_forces or want_stress:
+            grad_inputs = ([pos] if want_forces else []) + (
+                [strain] if want_stress else []
             )
-            f = torch.zeros_like(pos) if grad is None else -grad
-            out["forces"] = _reduce_scatter_owned(f, counts, rank, nlo, nhi, grp)
+            grads = torch.autograd.grad(
+                [e_partial.sum()],
+                grad_inputs,
+                create_graph=False,
+                allow_unused=True,
+            )
+            if want_forces:
+                grad = grads[0]
+                f = torch.zeros_like(pos) if grad is None else -grad
+                out["forces"] = _reduce_scatter_owned(f, counts, rank, nlo, nhi, grp)
+            if want_stress:
+                # Each rank's owned energy is a distinct partial, so the virials
+                # sum (no replication to divide out).
+                virial = grads[-1]
+                if virial is None:
+                    virial = torch.zeros(
+                        sharded.num_graphs, 3, 3, dtype=pos.dtype, device=pos.device
+                    )
+                virial = virial.detach()
+                if grp is not None:
+                    dist.all_reduce(virial, op=dist.ReduceOp.SUM, group=grp)
+                out["stress"] = virial / torch.det(cell_local).abs().reshape(-1, 1, 1)
         if e_handle is not None:
             e_handle.wait()
         out["energy"] = e_global
 
         self._dist_ctx.gather_meta = None
+        # Every value here is already global, so consolidation must not touch them.
         return consolidate_sharded_outputs(
             output=out,
             model_config=self._wrapper.model_config,
             world_size=self._world_size,
-            owned_only_outputs=frozenset({"energy", "forces"}),
+            owned_only_outputs=frozenset({"energy", "forces", "stress"}),
             all_reduce_outputs=frozenset(),
             halo_config=SimpleNamespace(mesh=mesh),
         )
@@ -1246,6 +1329,21 @@ class DistributedModel:
         if e_handle is not None:
             e_handle.wait()
 
+        # Other spec-declared rank partials (currently UMA stress) follow the
+        # same owned-energy algebra as energy: a raw SUM, with no /world. Mark
+        # them already global so sharded consolidation does not apply its normal
+        # replicated-energy autograd /world correction.
+        already_global_outputs = {"energy", "forces"}
+        for key in sorted(self._spec.all_reduce_outputs - already_global_outputs):
+            value = output.get(key)
+            if not isinstance(value, torch.Tensor):
+                continue
+            value = value.clone()
+            if grp is not None:
+                dist.all_reduce(value, op=dist.ReduceOp.SUM, group=grp)
+            output[key] = value
+            already_global_outputs.add(key)
+
         self._dist_ctx.gather_meta = None
         self._dist_ctx.owned_offset = 0
         _mark("reduce_outputs")
@@ -1254,7 +1352,7 @@ class DistributedModel:
             output,
             model_config=self._wrapper.model_config,
             world_size=self._world_size,
-            owned_only_outputs=frozenset({"energy", "forces"}),
+            owned_only_outputs=frozenset(already_global_outputs),
             all_reduce_outputs=frozenset(),
             halo_config=SimpleNamespace(mesh=mesh),
         )
@@ -1287,6 +1385,8 @@ class DistributedModel:
         from nvalchemi.distributed.helpers import system_sum, to_local  # noqa: PLC0415
 
         node_e = to_local(output.pop(node_energy_key))
+        # A wired consumer differentiates its own owned share, not the
+        # all-reduced total, whose backward is amplified across ranks.
         reduced = system_sum(
             node_e,
             to_local(padded_batch.batch_idx).to(torch.long),
@@ -1296,6 +1396,8 @@ class DistributedModel:
         ref = output.get("energy")
         if ref is not None:
             reduced = reduced.to(ref.dtype).reshape(ref.shape)
+        elif reduced.dim() == 1:
+            reduced = reduced.unsqueeze(-1)
         output["energy"] = reduced
         return output
 
@@ -1317,6 +1419,22 @@ class DistributedModel:
         tensile-positive Cauchy stress ``-W/V`` using the cell volume, and
         overrides the wrapper's all-local ``"stress"``. Must run inside an active
         DD context.
+
+        Parameters
+        ----------
+        output : dict[str, Any]
+            The wrapper's raw output dict; the virial key is consumed.
+        node_virial_key : str
+            Key of the per-node virial ``(n_nodes, 3, 3)``.
+        padded_batch : Batch
+            This rank's padded view, supplying ``batch_idx`` and ``cell``.
+        num_graphs : int
+            Number of systems in the batch.
+
+        Returns
+        -------
+        dict[str, Any]
+            *output* with ``"stress"`` replaced by the decomposition-correct value.
         """
         from nvalchemi.distributed._core.enums import Scope  # noqa: PLC0415
         from nvalchemi.distributed.helpers import system_sum, to_local  # noqa: PLC0415
@@ -1341,8 +1459,8 @@ class DistributedModel:
     # Compiled energy-autograd path (framework-owned)
     # ------------------------------------------------------------------
 
-    def _dd_compiled_region(self) -> Any:
-        """Build (once, cached) the compiled energy-only region.
+    def _dd_compiled_region(self, eager: bool = False) -> Any:
+        """Build (once, cached) the energy-only region.
 
         The region publishes the halo routing — carried as tensor attributes on
         the batch — so the wrapper's per-layer halo-refresh adapters fire inside
@@ -1350,7 +1468,8 @@ class DistributedModel:
         is read from the batch so Dynamo lifts it to graph inputs (it drifts per
         step and can't be baked); ``world_size`` is static and bakes in.
         """
-        region = getattr(self, "_dd_region", None)
+        attr = "_dd_region_eager" if eager else "_dd_region"
+        region = getattr(self, attr, None)
         if region is not None:
             return region
 
@@ -1375,6 +1494,17 @@ class DistributedModel:
                 )
             return wrapper.forward(batch)
 
+        if eager:
+            # Same region uncompiled, so eager and compiled cannot drift.
+            def eager_runner(batch: Any) -> Any:
+                try:
+                    return _region(batch)
+                finally:
+                    clear_compile_routing()
+
+            self._dd_region_eager = eager_runner
+            return eager_runner
+
         compiled = torch.compile(_region, backend=backend, **ck)
 
         def runner(batch: Any) -> Any:
@@ -1389,7 +1519,13 @@ class DistributedModel:
         return runner
 
     def _compiled_energy_autograd_forward(
-        self, padded_batch: "Batch", meta: Any, n_graphs: int
+        self,
+        padded_batch: "Batch",
+        meta: Any,
+        n_graphs: int,
+        eager: bool = False,
+        extra_grad_inputs: "list[Any] | None" = None,
+        retain_graph: bool = False,
     ) -> dict[str, Any]:
         """Compiled energy + autograd-force forward.
 
@@ -1413,8 +1549,10 @@ class DistributedModel:
         pos = atoms["positions"]
         pos_plain = pos.to_local() if hasattr(pos, "to_local") else pos
         # Fresh leaf so autograd.grad (outside compile) differentiates the
-        # compiled output w.r.t. it.
-        pos_plain = pos_plain.detach().requires_grad_(True)
+        # compiled output w.r.t. it, unless the caller pinned its own leaf that
+        # this padded view descends from — detaching would orphan it.
+        if not (retain_graph and pos_plain.requires_grad):
+            pos_plain = pos_plain.detach().requires_grad_(True)
 
         # Stress via the strain trick: perturb positions AND cell by a symmetric
         # per-system strain leaf, then virial = d(energy)/d(strain). Because we
@@ -1433,22 +1571,27 @@ class DistributedModel:
         if want_stress:
             _bidx = padded_batch.batch_idx
             _bidx = (_bidx.to_local() if hasattr(_bidx, "to_local") else _bidx).long()
-            strain = torch.zeros(
-                int(n_graphs), 3, 3, dtype=pos_plain.dtype, device=pos_plain.device
-            ).requires_grad_(True)
-            strain_sym = 0.5 * (strain + strain.transpose(-1, -2))
-            strain_atom = strain_sym.index_select(0, _bidx)  # [N, 3, 3]
-            pos_use = pos_plain + torch.einsum("nij,nj->ni", strain_atom, pos_plain)
             cell_orig = getattr(padded_batch, "cell", None)
-            if cell_orig is not None:
-                cell_local = (
+            cell_local = (
+                None
+                if cell_orig is None
+                else (
                     cell_orig.to_local()
                     if hasattr(cell_orig, "to_local")
                     else cell_orig
                 )
-                cell_use = cell_local + torch.einsum(
-                    "bij,bjk->bik", cell_local, strain_sym
+            )
+            # No cell (open boundary): strain the positions against a dummy so the
+            # leaf still exists and the virial is position-only.
+            _cell_in = (
+                cell_local
+                if cell_local is not None
+                else torch.zeros(
+                    int(n_graphs), 3, 3, dtype=pos_plain.dtype, device=pos_plain.device
                 )
+            )
+            pos_use, cell_use, strain = prepare_strain(pos_plain, _cell_in, _bidx)
+            if cell_local is not None:
                 object.__setattr__(padded_batch, "cell", cell_use)
             atoms["positions"] = pos_use
         else:
@@ -1481,13 +1624,14 @@ class DistributedModel:
         energy_key = _cp.energy_output
         consolidate = _cp.consolidate_node_energy
 
-        # Run energy-only through the compiled region, restoring the wrapper's
-        # active_outputs afterward.
+        # The framework owns energy / forces / stress; any other requested output
+        # is the model's own and still has to come out of the compiled region.
         mc = self._wrapper.model_config
         saved_active = mc.active_outputs
-        mc.active_outputs = {energy_key}
+        aux_keys = {k for k in saved_active if k not in ("energy", "forces", "stress")}
+        mc.active_outputs = {energy_key} | aux_keys
         try:
-            out = self._dd_compiled_region()(padded_batch)
+            out = self._dd_compiled_region(eager=eager)(padded_batch)
         finally:
             mc.active_outputs = saved_active
         e = out[energy_key]
@@ -1497,21 +1641,42 @@ class DistributedModel:
             energy = _consolidate_node_energy(
                 e, padded_batch.batch_idx.long(), int(n_graphs)
             )
+            # Wrappers accumulate in a wider dtype but return the total in the
+            # positions dtype; match that so DD and single-GPU agree.
+            if energy.dtype != pos_plain.dtype:
+                energy = energy.to(pos_plain.dtype)
         else:
             # Model self-consolidated the global per-system energy already.
             energy = e
         grad_inputs = [pos_plain] if not want_stress else [pos_plain, strain]
+        # The graph is freed here, so a wired consumer's dE/dfield must come
+        # out of this same backward.
+        n_core = len(grad_inputs)
+        if extra_grad_inputs:
+            grad_inputs = grad_inputs + list(extra_grad_inputs)
         grads = torch.autograd.grad(
             [energy],
             grad_inputs,
             grad_outputs=[torch.ones_like(energy)],
             create_graph=False,
-            retain_graph=False,
+            # A wired consumer's graph descends from the producer's, and a
+            # pinned leaf means the caller backwards through this again.
+            retain_graph=bool(extra_grad_inputs) or retain_graph,
             allow_unused=True,
         )
         grad = grads[0]
         forces = torch.zeros_like(pos_plain) if grad is None else -grad
         result: dict[str, Any] = {"energy": energy, "forces": forces}
+        for _k in aux_keys:
+            _v = out.get(_k)
+            if _v is None:
+                continue
+            # Strip the cap padding: consolidation expects the real padded view.
+            if isinstance(_v, torch.Tensor) and _v.shape[:1] == pos_plain.shape[:1]:
+                _v = _v[: int(meta.n_padded)]
+            result[_k] = _v
+        if extra_grad_inputs:
+            result["_extra_grads"] = list(grads[n_core:])
         if want_stress:
             virial = grads[1]  # d(energy)/d(strain): this rank's partial virial
             if virial is None or cell_local is None:
@@ -1527,4 +1692,9 @@ class DistributedModel:
                 result["stress"] = virial / vol
             if cell_orig is not None:
                 object.__setattr__(padded_batch, "cell", cell_orig)
-        return self._wrapper.adapt_output(result, padded_batch)
+        adapted = self._wrapper.adapt_output(result, padded_batch)
+        if "_extra_grads" in result:
+            # ``adapt_output`` would drop this, but a wired caller needs the
+            # dE/dfield from the same backward that produced the forces.
+            adapted["_extra_grads"] = result["_extra_grads"]
+        return adapted

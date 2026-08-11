@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+r"""
 PyTorch bindings for Nosé-Hoover chain (NHC) NVT integrator kernels.
 
 Wraps :mod:`nvalchemiops.dynamics.integrators.nose_hoover` as
@@ -25,13 +25,13 @@ Martyna-Tobias-Klein (MTK) equations for time-reversible integration.
 Functions
 ---------
 nhc_compute_masses
-    Compute chain masses Q_k from temperature and coupling time τ_T.
+    Compute chain masses :math:`Q_k` from temperature and coupling time :math:`\tau_T`.
 nhc_chain_update
     Propagate the NHC system, scaling particle velocities in-place.
 nhc_velocity_half_step
-    Apply half-step velocity kick: ``v += 0.5 * (F/m) * dt``.
+    Apply half-step velocity kick: :math:`v \mathrel{+}= 0.5\,(F/m)\,dt`.
 nhc_position_update
-    Apply full-step position update: ``r += v * dt``.
+    Apply full-step position update: :math:`r \mathrel{+}= v\,dt`.
 """
 
 from __future__ import annotations
@@ -69,10 +69,10 @@ def nhc_compute_masses(
     batch_idx: torch.Tensor,
     chain_length: int,
 ) -> torch.Tensor:
-    """Compute Nosé-Hoover chain masses Q_k for each system.
+    r"""Compute Nosé-Hoover chain masses :math:`Q_k` for each system.
 
     Uses the standard MTK formula:
-    ``Q_1 = N_f * kT * τ_T²``, ``Q_k = kT * τ_T²`` for k > 1.
+    :math:`Q_1 = N_f\, k_BT\, \tau_T^{2}`, :math:`Q_k = k_BT\, \tau_T^{2}` for :math:`k > 1`.
 
     .. note::
         The underlying kernel takes scalar *ndof*, *target_temp*, and *tau*
@@ -89,9 +89,9 @@ def nhc_compute_masses(
     temperature : torch.Tensor
         Per-system target temperature in Kelvin ``[M]``.
     thermostat_time : torch.Tensor
-        Per-system thermostat coupling time τ_T ``[M]``, same dtype.
+        Per-system thermostat coupling time :math:`\tau_T` ``[M]``, same dtype.
     masses : torch.Tensor
-        Per-atom masses ``[N]``, same dtype.  Used to determine N_f.
+        Per-atom masses ``[N]``, same dtype.  Used to determine :math:`N_f`.
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
     chain_length : int
@@ -154,7 +154,7 @@ def nhc_chain_update(
     batch_idx: torch.Tensor,
     compute_ke: bool = True,
 ) -> None:
-    """Propagate the Nosé-Hoover chain and scale particle velocities.
+    r"""Propagate the Nosé-Hoover chain and scale particle velocities.
 
     Applies Yoshida-Suzuki factorization to advance the chain variables
     (``eta``, ``eta_dot``) and rescales particle velocities by the
@@ -191,9 +191,9 @@ def nhc_chain_update(
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
     compute_ke : bool, optional
-        When True (default) the kernel computes ``ke2 = Σ m v²`` internally from
+        When True (default) the kernel computes :math:`\mathrm{ke2} = \sum m\, v^{2}` internally from
         *velocities*.  When False the caller-supplied *ke2* is used as-is — the
-        domain-parallel path fills it with the mesh-global 2·KE so the thermostat
+        domain-parallel path fills it with the mesh-global :math:`2\,\mathrm{KE}` so the thermostat
         couples to the whole system rather than a single rank's owned shard.
     """
     M = temperature.shape[0]
@@ -253,7 +253,7 @@ def nhc_velocity_half_step(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
 ) -> None:
-    """Apply NHC half-step velocity kick: ``v += 0.5 * (F/m) * dt``.
+    r"""Apply NHC half-step velocity kick: :math:`v \mathrel{+}= 0.5\,(F/m)\,dt`.
 
     Modifies *velocities* in-place.
 
@@ -294,7 +294,7 @@ def nhc_position_update(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
 ) -> None:
-    """Apply NHC full-step position update: ``r += v * dt``.
+    r"""Apply NHC full-step position update: :math:`r \mathrel{+}= v\,dt`.
 
     Modifies *positions* in-place.
 

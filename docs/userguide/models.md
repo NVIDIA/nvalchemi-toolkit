@@ -111,6 +111,33 @@ Avoid saving only `ema.state_dict()` for MACE training restarts. Strategy
 checkpoints preserve the model reconstruction recipe, model weights, optimizer
 state, runtime counters, and checkpointable hook state together.
 
+### Repairing methods on EMA copies
+
+{py:class}`~nvalchemi.training.hooks.EMAHook` uses
+{py:class}`torch.optim.swa_utils.AveragedModel`, which deep-copies the live model
+when constructing its averaged copy. Most wrappers require no special handling.
+If a third-party model attaches runtime methods that do not survive
+`deepcopy`, its wrapper can optionally implement `modify_ema_methods()`:
+
+```python
+class MyPotentialWrapper(nn.Module, BaseModelMixin):
+    def modify_ema_methods(self) -> None:
+        """Restore runtime methods on this EMA model copy."""
+        my_method_to_patch_runtime_methods()
+```
+
+The hook calls this method once on the copied wrapper immediately after EMA
+construction and before applying any pending EMA checkpoint weights. The method
+must modify only `self`, must not change parameters or buffers, and should be
+safe when called on a freshly copied model.
+
+```{tip}
+{py:class}`~nvalchemi.models.mace.MACEWrapper` implements this
+interface to restore cuEquivariance's fused convolution method.
+Take a look at the `MACEWrapper.modify_ema_methods` to see
+how this is done.
+```
+
 ### Using UMA (fairchem-core)
 
 UMA (Universal Models for Atoms) is a multi-task foundation model: one
@@ -185,7 +212,7 @@ fast = UMAWrapper.from_checkpoint(
 )
 ```
 
-See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
+See {doc}`the UMA NVE/NVT example </examples/advanced/09_uma_nve>` for a
 runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
@@ -200,24 +227,16 @@ subclass provides the forward pass, while
 digraph model_inheritance {
     rankdir=BT
     compound=true
-    fontname="Helvetica"
-    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
-    edge [fontname="Helvetica" fontsize=10]
 
     YourModel [
         label="YourModel(nn.Module)\l- forward()\l- your layers\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
     ]
     BaseModelMixin [
         label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
     ]
     YourModelWrapper [
         label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
-        fillcolor="#D5E8D4"
-        color="#82B366"
+        fillcolor="#26351d"
     ]
 
     YourModelWrapper -> YourModel
@@ -358,7 +377,7 @@ will raise ``TypeError`` at instantiation if missing:
 | `adapt_input()` | No (has default) | Override to collect model-specific inputs |
 | `adapt_output()` | No (has default) | Override to map raw outputs |
 | `forward()` | No (inherit from nn.Module) | Implement the three-step pipeline |
-| `export_model()` | No (has default) | Override if needed |
+| `export_model()` | No (base default raises `NotImplementedError`) | Override to enable export |
 
 For classical potentials with no learned embeddings, stub both embedding
 methods:
@@ -490,7 +509,7 @@ The standard output shapes are:
 | `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessians` | `[V, 3, 3]` | Per-atom Hessian |
+| `hessian` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
 

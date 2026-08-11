@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""AIMNet2 halo + ``torch.compile`` DD gate: force equivalence AND zero
+"""AIMNet2 halo + ``torch.compile`` DD gate: force/stress equivalence AND zero
 steady-state recompiles.
 
 AIMNet2's distributed halo path under ``compile_model=True`` is owned entirely
@@ -28,7 +28,8 @@ validator
 steady-state recompile count:
 
 * **Equivalence** (step 0, unjittered): an *eager*-DD reference vs the compiled
-  DD forward, on the same partition — each rank's owned forces must match. (A
+  DD forward, on the same partition — each rank's owned forces and the global
+  stress must match. (A
   single-GPU reference can't be used: a bare ``AIMNet2Wrapper(Batch)`` forward
   needs aimnet's 2-D neighbor-mode layout that only the DD input path builds.)
 * **Recompiles** (jittered MD loop): after warmup, the number of unique compiled
@@ -116,25 +117,22 @@ def _aimnet2_recompile_worker(rank: int, world_size: int) -> None:
     # only the DD input path builds. Same partition -> owned forces align. ----
     eager = AIMNet2Wrapper.from_checkpoint("aimnet2", device=device)
     eager.eval()
-    eager.model_config.active_outputs = {"energy", "forces"}
+    eager.model_config.active_outputs = {"energy", "forces", "stress"}
     cfg = DomainConfig(cutoff=float(eager._cutoff), skin=0.5, mesh=mesh)
     with DistributedModel(eager, cfg) as eager_model:
-        f_eager_owned = (
-            eager_model(ShardedBatch.from_batch(_batch(positions0), mesh, cfg, 0))[
-                "forces"
-            ]
-            .detach()
-            .float()
-            .cpu()
+        eager_out = eager_model(
+            ShardedBatch.from_batch(_batch(positions0), mesh, cfg, 0)
         )
-    del eager, eager_model
+        f_eager_owned = eager_out["forces"].detach().float().cpu()
+        stress_eager = eager_out["stress"].detach().float().cpu()
+    del eager, eager_model, eager_out
 
     # ---- compiled DD model: the wrapper is eager (compile_model is the
     # single-process model-compile lever); DD-compile is requested on
     # DistributedModel, which owns the compiled energy-autograd forward. ----
     wrapper = AIMNet2Wrapper.from_checkpoint("aimnet2", device=device)
     wrapper.eval()
-    wrapper.model_config.active_outputs = {"energy", "forces"}
+    wrapper.model_config.active_outputs = {"energy", "forces", "stress"}
 
     gen = torch.Generator(device="cpu").manual_seed(7)
     graphs_after_warmup = [0]
@@ -152,6 +150,7 @@ def _aimnet2_recompile_worker(rank: int, world_size: int) -> None:
             sharded = ShardedBatch.from_batch(_batch(pos), mesh, cfg, 0)
             out = dist_model(sharded)
             f_owned = out["forces"].detach().float()
+            stress = out["stress"].detach().float()
 
             if step == 0:
                 # Equivalence: compiled DD == eager DD on the same partition.
@@ -162,7 +161,14 @@ def _aimnet2_recompile_worker(rank: int, world_size: int) -> None:
                     atol=3e-3,
                     msg=f"rank {rank}: compiled DD forces != eager DD reference",
                 )
-            _ = f_owned.sum().item()
+                torch.testing.assert_close(
+                    stress.cpu(),
+                    stress_eager,
+                    rtol=3e-3,
+                    atol=3e-3,
+                    msg=f"rank {rank}: compiled DD stress != eager DD reference",
+                )
+            _ = (f_owned.sum() + stress.sum()).item()
             n_graphs = counters["stats"].get("unique_graphs", 0)
             if step == WARMUP_STEPS - 1:
                 graphs_after_warmup[0] = n_graphs

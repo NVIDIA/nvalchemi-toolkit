@@ -20,7 +20,7 @@ import fnmatch
 import warnings
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, ClassVar, Final, Literal, TypeAlias
+from typing import Annotated, Any, ClassVar, Final, Literal, TypeAlias
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -201,26 +201,6 @@ class ModulePatchHook(BaseModel):
     Shape compatibility is intentionally user-owned and is validated naturally
     by the model's forward pass or downstream checkpoint loading.
 
-    Parameters
-    ----------
-    patches : dict[str, BaseSpec | torch.nn.Module]
-        Ordered mapping of target paths to replacement modules or specs that
-        build modules.
-    register_parameters : bool
-        If ``True``, register the patched module parameters as both trainable
-        and managed under the fixed ``"patch"`` source. Registered
-        patch parameters are included in the final trainable allow-list by default
-        and are protected from being overridden by other sources modifying the models.
-        Defaults to ``True``.
-
-    Attributes
-    ----------
-    patches : dict[str, BaseSpec | torch.nn.Module]
-        Module patches applied in insertion order.
-    frequency : int
-        Required by the hook protocol; always ``1``.
-    stage : None
-        This hook does not run at training stages.
     Warns
     -----
     UserWarning
@@ -237,9 +217,23 @@ class ModulePatchHook(BaseModel):
     1
     """
 
-    patches: dict[str, PatchValue] = Field(default_factory=dict)
-
-    register_parameters: bool = True
+    patches: dict[str, PatchValue] = Field(
+        default_factory=dict,
+        description=(
+            "Ordered mapping of target paths to replacement modules or specs "
+            "that build modules."
+        ),
+    )
+    register_parameters: bool = Field(
+        default=True,
+        description=(
+            "If True, register the patched module parameters as both trainable "
+            "and managed under the fixed \"patch\" source. Registered patch "
+            "parameters are included in the final trainable allow-list by default "
+            "and are protected from being overridden by other sources modifying "
+            "the model."
+        ),
+    )
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None
@@ -400,41 +394,25 @@ class FineTuningSummaryHook(BaseModel):
 
 
 class TrainableParameterHook(BaseModel):
-    """Select trainable parameters for fine-tuning.
+    """Select which parameters stay trainable during fine-tuning.
 
-    The hook computes a fully-qualified parameter allow-list when registered
-    on a :class:`~nvalchemi.training.strategy.TrainingStrategy`. By default,
-    parameters outside the allow-list are temporarily marked
-    ``requires_grad=False`` during ``run`` and restored afterward. Set
-    ``freeze_mode="optimizer_only"`` to preserve gradients for excluded
-    parameters while keeping them out of optimizer parameter groups.
+    On registration with a :class:`~nvalchemi.training.strategy.TrainingStrategy`,
+    ``freeze_patterns`` and ``trainable_patterns`` (globs over fully-qualified
+    parameter names), together with parameters previously registered as trainable
+    by earlier hooks, resolve to the trainable set. What you set decides the
+    behaviour:
 
-    Parameters
-    ----------
-    freeze_patterns : tuple[str, ...]
-        Glob patterns to exclude from training. These exclusions are overridden
-        by ``trainable_patterns``.
-    trainable_patterns : tuple[str, ...]
-        Glob patterns to include. When supplied without ``freeze_patterns``,
-        these patterns form an allow-list, along with the trainable parameters
-        registered by earlier hooks, e.g., ``ModulePatchHook``.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Whether excluded parameters are temporarily frozen via
-        ``requires_grad=False`` or only excluded from optimizer construction.
+    - ``trainable_patterns`` only — train exactly those, plus any parameters
+      previously registered as trainable; freeze the rest,
+    - ``freeze_patterns`` only — freeze those; train the rest, including any
+      parameters previously registered as trainable.
+    - both — freeze the ``freeze_patterns`` set, but ``trainable_patterns`` win:
+      a parameter they match stays trainable even if a freeze pattern also
+      matches it.
 
-    Attributes
-    ----------
-    freeze_patterns : tuple[str, ...]
-        Exclusion patterns matched against names such as
-        ``"main.model.joint_mlp.0.weight"``.
-    trainable_patterns : tuple[str, ...]
-        Inclusion override patterns matched after exclusions.
-    freeze_mode : {"requires_grad", "optimizer_only"}
-        Parameter-freezing mode.
-    frequency : int
-        Required by the hook protocol; always ``1``.
-    stage : None
-        This hook does not run at training stages.
+    Frozen parameters are temporarily marked ``requires_grad=False`` during
+    ``run`` and restored afterward. Set ``freeze_mode="optimizer_only"`` to
+    instead keep them out of the optimizer while preserving their gradients.
 
     Raises
     ------
@@ -458,9 +436,37 @@ class TrainableParameterHook(BaseModel):
     1
     """
 
-    freeze_patterns: tuple[str, ...] = ()
-    trainable_patterns: tuple[str, ...] = ()
-    freeze_mode: FreezeMode = "requires_grad"
+    freeze_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns for parameters to freeze. Overridden by "
+                "``trainable_patterns`` — a parameter matching both stays "
+                "trainable."
+            )
+        ),
+    ] = ()
+    trainable_patterns: Annotated[
+        tuple[str, ...],
+        Field(
+            description=(
+                "Glob patterns for parameters to keep trainable. When supplied "
+                "without ``freeze_patterns``, they define the full trainable set, "
+                "along with the trainable parameters registered by earlier hooks, "
+                "e.g., ``ModulePatchHook``. Everything else is frozen."
+            )
+        ),
+    ] = ()
+    freeze_mode: Annotated[
+        FreezeMode,
+        Field(
+            description=(
+                "Whether excluded parameters are temporarily frozen via "
+                "``requires_grad=False`` or only excluded from optimizer "
+                "construction."
+            )
+        ),
+    ] = "requires_grad"
 
     frequency: ClassVar[int] = 1
     stage: ClassVar[None] = None

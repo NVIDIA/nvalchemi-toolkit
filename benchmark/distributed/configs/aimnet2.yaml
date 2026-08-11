@@ -23,6 +23,7 @@ forward:
   upfront_halo_exchange: false   # per-layer ghost refresh happens inside the forward
   charge_zero: true              # neutral-molecule scalar charge
   dd_compile_capable: true
+  has_stress: true
 
 nvt:
   cutoff_attr: _cutoff

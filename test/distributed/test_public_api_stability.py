@@ -45,6 +45,7 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         "ShardedBatch",
         "SpatialPartitioner",
         "autograd_target",
+        "pin_fp32",
         "reshard_by_destination",
         # Top layer — declarative spec types a model author names in a wrapper's
         # ``distribution_spec``.

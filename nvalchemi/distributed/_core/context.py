@@ -291,7 +291,7 @@ def current_dd_context() -> DistributedContext:
     or before the first forward — it is the inert :data:`NOT_DISTRIBUTED`
     sentinel.
 
-    Read it in eager or ``@torch._dynamo.disable``d code only. Inside a
+    Read it in eager code (or under ``@torch._dynamo.disable``) only. Inside a
     compiled region the varying fields would bake as stale constants;
     code there receives what it needs as threaded graph inputs instead.
     """

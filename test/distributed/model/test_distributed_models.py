@@ -683,7 +683,10 @@ def _build_pbc_orthorhombic_argon(
 # Registered topology builders, looked up by key in the worker functions.
 _SYSTEM_BUILDERS: dict[str, Any] = {
     "nonpbc_open_argon": lambda: _build_open_argon_cluster(n_per_side=8),
-    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=4),
+    # n_per_side=5 (box ~20.0 A) so a 2-rank split leaves each domain wider than
+    # the 8.5 A LJ ghost shell; at 4 the domains are 8.0 A and the halo would
+    # wrap onto the rank's own periodic image.
+    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=5),
 }
 
 
@@ -717,9 +720,13 @@ _WRAPPER_FACTORIES: dict[str, Any] = {
 
 
 def _port_for(key: str) -> str:
-    """Deterministic free-ish port per-parametrization so concurrent
-    pytest runs don't collide. 30000 + hash(key)%5000."""
-    return str(30000 + (hash(key) & 0xFFFF) % 5000)
+    """Deterministic per-parametrization rendezvous port.
+
+    Kept below the kernel's ephemeral range: a port drawn from there can be
+    claimed for an outbound connection between the choice and the rendezvous
+    bind, which surfaces as a mid-test EADDRINUSE.
+    """
+    return str(20000 + (hash(key) & 0xFFFF) % 9000)
 
 
 # Single-GPU gloo+cuda tier: N ranks share one GPU (gloo because NCCL rejects
@@ -1048,3 +1055,7 @@ def test_aimnet2_wrapper_declares_halo_spec() -> None:
     # ConvSV + LRCoulomb + SRCoulomb), with no gather custom_ops.
     assert spec.distribution.custom_ops == ()
     assert len(spec.distribution.third_party_helpers) == 4
+    # Stress comes from the framework strain trick, so each rank holds a partial
+    # that the declared reduction has to sum.
+    assert "stress" in spec.all_reduce_outputs
+    assert spec.compile is not None and spec.compile.stress_via_strain

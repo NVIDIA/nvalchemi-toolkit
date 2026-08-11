@@ -32,7 +32,7 @@ This example demonstrates four hooks that make simulations more robust:
 * :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` — monitors the
   total energy drift in NVE simulations and warns or raises when it exceeds
   a threshold.  Drift indicates timestep or potential issues.
-* :class:`~nvalchemi.dynamics.hooks.ProfilerHook` — records wall-clock time
+* :class:`~nvalchemi.dynamics.hooks.StageTimingHook` — records wall-clock time
   per hook stage and writes a CSV timing log.  Essential for identifying
   bottlenecks in the simulation loop.
 
@@ -42,7 +42,7 @@ This example demonstrates four hooks that make simulations more robust:
    bounded values.
 2. ``NaNDetectorHook`` — detect any NaN that slipped through clamping.
 3. ``EnergyDriftMonitorHook`` — monitor cumulative drift (``AFTER_STEP``).
-4. ``ProfilerHook`` — spans all stages, so register last or use ``stages="all"``.
+4. ``StageTimingHook`` — spans all stages, so register last or use ``profiled_stages="all"``.
 """
 
 import logging
@@ -58,7 +58,7 @@ from nvalchemi.dynamics.hooks import (
     EnergyDriftMonitorHook,
     MaxForceClampHook,
     NaNDetectorHook,
-    ProfilerHook,
+    StageTimingHook,
 )
 from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -264,10 +264,10 @@ logging.info(
 )
 
 # %%
-# ProfilerHook — timing the simulation loop
-# ------------------------------------------
-# :class:`~nvalchemi.dynamics.hooks.ProfilerHook` records wall-clock time at
-# each hook stage.  ``stages="step"`` instruments only ``BEFORE_STEP`` and
+# StageTimingHook — timing the simulation loop
+# --------------------------------------------
+# :class:`~nvalchemi.dynamics.hooks.StageTimingHook` records wall-clock time at
+# each hook stage.  ``profiled_stages="step"`` instruments only ``BEFORE_STEP`` and
 # ``AFTER_STEP``, giving a clean per-step elapsed time without the overhead
 # of timing every sub-stage.
 #
@@ -277,7 +277,7 @@ logging.info(
 
 profiler_out = Path(tempfile.mkdtemp()) / "profile.csv"
 
-profiler_hook = ProfilerHook(
+profiler_hook = StageTimingHook(
     profiled_stages="step",
     timer_backend="auto",
     log_path=str(profiler_out),
@@ -299,7 +299,7 @@ nvt_prof = NVTLangevin(
     hooks=[profiler_hook],
 )
 
-logging.info("Running ProfilerHook demo (50 NVT steps)...")
+logging.info("Running StageTimingHook demo (50 NVT steps)...")
 prof_batch = nvt_prof.run(prof_batch)
 profiler_hook.close()
 
@@ -325,7 +325,7 @@ logging.info("Profile CSV written to: %s", profiler_out)
 # 2. ``MaxForceClampHook`` (``AFTER_COMPUTE``) — clamp before NaN check.
 # 3. ``NaNDetectorHook`` (``AFTER_COMPUTE``) — detect remaining bad values.
 # 4. ``EnergyDriftMonitorHook`` (``AFTER_STEP``) — cumulative drift check.
-# 5. ``ProfilerHook`` (all stages) — spans the full step loop.
+# 5. ``StageTimingHook`` (all stages) — spans the full step loop.
 #
 # This ordering ensures each hook sees the most up-to-date (and safest)
 # state when it fires.
@@ -346,7 +346,7 @@ drift_check = EnergyDriftMonitorHook(
     action="warn",
     frequency=5,
 )
-profiler = ProfilerHook(profiled_stages="step", timer_backend="auto", frequency=1)
+profiler = StageTimingHook(profiled_stages="step", timer_backend="auto", frequency=1)
 
 safe_nvt = NVTLangevin(
     model=demo_model2,

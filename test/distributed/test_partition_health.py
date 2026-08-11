@@ -33,7 +33,7 @@ import torch.multiprocessing as mp
 
 def _verdict_worker(rank: int, world_size: int, scenario: str) -> None:
     os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = "29683"
+    os.environ["MASTER_PORT"] = "29711"
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)

@@ -7,6 +7,15 @@
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
+- Domain decomposition for distributed inference and dynamics: a spatial halo
+  strategy and a graph-parallel strategy, both driven by a declarative
+  `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
+  MACE, AIMNet2 and UMA ship specs; composed pipelines decompose per stage.
+  Energy, forces and stress agree with a single-GPU reference to fp32 rounding
+  under both strategies, eager and compiled. `nvalchemi.distributed.pin_fp32`
+  pins full-precision fp32 for runs that must match a reference, since TF32
+  makes distributed and single-process results diverge well beyond fp32 noise.
+
 - MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
@@ -87,6 +96,19 @@
 
 ### Fixed
 
+- **Ewald charge gradients and cell derivatives** — the reciprocal term was only
+  ever differentiated with respect to positions and charges, so a non-hybrid
+  Ewald returned a wrong `dE/dq`, and strain-autograd through the detached
+  Green's function gave a wrong stress. Work needing a cell derivative now
+  routes to the staged reciprocal.
+- **Ewald / PME strain cache** — cached k-vectors were rebuilt from the strained
+  cell, so a second stress evaluation reused the first call's autograd graph.
+
+- **Distributed dynamics lifecycle** — keep per-system integrator state aligned
+  when pipeline receives and graduates systems, clear reusable communication
+  buffers before every send without shrinking their segmented capacity, and run
+  distributed stages with explicit per-system step budgets and optional early
+  convergence.
 - **Zarr dataloader custom fields** — validated `Dataset` batch paths now
   preserve reader field-level metadata so custom atom-, edge-, and
   system-level tensors survive batching like the `skip_validation` path.
@@ -124,6 +146,12 @@
   will be removed in a future release.
 
 ### Breaking Changes
+
+- `EwaldModelWrapper` and `PMEModelWrapper` now default to `hybrid_forces=False`.
+  The analytic direct-output path (`hybrid_forces=True`) does not produce
+  consistent gradients and is not supported under domain decomposition, where
+  `distribution_spec` rejects it. Forces and stress now come from autograd over
+  the energy; pass `hybrid_forces=True` explicitly to keep the old path.
 
 - Dataset-level explicit batch reads now use `load_batches(...)`. The raw
   `read_many(...)` API remains on readers, where storage backends can optimize

@@ -143,7 +143,7 @@ def _rule_add_per_graph_autograd_to_all_reduce(
 
     1. Computed via ``autograd.grad(replicated_E.sum(), strain)``.
     2. Backward through ``per_system_reduce`` all-reduces the upstream
-       grad → each rank's local autograd produces ``world_size ×
+       grad → each rank's local autograd produces ``world_size x
        per_rank_strain_contribution``.
     3. Consolidation's default for non-per-atom autograd does
        ``/world_size``, producing ``per_rank_strain_contribution`` —
@@ -195,7 +195,7 @@ def _rule_add_per_graph_autograd_to_all_reduce(
 
 
 def _rule_drop_extra_all_reduce(spec: MLIPSpec, last: Attempt) -> MLIPSpec | None:
-    """If multi_E ≈ ref_E × world_size on a key declared in
+    """If multi_E ~= ref_E x world_size on a key declared in
     ``all_reduce_outputs``, that key is being reduced an extra time
     (the wrapper's internals already replicate it). Drop the key.
     """

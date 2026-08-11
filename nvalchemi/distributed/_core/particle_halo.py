@@ -55,6 +55,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ``torch.library.custom_op`` schemas cannot carry a Python ``ProcessGroup``.
+# Publish the active halo group immediately before each model forward so the
+# eager custom-op bodies can resolve their collectives to the same domain group
+# as the surrounding DD strategy. ``None`` preserves the default-group behavior
+# for direct/single-mesh callers.
+_HALO_PROCESS_GROUP: Any = None
+
+
+def set_halo_process_group(group: Any) -> None:
+    """Publish the domain process group used by compiled halo custom ops."""
+    global _HALO_PROCESS_GROUP
+    _HALO_PROCESS_GROUP = group
+
 
 # ======================================================================
 # Ghost identification
@@ -106,22 +119,23 @@ def _check_halo_region(
 ) -> torch.Tensor:
     """Return ``(N,)`` bool mask for atoms in the halo of a domain box.
 
-    The core check uses strict inequalities so atoms whose (possibly
+    The extent check uses inclusive inequalities so atoms whose (possibly
     PBC-shifted) position sits exactly on the receiver's domain boundary are
     still counted as halo — otherwise lattice atoms at integer multiples of
     the cell (e.g. FCC basis at Z=0 shifted to Z=box) fall through the gap.
+
+    The mask is computed from sender-owned atoms needed by a receiver domain.
+    ``particle_halo_padding`` receives only atoms owned by the sender. During
+    migration hysteresis, one of those atoms may already be geometrically
+    inside the receiver's core while ownership still belongs to the sender.
+    Include the full receiver extent, core plus ghost width, so the receiver
+    gets that atom as a ghost until ownership migrates.
     """
     expanded_lo = frac_lo - gw_frac
     expanded_hi = frac_hi + gw_frac
 
     inside = (frac_pos >= expanded_lo) & (frac_pos <= expanded_hi)
-    mask = inside.all(dim=1)
-
-    core_inside = (frac_pos > frac_lo) & (frac_pos < frac_hi)
-    in_core = core_inside.all(dim=1)
-    mask = mask & ~in_core
-
-    return mask
+    return inside.all(dim=1)
 
 
 def _identify_ghosts_split(
@@ -131,8 +145,8 @@ def _identify_ghosts_split(
 ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
     """Return ``(direct_mask, [(pbc_mask, cart_shift), ...])`` for one neighbor."""
     partitioner = config.partitioner
-    # Reuse the cached inverse; cell is fixed in NVT/NVE (see
-    # ``_ghost_width_fractional``).
+    # Reuse the inverse that ``SpatialPartitioner.update_cell`` refreshes
+    # whenever an NPT/NPH barostat changes the cell.
     inv_cell = partitioner._inv_cell.to(device=positions.device, dtype=positions.dtype)
 
     # cart = frac @ cell_matrix (rows of cell_matrix = lattice vectors a, b, c),
@@ -141,6 +155,13 @@ def _identify_ghosts_split(
     # fractional coordinates that miss PBC halo atoms at cell boundaries and
     # under-count neighbors on per-rank neighbor lists.
     frac_pos = positions @ inv_cell
+
+    # Use canonical fractional coordinates only when deciding which receiver
+    # needs each atom. Keep the original Cartesian positions for transmission;
+    # the receiver's neighbor list applies the required integer cell image.
+    pbc = partitioner.pbc.to(device=positions.device)
+    frac_pos = torch.where(pbc.unsqueeze(0), frac_pos - torch.floor(frac_pos), frac_pos)
+
     gw_frac = _ghost_width_fractional(partitioner, config.ghost_width).to(
         device=positions.device
     )
@@ -158,11 +179,13 @@ def _identify_ghosts_split(
     already_selected = direct_mask.clone()
     pbc_list: list[tuple[torch.Tensor, torch.Tensor]] = []
     shift_key = (config.rank, neighbor_rank)
-    if shift_key in config.pbc_shifts:
-        for cart_shift in config.pbc_shifts[shift_key]:
-            cart_shift = cart_shift.to(device=positions.device, dtype=positions.dtype)
-            # Same transpose fix as above: ``frac = cart @ inv(cell)``.
-            frac_shift = cart_shift @ inv_cell
+    if shift_key in config._pbc_images:
+        cell_matrix = partitioner.cell_matrix.to(
+            device=positions.device, dtype=positions.dtype
+        )
+        for frac_shift in config._pbc_images[shift_key]:
+            frac_shift = frac_shift.to(device=positions.device, dtype=positions.dtype)
+            cart_shift = frac_shift @ cell_matrix
             frac_pos_shifted = frac_pos + frac_shift
             mask = _check_halo_region(frac_pos_shifted, frac_lo, frac_hi, gw_frac)
             mask = mask & ~already_selected
@@ -722,19 +745,21 @@ def _halo_a2a_v_default_group(
     rank: int,
     world_size: int,
 ) -> torch.Tensor:
-    """:func:`_funcol_indexed_all_to_all_v_rows` over the DEFAULT process group.
+    """:func:`_funcol_indexed_all_to_all_v_rows` over the active halo group.
 
     Used inside the halo-correction custom op, which runs eagerly at runtime and
-    cannot take a ``DeviceMesh`` arg. Valid for single-domain-mesh-dim topology
-    (the domain group IS the world group); ``funcol`` mesh=None resolves the
-    default group.
+    cannot take a ``DeviceMesh`` or ``ProcessGroup`` arg. The surrounding halo
+    strategy publishes its domain group before the model forward; direct callers
+    that publish no group retain the default-world behavior.
     """
     send_rows = torch.cat(
         [tensor.index_select(0, indices[j]) for j in range(world_size)], dim=0
     )
     send_counts = [int(sizes[rank][j]) for j in range(world_size)]
     recv_counts = [int(sizes[i][rank]) for i in range(world_size)]
-    return funcol_all_to_all_v_rows(send_rows, send_counts, recv_counts, None)
+    return funcol_all_to_all_v_rows(
+        send_rows, send_counts, recv_counts, _HALO_PROCESS_GROUP
+    )
 
 
 def _halo_scatter_correct_dense(
@@ -746,7 +771,7 @@ def _halo_scatter_correct_dense(
     world_size: int,
 ) -> torch.Tensor:
     """``halo_forward_exchange(halo_reverse_exchange(padded))`` as pure
-    compute + collective (no autograd.Function, default group)."""
+    compute + collective (no autograd.Function, active halo group)."""
     # reverse: fold borrowed halo rows back into their owners.
     halo = padded[n_owned:].contiguous()
     rev_indices: list[torch.Tensor] = []
@@ -813,7 +838,7 @@ def halo_scatter_correct_op(
         Length of each per-destination slice in ``send_idx_flat`` — splits it
         back into ``world_size`` index tensors.
     send_sizes_flat : list[int]
-        Row-major flattening of the ``world_size × world_size`` send-counts
+        Row-major flattening of the ``world_size x world_size`` send-counts
         matrix; ``send_sizes[i][j]`` = rows rank ``i`` sent to rank ``j``.
     n_owned : int
         Number of owned rows = length of the returned block.
@@ -889,10 +914,10 @@ def halo_forward_op(
     this rank's halo (ghost) region.
 
     Compile-safe counterpart of :func:`halo_forward_exchange`; runs eagerly at
-    runtime (default group), while the trace sees only the registered fake. Its
-    adjoint (backward) is :func:`halo_scatter_correct_op`. The marker arrays ride
-    as ``int[]`` (not tensors) so inductor lowering does not see a real-Tensor
-    constant alongside the fake ``owned`` input.
+    runtime on the active halo group, while the trace sees only the registered
+    fake. Its adjoint (backward) is :func:`halo_scatter_correct_op`. The marker
+    arrays ride as ``int[]`` (not tensors) so inductor lowering does not see a
+    real-Tensor constant alongside the fake ``owned`` input.
 
     Parameters
     ----------
@@ -904,7 +929,7 @@ def halo_forward_op(
     send_idx_lens : list[int]
         Length of each per-destination slice in ``send_idx_flat``.
     send_sizes_flat : list[int]
-        Row-major ``world_size × world_size`` send-counts matrix;
+        Row-major ``world_size x world_size`` send-counts matrix;
         ``send_sizes[i][j]`` = rows rank ``i`` sends to rank ``j``.
     n_padded : int
         Expected total rows of the result (``n_owned + n_halo``); the registered
@@ -1196,10 +1221,10 @@ def halo_forward_static_op(
     world_size: int,
 ) -> torch.Tensor:
     """Fixed-shape owned->[owned|ghost] refresh. Runs eagerly at runtime
-    (default group); the trace sees only the fake. Owned rows pass through;
+    on the active halo group; the trace sees only the fake. Owned rows pass through;
     ghost rows are gathered from neighbors via a uniform-split all_to_all."""
     send_rows = padded_in.index_select(0, send_index)
-    recv = halo_exchange_fixed(send_rows, world_size, None)
+    recv = halo_exchange_fixed(send_rows, world_size, _HALO_PROCESS_GROUP)
     recv = recv * _row_mask_like(recv_real, recv).to(recv.dtype)
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     rowidx = torch.arange(padded_in.shape[0], device=padded_in.device)
@@ -1229,7 +1254,7 @@ def _hfs_backward(ctx, grad_out):  # type: ignore[no-untyped-def]
     grad_recv = grad_ghost.index_select(0, recv_dest) * _row_mask_like(
         recv_real, grad_out
     ).to(grad_out.dtype)
-    grad_send = halo_exchange_fixed(grad_recv, ws, None)
+    grad_send = halo_exchange_fixed(grad_recv, ws, _HALO_PROCESS_GROUP)
     grad_in = grad_out * (~ghostmask).to(grad_out.dtype)
     grad_in = grad_in.index_add(0, send_index, grad_send)
     return grad_in, None, None, None, None, None
@@ -1259,13 +1284,13 @@ def halo_scatter_correct_static_op(
 
     # reverse: ghost rows (recv-slot order) -> owning rank -> index_add into owners.
     ghost_rows = padded_in.index_select(0, recv_dest) * recv_real_f
-    back = halo_exchange_fixed(ghost_rows, world_size, None)
+    back = halo_exchange_fixed(ghost_rows, world_size, _HALO_PROCESS_GROUP)
     owned_only = (padded_in * (~ghostmask).to(padded_in.dtype)).to(acc_dt)
     owned_acc = owned_only.index_add(0, send_index, back.to(acc_dt)).to(padded_in.dtype)
 
     # forward: re-broadcast corrected owners to ghosts.
     send_rows = owned_acc.index_select(0, send_index)
-    recv = halo_exchange_fixed(send_rows, world_size, None) * recv_real_f
+    recv = halo_exchange_fixed(send_rows, world_size, _HALO_PROCESS_GROUP) * recv_real_f
     ghost_acc = torch.zeros_like(padded_in).index_add(0, recv_dest, recv)
     return torch.where(ghostmask, ghost_acc, owned_acc)
 

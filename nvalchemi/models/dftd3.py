@@ -697,7 +697,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the DFT-D3(BJ) kernel and return a :class:`ModelOutputs` dict.
+        r"""Run the DFT-D3(BJ) kernel and return a :class:`ModelOutputs` dict.
 
         Parameters
         ----------
@@ -712,7 +712,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``"stress"`` (shape ``[B, 3, 3]``, :math:`\mathrm{eV}/\mathrm{\AA}^3` — Cauchy stress
             ``-W/V``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy
