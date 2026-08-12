@@ -31,7 +31,7 @@
 #    .venv-uma environment (gated on UMA changes or full runs).
 # 5. test-multigpu: Runs the `@pytest.mark.multigpu` tests on a 2-GPU runner.
 #    They auto-skip in job 4, so this is the only tier that executes them.
-#    Gated on DD-relevant changes, full runs, or the `ciflow:multigpu` label.
+#    Gated on DD-relevant changes, the nightly run, or the `ci:multigpu` label.
 # 6. verify-status: Verifies all jobs completed successfully
 
 name: "CI"
@@ -478,16 +478,15 @@ jobs:
     if: |
       (github.event_name == 'schedule') ||
       contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:all') ||
-      contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:multigpu') ||
+      contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ci:multigpu') ||
       (
         !contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:skip') &&
         (needs.changed-files.outputs.dd_changed == 'true')
       ) ||
       (
         (github.event_name == 'merge_group') &&
-        (needs.changed-files.outputs.any_changed == 'true')
-      ) ||
-      (github.ref == 'refs/heads/main')
+        (needs.changed-files.outputs.dd_changed == 'true')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
