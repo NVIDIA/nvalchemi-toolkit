@@ -152,6 +152,32 @@ class HookRegistryMixin:
             workflow=self,
         )
 
+    def _has_hooks_for_stage(self, stage: Enum) -> bool:
+        """Return whether any registered hook would fire at *stage*.
+
+        A static (data-independent) query used by compiled step paths to
+        skip stage dispatch entirely when no hook is registered, without
+        consulting tensor values.
+
+        Parameters
+        ----------
+        stage : Enum
+            Workflow stage to query.
+
+        Returns
+        -------
+        bool
+            ``True`` if at least one hook is registered for *stage*.
+        """
+        for hook in self.hooks:
+            runs_on_stage = getattr(hook, "_runs_on_stage", None)
+            if runs_on_stage is not None:
+                if runs_on_stage(stage):
+                    return True
+            elif stage == hook.stage:
+                return True
+        return False
+
     def _call_hooks(self, stage: Enum, batch: Batch | None) -> None:
         """Call hooks registered for the given stage, gated by frequency.
 
