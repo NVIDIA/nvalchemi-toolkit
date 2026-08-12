@@ -64,11 +64,6 @@ _INFERENCE = os.environ.get("NVALCHEMI_UMA_INFERENCE", "default")
 # cache but not always for a cold one. Bumping to 30min is cheap insurance.
 _PG_TIMEOUT = datetime.timedelta(minutes=30)
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 # ======================================================================
 # Harness
@@ -308,7 +303,7 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_uma_dist_model_equivalence_2ranks():
     """Regression: ``DistributedModel(UMAWrapper)`` matches a single-GPU
     UMA reference on force + total energy under halo storage.

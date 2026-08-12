@@ -91,6 +91,11 @@
   (including `"turbo"` for `torch.compile`). See the
   `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
 
+- Multi-GPU CI coverage. Tests requiring 2 GPUs now carry
+  `@pytest.mark.multigpu` instead of a hand-rolled `device_count()` skip, and a
+  new 2-GPU CI job runs them. The domain-decomposition suite previously skipped
+  on every CI tier and was only exercised by hand.
+
 ### Fixed
 
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
