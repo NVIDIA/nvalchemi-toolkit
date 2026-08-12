@@ -66,7 +66,8 @@
       "id": "keep-inline-comments-concise",
       "rule": "Review inline comments in newly added or substantially changed function and method bodies. Prefer comments that explain intent in one or two concise lines. Flag long comment blocks that can be shortened, moved to a docstring or design document, or replaced by clearer names and structure, and flag dense stretches where comments narrate nearly every small operation (for example, comments on roughly every other line) instead of documenting a few important decisions. Ask the author to consolidate or rewrite the comments while preserving essential rationale. Do not enforce a rigid line or density limit when a precise mathematical derivation, distributed invariant, safety constraint, or non-obvious workaround genuinely needs more explanation. Ignore SPDX/license headers, section headings, tool directives such as `noqa` and `type: ignore`, generated code, and vendored or upstream code.",
       "scope": [
-        "nvalchemi/**/*.py"
+        "nvalchemi/**/*.py",
+        "test/**/*.py"
       ],
       "severity": "medium"
     },
