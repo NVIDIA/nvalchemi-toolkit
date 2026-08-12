@@ -617,8 +617,13 @@ class TestFusedStage:
         with pytest.raises(TypeError, match="other must be a BaseDynamics instance"):
             fused + mixin
 
-    def test_empty_status_mask_skips_update(self) -> None:
-        """Dynamics should not be called if no samples match its status."""
+    def test_empty_status_mask_is_noop_update(self) -> None:
+        """An all-False stage mask must leave positions/velocities untouched.
+
+        The masked update is invoked unconditionally (a data-dependent
+        ``if mask.any():`` would break full-graph compilation) but must be
+        a strict no-op for samples outside the stage's status.
+        """
         dynamics0 = TrackingDynamics(model=self.model)
         dynamics1 = TrackingDynamics(model=self.model)
 
@@ -631,11 +636,13 @@ class TestFusedStage:
 
         fused.step(batch)
 
-        # dynamics0 should not have been called (no samples with status=0)
-        assert len(dynamics0.updated_masks) == 0
+        # dynamics0 is called with an all-False mask (branchless dispatch).
+        assert len(dynamics0.updated_masks) == 1
+        assert not dynamics0.updated_masks[0].any()
 
-        # dynamics1 should have been called
+        # dynamics1 processed every sample.
         assert len(dynamics1.updated_masks) == 1
+        assert dynamics1.updated_masks[0].all()
 
     def test_three_stage_fusion(self) -> None:
         """FusedStage should support three or more sub-stages."""

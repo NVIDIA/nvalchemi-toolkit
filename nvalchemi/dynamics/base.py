@@ -1657,6 +1657,34 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         return None
 
+    def _ensure_autograd_inputs(self, batch: Batch) -> None:
+        """Enable ``requires_grad`` on autograd inputs as durable leaves.
+
+        Only active when ``_persistent_autograd_inputs`` is set (see
+        :class:`FusedStage`).  With the flag on, tensors named in
+        ``model_config.autograd_inputs`` (e.g. ``positions``) keep
+        ``requires_grad=True`` across steps instead of being re-enabled via
+        ``clone().requires_grad_(True)`` inside the model's ``adapt_input``
+        — that per-step re-enable is both an extra allocation and a dynamo
+        graph break ("requires_grad_() intermediate leaked as output").
+        The counterpart contract is that all in-place kinematic updates run
+        under ``no_grad`` and :meth:`compute` skips clearing these flags.
+
+        Parameters
+        ----------
+        batch : Batch
+            The current batch.
+        """
+        if not getattr(self, "_persistent_autograd_inputs", False):
+            return
+        cfg = self.model_config
+        if not (cfg.autograd_outputs & cfg.active_outputs):
+            return
+        for key in cfg.autograd_inputs:
+            value = getattr(batch, key, None)
+            if isinstance(value, torch.Tensor) and not value.requires_grad:
+                value.requires_grad_(True)
+
     def _ensure_state_initialized(self, batch: Batch) -> None:
         """Lazily initialize per-system integrator state on the first call.
 
@@ -1848,15 +1876,17 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         # Always include "positions" — it is an implicit model input that
         # may not appear in autograd_inputs but can still carry grad from
         # the forward pass.
-        cfg = self.model_config
-        grad_keys: set[str] = {"positions"}
-        grad_keys |= cfg.gradient_keys
-        if cfg.autograd_outputs & cfg.active_outputs:
-            grad_keys |= cfg.autograd_inputs
-        for key in grad_keys:
-            value = getattr(batch, key, None)
-            if isinstance(value, torch.Tensor) and value.requires_grad:
-                value.requires_grad_(False)
+        # Persistent-leaf mode keeps requires_grad set; see _ensure_autograd_inputs.
+        if not getattr(self, "_persistent_autograd_inputs", False):
+            cfg = self.model_config
+            grad_keys: set[str] = {"positions"}
+            grad_keys |= cfg.gradient_keys
+            if cfg.autograd_outputs & cfg.active_outputs:
+                grad_keys |= cfg.autograd_inputs
+            for key in grad_keys:
+                value = getattr(batch, key, None)
+                if isinstance(value, torch.Tensor) and value.requires_grad:
+                    value.requires_grad_(False)
 
         self._last_outputs = detached
 
@@ -2205,31 +2235,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         sub-stages before the shared compute, so that forces are evaluated at
         the post-pre_update positions (required for BAOAB Langevin and
         velocity-Verlet-based integrators).
+
+        The save/restore uses full-tensor clones blended back with
+        ``torch.where`` rather than boolean-mask fancy indexing: mask
+        indexing lowers to data-dependent ``nonzero`` (dynamic shapes,
+        graph breaks), while the blend is static-shaped, safe for all-False
+        masks, and CUDA-graph friendly.  The whole body runs under
+        ``no_grad``: the integrator is pure kinematics, and in-place updates
+        of a grad-requiring ``positions`` leaf are only legal without grad.
         """
         self._ensure_state_initialized(batch)
 
-        node_mask = mask[batch.batch_idx]
-        sys_mask = ~mask
-
-        saved: dict[str, torch.Tensor] = {}
-        for field in self._mutable_fields:
-            val = getattr(batch, field, None)
-            if val is None:
-                continue
-            if val.shape[0] == batch.num_nodes:
-                saved[field] = val[~node_mask].clone()
-            elif val.shape[0] == batch.num_graphs:
-                saved[field] = val[sys_mask].clone()
-
-        self.pre_update(batch)
-
         with torch.no_grad():
-            for field, sv in saved.items():
-                val = getattr(batch, field)
-                if val.shape[0] == batch.num_nodes:
-                    val[~node_mask] = sv
-                else:
-                    val[sys_mask] = sv
+            node_mask = mask[batch.batch_idx]
+            saved = self._save_mutable_fields(batch)
+            self.pre_update(batch)
+            self._restore_unmasked_fields(batch, saved, mask, node_mask)
 
     def _masked_post_update(
         self,
@@ -2241,29 +2262,38 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Called by :class:`FusedStage` after the shared compute so that
         post_update (e.g. the final BAOAB velocity half-kick) uses forces at
         the new positions.
-        """
-        node_mask = mask[batch.batch_idx]
-        sys_mask = ~mask
 
+        Uses the same static-shape save/blend strategy as
+        :meth:`_masked_pre_update` — see that method for the rationale.
+        """
+        with torch.no_grad():
+            node_mask = mask[batch.batch_idx]
+            saved = self._save_mutable_fields(batch)
+            self.post_update(batch)
+            self._restore_unmasked_fields(batch, saved, mask, node_mask)
+
+    def _save_mutable_fields(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Clone every mutable field in full (static shapes, no mask indexing)."""
         saved: dict[str, torch.Tensor] = {}
         for field in self._mutable_fields:
             val = getattr(batch, field, None)
-            if val is None:
-                continue
-            if val.shape[0] == batch.num_nodes:
-                saved[field] = val[~node_mask].clone()
-            elif val.shape[0] == batch.num_graphs:
-                saved[field] = val[sys_mask].clone()
+            if val is not None:
+                saved[field] = val.clone()
+        return saved
 
-        self.post_update(batch)
-
-        with torch.no_grad():
-            for field, sv in saved.items():
-                val = getattr(batch, field)
-                if val.shape[0] == batch.num_nodes:
-                    val[~node_mask] = sv
-                else:
-                    val[sys_mask] = sv
+    def _restore_unmasked_fields(
+        self,
+        batch: Batch,
+        saved: dict[str, torch.Tensor],
+        mask: torch.Tensor,
+        node_mask: torch.Tensor,
+    ) -> None:
+        """Blend pre-update values back into unmasked rows via ``torch.where``."""
+        for field, sv in saved.items():
+            val = getattr(batch, field)
+            m = node_mask if val.shape[0] == batch.num_nodes else mask
+            m = m.view(m.shape[0], *([1] * (val.dim() - 1)))
+            val.copy_(torch.where(m, val, sv))
 
 
 class ConvergenceHook:
@@ -2734,6 +2764,9 @@ class FusedStage(BaseDynamics):
         )
 
         self.entry_status = entry_status
+        # Keep autograd inputs as durable leaves so model wrappers skip their
+        # per-step clone().requires_grad_(True); see _ensure_autograd_inputs.
+        self._persistent_autograd_inputs = True
         self.compile_kwargs: dict[str, Any] = (
             compile_kwargs if compile_kwargs is not None else {}
         )
@@ -3003,13 +3036,13 @@ class FusedStage(BaseDynamics):
 
         Returns
         -------
-        tuple[Batch, torch.Tensor | None]
-            The updated batch, and a 1-D integer tensor of sample indices
-            that newly graduated (reached ``exit_status``) during this step,
-            or ``None`` if no samples graduated.
+        tuple[Batch, torch.Tensor]
+            The updated batch, and a boolean mask over graphs of samples
+            that newly graduated (reached ``exit_status``) during this step.
+            The mask (rather than an index tensor) keeps the return value
+            static-shaped so the whole method can be captured in a single
+            dynamo graph; :meth:`step` converts it to the index contract.
         """
-        self._ensure_bookkeeping_fields(batch)
-
         self._call_fused_hooks(DynamicsStage.BEFORE_STEP, batch)
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
 
@@ -3028,8 +3061,9 @@ class FusedStage(BaseDynamics):
             mask = status == status_code
             stage_active_masks.append(mask)
             dynamics._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
-            if mask.any():
-                dynamics._masked_pre_update(batch, mask)
+            # Unconditional: `if mask.any():` would be a graph-breaking host
+            # sync, and the masked update is a no-op for all-False masks.
+            dynamics._masked_pre_update(batch, mask)
 
         # Phase 2 — shared forward pass at the updated positions.
         self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
@@ -3037,8 +3071,9 @@ class FusedStage(BaseDynamics):
         outputs: ModelOutputs = self.compute(batch)
 
         # TODO: update this when `batch` structure is done
+        # Skip None placeholders — writing them only churns dynamo guards.
         for key, tensor in outputs.items():
-            if key not in ("forces", "energy"):
+            if key not in ("forces", "energy") and tensor is not None:
                 batch[key] = tensor
 
         self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
@@ -3048,8 +3083,7 @@ class FusedStage(BaseDynamics):
         # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
-            if mask.any():
-                dynamics._masked_post_update(batch, mask)
+            dynamics._masked_post_update(batch, mask)
             dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
 
         # Snapshot before hook and counter migration so both are reported
@@ -3081,7 +3115,8 @@ class FusedStage(BaseDynamics):
             )
             active = cur_status == status_code
 
-            counter[active] += 1
+            # Branchless: mask-indexed writes and `migrate.any()` break capture.
+            counter.add_(active.to(counter.dtype).unsqueeze(-1))
 
             next_status = (
                 self.sub_stages[i + 1][0]
@@ -3090,9 +3125,17 @@ class FusedStage(BaseDynamics):
             )
 
             migrate = active & (counter.squeeze(-1) >= dynamics.n_steps)
-            if migrate.any():
-                batch.status.view(-1)[migrate] = next_status
-                counter[migrate] = 0  # Reset for next system in this slot
+            status_flat = batch.status.view(-1)
+            status_flat.copy_(
+                torch.where(
+                    migrate,
+                    torch.full_like(status_flat, next_status),
+                    status_flat,
+                )
+            )
+            counter.copy_(
+                torch.where(migrate.unsqueeze(-1), torch.zeros_like(counter), counter)
+            )
 
         for active_mask, (_, dynamics) in zip(
             stage_active_masks, self.sub_stages, strict=True
@@ -3125,11 +3168,8 @@ class FusedStage(BaseDynamics):
         newly_graduated = (pre_migration_status < self.exit_status) & (
             post_status >= self.exit_status
         )
-        exit_converged: torch.Tensor | None = (
-            torch.where(newly_graduated)[0] if newly_graduated.any() else None
-        )
 
-        return batch, exit_converged
+        return batch, newly_graduated
 
     def step(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Execute one fused step: single forward pass + masked updates.
@@ -3149,9 +3189,20 @@ class FusedStage(BaseDynamics):
             that newly graduated (reached ``exit_status``) during this step,
             or ``None`` if no samples graduated.
         """
-        if self._compiled_step is not None:
-            return self._compiled_step(batch)
-        return self._step_impl(batch)
+        # Lazy state must be created outside the compiled step: in-graph
+        # allocations break CUDA-graph replay and fullgraph shape reasoning.
+        self._ensure_bookkeeping_fields(batch)
+        self._ensure_autograd_inputs(batch)
+        for _, dynamics in self.sub_stages:
+            dynamics._ensure_state_initialized(batch)
+        step_fn = (
+            self._compiled_step if self._compiled_step is not None else self._step_impl
+        )
+        batch, newly_graduated = step_fn(batch)
+        # Mask -> index conversion here, where a host sync is acceptable.
+        if newly_graduated is None or not newly_graduated.any():
+            return batch, None
+        return batch, torch.where(newly_graduated)[0]
 
     def __call__(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Call the ``step`` method on a batch."""
