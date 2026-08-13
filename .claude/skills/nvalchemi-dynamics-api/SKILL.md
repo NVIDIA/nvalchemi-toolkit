@@ -166,16 +166,17 @@ with fused:  # lazy compilation on context entry
 
 ### CUDA streams: `with` vs bare `run()`
 
-Used as a context manager (`with dynamics: dynamics.run(batch)`), dynamics
-creates a dedicated stream shared by torch and warp. This supports
-overlapping GPU work, multi-stage pipelines, and CUDA-graph capture
-(`mode="reduce-overhead"`). Entry waits for prior work, but exit is
-asynchronous; synchronize before consuming results on another stream.
+Prefer to use context manager:
 
-Without the context manager (calling `run()` directly), dynamics uses the
-caller's current torch stream and binds warp operations to it for each
-step. This is fine for eager and default-compile runs; callers using
-custom streams are responsible for cross-stream ordering.
+```python
+with dynamics:
+    dynamics.run(batch)
+```
+
+As best pattern, even without explicit CUDA stream usage, as it in turn
+supports `compile(mode="reduce-overhead")`
+
+Calling `dynamics.run(batch)` without context manager will reuse the current stream.
 
 ### How it works
 
