@@ -464,7 +464,10 @@ jobs:
       - lint
       - get-pr-labels
       - changed-files
-    runs-on: nv-gpu-amd64-h100-2gpu
+    # Overridable via a repo variable so a runner-fleet rename is a settings
+    # edit, not a code change; an unknown label queues silently until GitHub
+    # times it out ~24h later, with no runner ever assigned.
+    runs-on: ${{ vars.MULTIGPU_RUNNER || 'linux-amd64-gpu-h100-latest-2' }}
     # DD equivalence + compile recompile gates dominate; UMA adds a second
     # torch install and a possible checkpoint download.
     timeout-minutes: 90
