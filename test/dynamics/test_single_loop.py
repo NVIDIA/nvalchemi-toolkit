@@ -957,10 +957,17 @@ class TestCommunicationMixinStreamContext:
     @pytest.fixture(autouse=True)
     def _mock_warp(self):
         """Mock the warp stream API — real conversion rejects mocked streams."""
-        with patch("nvalchemi.dynamics.base.wp") as mock_wp:
+        with (
+            patch("nvalchemi.dynamics.base.wp") as mock_wp,
+            patch(
+                "torch.cuda.current_stream",
+                return_value=MagicMock(spec=torch.cuda.Stream),
+            ) as mock_current_stream,
+        ):
             mock_wp.stream_from_torch.return_value = MagicMock()
             mock_wp.ScopedStream.return_value = MagicMock()
             self.mock_wp = mock_wp
+            self.mock_current_stream = mock_current_stream
             yield
 
     def setup_method(self) -> None:
@@ -991,6 +998,14 @@ class TestCommunicationMixinStreamContext:
                         # Assert Stream was created with the device
                         mock_stream_cls.assert_called_once_with(
                             device=torch.device("cuda:0")
+                        )
+
+                        # The dedicated stream waits for work submitted before entry.
+                        self.mock_current_stream.assert_called_once_with(
+                            torch.device("cuda:0")
+                        )
+                        mock_stream.wait_stream.assert_called_once_with(
+                            self.mock_current_stream.return_value
                         )
 
                         # Assert torch.cuda.stream() was called with the stream
@@ -1162,7 +1177,13 @@ class TestFusedStageStreamContext:
     @pytest.fixture(autouse=True)
     def _mock_warp(self):
         """Mock the warp stream API — real conversion rejects mocked streams."""
-        with patch("nvalchemi.dynamics.base.wp") as mock_wp:
+        with (
+            patch("nvalchemi.dynamics.base.wp") as mock_wp,
+            patch(
+                "torch.cuda.current_stream",
+                return_value=MagicMock(spec=torch.cuda.Stream),
+            ),
+        ):
             mock_wp.stream_from_torch.return_value = MagicMock()
             mock_wp.ScopedStream.return_value = MagicMock()
             self.mock_wp = mock_wp

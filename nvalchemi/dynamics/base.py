@@ -794,10 +794,11 @@ class _CommunicationMixin:
         it jointly on the torch side (``torch.cuda.StreamContext``) and the
         warp side (``wp.ScopedStream`` over the converted stream), so all
         subsequent GPU operations — including warp-backed custom ops —
-        execute on the one dedicated stream.  On non-CUDA devices this is
-        a no-op.  See the **CUDA stream semantics** notes on
-        :class:`BaseDynamics` for how this differs from calling ``run()``
-        without the context manager.
+        execute on the one dedicated stream. The dedicated stream first waits
+        for work already submitted to the caller's current torch stream. On
+        non-CUDA devices this is a no-op. See the **CUDA stream semantics**
+        notes on :class:`BaseDynamics` for how this differs from calling
+        ``run()`` without the context manager.
 
         Returns
         -------
@@ -805,7 +806,9 @@ class _CommunicationMixin:
             This instance.
         """
         if self.device_type == "cuda" and torch.cuda.is_available():
+            caller_stream = torch.cuda.current_stream(self.device)
             self._stream = torch.cuda.Stream(device=self.device)
+            self._stream.wait_stream(caller_stream)
             self._wp_stream = wp.stream_from_torch(self._stream)
             self._stream_ctx = self._enter_joint_stream_context(
                 self._stream, self._wp_stream
