@@ -21,6 +21,8 @@ used by E(3) equivariant interatomic potentials.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import partial
 from typing import Any, Literal, TypeAlias
 
@@ -38,13 +40,14 @@ _TRANSFORMER_ENGINE_LORA_LINEAR = getattr(
 if _TRANSFORMER_ENGINE_LORA_LINEAR is not None:
     TransformerEngineLoRALinear = _TRANSFORMER_ENGINE_LORA_LINEAR
 
+
 LoRAWrappableLayer: TypeAlias = type[nn.Module]
 LoRAWrapper: TypeAlias = type[_peft.LoRALayer]
 LoRAWrapperRegistrations: TypeAlias = tuple[tuple[LoRAWrappableLayer, LoRAWrapper], ...]
 
 
 __all__ = [
-    "CuEquivariantLoRALinear",
+    "CuEquivarianceLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
     "LoRALayer",
@@ -53,7 +56,6 @@ __all__ = [
     "LoRAWrapperRegistrations",
     "LoRAWrappableLayer",
     "available_lora_wrappers",
-    "register_builtin_lora_wrappers",
 ]
 if _TRANSFORMER_ENGINE_LORA_LINEAR is not None:
     __all__.append("TransformerEngineLoRALinear")
@@ -66,9 +68,6 @@ def __getattr__(name: str) -> object:
             "TransformerEngineLoRALinear requires transformer_engine to be installed."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-_BUILTIN_LORA_WRAPPERS_REGISTERED = False
 
 
 def _import_e3nn() -> tuple[type[nn.Module], type[nn.Module], object, type[nn.Module]]:
@@ -361,7 +360,7 @@ class EquivariantLoRALinear(nn.Module, LoRALayer):
         self.base_layer.weight.copy_(self._merged_weight())
 
 
-class CuEquivariantLoRALinear(nn.Module, LoRALayer):
+class CuEquivarianceLoRALinear(nn.Module, LoRALayer):
     """LoRA layer for cuEquivariance linear layers.
 
     Models converted to cuEquivariance typically replace ``e3nn.o3.Linear``
@@ -392,25 +391,25 @@ class CuEquivariantLoRALinear(nn.Module, LoRALayer):
         linear_cls = _cueq_linear_cls()
         if not isinstance(base_layer, linear_cls):
             raise TypeError(
-                "CuEquivariantLoRALinear can only wrap "
+                "CuEquivarianceLoRALinear can only wrap "
                 "cuequivariance_torch.operations.linear.Linear layers."
             )
         if dropout != 0.0:
             raise ValueError(
-                "CuEquivariantLoRALinear does not support nonzero dropout."
+                "CuEquivarianceLoRALinear does not support nonzero dropout."
             )
         if not getattr(base_layer, "internal_weights", False):
             raise ValueError(
-                "CuEquivariantLoRALinear requires cuEq Linear layers with "
+                "CuEquivarianceLoRALinear requires cuEq Linear layers with "
                 "internal weights."
             )
         if not getattr(base_layer, "shared_weights", False):
             raise ValueError(
-                "CuEquivariantLoRALinear requires shared-weight cuEq Linear layers."
+                "CuEquivarianceLoRALinear requires shared-weight cuEq Linear layers."
             )
         if int(getattr(base_layer, "weight_classes", 1)) != 1:
             raise ValueError(
-                "CuEquivariantLoRALinear does not support cuEq Linear layers "
+                "CuEquivarianceLoRALinear does not support cuEq Linear layers "
                 "with multiple weight classes."
             )
 
@@ -574,7 +573,7 @@ class CuEquivariantLoRALinear(nn.Module, LoRALayer):
         weight = linear.weight
         if getattr(weight, "ndim", None) != 2 or int(weight.shape[0]) != 1:
             raise RuntimeError(
-                "CuEquivariantLoRALinear merge requires a single shared cuEq "
+                "CuEquivarianceLoRALinear merge requires a single shared cuEq "
                 "weight class."
             )
         for mul_in, ir_in in linear.irreps_in:
@@ -583,7 +582,7 @@ class CuEquivariantLoRALinear(nn.Module, LoRALayer):
                     continue
                 if ir_in in blocks:
                     raise RuntimeError(
-                        "CuEquivariantLoRALinear merge requires unique input "
+                        "CuEquivarianceLoRALinear merge requires unique input "
                         "and output irreps."
                     )
                 size = int(mul_in) * int(mul_out)
@@ -656,7 +655,7 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
     Attributes
     ----------
     mergeable : bool
-        Required by ``LoRALayer``; whether this adapter can be folded into the
+        Required by ``LoRALayer``; whether this adapter supports merging into the
         wrapped base layer.
     enabled : bool
         Required by ``LoRALayer``; whether the LoRA residual is active during
@@ -745,7 +744,7 @@ class E3NNFullyConnectedLoRALayer(nn.Module, LoRALayer):
 _BUILTIN_LORA_WRAPPER_FACTORIES = (
     (
         _cueq_linear_cls,
-        CuEquivariantLoRALinear,
+        CuEquivarianceLoRALinear,
     ),
     (
         partial(_e3nn_layer_cls, "linear"),
@@ -758,11 +757,13 @@ _BUILTIN_LORA_WRAPPER_FACTORIES = (
 )
 
 
-def register_builtin_lora_wrappers() -> None:
-    """Register ALCHEMI's built-in e3nn LoRA wrappers."""
-    global _BUILTIN_LORA_WRAPPERS_REGISTERED
-    if _BUILTIN_LORA_WRAPPERS_REGISTERED:
-        return
+def _register_lora_wrappers(
+    registrations: LoRAWrapperRegistrations = (),
+    *,
+    temporary: bool,
+) -> None:
+    """Register available built-in wrappers followed by custom wrappers."""
+    resolved: list[tuple[LoRAWrappableLayer, LoRAWrapper]] = []
     for layer_cls_factory, wrapper_cls in _BUILTIN_LORA_WRAPPER_FACTORIES:
         try:
             layer_cls = layer_cls_factory()
@@ -773,11 +774,40 @@ def register_builtin_lora_wrappers() -> None:
                 stacklevel=2,
             )
             continue
+        resolved.append((layer_cls, wrapper_cls))
+
+    for layer_cls, wrapper_cls in (*resolved, *registrations):
+        existing = _peft._LORA_WRAPPERS.get(layer_cls)
+        if existing is wrapper_cls:
+            continue
+        if existing is not None:
+            action = "Temporarily overriding" if temporary else "Overriding"
+            warnings.warn(
+                f"{action} LoRA wrapper for "
+                f"{layer_cls.__module__}.{layer_cls.__qualname__}: "
+                f"{existing.__module__}.{existing.__qualname__} -> "
+                f"{wrapper_cls.__module__}.{wrapper_cls.__qualname__}.",
+                UserWarning,
+                stacklevel=3,
+            )
         _peft.register_lora_wrapper(layer_cls, wrapper_cls)
-    _BUILTIN_LORA_WRAPPERS_REGISTERED = True
+
+
+@contextmanager
+def _temporary_lora_wrapper_registrations(
+    registrations: LoRAWrapperRegistrations,
+) -> Iterator[None]:
+    """Install wrappers temporarily and restore the prior registry afterward."""
+    previous = dict(_peft._LORA_WRAPPERS)
+    try:
+        _register_lora_wrappers(registrations, temporary=True)
+        yield
+    finally:
+        _peft._LORA_WRAPPERS.clear()
+        _peft._LORA_WRAPPERS.update(previous)
 
 
 def available_lora_wrappers() -> LoRAWrapperRegistrations:
     """Return registered (layer, LoRA-wrapper) pairs."""
-    register_builtin_lora_wrappers()
+    _register_lora_wrappers(temporary=False)
     return tuple(_peft._LORA_WRAPPERS.items())

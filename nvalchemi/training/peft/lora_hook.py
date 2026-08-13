@@ -30,6 +30,7 @@ from nvalchemi.training.peft.lora_wrappers import (
     LoRAWrappableLayer,
     LoRAWrapper,
     LoRAWrapperRegistrations,
+    _temporary_lora_wrapper_registrations,
 )
 
 __all__ = [
@@ -91,7 +92,7 @@ class LoRAHook(BaseModel):
 
     This hook is automatically prepended when
     :class:`~nvalchemi.training.FineTuningStrategy` receives a
-    :class:`~nvalchemi.training.LoRAConfig`.
+    :class:`~nvalchemi.training.peft.LoRAConfig`.
 
     Parameters
     ----------
@@ -139,10 +140,6 @@ class LoRAHook(BaseModel):
         parameter names are registered on the workflow.
         """
 
-        from nvalchemi.training.peft.lora_wrappers import (
-            register_builtin_lora_wrappers,
-        )
-
         # Validate workflow
         models = getattr(workflow, "models", None)
         if not isinstance(models, Mapping):
@@ -153,11 +150,6 @@ class LoRAHook(BaseModel):
             raise RuntimeError(
                 "LoRAHook must be registered before optimizers are built."
             )
-
-        # Register built-in and user-defined LoRA wrappers
-        register_builtin_lora_wrappers()
-        for layer_cls, wrapper_cls in self.lora_config.wrapper_registrations or ():
-            _peft.register_lora_wrapper(layer_cls, wrapper_cls)
 
         # Apply LoRA to models and collect registration data.
         # Adapter selectors operate on one model at a time. Convert
@@ -214,18 +206,19 @@ class LoRAHook(BaseModel):
                 lora_dropout=self.lora_config.lora_dropout,
                 extras_trainable=[],
                 wrap_mlp=self.lora_config.wrap_mlp,
-                init="default", # hardcode adapter initialization for now
+                init="default",  # hardcode adapter initialization for now
             )
 
             if not local_targets:
                 continue
 
             # Apply LoRA to the model and collect names to register.
-            result: _peft.ApplyResult = _peft.apply_lora(
-                model,
-                model_lora_config,
-                compute_fingerprint=False,
-            )
+            with _temporary_lora_wrapper_registrations(
+                self.lora_config.wrapper_registrations or ()
+            ):
+                result: _peft.ApplyResult = _peft.apply_lora(
+                    model, model_lora_config, compute_fingerprint=False
+                )
             (
                 model_trainable_names,
                 model_managed_names,

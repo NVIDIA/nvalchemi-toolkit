@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -39,6 +41,41 @@ from nvalchemi.training.hooks import (
     TrainableParameterHook,
 )
 from nvalchemi.training.strategy import TrainingStrategy
+
+
+def test_finetuning_import_does_not_load_experimental_peft() -> None:
+    """Importing the core training API must not initialize experimental PEFT."""
+    code = """
+import sys
+import warnings
+
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    import nvalchemi.training as training
+    from nvalchemi.training import FineTuningStrategy
+
+assert not any(
+    hasattr(training, name)
+    for name in (
+        "LoRAConfig", "PeftConfig", "available_lora_wrappers", "is_lora_layer",
+        "load_peft_checkpoint_into_model",
+    )
+)
+
+assert "physicsnemo.experimental.peft" not in sys.modules
+assert not any(
+    "physicsnemo.experimental" in str(warning.message)
+    for warning in caught
+)
+"""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 class _OnRegisterRecorder:

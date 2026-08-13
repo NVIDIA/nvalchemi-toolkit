@@ -671,7 +671,7 @@ sequence via `from_pretrained_checkpoint`.
 {py:class}`~nvalchemi.training.FineTuningStrategy` also supports
 parameter-efficient fine-tuning through `peft_config`; LoRA is the only
 supported PEFT method right now. Pass
-{py:class}`~nvalchemi.training.LoRAConfig` to inject low-rank LoRA adapters
+{py:class}`~nvalchemi.training.peft.LoRAConfig` to inject low-rank LoRA adapters
 into selected modules before optimizer construction. The pretrained base is
 frozen by default, and the optimizer sees only adapter parameters plus any
 module patches or explicit extra parameters you opt in with
@@ -691,12 +691,13 @@ from nvalchemi.training import (
     EnergyMSELoss,
     FineTuningStrategy,
     ForceMSELoss,
-    LoRAConfig,
     OptimizerConfig,
     TrainingStage,
     ValidationConfig,
     default_training_fn,
 )
+
+from nvalchemi.training.peft import LoRAConfig
 
 pretrained_model = load_my_pretrained_model()
 train_loader = make_my_batch_loader()
@@ -783,16 +784,16 @@ The public wrapper classes available through `nvalchemi.training.peft` are:
   installed.
 - {py:class}`nvalchemi.training.peft.EquivariantLoRALinear` for
   `e3nn.o3.Linear` layers.
-- {py:class}`nvalchemi.training.peft.CuEquivariantLoRALinear` for
+- {py:class}`nvalchemi.training.peft.CuEquivarianceLoRALinear` for
   `cuequivariance_torch.operations.linear.Linear` layers.
 - {py:class}`nvalchemi.training.peft.E3NNFullyConnectedLoRALayer` for
   `e3nn.nn._fc._Layer` scalar fully connected layers.
 
 Inspect the active layer-to-wrapper pairs with
-{py:func}`~nvalchemi.training.available_lora_wrappers`.
+{py:func}`~nvalchemi.training.peft.available_lora_wrappers`.
 
 ```python
-from nvalchemi.training import available_lora_wrappers
+from nvalchemi.training.peft import available_lora_wrappers
 
 for layer_cls, wrapper_cls in available_lora_wrappers():
     print(layer_cls, "->", wrapper_cls)
@@ -804,14 +805,19 @@ wrapper for the base layer class through
 `LoRAConfig(wrapper_registrations=...)`. Each registration is a pair of
 `(LoRAWrappableLayer, LoRAWrapper)`: when LoRA finds an instance of the base class
 matching your target patterns, it replaces that layer with your wrapper. The
-strategy registers these pairs immediately before adapter injection, so target
-patterns can select the custom layer in the same constructor call.
+strategy register these pairs immediately before adapter injection, so target
+patterns can select the custom layer in the same constructor call. Registrations
+are temporary: the process-wide registry is restored after injection.
+
+A custom wrapper may replace an existing or built-in wrapper for the duration of injection,
+with a `UserWarning`. Attempting to assign two different wrappers to the same layer class in
+`LoRAConfig` will raise `ValueError` during configuration validation.
 
 ```python
 import torch
 
-from nvalchemi.training import FineTuningStrategy, LoRAConfig, OptimizerConfig
-from nvalchemi.training.peft import LoRALayer, LoRAWrapperRegistrations
+from nvalchemi.training import FineTuningStrategy, OptimizerConfig
+from nvalchemi.training.peft import LoRAConfig, LoRALayer, LoRAWrapperRegistrations
 
 
 class MyBlock(torch.nn.Module):
@@ -881,7 +887,8 @@ For example, this strategy trains the LoRA adapters, the patched auxiliary
 projection, and one explicitly selected base projection.
 
 ```python
-from nvalchemi.training import FineTuningStrategy, LoRAConfig, create_model_spec
+from nvalchemi.training import FineTuningStrategy, create_model_spec
+from nvalchemi.training.peft import LoRAConfig
 
 strategy = FineTuningStrategy(
     models=pretrained_model,
@@ -1025,7 +1032,8 @@ training only a small fraction of parameters, use
 `save_trainable_state_only=True` in `save_checkpoint` or `CheckpointHook`.
 
 ```python
-from nvalchemi.training import CheckpointHook, FineTuningStrategy, LoRAConfig
+from nvalchemi.training import CheckpointHook, FineTuningStrategy
+from nvalchemi.training.peft import LoRAConfig
 
 strategy = FineTuningStrategy(
     models=pretrained_model,
@@ -1050,13 +1058,13 @@ not meant to be standalone deployable model artifacts unless they are loaded
 with a compatible base model.
 
 Load a trainable-state PEFT checkpoint into a compatible pristine base model
-with {py:func}`~nvalchemi.training.load_peft_checkpoint_into_model`. By
+with {py:func}`~nvalchemi.training.peft.load_peft_checkpoint_into_model`. By
 default, `load_peft_checkpoint_into_model(..., merge=True)` folds mergeable
 adapter weights into the base layers, which is usually the right shape for
 inference and export.
 
 ```python
-from nvalchemi.training import load_peft_checkpoint_into_model
+from nvalchemi.training.peft import load_peft_checkpoint_into_model
 
 checkpoint_index = strategy.save_checkpoint(
     "runs/lora-ft/checkpoints",

@@ -16,17 +16,9 @@
 
 from __future__ import annotations
 
-from nvalchemi.training.peft import lora_wrappers
-from nvalchemi.training.peft.fingerprints import (
-    BaseFingerprintHook,
-    compute_base_fingerprints,
-    validate_base_fingerprints,
-)
-from nvalchemi.training.peft.lora_hook import LoRAHook
-
 __all__ = [
     "BaseFingerprintHook",
-    "CuEquivariantLoRALinear",
+    "CuEquivarianceLoRALinear",
     "E3NNFullyConnectedLoRALayer",
     "EquivariantLoRALinear",
     "LoRAHook",
@@ -41,15 +33,24 @@ __all__ = [
     "compute_base_fingerprints",
     "is_lora_layer",
     "load_peft_checkpoint_into_model",
-    "register_builtin_lora_wrappers",
     "validate_base_fingerprints",
 ]
-if lora_wrappers._TRANSFORMER_ENGINE_LORA_LINEAR is not None:
-    __all__.append("TransformerEngineLoRALinear")
 
 
 def __getattr__(name: str) -> object:
     """Lazily expose PEFT helpers with optional dependency boundaries."""
+    if name in {
+        "BaseFingerprintHook",
+        "compute_base_fingerprints",
+        "validate_base_fingerprints",
+    }:
+        from nvalchemi.training.peft import fingerprints
+
+        return getattr(fingerprints, name)
+    if name == "LoRAHook":
+        from nvalchemi.training.peft import lora_hook
+
+        return lora_hook.LoRAHook
     if name == "LoRAConfig":
         from nvalchemi.training.peft import lora
 
@@ -67,10 +68,9 @@ def __getattr__(name: str) -> object:
 
         return _peft.is_lora_layer
     if name in {
-        "CuEquivariantLoRALinear",
+        "CuEquivarianceLoRALinear",
         "E3NNFullyConnectedLoRALayer",
         "EquivariantLoRALinear",
-        "is_lora_layer",
         "LoRALayer",
         "LoRALinear",
         "LoRAWrappableLayer",
@@ -78,7 +78,6 @@ def __getattr__(name: str) -> object:
         "LoRAWrapperRegistrations",
         "TransformerEngineLoRALinear",
         "available_lora_wrappers",
-        "register_builtin_lora_wrappers",
     }:
         from nvalchemi.training.peft import lora_wrappers
 

@@ -77,6 +77,7 @@ def peft_metadata_from_config(
 
     if config.peft_method == LORA_PEFT_METHOD:
         from nvalchemi.training.peft.lora import lora_metadata_from_config
+
         return lora_metadata_from_config(config, details)
     raise ValueError(f"Unsupported PEFT method {config.peft_method!r}.")
 
@@ -100,6 +101,7 @@ def peft_config_from_metadata(metadata: Mapping[str, Any]) -> PeftConfig:
 
     if method == LORA_PEFT_METHOD:
         from nvalchemi.training.peft.lora import lora_config_from_metadata
+
         return lora_config_from_metadata(metadata)
     raise ValueError(f"Unsupported PEFT method {method!r}.")
 
@@ -131,5 +133,6 @@ def peft_setup_hooks(
 
     if config.peft_method == LORA_PEFT_METHOD:
         from nvalchemi.training.peft.lora import lora_setup_hooks
+
         return lora_setup_hooks(config, strategy_data)
     raise ValueError(f"Unsupported PEFT method {config.peft_method!r}.")

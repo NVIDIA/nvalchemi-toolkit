@@ -27,23 +27,25 @@ from torch import nn
 from nvalchemi.training import (
     CheckpointHook,
     FineTuningStrategy,
-    LoRAConfig,
     OptimizerConfig,
     TrainingStrategy,
     create_model_spec,
-    is_lora_layer,
-    load_peft_checkpoint_into_model,
 )
 from nvalchemi.training.hooks import (
     BaseFingerprintHook,
     ModulePatchHook,
     TrainableParameterHook,
 )
-from nvalchemi.training.peft import lora_wrappers
+from nvalchemi.training.peft import (
+    LoRAConfig,
+    is_lora_layer,
+    load_peft_checkpoint_into_model,
+    lora_wrappers,
+)
 from nvalchemi.training.peft.lora import merge_lora_into_model
 from nvalchemi.training.peft.lora_hook import LoRAHook
 from nvalchemi.training.peft.lora_wrappers import (
-    CuEquivariantLoRALinear,
+    CuEquivarianceLoRALinear,
     E3NNFullyConnectedLoRALayer,
     EquivariantLoRALinear,
     LoRALayer,
@@ -143,6 +145,14 @@ class _CustomCheckpointPatch(nn.Linear):
     """Importable custom module patch used by checkpoint trust-policy tests."""
 
 
+class _CustomLoRAWrapper(_CustomCheckpointLoRAWrapper):
+    """Custom wrapper used by registration tests."""
+
+
+class _AlternateLoRAWrapper(_CustomCheckpointLoRAWrapper):
+    """Alternate wrapper used by conflict-validation tests."""
+
+
 def _import_real_o3() -> Any:
     """Import real e3nn.o3 with the PyTorch 2.6 safe-global shim."""
     if hasattr(torch.serialization, "add_safe_globals"):
@@ -240,8 +250,9 @@ def _install_fake_peft(
         lambda model: current_fingerprint,
     )
     monkeypatch.setattr(
-        "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
-        lambda: None,
+        lora_wrappers,
+        "_BUILTIN_LORA_WRAPPER_FACTORIES",
+        (),
     )
 
 
@@ -389,8 +400,8 @@ class TestLoRATrainableParameterRegistration:
             lambda module: bool(getattr(module, "_fake_lora", False)),
         )
         monkeypatch.setattr(
-            "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
-            lambda: None,
+            "nvalchemi.training.peft.lora_wrappers._register_lora_wrappers",
+            lambda *args, **kwargs: None,
         )
         strategy = FineTuningStrategy(
             **{
@@ -442,8 +453,8 @@ class TestLoRATrainableParameterRegistration:
             lambda module: bool(getattr(module, "_fake_lora", False)),
         )
         monkeypatch.setattr(
-            "nvalchemi.training.peft.lora_wrappers.register_builtin_lora_wrappers",
-            lambda: None,
+            "nvalchemi.training.peft.lora_wrappers._register_lora_wrappers",
+            lambda *args, **kwargs: None,
         )
 
         with pytest.raises(RuntimeError, match="not present"):
@@ -1230,7 +1241,7 @@ class TestLoadPeftCheckpointIntoModel:
 
 
 class TestLoRAWrapperRegistrations:
-    def test_register_builtin_lora_wrappers_warns_for_unavailable_optional_dependency(
+    def test_available_lora_wrappers_warns_for_unavailable_optional_dependency(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -1239,11 +1250,44 @@ class TestLoRAWrapperRegistrations:
         ]:
             raise ImportError("Equivariant LoRA requires e3nn.")
 
-        monkeypatch.setattr(lora_wrappers, "_BUILTIN_LORA_WRAPPERS_REGISTERED", False)
         monkeypatch.setattr(lora_wrappers, "_import_e3nn", raise_missing_e3nn)
 
         with pytest.warns(UserWarning, match="Skipping built-in LoRA wrapper"):
-            lora_wrappers.register_builtin_lora_wrappers()
+            lora_wrappers.available_lora_wrappers()
+
+    def test_config_rejects_conflicting_wrappers_for_one_layer(self) -> None:
+        with pytest.raises(ValueError, match="Multiple LoRA wrappers configured"):
+            LoRAConfig(
+                lora_target_patterns=("main.model.projection",),
+                wrapper_registrations=(
+                    (nn.Linear, _CustomLoRAWrapper),
+                    (nn.Linear, _AlternateLoRAWrapper),
+                ),
+            )
+
+    def test_temporary_registration_overrides_and_restores_wrapper(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            lora_wrappers,
+            "_BUILTIN_LORA_WRAPPER_FACTORIES",
+            (),
+        )
+        registry = lora_wrappers._peft._LORA_WRAPPERS
+        monkeypatch.setitem(registry, nn.Linear, lora_wrappers.LoRALinear)
+        previous = dict(registry)
+
+        with pytest.warns(
+            UserWarning,
+            match="Temporarily overriding LoRA wrapper",
+        ):
+            with lora_wrappers._temporary_lora_wrapper_registrations(
+                ((nn.Linear, _CustomLoRAWrapper),)
+            ):
+                assert registry[nn.Linear] is _CustomLoRAWrapper
+
+        assert registry == previous
 
 
 class TestE3NNFullyConnectedLoRALayer:
@@ -1470,7 +1514,7 @@ class TestEquivariantLoRALinear:
         )
 
 
-class TestCuEquivariantLoRALinear:
+class TestCuEquivarianceLoRALinear:
     @staticmethod
     def _base_layer() -> nn.Module:
         return _make_cueq_linear(
@@ -1484,7 +1528,7 @@ class TestCuEquivariantLoRALinear:
         cue, _linear_cls = _import_real_cueq_linear()
         base_layer = self._base_layer()
 
-        wrapper = CuEquivariantLoRALinear(base_layer, rank=3, alpha=6.0)
+        wrapper = CuEquivarianceLoRALinear(base_layer, rank=3, alpha=6.0)
 
         assert wrapper.adapter_irreps == cue.Irreps("O3", "3x0e + 3x1o")
         assert wrapper.lora_A.shape == (1, 9)
@@ -1501,7 +1545,9 @@ class TestCuEquivariantLoRALinear:
         def fill_ones(tensor: torch.Tensor) -> None:
             tensor.fill_(1.0)
 
-        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0, init=fill_ones)
+        wrapper = CuEquivarianceLoRALinear(
+            base_layer, rank=2, alpha=4.0, init=fill_ones
+        )
 
         assert torch.equal(wrapper.lora_A, torch.ones_like(wrapper.lora_A))
         assert torch.count_nonzero(wrapper.lora_B) == 0
@@ -1521,7 +1567,7 @@ class TestCuEquivariantLoRALinear:
         )
         expected = base_layer(x)
 
-        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0)
+        wrapper = CuEquivarianceLoRALinear(base_layer, rank=2, alpha=4.0)
         torch.testing.assert_close(wrapper(x), expected)
 
         with torch.no_grad():
@@ -1542,7 +1588,7 @@ class TestCuEquivariantLoRALinear:
             pytest.skip("cuEquivariance forward kernels require CUDA.")
         torch.manual_seed(2)
         base_layer = self._base_layer()
-        wrapper = CuEquivariantLoRALinear(base_layer, rank=2, alpha=4.0)
+        wrapper = CuEquivarianceLoRALinear(base_layer, rank=2, alpha=4.0)
         with torch.no_grad():
             wrapper.lora_B.normal_(mean=0.0, std=1e-3)
         x = torch.randn(
@@ -1578,11 +1624,11 @@ class TestCuEquivariantLoRALinear:
             **kwargs,
         )
 
-        assert CuEquivariantLoRALinear.is_compatible(base_layer) is expected
+        assert CuEquivarianceLoRALinear.is_compatible(base_layer) is expected
 
     def test_cueq_linear_lora_rejects_no_shared_irreps(self) -> None:
         with pytest.raises(ValueError, match="share no common irreps"):
-            CuEquivariantLoRALinear._build_adapter_irreps(
+            CuEquivarianceLoRALinear._build_adapter_irreps(
                 _cueq_irreps("1x0e"),
                 _cueq_irreps("1x1o"),
                 rank=1,
@@ -1592,7 +1638,7 @@ class TestCuEquivariantLoRALinear:
         self,
     ) -> None:
         with pytest.raises(ValueError, match="does not support nonzero dropout"):
-            CuEquivariantLoRALinear(
+            CuEquivarianceLoRALinear(
                 self._base_layer(),
                 rank=2,
                 alpha=4.0,

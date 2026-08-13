@@ -44,7 +44,7 @@ _DEFAULT_ALLOWED_IMPORT_PATHS: frozenset[str] = frozenset(
         "cuequivariance_torch.operations.linear.Linear",
         "e3nn.nn._fc._Layer",
         "e3nn.o3._linear.Linear",
-        "nvalchemi.training.peft.lora_wrappers.CuEquivariantLoRALinear",
+        "nvalchemi.training.peft.lora_wrappers.CuEquivarianceLoRALinear",
         "nvalchemi.training.peft.lora_wrappers.E3NNFullyConnectedLoRALayer",
         "nvalchemi.training.peft.lora_wrappers.EquivariantLoRALinear",
         "physicsnemo.experimental.peft.LoRALinear",
@@ -180,7 +180,7 @@ def load_peft_checkpoint_into_model(
         model_name=model_name,
         map_location=map_location,
     )
-    
+
     # Merge PEFT weights into the model if supported.
     if merge:
         model = merge_peft(model, strict=strict)
@@ -191,6 +191,7 @@ def load_peft_checkpoint_into_model(
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
 
 def _make_import_path_validator(
     *,
@@ -268,7 +269,11 @@ def _load_checkpoint_model_state(
 ) -> None:
     """Load full or partial checkpoint state into a prepared model."""
     weights = torch.load(
-        checkpoint_dir / "models" / model_name / "checkpoints" / f"{checkpoint_index}.pt",
+        checkpoint_dir
+        / "models"
+        / model_name
+        / "checkpoints"
+        / f"{checkpoint_index}.pt",
         weights_only=True,
         map_location=map_location,
     )

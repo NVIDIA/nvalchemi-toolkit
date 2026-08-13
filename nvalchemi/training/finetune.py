@@ -281,7 +281,7 @@ class FineTuningStrategy(TrainingStrategy):
     _trainable_parameter_summary: dict[str, dict[str, int]] = PrivateAttr(
         default_factory=dict
     )
-      
+
     @property
     def trainable_parameter_summary(self) -> Mapping[str, dict[str, int]]:
         """Return trainable parameter counts grouped by registration source."""
@@ -491,6 +491,54 @@ class FineTuningStrategy(TrainingStrategy):
             Immutable union of all registered managed parameter names.
         """
         return frozenset().union(*self._registered_managed_parameter_names.values())
+
+    def register_base_fingerprints(
+        self,
+        fingerprints: Mapping[str, str],
+    ) -> None:
+        """Register base-model fingerprints taken before architecture changes.
+
+        A fingerprint hashes the model architecture, so it must be taken while
+        the base model is still pristine, before fine-tuning modifies it by
+        injecting adapters or patching modules. Currently used only by the
+        parameter-efficient fine-tuning (PEFT) workflow, which records the
+        fingerprints in the strategy spec so a checkpoint can be checked
+        against the base architecture it was trained on.
+
+        Parameters
+        ----------
+        fingerprints : Mapping[str, str]
+            Architecture hash of each pristine base model, keyed by model name.
+
+        Returns
+        -------
+        None
+            This method replaces ``self._base_fingerprints`` with a copy of
+            ``fingerprints``.
+        """
+        self._base_fingerprints = dict(fingerprints)
+
+    def register_trainable_parameter_summary(
+        self,
+        summary: Mapping[str, Mapping[str, int]],
+    ) -> None:
+        """Register final trainable-parameter counts.
+
+        Parameters
+        ----------
+        summary : Mapping[str, Mapping[str, int]]
+            ``{"tensor_count": ..., "parameter_count": ...}`` counts keyed by
+            registration source.
+
+        Returns
+        -------
+        None
+            This method replaces ``self._trainable_parameter_summary`` with a
+            copy of ``summary``.
+        """
+        self._trainable_parameter_summary = {
+            source: dict(counts) for source, counts in summary.items()
+        }
 
     @classmethod
     def from_pretrained_checkpoint(

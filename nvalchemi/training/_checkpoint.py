@@ -438,36 +438,6 @@ def _snapshot_components(
     }
 
 
-def _selected_state_dict(
-    state_dict: dict[str, Any],
-    names: set[str],
-) -> dict[str, Any]:
-    """Return selected state entries and fail when metadata names are stale."""
-    missing = sorted(names - set(state_dict))
-    if missing:
-        raise KeyError(
-            f"Cannot checkpoint missing trainable parameter(s): {missing!r}."
-        )
-    return {name: state_dict[name] for name in sorted(names)}
-
-
-def _model_local_parameter_names(model_name: str, names: Iterable[str]) -> list[str]:
-    """Return names local to ``model_name`` from fully qualified parameters."""
-    prefix = f"{model_name}."
-    return [name.removeprefix(prefix) for name in names if name.startswith(prefix)]
-
-
-def _model_local_buffer_names(
-    workflow: Any,
-    model_name: str,
-    state_dict: Mapping[str, Any],
-) -> set[str]:
-    """Return persistent buffer names for a live workflow model."""
-    live_model = _checkpoint_model(workflow.models[model_name])
-    state_keys = set(state_dict)
-    return {name for name, _buffer in live_model.named_buffers() if name in state_keys}
-
-
 def _filter_ema_hook_states_to_trainable_state(
     snapshot: dict[str, Any],
     trainable_names_by_model: Mapping[str, set[str]],
@@ -490,6 +460,7 @@ def _filter_ema_hook_states_to_trainable_state(
         if model_key not in trainable_names_by_model:
             continue
 
+        # AveragedModel stores the wrapped model's state under the "module." prefix
         parameter_keys = {
             f"module.{name}" for name in trainable_names_by_model[model_key]
         }
@@ -498,6 +469,8 @@ def _filter_ema_hook_states_to_trainable_state(
             raise KeyError(
                 f"Cannot checkpoint missing EMA trainable parameter(s): {missing!r}."
             )
+
+        # Preserve persistent buffers that are present in the averaged model state
         buffer_keys = {
             f"module.{name}"
             for name in buffer_names_by_model.get(model_key, set())
@@ -507,6 +480,8 @@ def _filter_ema_hook_states_to_trainable_state(
         state["averaged_model_state"] = _snapshot_state_dict(
             {name: averaged_state[name] for name in sorted(keep_keys)}
         )
+
+        # Partial EMA state must be restored non-strictly, like partial model state
         state["averaged_model_state_load"] = "partial"
 
 
@@ -535,11 +510,32 @@ def _filter_snapshot_to_trainable_state(
     trainable_names_by_model: dict[str, set[str]] = {}
     buffer_names_by_model: dict[str, set[str]] = {}
     for model_name, (state_dict, spec) in snapshot["models"].items():
-        names = set(_model_local_parameter_names(model_name, trainable_names))
-        buffers = _model_local_buffer_names(workflow, model_name, state_dict)
-        trainable_names_by_model[model_name] = names
+        prefix = f"{model_name}."
+        model_trainable_names = {
+            name.removeprefix(prefix)
+            for name in trainable_names
+            if name.startswith(prefix)
+        }
+
+        # Persistent buffers are required alongside selected parameters for partial restore
+        live_model = _checkpoint_model(workflow.models[model_name])
+        buffers = {
+            name for name, _buffer in live_model.named_buffers() if name in state_dict
+        }
+        trainable_names_by_model[model_name] = model_trainable_names
         buffer_names_by_model[model_name] = buffers
-        selected_state = _selected_state_dict(state_dict, names)
+
+        # Reject stale optimizer metadata
+        missing = sorted(model_trainable_names - set(state_dict))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing trainable parameter(s): {missing!r}."
+            )
+
+        # Collate trainable states
+        selected_state: dict[str, torch.Tensor] = {
+            name: state_dict[name] for name in sorted(model_trainable_names)
+        }
         selected_state.update({name: state_dict[name] for name in sorted(buffers)})
         filtered_models[model_name] = (
             _snapshot_state_dict(selected_state),

@@ -25,7 +25,6 @@ from torch import nn
 
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.training import _strategy_validation as strategy_validation
-from nvalchemi.training.peft import _peft
 
 __all__ = [
     "BaseFingerprintHook",
@@ -36,6 +35,8 @@ __all__ = [
 
 def compute_base_fingerprints(models: Mapping[str, nn.Module]) -> dict[str, str]:
     """Return base fingerprints for all named models."""
+    from nvalchemi.training.peft import _peft
+
     return {
         model_name: _peft.compute_base_fingerprint(model)
         for model_name, model in models.items()
@@ -90,4 +91,14 @@ class BaseFingerprintHook(BaseModel):
             raise TypeError(
                 "BaseFingerprintHook requires a workflow with a models mapping."
             )
-        workflow._base_fingerprints = compute_base_fingerprints(models)
+        register_fingerprints = getattr(
+            workflow,
+            "register_base_fingerprints",
+            None,
+        )
+        if not callable(register_fingerprints):
+            raise TypeError(
+                "BaseFingerprintHook requires a workflow with a "
+                "register_base_fingerprints(fingerprints) method."
+            )
+        register_fingerprints(compute_base_fingerprints(models))

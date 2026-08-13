@@ -18,7 +18,7 @@ LoRA Fine-Tuning MACE on LPSC dataset
 
 This example illustrates how to fine-tune a model with LoRA adapters using
 :class:`~nvalchemi.training.FineTuningStrategy` with
-:class:`~nvalchemi.training.LoRAConfig`. It fine-tunes the MACE ``medium-mpa-0``
+:class:`~nvalchemi.training.peft.LoRAConfig`. It fine-tunes the MACE ``medium-mpa-0``
 foundation model on the ``li/data/LPSC_600.extxyz`` subset from the public
 ``ev-tlt/MACE_finetuning_supplementary`` Hugging Face dataset.
 Dataset attribution: ``li/data/LPSC_600.extxyz`` comes from
@@ -84,14 +84,16 @@ from nvalchemi.training import (
     EnergyHuberLoss,
     FineTuningStrategy,
     ForceHuberLoss,
-    LoRAConfig,
     OptimizerConfig,
     StressHuberLoss,
     TrainingStage,
     ValidationConfig,
-    available_lora_wrappers,
     default_training_fn,
     fit_atomic_reference_energies,
+)
+from nvalchemi.training.peft import (
+    LoRAConfig,
+    available_lora_wrappers,
     is_lora_layer,
     load_peft_checkpoint_into_model,
 )
@@ -462,7 +464,7 @@ print_available_lora_wrappers()
 # Similar to :class:`~nvalchemi.training.TrainingStrategy` and
 # :class:`~nvalchemi.training.FineTuningStrategy`, this workflow combines the
 # training objective, validation reporter, neighbor-list hook, optimizer setup,
-# and a :class:`~nvalchemi.training.LoRAConfig`. The LoRA target patterns select
+# and a :class:`~nvalchemi.training.peft.LoRAConfig`. The LoRA target patterns select
 # the MACE layers that receive adapters, while the trainable patterns keep a
 # small set of base-model parameters trainable. Module patches can also be
 # provided to customize model components, but they are not needed in this
@@ -631,7 +633,7 @@ if device.type == "cuda":
 # -------------------------------------------------
 # The PEFT checkpoint can be attached to a freshly loaded foundation model for
 # inference with
-# :func:`~nvalchemi.training.load_peft_checkpoint_into_model`. Here, we use a
+# :func:`~nvalchemi.training.peft.load_peft_checkpoint_into_model`. Here, we use a
 # held-out validation batch as a simple inference example. For inference after
 # training, the LoRA adapters can also be folded directly into the
 # strategy-owned model with

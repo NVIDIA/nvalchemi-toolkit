@@ -100,10 +100,8 @@ __all__ = [
     "EMAHook",
     "FineTuningStrategy",
     "LinearWeight",
-    "LoRAConfig",
     "LossWeightSchedule",
     "OptimizerConfig",
-    "PeftConfig",
     "PiecewiseWeight",
     "ReductionContext",
     "StressHuberLoss",
@@ -115,7 +113,6 @@ __all__ = [
     "ValidationConfig",
     "ValidationLoop",
     "assemble_loss_targets",
-    "available_lora_wrappers",
     "configure_dataloader",
     "configure_parallelism",
     "create_model_spec",
@@ -123,32 +120,13 @@ __all__ = [
     "default_training_fn",
     "fit_atomic_reference_energies",
     "freeze_unconfigured_models",
-    "is_lora_layer",
-    "load_peft_checkpoint_into_model",
     "loss_component_to_spec",
     "load_checkpoint",
     "move_to_devices",
     "register_type_serializer",
-    "register_builtin_lora_wrappers",
     "save_checkpoint",
     "setup_optimizers",
     "step_lr_schedulers",
     "step_optimizers",
     "zero_gradients",
 ]
-
-
-def __getattr__(name: str) -> object:
-    """Lazily expose PEFT helpers."""
-    if name in {
-        "LoRAConfig",
-        "PeftConfig",
-        "available_lora_wrappers",
-        "is_lora_layer",
-        "load_peft_checkpoint_into_model",
-        "register_builtin_lora_wrappers",
-    }:
-        from nvalchemi.training import peft
-
-        return getattr(peft, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -19,9 +19,9 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, Callable, Final
+from typing import Any, Callable, Final, Self
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from torch import nn
 
 from nvalchemi._serialization import _cls_path_of, _import_cls
@@ -81,7 +81,11 @@ class LoRAConfig(PeftConfig):
     wrapper_registrations : LoRAWrapperRegistrations, optional
         Custom layer-to-wrapper registrations installed before adapter
         injection. Each pair maps a base layer class to the adapter wrapper
-        class that should handle it. Defaults to ``()``.
+        class that should handle it. The registrations only apply during
+        adapter injection, and the global wrapper registry is restored to its
+        prior state as soon as injection finishes. Replacing an existing wrapper
+        emits a ``UserWarning``; assigning two different wrappers to one layer class
+        in the same configuration raises ``ValueError``. Defaults to ``()``.
 
     Attributes
     ----------
@@ -121,6 +125,22 @@ class LoRAConfig(PeftConfig):
     wrapper_registrations: LoRAWrapperRegistrations | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def _validate_wrapper_registrations(self) -> Self:
+        """Reject conflicting wrappers for one layer within this config."""
+        selected: dict[type[nn.Module], type[nn.Module]] = {}
+        for layer_cls, wrapper_cls in self.wrapper_registrations or ():
+            existing = selected.get(layer_cls)
+            if existing is not None and existing is not wrapper_cls:
+                raise ValueError(
+                    "Multiple LoRA wrappers configured for "
+                    f"{layer_cls.__module__}.{layer_cls.__qualname__}: "
+                    f"{existing.__module__}.{existing.__qualname__} and "
+                    f"{wrapper_cls.__module__}.{wrapper_cls.__qualname__}."
+                )
+            selected[layer_cls] = wrapper_cls
+        return self
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation of this configuration.

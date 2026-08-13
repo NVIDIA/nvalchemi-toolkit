@@ -228,7 +228,7 @@ class ModulePatchHook(BaseModel):
         default=True,
         description=(
             "If True, register the patched module parameters as both trainable "
-            "and managed under the fixed \"patch\" source. Registered patch "
+            "and managed under the fixed 'patch' source. Registered patch "
             "parameters are included in the final trainable allow-list by default "
             "and are protected from being overridden by other sources modifying "
             "the model."
@@ -387,10 +387,17 @@ class FineTuningSummaryHook(BaseModel):
             raise TypeError(
                 "FineTuningSummaryHook requires a workflow with a models mapping."
             )
-        workflow._trainable_parameter_summary = _trainable_parameter_summary(
+        register_summary = getattr(
             workflow,
-            models,
+            "register_trainable_parameter_summary",
+            None,
         )
+        if not callable(register_summary):
+            raise TypeError(
+                "FineTuningSummaryHook requires a workflow with a "
+                "register_trainable_parameter_summary(summary) method."
+            )
+        register_summary(_trainable_parameter_summary(workflow, models))
 
 
 class TrainableParameterHook(BaseModel):
