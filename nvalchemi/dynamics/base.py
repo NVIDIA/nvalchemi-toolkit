@@ -1460,29 +1460,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     Notes
     -----
-    **CUDA stream semantics.** The engine runs in one of two modes:
+    **CUDA streams.** Used as a context manager, dynamics creates a dedicated
+    stream shared by torch and warp. This supports overlapping GPU work,
+    multi-stage pipelines, and CUDA-graph capture. Entry waits for prior work,
+    but exit is asynchronous; synchronize before consuming results on another
+    stream.
 
-    * ``with dynamics: dynamics.run(batch)`` — the context manager creates
-      a dedicated ``torch.cuda.Stream`` and enters it *jointly* on the
-      torch and warp sides, so every kernel of every step (torch eager,
-      inductor-compiled, and warp-backed custom ops) is enqueued on one
-      non-default stream. Use this form when overlapping the engine with
-      other GPU work, in multi-stage pipelines, and for CUDA-graph capture
-      (``compile(mode="reduce-overhead")``), where a single stable stream
-      across capture and replay is essential. Entering the context
-      synchronizes with previously enqueued work (``sync_enter``), but
-      exiting does **not**: synchronize (e.g.
-      ``torch.cuda.current_stream().wait_stream(...)`` or
-      ``torch.cuda.synchronize()``) before consuming results on a
-      different stream after the ``with`` block.
-    * bare ``dynamics.run(batch)`` — no dedicated stream is created. Torch
-      work runs on the caller's current stream (typically the legacy
-      default stream, which implicitly orders against other blocking
-      streams), and each ``step()`` transiently binds warp-backed ops to
-      that same stream via a cached conversion (see ``_stream_scope``).
-      Correct for eager and default-mode compiled runs with no action
-      required; callers that manage their own non-default streams own the
-      cross-stream ordering in this mode.
+    Without the context manager (i.e. when you just call `run()` directly),
+    dynamics uses the caller's current torch stream and binds warp operations
+    to it for each step. Callers using custom streams are responsible for
+    cross-stream ordering.
 
     Developers implementing a new integrator should override
     ``pre_update(batch)`` and ``post_update(batch)`` to implement the
