@@ -954,6 +954,15 @@ class TestFusedStageDeviceValidation:
 class TestCommunicationMixinStreamContext:
     """Tests for _CommunicationMixin.__enter__ / __exit__ stream context."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_warp(self):
+        """Mock the warp stream API — real conversion rejects mocked streams."""
+        with patch("nvalchemi.dynamics.base.wp") as mock_wp:
+            mock_wp.stream_from_torch.return_value = MagicMock()
+            mock_wp.ScopedStream.return_value = MagicMock()
+            self.mock_wp = mock_wp
+            yield
+
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         self.model = DemoModelWrapper(DemoModel())
@@ -990,11 +999,15 @@ class TestCommunicationMixinStreamContext:
                         # Assert the context was entered
                         mock_stream_ctx.__enter__.assert_called_once()
 
-                        # Assert _stream is the mock stream
-                        assert dyn._stream is mock_stream
+                        # Assert both stream views are exposed
+                        assert dyn.torch_stream is mock_stream
+                        assert (
+                            dyn.warp_stream
+                            is self.mock_wp.stream_from_torch.return_value
+                        )
 
-                        # Assert _stream_ctx is the mock context
-                        assert dyn._stream_ctx is mock_stream_ctx
+                        # The joint context entered the torch side
+                        assert dyn._stream_ctx is not None
 
                         # Assert returns self
                         assert result is dyn
@@ -1016,6 +1029,40 @@ class TestCommunicationMixinStreamContext:
         # Should return self
         assert result is dyn
 
+    def test_enter_and_exit_bind_warp_stream(self) -> None:
+        """__enter__ converts the torch stream to warp and enters both; __exit__ clears."""
+        mock_stream = MagicMock(spec=torch.cuda.Stream)
+        mock_stream_ctx = MagicMock()
+
+        with patch("torch.cuda.is_available", return_value=True):
+            with patch("torch.cuda.Stream", return_value=mock_stream):
+                with patch("torch.cuda.stream", return_value=mock_stream_ctx):
+                    dyn = BaseDynamics(model=self.model, device_type="cuda")
+
+                    with patch.object(
+                        type(dyn), "device", property(lambda s: torch.device("cuda:0"))
+                    ):
+                        dyn.__enter__()
+
+                        self.mock_wp.stream_from_torch.assert_called_once_with(
+                            mock_stream
+                        )
+                        assert (
+                            dyn.warp_stream
+                            is self.mock_wp.stream_from_torch.return_value
+                        )
+                        wp_ctx = self.mock_wp.ScopedStream.return_value
+                        wp_ctx.__enter__.assert_called_once()
+
+                        dyn.__exit__(None, None, None)
+                        assert wp_ctx.__exit__.call_count == 1
+                        assert wp_ctx.__exit__.call_args.args[-3:] == (
+                            None,
+                            None,
+                            None,
+                        )
+                        assert dyn.warp_stream is None
+
     def test_exit_clears_stream(self) -> None:
         """__exit__ exits the StreamContext and clears stream references."""
         mock_stream = MagicMock(spec=torch.cuda.Stream)
@@ -1033,19 +1080,25 @@ class TestCommunicationMixinStreamContext:
                         dyn.__enter__()
 
                         # Verify stream is set
-                        assert dyn._stream is mock_stream
-                        assert dyn._stream_ctx is mock_stream_ctx
+                        assert dyn.torch_stream is mock_stream
+                        assert dyn._stream_ctx is not None
 
                         # Exit the context
                         dyn.__exit__(None, None, None)
 
                         # Assert __exit__ was called on the stream context
-                        mock_stream_ctx.__exit__.assert_called_once_with(
-                            None, None, None
+                        # (ExitStack invokes it via the type, so the mock
+                        # records itself as the first argument).
+                        assert mock_stream_ctx.__exit__.call_count == 1
+                        assert mock_stream_ctx.__exit__.call_args.args[-3:] == (
+                            None,
+                            None,
+                            None,
                         )
 
-                        # Assert stream and context are cleared
-                        assert dyn._stream is None
+                        # Assert streams and context are cleared
+                        assert dyn.torch_stream is None
+                        assert dyn.warp_stream is None
                         assert dyn._stream_ctx is None
 
     def test_stream_property_returns_active_stream(self) -> None:
@@ -1061,16 +1114,19 @@ class TestCommunicationMixinStreamContext:
                     with patch.object(
                         type(dyn), "device", property(lambda s: torch.device("cuda:0"))
                     ):
-                        # Before __enter__, stream is None
+                        # Before __enter__, nothing is active
                         assert dyn.stream is None
+                        assert dyn.torch_stream is None
 
-                        # After __enter__, stream is the mock stream
+                        # After __enter__, the joint context and streams exist
                         dyn.__enter__()
-                        assert dyn.stream is mock_stream
+                        assert dyn.stream is dyn._stream_ctx
+                        assert dyn.torch_stream is mock_stream
 
-                        # After __exit__, stream is None again
+                        # After __exit__, everything clears again
                         dyn.__exit__(None, None, None)
                         assert dyn.stream is None
+                        assert dyn.torch_stream is None
 
     def test_context_manager_protocol(self) -> None:
         """'with dynamics_instance:' works end-to-end."""
@@ -1087,21 +1143,30 @@ class TestCommunicationMixinStreamContext:
                     ):
                         # Use the context manager protocol
                         with dyn:
-                            # Inside the with block, stream should be active
-                            assert dyn.stream is mock_stream
-                            assert dyn._stream_ctx is mock_stream_ctx
+                            # Inside the with block, streams should be active
+                            assert dyn.torch_stream is mock_stream
+                            assert dyn.stream is not None
 
-                        # After exiting, stream should be cleared
+                        # After exiting, everything should be cleared
                         assert dyn.stream is None
-                        assert dyn._stream_ctx is None
+                        assert dyn.torch_stream is None
 
                         # Verify __enter__ and __exit__ were called on the stream context
                         mock_stream_ctx.__enter__.assert_called_once()
-                        mock_stream_ctx.__exit__.assert_called_once()
+                        assert mock_stream_ctx.__exit__.call_count == 1
 
 
 class TestFusedStageStreamContext:
     """Tests for FusedStage.__enter__ / __exit__ stream propagation to sub-stages."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_warp(self):
+        """Mock the warp stream API — real conversion rejects mocked streams."""
+        with patch("nvalchemi.dynamics.base.wp") as mock_wp:
+            mock_wp.stream_from_torch.return_value = MagicMock()
+            mock_wp.ScopedStream.return_value = MagicMock()
+            self.mock_wp = mock_wp
+            yield
 
     def setup_method(self) -> None:
         """Set up test fixtures."""
@@ -1179,12 +1244,12 @@ class TestFusedStageStreamContext:
                     ):
                         with fused:
                             # Inside: all sub-stages share the stream
-                            assert fused.stream is mock_stream
+                            assert fused.torch_stream is mock_stream
                             assert dyn0._stream is mock_stream
                             assert dyn1._stream is mock_stream
 
                         # Outside: everything is cleaned up
-                        assert fused.stream is None
+                        assert fused.torch_stream is None
                         assert dyn0._stream is None
                         assert dyn1._stream is None
 

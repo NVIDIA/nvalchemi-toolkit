@@ -164,6 +164,20 @@ with fused:  # lazy compilation on context entry
     result = fused.run(batch)
 ```
 
+### CUDA stream semantics: `with` vs bare `run()`
+
+- `with dynamics: dynamics.run(batch)` creates a dedicated CUDA stream and
+  enters it jointly on the torch and warp sides — every kernel (eager,
+  compiled, warp custom ops) shares one non-default queue. Use it when
+  overlapping engines, in pipelines, and always for CUDA-graph capture
+  (`mode="reduce-overhead"`). Exit does **not** synchronize: call
+  `torch.cuda.synchronize()` (or `wait_stream`) before consuming results on
+  another stream after the block.
+- Bare `dynamics.run(batch)` uses the caller's current stream; each step
+  transiently binds warp ops to it. Correct for eager and default-compile
+  runs with no action needed. If you manage your own non-default streams,
+  you own the cross-stream ordering in this mode.
+
 ### How it works
 
 1. Each sample has a `status` field (integer)

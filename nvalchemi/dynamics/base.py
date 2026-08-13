@@ -52,6 +52,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
+from contextlib import ExitStack, nullcontext
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -62,6 +63,7 @@ from typing import (
 )
 
 import torch
+import warp as wp
 from jaxtyping import Bool
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
@@ -457,11 +459,16 @@ class _CommunicationMixin:
         Stored ``isend`` handle when send is deferred (``"fully_async"``).
         ``None`` when no send is pending.
     _stream : torch.cuda.Stream | None
-        The CUDA stream created when entering the context manager.
+        The torch CUDA stream created when entering the context manager
+        (see :attr:`torch_stream`).  ``None`` when outside a ``with``
+        block or on non-CUDA devices.
+    _wp_stream : wp.Stream | None
+        The warp view of ``_stream`` (see :attr:`warp_stream`).
         ``None`` when outside a ``with`` block or on non-CUDA devices.
-    _stream_ctx : torch.cuda.StreamContext | None
-        The active stream context wrapping ``_stream``.
-        ``None`` when outside a ``with`` block or on non-CUDA devices.
+    _stream_ctx : contextlib.ExitStack | None
+        The active joint stream context entering ``_stream`` on both the
+        torch and warp sides (see :attr:`stream`).  ``None`` when outside
+        a ``with`` block or on non-CUDA devices.
 
     Examples
     --------
@@ -558,7 +565,11 @@ class _CommunicationMixin:
         self._pending_recv_handle: Any = None
         self._pending_send_handle: Any = None
         self._stream: torch.cuda.Stream | None = None
-        self._stream_ctx: torch.cuda.StreamContext | None = None
+        self._wp_stream: wp.Stream | None = None
+        self._stream_ctx: ExitStack | None = None
+        # warp wrappers cached per torch stream: re-wrapping the same CUDA
+        # stream makes a new warp Stream object and invalidates graph capture.
+        self._wp_stream_cache: dict[int, wp.Stream] = {}
         if isinstance(buffer_config, dict):
             buffer_config = BufferConfig(**buffer_config)
         if buffer_config is not None and not isinstance(buffer_config, BufferConfig):
@@ -707,26 +718,86 @@ class _CommunicationMixin:
                     )
 
     @property
-    def stream(self) -> torch.cuda.Stream | None:
-        """Return the active CUDA stream, if any.
+    def stream(self) -> ExitStack | None:
+        """Return the active joint torch+warp stream context, if any.
 
-        Returns ``None`` when outside a ``with`` block or on non-CUDA
-        devices.
+        The joint context is an :class:`contextlib.ExitStack` that entered
+        the dedicated stream on both the torch side
+        (``torch.cuda.stream``) and the warp side (``wp.ScopedStream``).
+        Use :attr:`torch_stream` / :attr:`warp_stream` for the underlying
+        stream objects.  Returns ``None`` when outside a ``with`` block or
+        on non-CUDA devices.
+
+        Returns
+        -------
+        contextlib.ExitStack | None
+            The active joint stream context, or ``None``.
+        """
+        return self._stream_ctx
+
+    @property
+    def torch_stream(self) -> torch.cuda.Stream | None:
+        """Return the dedicated torch CUDA stream, if any.
 
         Returns
         -------
         torch.cuda.Stream | None
-            The CUDA stream created by ``__enter__``, or ``None``.
+            The stream created by ``__enter__``, or ``None``.
         """
         return self._stream
+
+    @property
+    def warp_stream(self) -> wp.Stream | None:
+        """Return the warp view of the dedicated CUDA stream, if any.
+
+        Returns
+        -------
+        wp.Stream | None
+            The converted warp stream, or ``None``.
+        """
+        return self._wp_stream
+
+    @staticmethod
+    def _enter_joint_stream_context(
+        torch_stream: torch.cuda.Stream, warp_stream: wp.Stream
+    ) -> ExitStack:
+        """Enter one CUDA stream jointly on the torch and warp sides.
+
+        The single mechanism behind both the engine context manager
+        (``__enter__``, dedicated stream) and the per-step scope for bare
+        ``run()`` calls (``_stream_scope``, caller's current stream): both
+        sides of the same stream are entered on an
+        :class:`contextlib.ExitStack`, which the caller later unwinds with
+        one ``__exit__``/``close``.
+
+        Parameters
+        ----------
+        torch_stream : torch.cuda.Stream
+            The torch stream to make current.
+        warp_stream : wp.Stream
+            The warp view of the same stream.
+
+        Returns
+        -------
+        contextlib.ExitStack
+            The entered joint context.
+        """
+        stack = ExitStack()
+        stack.enter_context(torch.cuda.stream(torch_stream))
+        stack.enter_context(wp.ScopedStream(warp_stream))
+        return stack
 
     def __enter__(self) -> _CommunicationMixin:
         """Enter the stream context manager.
 
         On CUDA devices, creates a new ``torch.cuda.Stream`` and enters
-        a ``torch.cuda.StreamContext`` so that all subsequent GPU
-        operations execute on the dedicated stream.  On non-CUDA devices
-        this is a no-op.
+        it jointly on the torch side (``torch.cuda.StreamContext``) and the
+        warp side (``wp.ScopedStream`` over the converted stream), so all
+        subsequent GPU operations — including warp-backed custom ops —
+        execute on the one dedicated stream.  On non-CUDA devices this is
+        a no-op.  See the **CUDA stream semantics** notes on
+        :class:`BaseDynamics` for how this differs from calling ``run()``
+        without the context manager.
 
         Returns
         -------
@@ -735,8 +806,10 @@ class _CommunicationMixin:
         """
         if self.device_type == "cuda" and torch.cuda.is_available():
             self._stream = torch.cuda.Stream(device=self.device)
-            self._stream_ctx = torch.cuda.stream(self._stream)
-            self._stream_ctx.__enter__()
+            self._wp_stream = wp.stream_from_torch(self._stream)
+            self._stream_ctx = self._enter_joint_stream_context(
+                self._stream, self._wp_stream
+            )
         return self
 
     def __exit__(
@@ -747,8 +820,10 @@ class _CommunicationMixin:
     ) -> None:
         """Exit the stream context manager.
 
-        Exits the ``torch.cuda.StreamContext`` (if one was entered) and
-        clears the stored stream references.
+        Exits the warp and torch stream contexts (if entered) and clears
+        the stored stream references.  Exiting does **not** synchronize the
+        dedicated stream: enqueue a ``wait_stream``/``synchronize`` before
+        consuming results from a different stream.
 
         Parameters
         ----------
@@ -762,6 +837,7 @@ class _CommunicationMixin:
         if self._stream_ctx is not None:
             self._stream_ctx.__exit__(exc_type, exc_val, exc_tb)
         self._stream = None
+        self._wp_stream = None
         self._stream_ctx = None
 
     @property
@@ -776,6 +852,37 @@ class _CommunicationMixin:
         if self.active_batch is None:
             return 0
         return self.active_batch.num_graphs or 0
+
+    def _stream_scope(self, device: torch.device):
+        """Bind warp launches to the torch stream the step runs on.
+
+        Inside the engine's context manager the joint torch+warp stream from
+        ``__enter__`` is already active and this is a no-op.  Outside it,
+        the current torch stream is converted once (cached) and entered on
+        the warp side only, so warp-backed custom ops stop launching on
+        warp's default per-device stream — which serializes against torch
+        work and invalidates CUDA-graph capture.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device the batch lives on.
+
+        Returns
+        -------
+        ContextManager
+            The entered joint stream context (see
+            ``_enter_joint_stream_context``), or a null context.
+        """
+        if device.type != "cuda" or self._stream_ctx is not None:
+            return nullcontext()
+        torch_stream = torch.cuda.current_stream(device)
+        key = torch_stream.cuda_stream
+        wp_stream = self._wp_stream_cache.get(key)
+        if wp_stream is None:
+            wp_stream = wp.stream_from_torch(torch_stream)
+            self._wp_stream_cache[key] = wp_stream
+        return self._enter_joint_stream_context(torch_stream, wp_stream)
 
     @property
     def active_batch_has_room(self) -> bool:
@@ -1353,6 +1460,29 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     Notes
     -----
+    **CUDA stream semantics.** The engine runs in one of two modes:
+
+    * ``with dynamics: dynamics.run(batch)`` — the context manager creates
+      a dedicated ``torch.cuda.Stream`` and enters it *jointly* on the
+      torch and warp sides, so every kernel of every step (torch eager,
+      inductor-compiled, and warp-backed custom ops) is enqueued on one
+      non-default stream. Use this form when overlapping the engine with
+      other GPU work, in multi-stage pipelines, and for CUDA-graph capture
+      (``compile(mode="reduce-overhead")``), where a single stable stream
+      across capture and replay is essential. Entering the context
+      synchronizes with previously enqueued work (``sync_enter``), but
+      exiting does **not**: synchronize (e.g.
+      ``torch.cuda.current_stream().wait_stream(...)`` or
+      ``torch.cuda.synchronize()``) before consuming results on a
+      different stream after the ``with`` block.
+    * bare ``dynamics.run(batch)`` — no dedicated stream is created. Torch
+      work runs on the caller's current stream (typically the legacy
+      default stream, which implicitly orders against other blocking
+      streams), and each ``step()`` transiently binds warp-backed ops to
+      that same stream via a cached conversion (see ``_stream_scope``).
+      Correct for eager and default-mode compiled runs with no action
+      required; callers that manage their own non-default streams own the
+      cross-stream ordering in this mode.
 
     Developers implementing a new integrator should override
     ``pre_update(batch)`` and ``post_update(batch)`` to implement the
@@ -1952,15 +2082,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
 
-        self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
-        self.pre_update(batch)
-        self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
-        self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
-        self.compute(batch)
-        self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
-        self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
-        self.post_update(batch)
-        self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
+        with self._stream_scope(batch.device):
+            self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
+            self.pre_update(batch)
+            self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
+            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            self.compute(batch)
+            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+            self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
+            self.post_update(batch)
+            self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():
@@ -1990,6 +2121,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ``n_steps`` parameter, or passed directly to this method.
         A value passed here takes precedence over the instance
         attribute.
+
+        May be called bare or inside the engine's context manager; the
+        two differ in CUDA stream behavior — see the **CUDA stream
+        semantics** notes on :class:`BaseDynamics`.
 
         Parameters
         ----------
@@ -2897,6 +3032,7 @@ class FusedStage(BaseDynamics):
         super().__enter__()
         for _, dynamics in self.sub_stages:
             dynamics._stream = self._stream
+            dynamics._wp_stream = self._wp_stream
         if self.compile_step and self._compiled_step is None:
             self.compile()
         return self
@@ -2924,6 +3060,7 @@ class FusedStage(BaseDynamics):
         """
         for _, dynamics in self.sub_stages:
             dynamics._stream = None
+            dynamics._wp_stream = None
         super().__exit__(exc_type, exc_val, exc_tb)
 
     def _sync_state_to_batch(
@@ -3198,7 +3335,8 @@ class FusedStage(BaseDynamics):
         step_fn = (
             self._compiled_step if self._compiled_step is not None else self._step_impl
         )
-        batch, newly_graduated = step_fn(batch)
+        with self._stream_scope(batch.device):
+            batch, newly_graduated = step_fn(batch)
         # Mask -> index conversion here, where a host sync is acceptable.
         if newly_graduated is None or not newly_graduated.any():
             return batch, None
