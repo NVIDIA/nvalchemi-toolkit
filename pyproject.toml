@@ -101,7 +101,7 @@ packages = ["nvalchemi"]
 
 # === UV configuration ====
 [tool.uv]
-default-groups = ["dev", "build"]
+default-groups = ["dev", "build", "docs"]
 # torch/torchvision resolve from the explicit PyTorch CUDA indexes while their
 # dependencies come from PyPI; unsafe-best-match lets uv pick the best version
 # across indexes rather than stopping at the first that has the name.
@@ -155,9 +155,7 @@ torchvision = [
 [dependency-groups]
 build = [
     "ninja>=1.11.1.4",
-    # setuptools 81 dropped pkg_resources, which fairchem-core's torchtnt
-    # imports at load — pin <81 so the UMA stack imports.
-    "setuptools>=70.0.0,<81",
+    "setuptools>=83.0.0",
 ]
 dev = [
     "pre-commit",
@@ -166,18 +164,14 @@ dev = [
     "pytest-skip-slow>=0.0.5",
     "pytest-asyncio>=0.25.3",
     "pytest-dependency>=0.6.0",
-    "pyyaml>=6.0",
-    "black==22.10.0",
-    "interrogate==1.5.0",
-    "coverage>=7.2.0",
     "pytest-cov>=7.0.0",
-    "ruff==0.11.13",
-    "nvtx",
-    "hypothesis>=6.135.10",
-    "hypothesis-torch>=1.0.11",
-    "rdkit>=2025.3.3",
     "pytest-dependency>=0.6.0",
     "pytest-testmon>=2.2.0",
+    "coverage>=7.2.0",
+    "pyyaml>=6.0",
+    "interrogate==1.5.0",
+    "nvtx",
+    "rdkit>=2025.3.3",
 ]
 distribution = [
   "pyarmor==9.1.8",
@@ -195,7 +189,7 @@ docs = [
     "myst-parser>=0.18.0",
     "sphinx-favicon>=1.0.1",
     "pydata-sphinx-theme==0.15.2",
-    "python-dotenv==1.1.1"
+    "python-dotenv==1.2.2",
 ]
 
 [tool.setuptools.packages.find]
