@@ -60,6 +60,22 @@ def _pins_rank_to_gpu(fn: ast.FunctionDef, source: str) -> bool:
     return "nccl" in segment and "set_device" in segment
 
 
+def _imported_seed_aliases(tree: ast.Module) -> set[str]:
+    """Local names bound to a harness helper, following ``as`` renames.
+
+    Most of the suite imports ``from _dd_harness import nccl_worker as _worker``,
+    so matching the original name alone sees nothing and the check passes
+    vacuously.
+    """
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom | ast.Import):
+            for a in node.names:
+                if a.name in _HARNESS_SEEDS:
+                    aliases.add(a.asname or a.name)
+    return aliases
+
+
 def _multigpu_functions(tree: ast.Module, source: str) -> set[str]:
     """Module-level functions that reach a rank-pinned NCCL group.
 
@@ -77,8 +93,9 @@ def _multigpu_functions(tree: ast.Module, source: str) -> set[str]:
         for name, node in functions.items()
         if isinstance(node, ast.FunctionDef) and _pins_rank_to_gpu(node, source)
     }
-    # Imported harness helpers are referenced by name, not defined here.
-    multigpu |= _HARNESS_SEEDS
+    # Imported harness helpers are referenced by name, not defined here --
+    # under whatever local name the import bound them to.
+    multigpu |= _HARNESS_SEEDS | _imported_seed_aliases(tree)
 
     # Calling a multi-GPU function makes you one.
     changed = True
