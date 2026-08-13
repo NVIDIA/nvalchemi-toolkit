@@ -94,6 +94,8 @@ tensorboard = [
 ]
 uma = [
     "fairchem-core>=2.0.0",
+    # torchtnt imports pkg_resources, which setuptools 81 removed.
+    "setuptools>=70.0.0,<81",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -107,12 +109,19 @@ default-groups = ["dev", "build", "docs"]
 # across indexes rather than stopping at the first that has the name.
 index-strategy = "unsafe-best-match"
 conflicts = [
+  # UMA needs setuptools<81 for torchtnt's pkg_resources import, while the
+  # default build group uses the first patched release for GHSA-h35f-9h28-mq5c.
+  [
+    { extra = "uma" },
+    { group = "build" },
+  ],
   [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
   # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
-  # (via toolkit-ops), so UMA forks a separate env (`uv sync --extra uma`).
+  # (via toolkit-ops), so UMA forks a separate env
+  # (`uv sync --extra uma --no-group build`).
   [
     { extra = "cu12" },
     { extra = "uma" },

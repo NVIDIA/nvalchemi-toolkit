@@ -250,7 +250,7 @@ jobs:
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
 
       # ========================================================================
       # TESTMON + COVERAGE CACHING (PR runs only)
@@ -341,7 +341,7 @@ jobs:
           else
             export COVERAGE_FILE=coverage_pr.dat
           fi
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase \
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase --no-group build \
             pytest --cov=nvalchemi --cov-append --cov-report= --cov-fail-under=0 \
             test/models/test_uma.py
 

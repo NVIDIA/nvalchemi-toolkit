@@ -49,12 +49,13 @@ break other imports.
 `torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
 `nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
 `uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
-and `mace`, and `uv sync --extra uma` forks a standalone resolution that
-installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
-`cuXX` build. Keep UMA in its own environment, e.g.:
+and `mace`. Running `uv sync --extra uma --no-group build` forks a standalone
+resolution that installs a PyPI CUDA torch wheel (~2.8) instead of the
+NVIDIA-indexed `cuXX` build. Keep UMA in its own environment, e.g.:
 
 ```bash
-uv venv .venv-uma && uv sync --extra uma           # UMA (fairchem's torch)
+UV_PROJECT_ENVIRONMENT=.venv-uma \
+  uv sync --extra uma --no-group build  # UMA (fairchem's torch/setuptools)
 uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
 ```
 
@@ -151,7 +152,7 @@ construction; `active_outputs` is `{energy, forces}` for molecular tasks and
 above):
 
 ```bash
-uv venv .venv-uma && uv sync --extra uma
+UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --no-group build
 # or, with pip:  pip install 'nvalchemi-toolkit[uma]'
 ```
 
@@ -1018,11 +1019,11 @@ All composition tiers handle neighbor lists centrally:
 
 `neighbor_adaptation` accepts:
 
-- `"auto"`: default. Adapt only when the source cutoff is at most
+* `"auto"`: default. Adapt only when the source cutoff is at most
   `max_cutoff_ratio` times the target cutoff; otherwise build another source
   list.
-- `"always"`: build one max-cutoff source and adapt every tighter model from it.
-- `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
+* `"always"`: build one max-cutoff source and adapt every tighter model from it.
+* `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
   source groups. Runtime format conversion is still allowed.
 
 ```python

@@ -68,7 +68,7 @@ Optional extras include `aimnet`, `ase`, `cu12`, `cu13`, `mace`, `pymatgen`,
 resolved in its own environment, as CI does with:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
 ```
 
 ## Build, Lint, Test
