@@ -26,10 +26,13 @@
 # 1. changed-files: Detects which files have changed compared to main branch
 # 2. lint: Runs static code checks and linting via pre-commit
 # 3. get-pr-labels: Retrieves PR labels for conditional job execution
-# 4. test: Runs pytest unit tests with coverage (on GPU runner). UMA, whose
+# 4. test: Runs pytest unit tests with coverage (on 1-GPU runner). UMA, whose
 #    deps conflict with the cu13/mace stack, is tested from a separate
 #    .venv-uma environment (gated on UMA changes or full runs).
-# 5. verify-status: Verifies all jobs completed successfully
+# 5. test-multigpu: Runs the `@pytest.mark.multigpu` tests on a 2-GPU runner.
+#    They auto-skip in job 4, so this is the only tier that executes them.
+#    Gated on DD-relevant changes, the nightly run, or the `ci:multigpu` label.
+# 6. verify-status: Verifies all jobs completed successfully
 
 name: "CI"
 
@@ -67,6 +70,7 @@ jobs:
     outputs:
       any_changed: ${{ steps.changed-files.outputs.any_changed }}
       uma_changed: ${{ steps.uma-changed.outputs.any_changed }}
+      dd_changed: ${{ steps.dd-changed.outputs.any_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,10 +108,27 @@ jobs:
             test/models/test_uma.py
             examples/advanced/09_uma_nve.py
 
+      # The 2-GPU runner is scarcer and its tests slower, so gate that job on
+      # the paths those tests cover rather than on any change.
+      - uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46
+        id: dd-changed
+        with:
+          base_sha: ${{ steps.merge-base.outputs.merge-base }}
+          files: |
+            nvalchemi/distributed/**
+            nvalchemi/models/**
+            nvalchemi/dynamics/**
+            test/distributed/**
+            test/dynamics/test_distributed_correctness.py
+            test/conftest.py
+            test/test_multigpu_marker.py
+            .github/workflows/ci.yml
+
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
           echo 'uma_changed=${{ steps.uma-changed.outputs.any_changed }}'
+          echo 'dd_changed=${{ steps.dd-changed.outputs.any_changed }}'
 
   # ============================================================================
   # LINTING STAGE
@@ -433,6 +454,115 @@ jobs:
           retention-days: 7
 
   # ============================================================================
+  # MULTI-GPU TEST STAGE (2-GPU Runner)
+  # ============================================================================
+  # No testmon: selection is the marker, and a second writer would corrupt the
+  # cached db the 1-GPU job maintains. No coverage: appending from a separate
+  # job would desync the baseline/PR combine above.
+  test-multigpu:
+    needs:
+      - lint
+      - get-pr-labels
+      - changed-files
+    # Overridable via a repo variable so a runner-fleet rename is a settings
+    # edit, not a code change; an unknown label queues silently until GitHub
+    # times it out ~24h later, with no runner ever assigned.
+    runs-on: ${{ vars.MULTIGPU_RUNNER || 'linux-amd64-gpu-h100-latest-2' }}
+    # DD equivalence + compile recompile gates dominate; UMA adds a second
+    # torch install and a possible checkpoint download.
+    timeout-minutes: 90
+    container:
+      image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
+      # NCCL and mp.spawn need more than the 64 MB default /dev/shm.
+      options: --gpus all --shm-size=8g
+    env:
+      IS_FULL_RUN: ${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'merge_group' }}
+      NCCL_DEBUG: WARN
+    if: |
+      (github.event_name == 'schedule') ||
+      contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:all') ||
+      contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ci:multigpu') ||
+      (
+        !contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:skip') &&
+        (needs.changed-files.outputs.dd_changed == 'true')
+      ) ||
+      (
+        (github.event_name == 'merge_group') &&
+        (needs.changed-files.outputs.dd_changed == 'true')
+      )
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install apt requirements
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
+          TZ: "Etc/UTC"
+        run: |
+          apt-get update && \
+          apt-get install -y curl \
+            git \
+            build-essential
+
+      - name: Setup UV
+        env:
+          UV_VERSION: "0.9.25"
+          UV_CHECKSUM: "10fb1f54d56f3eb60622006797339d4ea0bfda9b358d07db635f73cf89f7094c"
+        run: |
+          UV_INSTALLER=$(mktemp)
+          curl --proto '=https' --tlsv1.2 -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o "$UV_INSTALLER"
+          echo "${UV_CHECKSUM}  ${UV_INSTALLER}" | sha256sum -c -
+          sh "$UV_INSTALLER"
+          rm "$UV_INSTALLER"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync ${CI_UV_EXTRAS}
+
+      # Without this, a runner short a device would skip every test and
+      # report green.
+      - name: Verify 2 GPUs are visible
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          nvidia-smi
+          uv run ${CI_UV_EXTRAS} python -c "
+          import sys, torch
+          n = torch.cuda.device_count()
+          print(f'visible CUDA devices: {n}')
+          if n < 2:
+              sys.exit(f'expected >=2 GPUs on this runner, found {n}')
+          "
+
+      - name: Run multi-GPU tests
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run ${CI_UV_EXTRAS} pytest -m multigpu test/
+
+      # ========================================================================
+      # UMA MULTI-GPU TESTS (isolated environment)
+      # ========================================================================
+      # Same split as the 1-GPU job; without HF access these skip cleanly.
+
+      - name: Install UMA environment (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+
+      - name: Run UMA multi-GPU tests (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase \
+            pytest -m multigpu \
+            test/distributed/model/test_uma_multigpu.py \
+            test/distributed/model/test_uma_gp_partition_multigpu.py
+
+  # ============================================================================
   # VERIFY STATUS
   # ============================================================================
   verify-status:
@@ -440,6 +570,7 @@ jobs:
       - lint
       - get-pr-labels
       - test
+      - test-multigpu
     runs-on: ubuntu-latest
     if: always()
     steps:

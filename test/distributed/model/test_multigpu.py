@@ -43,11 +43,6 @@ from nvalchemi.models.lj import LennardJonesModelWrapper
 
 WORLD_SIZE = 2
 
-_skip_no_multi_gpu = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ GPUs for distributed tests",
-)
-
 
 # ======================================================================
 # Helpers
@@ -155,7 +150,7 @@ def _test_sharded_batch_roundtrip(rank: int, world_size: int) -> None:
         assert full is None
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_sharded_batch_roundtrip():
     mp.spawn(
         _worker, args=(WORLD_SIZE, _test_sharded_batch_roundtrip), nprocs=WORLD_SIZE
@@ -202,7 +197,7 @@ def _test_reshard(rank: int, world_size: int) -> None:
     assert total.item() == 20  # 10 per rank * 2 ranks
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_reshard():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_reshard), nprocs=WORLD_SIZE)
 
@@ -232,7 +227,7 @@ def _test_dd_step_completes(rank: int, world_size: int) -> None:
     assert local_batch.num_nodes > 0
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_dd_step_completes():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_dd_step_completes), nprocs=WORLD_SIZE)
 
@@ -265,7 +260,7 @@ def _test_atom_conservation(rank: int, world_size: int) -> None:
     )
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_atom_conservation():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_atom_conservation), nprocs=WORLD_SIZE)
 
@@ -300,7 +295,7 @@ def _test_gather(rank: int, world_size: int) -> None:
         assert full.cell is not None
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_gather():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_gather), nprocs=WORLD_SIZE)
 
@@ -339,7 +334,7 @@ def _test_migration_moves_atoms(rank: int, world_size: int) -> None:
     assert final_count.item() == initial_total.item()
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_migration_moves_atoms():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_migration_moves_atoms), nprocs=WORLD_SIZE)
 
@@ -370,6 +365,6 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
     assert local_batch.forces.abs().max() > 0
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_prime_forces():
     mp.spawn(_worker, args=(WORLD_SIZE, _test_prime_forces), nprocs=WORLD_SIZE)
