@@ -19,9 +19,9 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, Callable, Final, Self
+from typing import Any, Callable, Final, Literal, Self
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
 
 from nvalchemi._serialization import _cls_path_of, _import_cls
@@ -29,15 +29,13 @@ from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training.peft import _peft
 from nvalchemi.training.peft.config import PeftConfig
 from nvalchemi.training.peft.lora_wrappers import LoRAWrapperRegistrations
+from nvalchemi.training.peft.registry import register_peft_method
 
 __all__ = [
     "LORA_PEFT_METHOD",
     "LoRAConfig",
-    "PeftConfig",
-    "lora_config_from_metadata",
-    "lora_metadata_from_config",
-    "lora_setup_hooks",
     "merge_lora_into_model",
+    "register_lora_method",
 ]
 
 LORA_PEFT_METHOD: Final = "lora"
@@ -58,6 +56,8 @@ class LoRAConfig(PeftConfig):
 
     Parameters
     ----------
+    peft_method : Literal["lora"]
+        Fixed PEFT method name as ``"lora"``.
     lora_target_patterns : tuple[str, ...]
         Shell-style glob patterns matched against model-prefixed module names,
         using the same ``*``, ``?``, and ``[...]`` syntax as
@@ -87,11 +87,6 @@ class LoRAConfig(PeftConfig):
         emits a ``UserWarning``; assigning two different wrappers to one layer class
         in the same configuration raises ``ValueError``. Defaults to ``()``.
 
-    Attributes
-    ----------
-    peft_method : str
-        PEFT method discriminator; always ``"lora"``.
-
     Examples
     --------
     Exact module names can be written as patterns without glob characters:
@@ -116,7 +111,7 @@ class LoRAConfig(PeftConfig):
     ... )
     """
 
-    peft_method: str = LORA_PEFT_METHOD
+    peft_method: Literal["lora"] = Field(default=LORA_PEFT_METHOD, frozen=True)
     rank: int = 8
     alpha: float = 1.0
     lora_target_patterns: tuple[str, ...] = Field(min_length=1)
@@ -124,7 +119,39 @@ class LoRAConfig(PeftConfig):
     wrap_mlp: bool = False
     wrapper_registrations: LoRAWrapperRegistrations | None = None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_validator("wrapper_registrations", mode="before")
+    @classmethod
+    def _deserialize_wrapper_registrations(
+        cls,
+        value: Any,
+        info: ValidationInfo,
+    ) -> Any:
+        """Import wrapper class paths when validating a serialized PEFT spec."""
+        context = info.context or {}
+        if "import_path_validator" not in context or value is None:
+            return value
+        if not isinstance(value, list):
+            raise ValueError("LoRAConfig wrapper_registrations must be a list or null.")
+
+        import_path_validator = context["import_path_validator"]
+        wrapper_registrations = []
+        for item in value:
+            if (
+                not isinstance(item, list)
+                or len(item) != 2
+                or not all(isinstance(path, str) for path in item)
+            ):
+                raise ValueError(
+                    "LoRAConfig wrapper_registrations entries must be "
+                    "[layer_cls_path, wrapper_cls_path] lists."
+                )
+            if import_path_validator is not None:
+                import_path_validator(item[0], "LoRA wrapper layer class")
+                import_path_validator(item[1], "LoRA wrapper class")
+            wrapper_registrations.append((_import_cls(item[0]), _import_cls(item[1])))
+        return tuple(wrapper_registrations)
 
     @model_validator(mode="after")
     def _validate_wrapper_registrations(self) -> Self:
@@ -143,173 +170,28 @@ class LoRAConfig(PeftConfig):
         return self
 
     def to_spec_dict(self) -> dict[str, Any]:
-        """Return a JSON-safe representation of this configuration.
+        """Return a JSON-safe representation of this LoRA config.
 
         Returns
         -------
         dict[str, Any]
             JSON-safe LoRA configuration data suitable for serialization.
         """
-        wrapper_registrations = [
+        spec = super().to_spec_dict()
+        spec["lora_target_patterns"] = list(self.lora_target_patterns)
+        spec["wrapper_registrations"] = [
             [_cls_path_of(layer_cls), _cls_path_of(wrapper_cls)]
             for layer_cls, wrapper_cls in self.wrapper_registrations or ()
         ]
-        return {
-            "rank": self.rank,
-            "alpha": self.alpha,
-            "lora_target_patterns": list(self.lora_target_patterns),
-            "lora_dropout": self.lora_dropout,
-            "wrap_mlp": self.wrap_mlp,
-            "wrapper_registrations": wrapper_registrations,
-        }
-
-    @classmethod
-    def from_spec_dict(
-        cls,
-        spec: dict[str, Any],
-        *,
-        import_path_validator: Callable[[str, str], None] | None = None,
-    ) -> LoRAConfig:
-        """Rebuild a LoRA config from :meth:`to_spec_dict` output.
-
-        Parameters
-        ----------
-        spec : dict[str, Any]
-            Serialized LoRA configuration produced by :meth:`to_spec_dict`.
-        import_path_validator : Callable[[str, str], None] | None, optional
-            Optional validator called before importing custom wrapper
-            registration classes.
-
-        Returns
-        -------
-        LoRAConfig
-            The reconstructed LoRA configuration.
-        """
-        raw_registrations = spec.get("wrapper_registrations")
-        if raw_registrations is None:
-            wrapper_registrations = None
-        elif isinstance(raw_registrations, list):
-            wrapper_registrations = []
-            for item in raw_registrations:
-                if (
-                    not isinstance(item, list)
-                    or len(item) != 2
-                    or not all(isinstance(path, str) for path in item)
-                ):
-                    raise ValueError(
-                        "LoRAConfig wrapper_registrations entries must be "
-                        "[layer_cls_path, wrapper_cls_path] lists."
-                    )
-                if import_path_validator is not None:
-                    import_path_validator(item[0], "LoRA wrapper layer class")
-                    import_path_validator(item[1], "LoRA wrapper class")
-                wrapper_registrations.append(
-                    (_import_cls(item[0]), _import_cls(item[1]))
-                )
-            wrapper_registrations = tuple(wrapper_registrations)
-        else:
-            raise ValueError("LoRAConfig wrapper_registrations must be a list or null.")
-
-        return cls(
-            rank=int(spec.get("rank", 8)),
-            alpha=float(spec.get("alpha", 1.0)),
-            lora_target_patterns=tuple(spec.get("lora_target_patterns", ())),
-            lora_dropout=float(spec.get("lora_dropout", 0.0)),
-            wrap_mlp=bool(spec.get("wrap_mlp", False)),
-            wrapper_registrations=wrapper_registrations,
-        )
+        return spec
 
 
 # ---------------------------------------------------------------------------
-# Metadata serialization
+# # PEFT hooks for strategy
 # ---------------------------------------------------------------------------
 
 
-def lora_metadata_from_config(
-    config: PeftConfig,
-    details: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Return JSON-safe LoRA metadata for a config object.
-
-    Parameters
-    ----------
-    config : PeftConfig
-        LoRA config object to convert to metadata.
-    details : Mapping[str, Any] | None, optional
-        Additional details to include in the metadata.
-
-    Returns
-    -------
-    dict[str, Any]
-        LoRA metadata dictionary.
-
-    Notes
-    -----
-    ``peft_method`` is the authoritative discriminator used when loading
-    portable PEFT metadata. ``peft_config_class`` is recorded only as
-    provenance/debug metadata and must not be dynamically imported during
-    load. This keeps adapter loading limited to known PEFT config formats
-    instead of allowing the artifact to choose arbitrary Python classes.
-    """
-    if isinstance(config, LoRAConfig):
-        metadata = {
-            "peft_method": config.peft_method,
-            "peft_config_class": _cls_path_of(type(config)),
-            "peft_config": config.to_spec_dict(),
-        }
-        if details is not None:
-            metadata["peft_details"] = dict(details)
-        return metadata
-    raise ValueError(f"Unsupported PEFT config type: {type(config).__name__}.")
-
-
-def lora_config_from_metadata(
-    metadata: Mapping[str, Any],
-    *,
-    import_path_validator: Callable[[str, str], None] | None = None,
-) -> PeftConfig:
-    """Rebuild a LoRA config from serialized metadata.
-
-    Parameters
-    ----------
-    metadata : Mapping[str, Any]
-        Serialized LoRA metadata containing the PEFT method discriminator and
-        LoRA configuration payload.
-    import_path_validator : Callable[[str, str], None] | None, optional
-        Optional validator called before importing custom wrapper registration
-        classes referenced by the metadata.
-
-    Returns
-    -------
-    PeftConfig
-        The LoRA configuration reconstructed from the serialized metadata.
-    """
-    method = metadata.get("peft_method")
-    if method != LORA_PEFT_METHOD:
-        raise ValueError(f"Unsupported PEFT method {method!r}.")
-    peft_config_class = metadata.get("peft_config_class")
-    expected_config_class = _cls_path_of(LoRAConfig)
-    if peft_config_class not in (None, expected_config_class):
-        raise ValueError(
-            "PEFT metadata peft_config_class must be "
-            f"{expected_config_class!r} for peft_method={LORA_PEFT_METHOD!r}; "
-            f"got {peft_config_class!r}."
-        )
-    raw_config = metadata.get("peft_config")
-    if not isinstance(raw_config, dict):
-        raise ValueError("PEFT metadata must contain a peft_config object.")
-    return LoRAConfig.from_spec_dict(
-        raw_config,
-        import_path_validator=import_path_validator,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Strategy registration
-# ---------------------------------------------------------------------------
-
-
-def lora_setup_hooks(
+def _lora_setup_hooks(
     config: PeftConfig,
     strategy_data: Mapping[str, Any],
 ) -> list[Any]:
@@ -391,8 +273,11 @@ def _apply_lora_from_checkpoint_metadata(
     import_path_validator: Callable[[str, str], None] | None = None,
 ) -> None:
     """Inject LoRA adapters into ``model`` using checkpoint strategy metadata."""
-    config = lora_config_from_metadata(
-        strategy_metadata,
+    raw_config = strategy_metadata.get("peft_config")
+    if not isinstance(raw_config, Mapping):
+        raise ValueError("Checkpoint strategy metadata does not contain peft_config.")
+    config = PeftConfig.from_spec_dict(
+        raw_config,
         import_path_validator=import_path_validator,
     )
     if not isinstance(config, LoRAConfig):
@@ -401,4 +286,20 @@ def _apply_lora_from_checkpoint_metadata(
 
     LoRAHook(lora_config=config, register_parameters=False).on_register(
         SimpleNamespace(models={model_name: model})
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEFT Method Registration
+# ---------------------------------------------------------------------------
+
+
+def register_lora_method() -> None:
+    """Register the built-in LoRA implementation with the PEFT registry."""
+    register_peft_method(
+        LORA_PEFT_METHOD,
+        config_cls=LoRAConfig,
+        build_peft_setup_hooks=_lora_setup_hooks,
+        apply_peft_from_checkpoint_metadata=_apply_lora_from_checkpoint_metadata,
+        merge_peft=merge_lora_into_model,
     )

@@ -92,4 +92,7 @@ checkpoint into a compatible base model.
 
    LoRAConfig
    load_peft_checkpoint_into_model
+   PeftMethodRegistration
+   register_peft_method
+   available_peft_methods
    available_lora_wrappers

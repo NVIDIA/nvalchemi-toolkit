@@ -16,10 +16,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -27,11 +27,17 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PeftConfig(BaseModel):
-    """Base class for ALCHEMI parameter-efficient fine-tuning configs."""
+    """Base class for ALCHEMI parameter-efficient fine-tuning configs.
 
-    peft_method: str
+    Parameters
+    ----------
+    peft_method : str
+        Frozen PEFT method name.
+    """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    peft_method: str = Field(frozen=True)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation of this configuration.
@@ -41,69 +47,60 @@ class PeftConfig(BaseModel):
         dict[str, Any]
             JSON-safe PEFT configuration data suitable for serialization.
         """
-        raise NotImplementedError
+        from nvalchemi.training.peft.registry import get_peft_registration_by_config
 
+        registration = get_peft_registration_by_config(self)
+        config_data = self.model_dump(mode="python")
+        if self.peft_method != registration.peft_method:
+            raise ValueError(
+                f"{type(self).__name__}.peft_method must match its registered "
+                f"method {registration.peft_method!r}; got {self.peft_method!r}."
+            )
+        return config_data
 
-# ---------------------------------------------------------------------------
-# Metadata serialization
-# ---------------------------------------------------------------------------
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        import_path_validator: Callable[[str, str], None] | None = None,
+    ) -> PeftConfig:
+        """Rebuild a PEFT config from its JSON-safe representation.
 
+        Parameters
+        ----------
+        spec : Mapping[str, Any]
+            Configuration containing a ``peft_method`` discriminator and
+            method-specific fields.
+        import_path_validator : Callable[[str, str], None] | None, optional
+            Optional validator called before importing referenced classes.
 
-def peft_metadata_from_config(
-    config: PeftConfig,
-    details: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Return JSON-safe PEFT metadata for a config object.
+        Returns
+        -------
+        PeftConfig
+            The concrete registered PEFT configuration.
+        """
+        method = spec.get("peft_method")
+        from nvalchemi.training.peft.registry import (
+            available_peft_methods,
+            get_peft_registration_by_method,
+        )
 
-    Parameters
-    ----------
-    config : PeftConfig
-        The PEFT config object to convert to metadata.
-    details : Mapping[str, Any] | None, optional
-        Additional details to include in the metadata.
-
-    Returns
-    -------
-    dict[str, Any]
-        A dictionary containing the PEFT metadata.
-
-    Notes
-    -----
-    PEFT metadata uses ``peft_method`` as the loading discriminator. Any
-    recorded config class path is provenance metadata only and must not be
-    dynamically imported during load.
-    """
-    from nvalchemi.training.peft.lora import LORA_PEFT_METHOD
-
-    if config.peft_method == LORA_PEFT_METHOD:
-        from nvalchemi.training.peft.lora import lora_metadata_from_config
-
-        return lora_metadata_from_config(config, details)
-    raise ValueError(f"Unsupported PEFT method {config.peft_method!r}.")
-
-
-def peft_config_from_metadata(metadata: Mapping[str, Any]) -> PeftConfig:
-    """Rebuild a PEFT config from serialized metadata.
-
-    Parameters
-    ----------
-    metadata : Mapping[str, Any]
-        Serialized PEFT metadata containing a ``peft_method`` discriminator and
-        method-specific configuration payload.
-
-    Returns
-    -------
-    PeftConfig
-        The PEFT config reconstructed from the serialized metadata.
-    """
-    method = metadata.get("peft_method")
-    from nvalchemi.training.peft.lora import LORA_PEFT_METHOD
-
-    if method == LORA_PEFT_METHOD:
-        from nvalchemi.training.peft.lora import lora_config_from_metadata
-
-        return lora_config_from_metadata(metadata)
-    raise ValueError(f"Unsupported PEFT method {method!r}.")
+        if not isinstance(method, str) or not method:
+            raise ValueError(
+                "PEFT config specs must contain a non-empty string peft_method; "
+                f"available methods: {list(available_peft_methods())}."
+            )
+        registration = get_peft_registration_by_method(method)
+        if cls is not PeftConfig and not issubclass(registration.config_cls, cls):
+            raise ValueError(
+                f"PEFT method {method!r} resolves to "
+                f"{registration.config_cls.__name__}, not {cls.__name__}."
+            )
+        return registration.config_cls.model_validate(
+            spec,
+            context={"import_path_validator": import_path_validator},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +108,7 @@ def peft_config_from_metadata(metadata: Mapping[str, Any]) -> PeftConfig:
 # ---------------------------------------------------------------------------
 
 
-def peft_setup_hooks(
+def build_peft_setup_hooks(
     config: PeftConfig,
     strategy_data: Mapping[str, Any],
 ) -> list[Any]:
@@ -129,10 +126,7 @@ def peft_setup_hooks(
     list[Any]
         Registration-time hooks required by the PEFT method.
     """
-    from nvalchemi.training.peft.lora import LORA_PEFT_METHOD
+    from nvalchemi.training.peft.registry import get_peft_registration_by_config
 
-    if config.peft_method == LORA_PEFT_METHOD:
-        from nvalchemi.training.peft.lora import lora_setup_hooks
-
-        return lora_setup_hooks(config, strategy_data)
-    raise ValueError(f"Unsupported PEFT method {config.peft_method!r}.")
+    registration = get_peft_registration_by_config(config)
+    return registration.build_peft_setup_hooks(config, strategy_data)

@@ -34,9 +34,7 @@ from nvalchemi.training.hooks.finetune import (
 )
 from nvalchemi.training.peft.config import (
     PeftConfig,
-    peft_config_from_metadata,
-    peft_metadata_from_config,
-    peft_setup_hooks,
+    build_peft_setup_hooks,
 )
 from nvalchemi.training.peft.fingerprints import (
     BaseFingerprintHook,
@@ -217,9 +215,8 @@ class FineTuningStrategy(TrainingStrategy):
     peft_config: PeftConfig | None = Field(
         default=None,
         description=(
-            "Parameter-efficient fine-tuning configuration. When provided, PEFT "
-            "registration hooks are prepended before module patches and trainable "
-            "parameter selection."
+            "Parameter-efficient fine-tuning configuration. When provided, its setup "
+            "hooks run before module patches and trainable parameter selection."
         ),
     )
     module_patches: dict[str, BaseSpec | torch.nn.Module] = Field(
@@ -298,8 +295,8 @@ class FineTuningStrategy(TrainingStrategy):
 
         # (1) PEFT-related hooks are prepended first if peft_config is provided.
         peft_config = normalized.get("peft_config")
-        if isinstance(peft_config, dict):
-            peft_config = peft_config_from_metadata(peft_config)
+        if isinstance(peft_config, Mapping):
+            peft_config = PeftConfig.from_spec_dict(peft_config)
             normalized["peft_config"] = peft_config
         if peft_config is not None:
             if not isinstance(peft_config, PeftConfig):
@@ -314,7 +311,7 @@ class FineTuningStrategy(TrainingStrategy):
                 )
             if normalized.get("compute_base_fingerprints", True):
                 generated.append(BaseFingerprintHook())
-            generated.extend(peft_setup_hooks(peft_config, normalized))
+            generated.extend(build_peft_setup_hooks(peft_config, normalized))
 
         # (2) Module patching hook is prepended next.
         module_patches = normalized.get("module_patches") or {}
@@ -703,12 +700,9 @@ class FineTuningStrategy(TrainingStrategy):
         """
         spec = super().to_spec_dict()
         if self.peft_config is not None:
-            spec.update(
-                peft_metadata_from_config(
-                    self.peft_config,
-                    self._peft_details,
-                )
-            )
+            spec["peft_config"] = self.peft_config.to_spec_dict()
+            if self._peft_details:
+                spec["peft_details"] = dict(self._peft_details)
             spec["compute_base_fingerprints"] = self.compute_base_fingerprints
             if self._base_fingerprints:
                 spec["base_model_fingerprints"] = dict(self._base_fingerprints)
@@ -779,8 +773,11 @@ class FineTuningStrategy(TrainingStrategy):
 
         # Parse PEFT-related configuration and validate base model fingerprints if needed.
         peft_config = None
-        if "peft_method" in spec:
-            peft_config = peft_config_from_metadata(spec)
+        raw_peft_config = spec.get("peft_config")
+        if raw_peft_config is not None:
+            if not isinstance(raw_peft_config, Mapping):
+                raise ValueError("from_spec_dict: peft_config must be a mapping.")
+            peft_config = PeftConfig.from_spec_dict(raw_peft_config)
         compute_base_fingerprints = spec.get("compute_base_fingerprints", True)
         if peft_config is not None and compute_base_fingerprints:
             if "base_model_fingerprints" not in spec:

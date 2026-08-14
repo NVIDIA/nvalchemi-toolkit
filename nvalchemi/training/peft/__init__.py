@@ -29,10 +29,13 @@ __all__ = [
     "LoRAWrapper",
     "LoRAWrapperRegistrations",
     "PeftConfig",
+    "PeftMethodRegistration",
     "available_lora_wrappers",
+    "available_peft_methods",
     "compute_base_fingerprints",
     "is_lora_layer",
     "load_peft_checkpoint_into_model",
+    "register_peft_method",
     "validate_base_fingerprints",
 ]
 
@@ -63,6 +66,14 @@ def __getattr__(name: str) -> object:
         from nvalchemi.training.peft import loading
 
         return getattr(loading, name)
+    if name in {
+        "PeftMethodRegistration",
+        "available_peft_methods",
+        "register_peft_method",
+    }:
+        from nvalchemi.training.peft import registry
+
+        return getattr(registry, name)
     if name == "is_lora_layer":
         from nvalchemi.training.peft import _peft
 

@@ -809,9 +809,10 @@ strategy register these pairs immediately before adapter injection, so target
 patterns can select the custom layer in the same constructor call. Registrations
 are temporary: the process-wide registry is restored after injection.
 
-A custom wrapper may replace an existing or built-in wrapper for the duration of injection,
-with a `UserWarning`. Attempting to assign two different wrappers to the same layer class in
-`LoRAConfig` will raise `ValueError` during configuration validation.
+A custom wrapper may replace an existing or built-in wrapper for the duration
+of injection, with a `UserWarning`. Attempting to assign two different wrappers
+to the same layer class in `LoRAConfig` will raise `ValueError` during
+configuration validation.
 
 ```python
 import torch
@@ -915,6 +916,66 @@ The complete intermediate example
 downloads the LPSC dataset, fits reference energies, inspects LoRA target
 candidates, trains adapters, writes a trainable-state PEFT checkpoint, and
 loads the PEFT checkpoint back into a fresh base model.
+
+### Adding a PEFT method
+
+A PEFT provider must supply all five arguments required by
+{py:func}`~nvalchemi.training.peft.register_peft_method`. Together, these inputs
+are the complete registry contract for a method:
+
+- `method`: a unique, stable string stored in serialized strategy and checkpoint
+  metadata.
+- `config_cls`: a `PeftConfig` subclass whose frozen `peft_method` literal matches
+  `method`. Its `to_spec_dict()` result must be JSON-safe; add Pydantic serializers
+  or validators for class objects and other Python-only fields.
+- `build_peft_setup_hooks`: a callable that accepts the validated config and
+  strategy mapping, checks model-dependent restrictions, and returns hooks that
+  install the PEFT structure before optimizer construction.
+- `apply_peft_from_checkpoint_metadata`: a callable that accepts the base model,
+  serialized strategy metadata, model name, and optional import-path validator.
+  It must rebuild the saved config and recreate the PEFT module structure before
+  weights are loaded.
+- `merge_peft`: a callable that merges learned PEFT parameters into the model and
+  honors `strict` when the structure cannot be merged completely.
+
+The registration has this shape:
+
+```python
+from nvalchemi.training.peft import register_peft_method
+
+register_peft_method(
+    MY_PEFT_METHOD,
+    config_cls=MyPeftConfig,
+    build_peft_setup_hooks=build_my_peft_setup_hooks,
+    apply_peft_from_checkpoint_metadata=apply_my_peft_from_checkpoint_metadata,
+    merge_peft=merge_my_peft,
+)
+```
+
+A minimal discriminator field looks like this:
+
+```python
+from typing import Literal
+
+from pydantic import Field
+
+from nvalchemi.training.peft import PeftConfig
+
+MY_PEFT_METHOD = "my_peft"
+
+
+class MyPeftConfig(PeftConfig):
+    peft_method: Literal["my_peft"] = Field(
+        default=MY_PEFT_METHOD,
+        frozen=True,
+    )
+```
+
+Use `nvalchemi/training/peft/lora.py` as a reference implementation and
+`test/training/test_peft_lora.py` as its test example.
+
+Finally, add the method registration callback to `_register_builtin_peft_methods()`
+in `nvalchemi/training/peft/registry.py`.
 
 (checkpoint-workflows)=
 

@@ -261,6 +261,21 @@ def _install_fake_peft(
 # ---------------------------------------------------------------------------
 
 
+class TestLoRARegistration:
+    def test_builtin_method_is_registered_on_lookup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from nvalchemi.training.peft import lora, registry
+
+        monkeypatch.setattr(registry, "_REGISTRATIONS_BY_METHOD", {})
+        monkeypatch.setattr(registry, "_REGISTRATIONS_BY_CONFIG", {})
+
+        registration = registry.get_peft_registration_by_method(lora.LORA_PEFT_METHOD)
+
+        assert registration.config_cls is lora.LoRAConfig
+
+
 class TestLoRAHook:
     def test_lora_strategy_applies_real_physicsnemo_peft(
         self,
@@ -464,6 +479,29 @@ class TestLoRATrainableParameterRegistration:
 
 
 class TestLoRAStrategy:
+    def test_accepts_flat_peft_config(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        baseline_strategy_kwargs: dict[str, Any],
+    ) -> None:
+        _install_fake_peft(monkeypatch)
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "peft_config": {
+                    "peft_method": "lora",
+                    "rank": 1,
+                    "alpha": 1.0,
+                    "lora_target_patterns": ["main.model.projection"],
+                },
+            }
+        )
+
+        assert isinstance(strategy.peft_config, LoRAConfig)
+        assert strategy.peft_config.peft_method == "lora"
+        assert strategy.peft_config.rank == 1
+        assert strategy.peft_config.lora_target_patterns == ("main.model.projection",)
+
     def test_lora_strategy_prepends_generated_hooks(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -567,7 +605,9 @@ class TestLoRAStrategySerialization:
 
         spec = strategy.to_spec_dict()
 
-        assert spec["peft_method"] == "lora"
+        assert spec["peft_config"]["peft_method"] == "lora"
+        assert "peft_method" not in spec
+        assert "peft_config_class" not in spec
         assert spec["peft_config"]["lora_target_patterns"] == [
             "modelA.model.projection"
         ]
@@ -978,7 +1018,7 @@ class TestLoadPeftCheckpointIntoModel:
         source = TrainingStrategy(**baseline_strategy_kwargs)
         source.save_checkpoint(tmp_path)
 
-        with pytest.raises(ValueError, match="peft_method"):
+        with pytest.raises(ValueError, match="peft_config"):
             load_peft_checkpoint_into_model(source.models["main"], tmp_path)
 
     def test_rejects_unsupported_peft_method(
@@ -991,7 +1031,7 @@ class TestLoadPeftCheckpointIntoModel:
         source.save_checkpoint(tmp_path)
         metadata_path = tmp_path / "strategy" / "checkpoints" / "0.json"
         metadata = json.loads(metadata_path.read_text())
-        metadata["peft_method"] = "ia3"
+        metadata["peft_config"]["peft_method"] = "ia3"
         metadata_path.write_text(json.dumps(metadata))
 
         with pytest.raises(ValueError, match="Unsupported PEFT method"):

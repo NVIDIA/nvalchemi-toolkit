@@ -33,7 +33,7 @@ from nvalchemi.training._checkpoint import (
 from nvalchemi.training._spec import create_model_spec_from_json
 from nvalchemi.training.hooks.finetune import ModulePatchHook
 from nvalchemi.training.peft import _peft
-from nvalchemi.training.peft.lora import LORA_PEFT_METHOD
+from nvalchemi.training.peft.registry import get_peft_registration_by_method
 
 __all__ = ["load_peft_checkpoint_into_model"]
 
@@ -134,20 +134,12 @@ def load_peft_checkpoint_into_model(
             "written from a FineTuningStrategy with peft_config."
         )
 
-    # Select the appropriate PEFT method to apply based on the checkpoint metadata.
-    method = strategy_metadata.get("peft_method")
-    if method == LORA_PEFT_METHOD:
-        from nvalchemi.training.peft.lora import (
-            _apply_lora_from_checkpoint_metadata,
-            merge_lora_into_model,
-        )
-
-        apply_peft = _apply_lora_from_checkpoint_metadata
-        merge_peft = merge_lora_into_model
-    elif method is None:
-        raise ValueError("Checkpoint strategy metadata does not contain peft_method.")
-    else:
-        raise ValueError(f"Unsupported PEFT method {method!r}.")
+    # Select the appropriate PEFT method from the canonical tagged config.
+    raw_peft_config = strategy_metadata.get("peft_config")
+    if not isinstance(raw_peft_config, Mapping):
+        raise ValueError("Checkpoint strategy metadata does not contain peft_config.")
+    method = raw_peft_config.get("peft_method")
+    registration = get_peft_registration_by_method(method)
 
     # Validate the base model and recreate the saved PEFT/module structure before loading weights.
     import_path_validator = _make_import_path_validator(
@@ -160,7 +152,7 @@ def load_peft_checkpoint_into_model(
         model_name=model_name,
         strict=strict,
     )
-    apply_peft(
+    registration.apply_peft_from_checkpoint_metadata(
         model,
         strategy_metadata,
         model_name=model_name,
@@ -183,7 +175,7 @@ def load_peft_checkpoint_into_model(
 
     # Merge PEFT weights into the model if supported.
     if merge:
-        model = merge_peft(model, strict=strict)
+        model = registration.merge_peft(model, strict=strict)
 
     return model
 
