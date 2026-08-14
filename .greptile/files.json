@@ -1,0 +1,175 @@
+{
+  "files": [
+    {
+      "path": "CONTRIBUTING.md",
+      "description": "Guidelines for contributing to NVIDIA ALCHEMI Toolkit."
+    },
+    {
+      "path": ".claude/skills/nvalchemi-data-structures/SKILL.md",
+      "description": "Agent guidance for AtomicData and Batch APIs.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-structures/SKILL.md",
+        "nvalchemi/_serialization.py",
+        "nvalchemi/_typing.py",
+        "nvalchemi/data/atomic_data.py",
+        "nvalchemi/data/batch.py",
+        "nvalchemi/data/data.py",
+        "docs/userguide/data.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-data-storage/SKILL.md",
+      "description": "Agent guidance for Zarr-backed atomic data storage.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-storage/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-zarr-perf/SKILL.md",
+      "description": "Agent guidance for Zarr and DataLoader performance tuning.",
+      "scope": [
+        ".claude/skills/nvalchemi-zarr-perf/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/io_test.py",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-model-wrapping/SKILL.md",
+      "description": "Agent guidance for wrapping MLIP and PyTorch models.",
+      "scope": [
+        ".claude/skills/nvalchemi-model-wrapping/SKILL.md",
+        "nvalchemi/models/**",
+        "docs/userguide/models.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-training-api/SKILL.md",
+      "description": "Agent guidance for training strategies and distributed training.",
+      "scope": [
+        ".claude/skills/nvalchemi-training-api/SKILL.md",
+        "nvalchemi/training/**",
+        "docs/userguide/training.md",
+        "docs/userguide/distributed_training.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-fine-tuning/SKILL.md",
+      "description": "Agent guidance for pretrained-model fine tuning.",
+      "scope": [
+        ".claude/skills/nvalchemi-fine-tuning/SKILL.md",
+        "nvalchemi/training/_checkpoint.py",
+        "nvalchemi/training/_spec.py",
+        "nvalchemi/training/_spec_utils.py",
+        "nvalchemi/training/cli.py",
+        "nvalchemi/training/finetune.py",
+        "nvalchemi/training/hooks/checkpoint.py",
+        "nvalchemi/training/hooks/finetune.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/finetuning.md",
+        "docs/userguide/training_finetuning.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-loss-api/SKILL.md",
+      "description": "Agent guidance for training loss functions.",
+      "scope": [
+        ".claude/skills/nvalchemi-loss-api/SKILL.md",
+        "nvalchemi/training/losses/**",
+        "docs/userguide/losses.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-dynamics-api/SKILL.md",
+      "description": "Agent guidance for dynamics workflows and pipelines.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-api/SKILL.md",
+        "nvalchemi/dynamics/**",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md",
+        "docs/userguide/dynamics_sinks.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-dynamics-hooks/SKILL.md",
+      "description": "Agent guidance for shared and dynamics hooks.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-hooks/SKILL.md",
+        "nvalchemi/hooks/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/**",
+        "docs/userguide/hooks.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-dynamics-implementation/SKILL.md",
+      "description": "Agent guidance for implementing dynamics classes.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-implementation/SKILL.md",
+        "nvalchemi/dynamics/_ops/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/integrators/**",
+        "nvalchemi/dynamics/optimizers/**",
+        "nvalchemi/dynamics/sampler.py",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-reporting/SKILL.md",
+      "description": "Agent guidance for Rich, TensorBoard, CSV, and custom reporting.",
+      "scope": [
+        ".claude/skills/nvalchemi-reporting/SKILL.md",
+        "nvalchemi/hooks/reporting/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/logging.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/reporting.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/nvalchemi-distributed/SKILL.md",
+      "description": "Agent guidance for domain decomposition and distributed simulations.",
+      "scope": [
+        ".claude/skills/nvalchemi-distributed/SKILL.md",
+        "nvalchemi/distributed/**",
+        "examples/distributed/**",
+        "docs/userguide/distributed.md",
+        "docs/userguide/distributed_byo.md",
+        "docs/userguide/distributed_design.md",
+        "docs/userguide/distributed_shardtensor.md"
+      ]
+    },
+    {
+      "path": ".claude/skills/README.md",
+      "description": "Authoring conventions and repository-wide index for agent skills.",
+      "scope": [
+        ".claude/skills/**",
+        "AGENTS.md",
+        "docs/userguide/agent_skills.md"
+      ]
+    },
+    {
+      "path": "AGENTS.md",
+      "description": "Repository agent guidance and skill routing table.",
+      "scope": [
+        ".claude/skills/**",
+        "AGENTS.md",
+        "docs/userguide/agent_skills.md"
+      ]
+    },
+    {
+      "path": "docs/userguide/agent_skills.md",
+      "description": "User-facing agent skill index and installation guidance.",
+      "scope": [
+        ".claude/skills/**",
+        "AGENTS.md",
+        "docs/userguide/agent_skills.md"
+      ]
+    }
+  ]
+}
