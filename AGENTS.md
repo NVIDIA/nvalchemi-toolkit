@@ -168,6 +168,8 @@ be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
 - CUDA-dependent tests guard with `torch.cuda.is_available()` (see
   `test/conftest.py`) and skip cleanly on CPU-only machines; the rest of the
   suite runs on CPU.
+- Tests needing 2 GPUs must be marked with `@pytest.mark.multigpu`; the 2-GPU
+  CI job selects on it. Gloo/CPU multi-rank tests are not `multigpu`.
 - Add or update regression tests for behavior changes, especially model adapters,
   dynamics hooks, data serialization, training specs, and optional-dependency
   paths.

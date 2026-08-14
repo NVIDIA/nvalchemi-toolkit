@@ -53,11 +53,6 @@ NEIGHBOR_SKIN = 0.0
 # Helpers
 # ---------------------------------------------------------------------------
 
-_skip_no_multi_gpu = pytest.mark.skipif(
-    torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ GPUs for distributed tests",
-)
-
 
 def _init_process_group(rank: int, world_size: int) -> None:
     """Initialise NCCL process group for a spawned worker."""
@@ -200,7 +195,7 @@ def _test_single_step_force_correctness(rank: int, world_size: int) -> None:
         )
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_single_step_force_correctness():
     """Per-atom forces must match between 1-GPU reference and 2-GPU DomainParallel."""
     mp.spawn(
@@ -237,7 +232,7 @@ def _test_nve_final_energy_correctness(rank: int, world_size: int) -> None:
         )
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_nve_final_energy_correctness():
     """Final potential energy must match after 100 distributed NVE steps."""
     mp.spawn(
@@ -279,7 +274,7 @@ def _test_atom_count_conservation(rank: int, world_size: int) -> None:
         )
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_atom_count_conservation():
     """Total atoms across all ranks must equal the initial system size."""
     mp.spawn(
@@ -312,7 +307,7 @@ def _test_partition_distributes_atoms(rank: int, world_size: int) -> None:
     assert local_batch.pbc is not None
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_partition_distributes_atoms():
     """After partition(), each rank has atoms and totals match initial count."""
     mp.spawn(
@@ -353,7 +348,7 @@ def _test_step_completes(rank: int, world_size: int) -> None:
     assert torch.isfinite(local_batch.energy).all()
 
 
-@_skip_no_multi_gpu
+@pytest.mark.multigpu
 def test_step_completes():
     """dd.step() must complete 5 steps without crashing."""
     mp.spawn(

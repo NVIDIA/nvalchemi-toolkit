@@ -110,14 +110,18 @@ def _crossed_atom_reaches_receiver_before_migration(
 def _crossed_atom_force_matches_same_geometry_reference(
     rank: int,
     world_size: int,
-    _queue: Any,
+    _queue: Any = None,
+    device_type: str = "cpu",
 ) -> None:
     """Compare forces at the crossed geometry, without evolving trajectories."""
     assert world_size == 2
     dtype = torch.float64
-    cell = torch.eye(3, dtype=dtype) * 20.0
-    pbc = torch.ones(3, dtype=torch.bool)
-    mesh = DeviceMesh("cpu", list(range(world_size)), mesh_dim_names=("domain",))
+    device = (
+        torch.device(f"cuda:{rank}") if device_type == "cuda" else torch.device("cpu")
+    )
+    cell = torch.eye(3, dtype=dtype, device=device) * 20.0
+    pbc = torch.ones(3, dtype=torch.bool, device=device)
+    mesh = DeviceMesh(device_type, list(range(world_size)), mesh_dim_names=("domain",))
     domain_config = DomainConfig(cutoff=2.0, skin=0.5, mesh=mesh)
     partitioner = SpatialPartitioner(
         config=domain_config,
@@ -129,7 +133,7 @@ def _crossed_atom_force_matches_same_geometry_reference(
     assert len(split_dims) == 1
     split_dim = split_dims[0]
 
-    previous_frac = torch.full((1, 3), 0.5, dtype=dtype)
+    previous_frac = torch.full((1, 3), 0.5, dtype=dtype, device=device)
     previous_frac[0, split_dim] = 0.495
     previous_position = previous_frac @ cell
     crossed_frac = previous_frac.clone()
@@ -165,15 +169,15 @@ def _crossed_atom_force_matches_same_geometry_reference(
     )
     assert torch.equal(
         partitioner.assign_atoms_to_ranks(positions_before_crossing),
-        torch.tensor([0, 0, 1, 1]),
+        torch.tensor([0, 0, 1, 1], device=device),
     )
 
     def _batch(positions: torch.Tensor) -> Batch:
         n_atoms = positions.shape[0]
         data = AtomicData(
             positions=positions.clone(),
-            atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
-            atomic_masses=torch.full((n_atoms,), 39.948, dtype=dtype),
+            atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long, device=device),
+            atomic_masses=torch.full((n_atoms,), 39.948, dtype=dtype, device=device),
             cell=cell.unsqueeze(0),
             pbc=pbc.unsqueeze(0),
         )
@@ -201,13 +205,13 @@ def _crossed_atom_force_matches_same_geometry_reference(
 
     # The reference is a fresh single-process forward at exactly the positions
     # used by the distributed compute. It is not a separately evolved trajectory.
-    reference_forces = torch.zeros(4, 3, dtype=dtype)
+    reference_forces = torch.zeros(4, 3, dtype=dtype, device=device)
     if rank == 0:
         reference_model = LennardJonesModelWrapper(
             epsilon=1.0,
             sigma=1.0,
             cutoff=2.0,
-        )
+        ).to(device)
         reference_batch = _batch(positions_at_compute)
         compute_neighbors(
             reference_batch,
@@ -221,7 +225,7 @@ def _crossed_atom_force_matches_same_geometry_reference(
         epsilon=1.0,
         sigma=1.0,
         cutoff=2.0,
-    )
+    ).to(device)
     with DistributedModel(distributed_model, domain_config) as model:
         distributed_forces = model(sharded)["forces"]
 
@@ -402,22 +406,18 @@ def test_unwrapped_periodic_migrant_force_matches_same_geometry_reference() -> N
 
 
 @pytest.mark.multigpu
-@pytest.mark.skipif(
-    torch.cuda.device_count() < 4,
-    reason="requires >=4 CUDA GPUs",
-)
-def test_unwrapped_periodic_migrant_force_matches_reference_nccl(
+def test_crossed_atom_force_matches_same_geometry_reference_nccl(
     unused_tcp_port: int,
 ) -> None:
-    """The periodic-migrant force regression also fails over a real NCCL halo."""
+    """The same force check over a real NCCL halo instead of gloo."""
     mp.spawn(
         nccl_worker,
         args=(
-            4,
+            2,
             str(unused_tcp_port),
-            _unwrapped_periodic_migrant_force_matches_reference,
+            _crossed_atom_force_matches_same_geometry_reference,
             None,
             "cuda",
         ),
-        nprocs=4,
+        nprocs=2,
     )
