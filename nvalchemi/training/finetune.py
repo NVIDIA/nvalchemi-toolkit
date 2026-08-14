@@ -134,7 +134,8 @@ class FineTuningStrategy(TrainingStrategy):
     matching linear modules. When ``peft_config`` is provided, ``freeze_patterns``
     must be empty since the base model is considered frozen by default and PEFT
     hooks register adapter parameters as trainable. Use ``trainable_patterns``
-    only for extra parameters that should remain trainable.
+    to select any additional existing model parameters that should remain
+    trainable.
 
     Module patch targets are fully-qualified paths of the form
     ``"<model_key>.<module_path>.<child>"``, for example
@@ -237,11 +238,12 @@ class FineTuningStrategy(TrainingStrategy):
         tuple[str, ...],
         Field(
             description=(
-                "Glob patterns included in the trainable parameter allow-list. "
-                "When no ``freeze_patterns`` are supplied, this is the complete "
-                "allow-list for parameters not already registered as trainable, "
-                "such as module patch parameters. With ``peft_config``, use only "
-                "for extra parameters beyond adapters and module patches."
+                "Glob patterns for model parameters to keep trainable. Without "
+                "``freeze_patterns``, matching parameters form the allow-list, "
+                "together with parameters registered as trainable by setup hooks. "
+                "Module patches and, when ``peft_config`` is configured, PEFT "
+                "adapters register their parameters automatically; use these "
+                "patterns to select any additional existing model parameters."
             )
         ),
     ] = ()

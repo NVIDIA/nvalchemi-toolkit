@@ -881,8 +881,8 @@ importable when the strategy is rebuilt.
 
 When `peft_config` is provided, LoRA freezes the pretrained base by default, so
 `freeze_patterns` must stay empty. LoRA adapters and `module_patches` are
-trainable automatically; use `trainable_patterns` only for extra base-model
-parameters you also want to update.
+trainable automatically. As in regular fine-tuning, use `trainable_patterns`
+to select any additional existing model parameters you also want to update.
 
 For example, this strategy trains the LoRA adapters, the patched auxiliary
 projection, and one explicitly selected base projection.
