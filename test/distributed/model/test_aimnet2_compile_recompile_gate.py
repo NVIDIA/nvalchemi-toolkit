@@ -54,11 +54,6 @@ WARMUP_STEPS = 8
 STEADY_STEPS = 8
 JITTER = 0.06  # Å per-step RMS displacement (within cutoff+skin headroom)
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _methane_packing(n_per_side: int = 4, spacing: float = 4.4, dtype=torch.float32):
     """n_per_side**3 methane molecules (5 atoms each) on a cubic PBC lattice."""
@@ -188,7 +183,7 @@ def _aimnet2_recompile_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_aimnet2_compile_dd_equivalence_and_zero_recompiles_2ranks():
     """AIMNet2 halo + compile under DD: owned forces match a single-GPU
     reference, and a jittered MD loop produces zero steady-state recompiles.
