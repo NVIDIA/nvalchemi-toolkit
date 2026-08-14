@@ -12,7 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Reference energy computation for training strategies."""
+"""Utilities for computing reference energies prior to training or fine-tuning
+some models.
+
+TODO: Revisit this module's location and API.
+"""
 
 from __future__ import annotations
 

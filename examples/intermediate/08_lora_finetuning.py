@@ -89,7 +89,6 @@ from nvalchemi.training import (
     TrainingStage,
     ValidationConfig,
     default_training_fn,
-    fit_atomic_reference_energies,
 )
 from nvalchemi.training.peft import (
     LoRAConfig,
@@ -97,6 +96,7 @@ from nvalchemi.training.peft import (
     is_lora_layer,
     load_peft_checkpoint_into_model,
 )
+from nvalchemi.training.reference_energies import fit_atomic_reference_energies
 
 # Data and output paths
 DATA_ROOT = Path("outputs/lpsc_lora")
@@ -211,24 +211,19 @@ print(f"Loaded {len(samples)} structures into memory.", flush=True)
 # %%
 # Creating train/validation subsets
 # ---------------------------------
-# We shuffle once with a fixed seed, then build deterministic training and
-# validation splits for reproducibility.
+# We shuffle once with a fixed seed, then build training and validation splits.
 
 if len(samples) < 2:
     raise ValueError("Need at least two structures for train/validation split.")
-generator = torch.Generator().manual_seed(SEED)
-shuffled = torch.randperm(len(samples), generator=generator).tolist()
+random.Random(SEED).shuffle(samples)
 validation_count = max(1, int(round(len(samples) * VALIDATION_FRACTION)))
-validation_indices = sorted(shuffled[:validation_count])
-train_indices = sorted(shuffled[validation_count:])
-train_batch = Batch.from_data_list([samples[index] for index in train_indices])
-validation_batch = Batch.from_data_list(
-    [samples[index] for index in validation_indices]
-)
-del samples
+full_batch = Batch.from_data_list(samples)
+train_batch = full_batch[:-validation_count]
+validation_batch = full_batch[-validation_count:]
+del samples, full_batch
 print(
-    f"Created deterministic split: {len(train_indices)} train, "
-    f"{len(validation_indices)} validation.",
+    f"Created deterministic split: {train_batch.num_graphs} train, "
+    f"{validation_batch.num_graphs} validation.",
     flush=True,
 )
 
@@ -248,14 +243,14 @@ def make_loader(
     *,
     batch_size: int,
     shuffle: bool,
+    device: torch.device,
 ) -> DataLoader:
-    """Create a DataLoader over an in-memory batch."""
-    dataset = InMemoryDataset(
-        in_memory_batch=batch,
-        device=device,
-    )
+    """Create a dataloader"""
     return DataLoader(
-        dataset,
+        InMemoryDataset(
+            in_memory_batch=batch,
+            device=device,
+        ),
         batch_size=batch_size,
         shuffle=shuffle,
         drop_last=shuffle,
@@ -270,11 +265,13 @@ train_loader = make_loader(
     train_batch,
     batch_size=BATCH_SIZE,
     shuffle=True,
+    device=device,
 )
 validation_loader = make_loader(
     validation_batch,
     batch_size=VALIDATION_BATCH_SIZE,
     shuffle=False,
+    device=device,
 )
 
 
@@ -374,7 +371,12 @@ else:
         stage=TrainingStage.BEFORE_FORWARD,
     )
     checkpoint_reference_energies = mace_checkpoint_reference_energies(foundation_model)
-    reference_loader = make_loader(train_batch, batch_size=BATCH_SIZE, shuffle=False)
+    reference_loader = make_loader(
+        train_batch,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        device=device,
+    )
     try:
         fit_results = fit_atomic_reference_energies(
             reference_loader,
@@ -444,18 +446,14 @@ def class_name(cls: type) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def print_available_lora_wrappers() -> None:
-    """Print currently registered layer-to-LoRA wrapper pairs."""
-    wrappers = available_lora_wrappers()
-    print(f"Available LoRA wrappers: {len(wrappers)}", flush=True)
-    for layer_cls, wrapper_cls in wrappers:
-        print(
-            f"  - {class_name(layer_cls)} -> {class_name(wrapper_cls)}",
-            flush=True,
-        )
-
-
-print_available_lora_wrappers()
+# Print currently registered layer-to-LoRA wrapper pairs.
+wrappers = available_lora_wrappers()
+print(f"Available LoRA wrappers: {len(wrappers)}", flush=True)
+for layer_cls, wrapper_cls in wrappers:
+    print(
+        f"  - {class_name(layer_cls)} -> {class_name(wrapper_cls)}",
+        flush=True,
+    )
 
 
 # %%
@@ -573,21 +571,17 @@ strategy = FineTuningStrategy(
 # training.
 
 
-def print_lora_adapters(strategy: FineTuningStrategy) -> None:
-    """Print LoRA modules installed in strategy."""
-    print("LoRA adapters inserted:", flush=True)
-    for model_name, model in strategy.models.items():
-        module_names = [
-            name for name, module in model.named_modules() if is_lora_layer(module)
-        ]
-        if not module_names:
-            print(f"  - {model_name}: none", flush=True)
-            continue
-        for module_name in module_names:
-            print(f"  - {model_name}.{module_name}", flush=True)
-
-
-print_lora_adapters(strategy)
+# Print LoRA modules installed in strategy.
+print("LoRA adapters inserted:", flush=True)
+for model_name, model in strategy.models.items():
+    module_names = [
+        name for name, module in model.named_modules() if is_lora_layer(module)
+    ]
+    if not module_names:
+        print(f"  - {model_name}: none", flush=True)
+        continue
+    for module_name in module_names:
+        print(f"  - {model_name}.{module_name}", flush=True)
 
 
 # %%

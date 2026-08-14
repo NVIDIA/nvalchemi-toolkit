@@ -20,7 +20,9 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.training import fit_atomic_reference_energies
+from nvalchemi.training.reference_energies import (
+    fit_atomic_reference_energies,
+)
 
 
 def _structure(numbers: list[int], energy: float) -> AtomicData:
