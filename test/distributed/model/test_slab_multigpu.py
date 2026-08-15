@@ -45,10 +45,6 @@ from nvalchemi.distributed.config import DomainConfig
 
 WORLD_SIZE = 2
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
 
 _CUTOFF = 8.0
 _SKIN = 2.0
@@ -223,18 +219,18 @@ def _slab_equivalence_worker(rank: int, world_size: int, method: str) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_pme_slab_dist_model_equivalence_2ranks():
     """DistributedModel(PMEModelWrapper, slab_correction=True) matches 1-GPU."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29591", _slab_equivalence_worker, "pme"),
+        args=(WORLD_SIZE, "29708", _slab_equivalence_worker, "pme"),
         nprocs=WORLD_SIZE,
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_ewald_slab_dist_model_equivalence_2ranks():
     """DistributedModel(EwaldModelWrapper, slab_correction=True) matches 1-GPU."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")

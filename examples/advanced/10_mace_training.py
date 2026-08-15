@@ -27,7 +27,8 @@ At a high level, the ALCHEMI training workflow has the following structure:
 
    [Graph Data] -> [Model Architecture] -> [Supervised Objective] -> [Runtime Hooks] -> [TrainingStrategy]
 
-**Data** — MatPES r2SCAN structures are read from ALCHEMI-compatible Zarr splits.
+**Data** — MatPES r2SCAN 2025.2 structures, obtained from
+`MatPES <https://matpes.ai/>`__, are read from ALCHEMI-compatible Zarr splits.
 Each sample contains graph inputs (positions, atom types, periodic boundary
 metadata) and supervised labels (energy, forces, stress).
 
@@ -66,22 +67,6 @@ import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
 
-from examples.advanced._mace_models import build_training_mace_model, get_e0s
-from examples.advanced._mace_training_helpers import (
-    GradientClipHook,
-    JsonLinesLogger,
-    ScaleField,
-    ToDType,
-    TrainingMetricsLogger,
-    TwoStageCosineConstantLR,
-    close_zarr_loaders,
-    count_model_parameters,
-    get_cfg,
-    get_dtype,
-    make_validation_sampler,
-    save_final_checkpoint,
-    stress_target_scale,
-)
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
     DataLoader,
@@ -107,6 +92,41 @@ from nvalchemi.training import (
 )
 from nvalchemi.training.hooks import TrainingUpdateHook
 
+if __package__:
+    from ._mace_models import build_training_mace_model, get_e0s
+    from ._mace_training_helpers import (
+        GradientClipHook,
+        JsonLinesLogger,
+        ScaleField,
+        ToDType,
+        TrainingMetricsLogger,
+        TwoStageCosineConstantLR,
+        close_zarr_loaders,
+        count_model_parameters,
+        get_cfg,
+        get_dtype,
+        make_validation_sampler,
+        save_final_checkpoint,
+        stress_target_scale,
+    )
+else:
+    from _mace_models import build_training_mace_model, get_e0s
+    from _mace_training_helpers import (
+        GradientClipHook,
+        JsonLinesLogger,
+        ScaleField,
+        ToDType,
+        TrainingMetricsLogger,
+        TwoStageCosineConstantLR,
+        close_zarr_loaders,
+        count_model_parameters,
+        get_cfg,
+        get_dtype,
+        make_validation_sampler,
+        save_final_checkpoint,
+        stress_target_scale,
+    )
+
 _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
 # Samples per Zarr read during startup materialization; 32768 is used instead of
 # the default 4096 for fewer read calls.
@@ -120,12 +140,68 @@ _DATALOADER_USE_STREAMS = True
 # %%
 # Loading train and validation data
 # ---------------------------------
-# This pipeline reads MatPES r2SCAN structures from ALCHEMI-compatible Zarr
-# splits. :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw
-# samples from disk; :class:`~nvalchemi.data.datapipes.InMemoryDataset`
-# materializes each split once as a :class:`~nvalchemi.data.Batch` on the target
-# device, and :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or
-# sequential training batches from that in-memory batch.
+# The source data is the `MatPES r2SCAN 2025.2 release
+# <https://huggingface.co/datasets/materialyze/matpes>`__ on Hugging Face. This
+# example expects separate train, validation, and test Zarr stores. Load each
+# MatPES split file, for example the train, validation, and test JSON/JSONL files,
+# and convert each split independently to an ALCHEMI Zarr store with
+# :class:`~nvalchemi.data.datapipes.AtomicDataZarrWriter`.
+#
+# A minimal converter for this workflow should map each pymatgen/MSON ``structure``
+# dictionary to atomic numbers, Cartesian positions, cell, and PBC tensors;
+# write ``energy`` as a system label, ``forces`` as an atom label, and convert
+# Voigt-6 ``stress`` to a ``3 x 3`` system tensor.
+#
+# .. code-block:: python
+#
+#    import periodictable as pt
+#    import torch
+#
+#    from nvalchemi.data import AtomicData
+#    from nvalchemi.data.atomic_data import voigt_to_matrix
+#    from nvalchemi.data.datapipes import AtomicDataZarrWriter
+#
+#    def atomic_numbers_from_element_symbols(sites):
+#        return torch.as_tensor(
+#            [
+#                int(pt.elements.symbol(site["species"][0]["element"]).number)
+#                for site in sites
+#            ],
+#            dtype=torch.int32,
+#        )
+#
+#    writer = AtomicDataZarrWriter("r2scan-2025.2-train.zarr")
+#    chunk_size = 8192
+#    chunk = []
+#    initialized = False
+#    for record in jsonl_records:
+#        structure = record["structure"]
+#        chunk.append(
+#            AtomicData(
+#                atomic_numbers=atomic_numbers_from_element_symbols(structure["sites"]),
+#                positions=torch.as_tensor([site["xyz"] for site in structure["sites"]]),
+#                cell=torch.as_tensor(structure["lattice"]["matrix"]).reshape(1, 3, 3),
+#                pbc=torch.as_tensor(structure["lattice"].get("pbc", [True] * 3)).reshape(1, 3),
+#                energy=torch.as_tensor([[record["energy"]]]),
+#                forces=torch.as_tensor(record["forces"]),
+#                stress=voigt_to_matrix(torch.as_tensor(record["stress"])).reshape(1, 3, 3),
+#            )
+#        )
+#
+#        if len(chunk) >= chunk_size:
+#            writer.append(chunk) if initialized else writer.write(chunk)
+#            initialized = True
+#            chunk.clear()
+#
+#    if chunk:
+#        writer.append(chunk) if initialized else writer.write(chunk)
+#
+# This pipeline reads those Zarr splits with
+# :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader`.
+# :class:`~nvalchemi.data.datapipes.InMemoryDataset` materializes each split once
+# as a :class:`~nvalchemi.data.Batch` on the target device, and
+# :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or sequential
+# batches from that in-memory batch.
 #
 # The default configuration uses a per-process training batch size of 256 and a
 # validation batch size of 512. Given that the structure sizes in this dataset range from
@@ -247,7 +323,7 @@ def _loader(
 #
 # The runnable script reads architecture hyperparameters from Hydra and builds
 # the wrapped model through ``_build_model(cfg, device)``, which calls
-# :func:`examples.advanced._mace_models.build_training_mace_model` to set
+# :func:`~examples.advanced._mace_models.build_training_mace_model` to set
 # ``active_outputs`` and attach a checkpointable model spec.
 
 # sphinx_gallery_start_ignore
@@ -416,7 +492,7 @@ def _build_mace_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
 #
 #    import torch
 #
-#    from examples.advanced._mace_training_helpers import TwoStageCosineConstantLR
+#    from _mace_training_helpers import TwoStageCosineConstantLR
 #    from nvalchemi.training import OptimizerConfig
 #
 #    optimizer_config = OptimizerConfig(
@@ -478,7 +554,7 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 #
 #    from pathlib import Path
 #
-#    from examples.advanced._mace_training_helpers import (
+#    from _mace_training_helpers import (
 #        GradientClipHook,
 #        TrainingMetricsLogger,
 #    )

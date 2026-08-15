@@ -6,7 +6,7 @@ model; a model is selected with `--config <model>.yaml`.
 
 | Runner | What it measures |
 | --- | --- |
-| `benchmark_dd_model_forward.py` | Single-GPU vs multi-GPU forward time, peak memory, and a single-vs-multi **force-equivalence** gate. |
+| `benchmark_dd_model_forward.py` | Single-GPU vs multi-GPU forward time, peak memory, and a single-vs-multi **energy / force / stress equivalence** gate. |
 | `benchmark_dd_nvt.py` | End-to-end NVT (`NVTLangevin`) step time across `world ∈ {0, 1, 2}`. |
 
 Shared timing, system builders, force-gathering, and the sweep drivers
@@ -25,6 +25,22 @@ the per-mode distribution knobs. Shipped configs:
 | `mace.yaml` | α-quartz SiO₂ supercell | ✓ | ✓ |
 | `aimnet2.yaml` | Methane (CH₄) packing | ✓ | ✓ |
 | `uma.yaml` | bcc iron supercell | ✓ | ✓ |
+| `pipeline_aimnet2_pme.yaml` | Methane packing, AIMNet2 → PME composed | ✓ | |
+
+### Equivalence gate
+
+Every config sets `forward.has_stress: true`, so the multi-GPU gate compares
+**energy, forces and stress** against the single-rank reference; all three must
+agree within `--tolerance`. Stress is the term most sensitive to a reduction
+bug — it is per-system, so an incorrectly reduced partial does not average out
+the way per-atom forces can.
+
+`pipeline_aimnet2_pme.yaml` runs a composed model through
+`DistributedPipelineModel` instead of `DistributedModel`. PME's energy depends
+on the charges AIMNet2 predicts, so the two share one autograd graph (a *wired*
+group) and the stress carries a cross-model chain term that a wiring bug drops
+silently. Add a composed benchmark by giving `loader.kind: pipeline` a list of
+ordinary loader specs under `loader.steps`.
 
 Override any config value for a one-off run with `--set` (dotted keys),
 no new file needed:
@@ -57,8 +73,10 @@ pools clean between modes):
 
 ```bash
 # world=0 (raw integrator)         python ... benchmark_dd_nvt.py --config ...
-# world=1 (DD wrapper, single rank) torchrun --nproc_per_node=1 ... benchmark_dd_nvt.py --config ...
-# world=2 (full DD)                 torchrun --nproc_per_node=2 ... benchmark_dd_nvt.py --config ...
+# world=1 (DD wrapper, single rank)
+#   torchrun --nproc_per_node=1 ... benchmark_dd_nvt.py --config ...
+# world=2 (full DD)
+#   torchrun --nproc_per_node=2 ... benchmark_dd_nvt.py --config ...
 python benchmark/distributed/benchmark_dd_nvt.py \
     --config benchmark/distributed/configs/aimnet2.yaml --sizes 500 2000
 ```

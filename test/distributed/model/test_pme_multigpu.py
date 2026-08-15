@@ -52,11 +52,6 @@ STEADY_STEPS = 4
 JITTER = 0.05
 _PME_CUT = 6.0
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _pme_equivalence_worker(rank: int, world_size: int) -> None:
     """Single-GPU PME reference on rank 0 → broadcast → each rank
@@ -209,7 +204,7 @@ def _pme_equivalence_worker(rank: int, world_size: int) -> None:
     # fp32 + FFT-based PME: tolerances slightly looser than Ewald's
     # direct k-sum because of accumulated rounding in the mesh pipeline.
     torch.testing.assert_close(
-        e_local.view(1),
+        e_local.view(1).to(e_ref.dtype),
         e_ref,
         rtol=5e-4,
         atol=5e-4,
@@ -231,7 +226,7 @@ def _pme_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_pme_dist_model_equivalence_2ranks():
     """Regression: ``DistributedModel(PMEModelWrapper)`` under halo
     matches single-GPU PME on total energy and per-atom forces.
@@ -248,7 +243,7 @@ def test_pme_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29574", _pme_equivalence_worker),
+        args=(WORLD_SIZE, "29706", _pme_equivalence_worker),
         nprocs=WORLD_SIZE,
     )
 
@@ -401,7 +396,7 @@ def _compile_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_pme_compile_dd_2ranks():
     """Compiled ``DistributedModel(PME, hybrid_forces=False)`` == single-GPU; no steady recompiles."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -548,7 +543,7 @@ def _pme_gp_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_pme_gp_dist_model_equivalence_2ranks():
     """``DistributedModel(PMEModelWrapper, GRAPH_PARTITION)`` matches single-GPU
     PME on total energy and per-atom forces (correctness-first GP path)."""

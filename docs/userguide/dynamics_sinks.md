@@ -41,7 +41,7 @@ trajectory_hook = SnapshotHook(
 
 # Capture only converged structures in a GPU buffer
 converged_hook = ConvergedSnapshotHook(
-    sink=GPUBuffer(capacity=256),
+    sink=GPUBuffer(capacity=256, max_atoms=128, max_edges=4096),
 )
 ```
 
@@ -146,7 +146,7 @@ with FIRE(
         # Full trajectory to disk every 50 steps
         SnapshotHook(sink=ZarrData("/tmp/traj.zarr"), frequency=50),
         # Converged frames to GPU for downstream consumption
-        ConvergedSnapshotHook(sink=GPUBuffer(capacity=256)),
+        ConvergedSnapshotHook(sink=GPUBuffer(capacity=256, max_atoms=128, max_edges=4096)),
     ],
 ) as opt:
     relaxed = opt.run(batch)

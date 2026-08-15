@@ -155,7 +155,8 @@ def test_lj_passes_initial_inference():
 
     report = trace_and_validate(
         _make_lj_wrapper,
-        _make_argon_batch(n_per_side=5),
+        # n=7 (23.8 A box) so the 2-rank domains exceed the wrapper's 10 A cutoff.
+        _make_argon_batch(n_per_side=7),
         world_size=2,
         device="cuda:0",
         atol=1e-4,
@@ -181,7 +182,7 @@ def test_spec_round_trips_through_disk(tmp_path):
 
     report = trace_and_validate(
         _make_lj_wrapper,
-        _make_argon_batch(n_per_side=4),  # 64 atoms — quick
+        _make_argon_batch(n_per_side=7),  # box must exceed 2x the 10 A cutoff
         world_size=2,
         device="cuda:0",
     )
@@ -208,7 +209,7 @@ def test_auto_fix_kicks_in_when_initial_spec_is_wrong():
 
     report = trace_and_validate(
         _make_lj_with_wrong_spec,  # module-level so mp.spawn can pickle it
-        _make_argon_batch(n_per_side=4),
+        _make_argon_batch(n_per_side=7),
         world_size=2,
         device="cuda:0",
         auto_fix=True,
@@ -281,11 +282,18 @@ class _LJWithWrongSpec:
 def _make_ewald_wrapper():
     from nvalchemi.models.ewald import EwaldModelWrapper
 
-    return EwaldModelWrapper(cutoff=10.0)
+    return EwaldModelWrapper(cutoff=5.0)
 
 
-def _make_charged_argon_batch(n_per_side: int = 5, lattice: float = 3.4):
-    """Argon-with-fake-charges batch for Ewald/PME — alternating ±1 e."""
+def _make_charged_argon_batch(
+    n_per_side: int = 5, lattice: float = 3.4, jitter: float = 0.15
+):
+    """Argon-with-fake-charges batch for Ewald/PME — alternating ±1 e.
+
+    ``jitter`` displaces the lattice by a seeded random offset. On the perfect
+    lattice the forces cancel by symmetry, so a force comparison would be
+    noise-against-noise and could not detect a wrong distributed force.
+    """
     import torch
 
     from nvalchemi.data import AtomicData, Batch
@@ -295,6 +303,10 @@ def _make_charged_argon_batch(n_per_side: int = 5, lattice: float = 3.4):
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1).cuda()
     n = positions.shape[0]
     box = n_per_side * lattice
+    if jitter:
+        gen = torch.Generator(device="cpu").manual_seed(0)
+        offsets = jitter * torch.randn(positions.shape, generator=gen)
+        positions = (positions + offsets.cuda()) % box
     cell = torch.eye(3, device="cuda") * box
     charges = torch.tensor(
         [1.0 if i % 2 == 0 else -1.0 for i in range(n)],
@@ -320,7 +332,9 @@ def test_ewald_passes_initial_inference():
 
     report = trace_and_validate(
         _make_ewald_wrapper,
-        _make_charged_argon_batch(n_per_side=4),
+        # Even n keeps the alternating +/-1 lattice net-neutral; 8 also puts the
+        # 2-rank domains clear of the wrapper's 10 A cutoff.
+        _make_charged_argon_batch(n_per_side=8),
         world_size=2,
         device="cuda:0",
         auto_fix=True,
@@ -335,7 +349,7 @@ def test_ewald_passes_initial_inference():
 def _make_pme_wrapper():
     from nvalchemi.models.pme import PMEModelWrapper
 
-    return PMEModelWrapper(cutoff=10.0)
+    return PMEModelWrapper(cutoff=5.0)
 
 
 @cuda_required
@@ -346,7 +360,9 @@ def test_pme_passes_initial_inference():
 
     report = trace_and_validate(
         _make_pme_wrapper,
-        _make_charged_argon_batch(n_per_side=4),
+        # Even n keeps the alternating +/-1 lattice net-neutral; 8 also puts the
+        # 2-rank domains clear of the wrapper's 10 A cutoff.
+        _make_charged_argon_batch(n_per_side=8),
         world_size=2,
         device="cuda:0",
         auto_fix=True,
@@ -596,9 +612,12 @@ def test_aimnet2_methane_pbc_passes():
     """3-D methane packing with full PBC. Exercises the multi-rank halo
     energy/force/stress path under PBC that the (non-PBC) carbon-chain
     sample doesn't — owned forces, stress, and energy must all match the
-    single-process reference. Stress rides the autograd /world_size
-    consolidation and is only meaningful under PBC, so this is the gate
-    that covers it for AIMNet2 under DD."""
+    single-process reference. Stress rides the autograd /world_size plus
+    cross-rank sum consolidation and is only meaningful under PBC, so this
+    is the gate that covers it for AIMNet2 under DD.
+
+    ``auto_fix=False``: the declared spec must pass as written. Letting the
+    validator repair it would hide a wrong declaration behind a working run."""
     pytest.importorskip("aimnet")
     from nvalchemi.distributed.validate import trace_and_validate
 
@@ -614,7 +633,7 @@ def test_aimnet2_methane_pbc_passes():
         device="cuda:0",
         atol=1e-5,
         rtol=1e-4,
-        auto_fix=True,
+        auto_fix=False,
     )
     assert report.ok, report.next_action
     ph = report.attempts[-1].partition_health

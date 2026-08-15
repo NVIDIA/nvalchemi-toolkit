@@ -339,10 +339,7 @@ def _worker_pass_halo_refresh(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs (static halo op uses NCCL funcol)",
-)
+@pytest.mark.multigpu
 def test_compile_pass_halo_refresh_2ranks() -> None:
     """The compile-refresh pass auto-inserts the real halo correction on a
     no-subclass plain scatter and reproduces the eager dispatch-corrected result
@@ -488,10 +485,7 @@ def _worker_pass_two_layer_mpnn(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs (static halo op uses NCCL funcol)",
-)
+@pytest.mark.multigpu
 def test_compile_pass_two_layer_mpnn_owned_equivalence_2ranks() -> None:
     """A real 2-layer pure-PyTorch MPNN with NO author DD code, compiled under DD
     (``fullgraph=False``) — the compile-refresh pass auto-places the halo refresh
@@ -580,10 +574,7 @@ def _worker_bridge_two_layer(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs (static halo op uses NCCL funcol)",
-)
+@pytest.mark.multigpu
 def test_halo_compile_bridge_two_layer_owned_equivalence_2ranks() -> None:
     """The framework-owned ``HaloCompileBridge`` reproduces the inline pass
     result — a 2-layer MPNN's OWNED outputs match the eager-corrected reference
@@ -690,10 +681,7 @@ def _worker_holder_self_refresh_two_layer(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs (static halo op uses NCCL funcol)",
-)
+@pytest.mark.multigpu
 def test_halo_compile_bridge_holder_self_refresh_2ranks() -> None:
     """The compile-routing holder threads the step's routing from the bridge's
     graph inputs to an in-region ``scatter_to_owners`` call, so a model that

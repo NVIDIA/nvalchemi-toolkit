@@ -286,24 +286,17 @@ def main() -> None:
     sink_a = ZarrData(store="trajectories_rank1.zarr", capacity=1000)
     sink_b = ZarrData(store="trajectories_rank3.zarr", capacity=1000)
 
-    # Hooks — created before pipeline initialisation so that rank is known
-    # after dist.init_process_group fires inside DistributedPipeline.__enter__.
-    # We defer rank resolution to inside the ``with pipeline:`` block by
-    # building stages lazily after the context manager is entered.
-
-    # DistributedPipeline.__enter__ calls dist.init_process_group, so we
-    # build the stages dict inside the ``with`` block to ensure dist is live.
     pipeline_kwargs = dict(backend="nccl", debug_mode=True)
 
-    # Build stages inside the context manager so dist.get_rank() is valid.
-    # We create a thin wrapper that defers stage construction.
     class _DeferredMain:
-        """Helper that constructs stages after the process group is ready."""
+        """Build the stages, then run the pipeline."""
 
         def run(
             self,
         ) -> tuple[int, LoggingHook, LoggingHook, StageTimingHook, StageTimingHook]:
-            rank = dist.get_rank() if dist.is_initialized() else 0
+            # torchrun sets RANK in the environment before the process group is
+            # up, so per-rank CSV filenames are correct without dist being live.
+            rank = int(os.environ.get("RANK", 0))
 
             # Per-rank hook instances — each rank writes to its own files.
             fire_logger = LoggingHook(
@@ -373,13 +366,17 @@ def main() -> None:
             }
 
             pipeline = DistributedPipeline(stages=stages, **pipeline_kwargs)
-            try:
-                with fire_logger, langevin_logger:
-                    with pipeline:
+            with pipeline:
+                try:
+                    with fire_logger, langevin_logger:
                         pipeline.run()
-            finally:
-                fire_profiler.close()
-                langevin_profiler.close()
+                finally:
+                    fire_profiler.close()
+                    langevin_profiler.close()
+
+                # Keep the process group alive until every rank has flushed its
+                # CSV files; rank 0 reads them after the context exits.
+                dist.barrier()
 
             return rank, fire_logger, langevin_logger, fire_profiler, langevin_profiler
 
@@ -400,10 +397,6 @@ def main() -> None:
     # ``fmax``.  We aggregate the mean step time per rank from the profiler
     # CSV files as well.
     #
-    # A barrier ensures all ranks have finished writing their CSV files
-    # before rank 0 reads them.
-    dist.barrier()
-
     if rank == 0:
         _print_post_run_summary(num_ranks=4)
 

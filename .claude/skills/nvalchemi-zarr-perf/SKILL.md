@@ -1,6 +1,6 @@
 ---
 name: nvalchemi-zarr-perf
-description: >
+description: >-
   Performance tuning for nvalchemi's Zarr-backed Reader, Dataset, and
   DataLoader pipeline. Use when configuring AtomicDataZarrReader, Dataset,
   DataLoader, ZarrWriteConfig, or nvalchemi-io-test for training/inference
@@ -13,7 +13,7 @@ description: >
 Use this skill when optimizing nvalchemi Zarr reads or writing stores that will
 later be read through the nvalchemi DataLoader.
 
-## Current API model
+## Overview
 
 The pipeline has clean ownership boundaries:
 

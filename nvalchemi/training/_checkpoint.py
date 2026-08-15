@@ -212,26 +212,6 @@ class CheckpointManifest(BaseModel):
     code).  Serialization always produces sorted name lists via
     :class:`~pydantic.PlainSerializer`.
 
-    Attributes
-    ----------
-    schema_version
-        Schema version. Defaults to the current ``_SCHEMA_VERSION``.
-        When manifest structure changes, bump ``_SCHEMA_VERSION`` and
-        add a migration step in :meth:`read`.
-    checkpoint_index
-        The latest checkpoint index written.
-    models
-        Component dict keyed by name. At runtime each value is a
-        ``(nn.Module, BaseSpec)`` tuple; on disk, serialized as a
-        sorted ``list[str]`` of names.
-    optimizers
-        Same dual-mode dict for optimizers (empty by default).
-    schedulers
-        Same dual-mode dict for schedulers (empty by default).
-    associations
-        Model-centric linkage: maps a model name to
-        ``{"optimizers": [...], "schedulers": [...]}``.
-
     Examples
     --------
     >>> manifest = CheckpointManifest(

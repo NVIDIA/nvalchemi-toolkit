@@ -15,6 +15,12 @@ logic in a straightforward manner, and freely compose them with a modular
 scheduling system that allows curricula to be designed exactly for a wide
 range of training styles.
 
+```{tip}
+**AI coding assistant?** Load the ``nvalchemi-loss-api``
+{ref}`agent skill <agent_skills>` for concise instructions on using,
+composing, and implementing training losses.
+```
+
 This page covers:
 
 - the built-in leaf (or terms) losses and how to call them directly;
@@ -810,6 +816,7 @@ multiplies per-graph residuals by these weights when computing the mean, giving
 larger graphs proportionally more influence — the same semantics as
 `EnergyMSELoss(per_atom=True)`.
 
+(masking-mask)=
 ### Masking (mask)
 
 The default `mask` returns an all-True tensor — every position is valid, with no
@@ -856,6 +863,7 @@ as `valid`. Use `torch.where(valid, ..., torch.zeros_like(...))` in
 `compute_residual` to zero invalid entries; the base `reduce` handles the
 denominator.
 
+(reduction-reduce)=
 ### Reduction (reduce)
 
 The default `reduce` computes a validity-weighted global mean: valid entries
@@ -917,6 +925,7 @@ per-graph diagnostics through `ComposedLossOutput["per_component_sample"]`.
 See [Per-sample loss diagnostics](#per-sample-loss-diagnostics) for the full
 contract; leave it `None` when a per-graph decomposition is unavailable.
 
+(shape-and-dtype-validation-validate)=
 ### Shape and dtype validation (validate)
 
 By default, `validate` calls

@@ -683,7 +683,10 @@ def _build_pbc_orthorhombic_argon(
 # Registered topology builders, looked up by key in the worker functions.
 _SYSTEM_BUILDERS: dict[str, Any] = {
     "nonpbc_open_argon": lambda: _build_open_argon_cluster(n_per_side=8),
-    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=4),
+    # n_per_side=5 (box ~20.0 A) so a 2-rank split leaves each domain wider than
+    # the 8.5 A LJ ghost shell; at 4 the domains are 8.0 A and the halo would
+    # wrap onto the rank's own periodic image.
+    "pbc_orthorhombic_argon": lambda: _build_pbc_orthorhombic_argon(n_per_side=5),
 }
 
 
@@ -717,9 +720,13 @@ _WRAPPER_FACTORIES: dict[str, Any] = {
 
 
 def _port_for(key: str) -> str:
-    """Deterministic free-ish port per-parametrization so concurrent
-    pytest runs don't collide. 30000 + hash(key)%5000."""
-    return str(30000 + (hash(key) & 0xFFFF) % 5000)
+    """Deterministic per-parametrization rendezvous port.
+
+    Kept below the kernel's ephemeral range: a port drawn from there can be
+    claimed for an outbound connection between the choice and the rendezvous
+    bind, which surfaces as a mid-test EADDRINUSE.
+    """
+    return str(20000 + (hash(key) & 0xFFFF) % 9000)
 
 
 # Single-GPU gloo+cuda tier: N ranks share one GPU (gloo because NCCL rejects
@@ -736,24 +743,20 @@ cuda_model_tier = pytest.mark.skipif(
 )
 
 
+# ======================================================================
+# MACE — multi-step NVE via DomainParallel
+#
 # Real-multi-GPU tier: the full DomainParallel NVE dynamics path (gather +
 # per-step halo migration) needs raw cuda-tensor send/recv, which gloo's TCP
 # transport rejects ("Bad address"). It therefore runs on genuine NCCL across
 # >=2 physical GPUs (rank r -> cuda:r) rather than the N-ranks-share-one-GPU
-# gloo tier. Skipped on <2 GPUs.
-cuda_multigpu_tier = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="full distributed NVE dynamics run on real NCCL across >=2 GPUs",
-)
-
-
-# ======================================================================
-# MACE — multi-step NVE via DomainParallel
+# gloo tier above — hence ``multigpu``, not ``cuda_model_tier``.
+#
 # Shares the parameterized ``_nve_via_domain_parallel_worker`` above.
 # ======================================================================
 
 
-@cuda_multigpu_tier
+@pytest.mark.multigpu
 @pytest.mark.parametrize(
     "system_name,world_size,n_steps,dt_fs,energy_tol", _MACE_NVE_CASES
 )
@@ -1048,3 +1051,7 @@ def test_aimnet2_wrapper_declares_halo_spec() -> None:
     # ConvSV + LRCoulomb + SRCoulomb), with no gather custom_ops.
     assert spec.distribution.custom_ops == ()
     assert len(spec.distribution.third_party_helpers) == 4
+    # Stress comes from the framework strain trick, so each rank holds a partial
+    # that the declared reduction has to sum.
+    assert "stress" in spec.all_reduce_outputs
+    assert spec.compile is not None and spec.compile.stress_via_strain

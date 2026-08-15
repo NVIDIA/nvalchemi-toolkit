@@ -77,7 +77,8 @@ class ReportingOrchestrator:
         Individual reporters may also expose ``rank_zero_only=True`` to
         request their own gating. Default ``False``.
     error_policy : ReportingErrorPolicy | str, optional
-        Reporter failure handling policy. Default ``"raise"``.
+        Reporter failure handling policy. Default
+        ``ReportingErrorPolicy.RAISE`` (the string ``"raise"`` is also accepted).
     state : ReportingState | None, optional
         Shared reporting state. If omitted, a new state object is created.
     """

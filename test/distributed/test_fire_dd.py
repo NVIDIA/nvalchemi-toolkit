@@ -28,28 +28,23 @@ Three levels of gate, all on CPU with gloo:
   ops kernel the *whole-system* ``vf/vv/ff`` (the local partials summed across
   the mesh). We assert the globalized scalars equal the single-process sum
   bit-for-bit — this is the direct DD correctness claim the coordinator owns.
-* **tight trajectory equivalence** — with a non-adapting FIRE
-  (``f_alpha=1``/``f_inc=1``, see the note), ``DomainParallel(FIRE(LJ))`` on a
-  genuinely-decomposed cluster reproduces the bare single-process ``FIRE``
-  relaxation (energy + sorted force magnitudes) to ~machine precision.
 * **end-to-end descent** — default (adapting-alpha) ``DomainParallel(FIRE(LJ))``
   runs to completion and relaxes the cluster (global energy descends well below
   the start).
+* **same-geometry force correctness** — save every gathered frame from a
+  distributed FIRE trajectory, then replay those exact positions through
+  single-process LJ. Distributed energy and forces must match the replay,
+  including frames where ownership migration is deferred.
 
-  .. note:: The per-step *vanilla*-FIRE trajectory is bit-exact between DD and
-     bare FIRE on GPU, but **not** on the Warp CPU backend: the ops FIRE update
-     kernel reads ``alpha[sys]`` per-thread to recompute the per-system
-     parameters, and under serial CPU execution the first-atom thread writes
-     ``alpha[sys]`` before the remaining same-system atoms read it, so the mixed
-     velocity of every non-first atom picks up a once-decayed ``alpha`` (~1e-3
-     per step). That artifact depends only on *which* atom is first in a segment,
-     so it differs between a shard (its own first atom) and the full system — it
-     is an ops CPU-backend quirk independent of this coordinator wiring, not a DD
-     divergence. Setting ``f_alpha=1``/``f_inc=1`` removes the ``alpha``/``dt``
-     write entirely, which is why the tight trajectory gate uses it; the vanilla
-     per-step match rides the GPU dynamics gates.
+The tests do not compare independently evolved trajectories: small
+floating-point differences can accumulate even when each force evaluation is
+correct.
 
-The gate anchor is bare single-process ``FIRE`` (not ``DomainParallel`` world 1).
+.. note:: ``_bare_fire_relax`` remains available for the 2-D pipeline tests,
+   which configure ``f_alpha=1`` and ``f_inc=1`` when comparing CPU trajectories.
+   This avoids the Warp CPU kernel's atom-order-dependent in-place updates of
+   per-system ``alpha`` and ``dt``. The same-geometry gate here does not depend
+   on trajectory identity.
 """
 
 from __future__ import annotations
@@ -357,13 +352,6 @@ def _fire_e2e_worker(rank: int, world_size: int, n_steps: int) -> None:
 
     # Default (adapting-alpha) FIRE under DD must run to completion and relax:
     # the (global, forward-consolidated) energy descends well below the start.
-    # We do NOT compare to the bare trajectory here — with vanilla FIRE the ops
-    # Warp CPU-backend first-atom alpha[sys] read/write ordering perturbs the
-    # per-step path (~1e-3/step) differently for a shard vs the whole system,
-    # which over a long descent can reach a different local minimum. That is an
-    # ops CPU quirk, not a DD-reduction error: the coordinator's globalization is
-    # exact (Level 1) and the artifact-free trajectory match is Level 3. The
-    # tight vanilla-FIRE trajectory match rides the GPU dynamics gates.
     e_first, e_final = energies[0], energies[-1]
     assert e_final < e_first - 0.3, (
         f"DomainParallel(FIRE) did not relax: E_first={e_first:.6f} "
@@ -377,27 +365,23 @@ def _fire_e2e_worker(rank: int, world_size: int, n_steps: int) -> None:
 
 def test_fire_lj_2ranks_end_to_end() -> None:
     """``DomainParallel(FIRE(LJ))`` runs to completion on a genuinely-decomposed
-    argon cluster and relaxes it (global energy descends well below the start).
-    The tight equivalence to bare FIRE is gated by
-    :func:`test_fire_lj_2ranks_exact_trajectory`."""
+    argon cluster and relaxes it (global energy descends well below the start)."""
     _spawn(2, "29742", "_fire_e2e_worker", 200)
 
 
 # ======================================================================
-# Level 3 — tight trajectory equivalence, artifact-free config.
+# Level 3 — same-geometry correctness through a FIRE trajectory.
 #
-# With ``f_alpha=1.0`` and ``f_inc=1.0`` the FIRE parameter update writes nothing
-# back to ``alpha[sys]`` / ``dt[sys]``, so the ops CPU first-atom read/write
-# ordering has no effect and the DD vs whole-system trajectories track to
-# machine precision. This isolates and validates the coordinator's reduction
-# wiring over a real multi-step relaxation on a genuinely-decomposed system:
-# DomainParallel(FIRE) == bare FIRE, positions + energy. (Vanilla FIRE with its
-# default decaying ``alpha`` / growing ``dt`` is bit-exact on GPU; see Level-2.)
+# The trajectory deliberately places atoms near the rank split and reaches
+# deferred-migration states. Save every gathered DD frame, then replay those
+# fixed positions through a single-process LJ model. This checks distributed
+# energy and forces without comparing two separately evolved trajectories.
 # ======================================================================
 
 
-def _fire_exact_worker(rank: int, world_size: int, n_steps: int) -> None:
+def _fire_same_geometry_worker(rank: int, world_size: int, n_steps: int) -> None:
     from nvalchemi.distributed.domain_parallel import DomainParallel
+    from nvalchemi.neighbors import compute_neighbors
 
     dtype = torch.float64
     positions, atomic_numbers, masses, cell, pbc = _build_lj_cluster()
@@ -422,39 +406,78 @@ def _fire_exact_worker(rank: int, world_size: int, n_steps: int) -> None:
     else:
         full_batch = None
     local_batch = dp.partition(full_batch)
+    assert dp._sharded_batch is not None
+    assert dp._sharded_batch.partitioner is not None
+
+    saw_deferred_owner = torch.zeros(1, dtype=torch.int32)
+    trajectory: list[tuple[Batch, torch.Tensor, torch.Tensor]] = []
 
     for _ in range(n_steps):
         local_batch, _ = dp.step(local_batch)
+        natural_owner = dp._sharded_batch.partitioner.assign_atoms_to_ranks(
+            local_batch.positions
+        )
+        saw_deferred_owner |= (natural_owner != rank).any().to(torch.int32).view(1)
 
-    dd_final_energy = float(local_batch.energy.sum().item())
-    full_final = dp.gather(local_batch, dst=0)
+        distributed_energy = local_batch.energy.sum().detach().clone()
+        full_step = dp.gather(local_batch, dst=0)
 
+        if rank != 0:
+            continue
+
+        assert full_step is not None
+        assert full_step.num_nodes == n
+        trajectory.append(
+            (
+                full_step,
+                distributed_energy,
+                full_step.forces.detach().clone(),
+            )
+        )
+
+    # Finish every step/gather collective before replaying frames on rank 0.
+    dist.all_reduce(saw_deferred_owner, op=dist.ReduceOp.MAX)
     if rank != 0:
         return
 
-    assert full_final is not None
-    assert full_final.num_nodes == n
-
-    _, ref_batch = _bare_fire_relax(n_steps, f_alpha=1.0, f_inc=1.0)
-    ref_final_energy = float(ref_batch.energy.sum().item())
-
-    # The gather reorders atoms by owner, so compare order-invariant relaxation
-    # signatures: the total energy and the SORTED per-atom force magnitudes. Both
-    # are invariant under the atom permutation and pin the relaxed configuration.
-    # Energy agreeing to ~machine precision over a real 2-way decomposed 30-step
-    # relaxation is the proof the coordinator globalizes vf/vv/ff correctly.
-    assert abs(dd_final_energy - ref_final_energy) < 1e-5, (
-        f"DomainParallel(FIRE) energy {dd_final_energy:.10f} != bare-FIRE "
-        f"{ref_final_energy:.10f}"
+    assert bool(saw_deferred_owner.item()), (
+        "the FIRE fixture never entered a deferred-ownership state"
     )
-    dd_fmag = torch.sort(full_final.forces.norm(dim=-1)).values
-    ref_fmag = torch.sort(ref_batch.forces.norm(dim=-1)).values
-    torch.testing.assert_close(dd_fmag, ref_fmag, rtol=0, atol=1e-4)
+    assert len(trajectory) == n_steps
+
+    # Replay the saved DD trajectory without advancing another FIRE integrator:
+    # each reference calculation sees exactly the positions from that DD frame.
+    reference_model, _, _ = _make_fire_lj(None, f_alpha=1.0, f_inc=1.0)
+    for step, (
+        reference_batch,
+        distributed_energy,
+        distributed_forces,
+    ) in enumerate(trajectory, start=1):
+        compute_neighbors(
+            reference_batch,
+            config=reference_model.model_config.neighbor_config,
+        )
+        reference = reference_model(reference_batch)
+
+        reference_energy = reference["energy"].sum().detach()
+        reference_forces = reference["forces"].detach()
+        torch.testing.assert_close(
+            distributed_energy,
+            reference_energy,
+            rtol=1e-10,
+            atol=1e-12,
+            msg=f"distributed energy differs at the same geometry on step {step}",
+        )
+        torch.testing.assert_close(
+            distributed_forces,
+            reference_forces,
+            rtol=1e-10,
+            atol=1e-12,
+            msg=f"distributed forces differ at the same geometry on step {step}",
+        )
 
 
-def test_fire_lj_2ranks_exact_trajectory() -> None:
-    """``DomainParallel(FIRE(LJ))`` with non-adapting alpha/dt reproduces the
-    bare single-process FIRE relaxation (positions + energy) at fp64 precision —
-    the machine-precision proof that the coordinator globalizes vf/vv/ff
-    correctly through a full relaxation loop."""
-    _spawn(2, "29743", "_fire_exact_worker", 30)
+def test_fire_lj_2ranks_same_geometry() -> None:
+    """Replay a saved DD FIRE trajectory through single-process LJ and compare
+    energy and forces at every identical-position frame."""
+    _spawn(2, "29743", "_fire_same_geometry_worker", 30)

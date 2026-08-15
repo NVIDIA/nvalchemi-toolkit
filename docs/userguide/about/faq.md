@@ -6,7 +6,7 @@
 
 ### How do I get started?
 
-For installation instructions, check the [installation guide](install). For a
+For installation instructions, check the [installation guide](install.md). For a
 quick working example, see the [User Guide](../index). For detailed API usage,
 refer to the [API documentation](../../modules/index).
 
@@ -20,7 +20,7 @@ ALCHEMI Toolkit runs on:
 - CPU execution via NVIDIA Warp (x86 and ARM, including Apple Silicon)
 
 For best performance, we recommend CUDA 12+ with driver version 570.xx or newer.
-See the [installation guide](install) for full prerequisites.
+See the [installation guide](install.md) for full prerequisites.
 
 ## Dynamics & Simulation
 

@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.4.0",
+    "nvalchemi-toolkit-ops>=0.4.1",
     "torch>=2.8",
     "click",
     "loguru",
@@ -67,7 +67,7 @@ ase = [
     "ase>=3.27.0",
 ]
 cu12 = [
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.3.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
     "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
@@ -75,7 +75,7 @@ cu12 = [
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.3.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
     "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
@@ -102,8 +102,9 @@ packages = ["nvalchemi"]
 # === UV configuration ====
 [tool.uv]
 default-groups = ["dev", "build"]
-# Several PhysicsNeMo CUDA dependencies have placeholder packages on PyPI and
-# installable wheels on NVIDIA's index.
+# torch/torchvision resolve from the explicit PyTorch CUDA indexes while their
+# dependencies come from PyPI; unsafe-best-match lets uv pick the best version
+# across indexes rather than stopping at the first that has the name.
 index-strategy = "unsafe-best-match"
 conflicts = [
   [
@@ -131,7 +132,7 @@ override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
 dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.4.0", requires-dist = [
+  { name = "nvalchemi-toolkit-ops", version = "0.4.1", requires-dist = [
     "warp-lang >= 1.13.0",
     "numpy",
     "torch>=2.8.0 ; extra == 'torch'",
@@ -187,6 +188,7 @@ docs = [
     "sphinx-design",
     "sphinx>=6.0.0",
     "jupytext>=1.15.0",
+    "autodoc-pydantic>=2.0.0",
     "sphinx-autodoc-typehints>=1.24.0",
     "sphinx-gallery>=0.12.0",
     "sphinx-togglebutton>=0.3.0",
@@ -198,10 +200,6 @@ docs = [
 
 [tool.setuptools.packages.find]
 include = ["nvalchemi", "nvalchemi.*"]
-
-[[tool.uv.index]]
-name = "nvidia"
-url = "https://pypi.nvidia.com"
 
 [[tool.uv.index]]
 name = "pytorch-cu126"

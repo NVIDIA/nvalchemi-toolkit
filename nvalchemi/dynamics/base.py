@@ -49,6 +49,7 @@ execution without needing explicit multiple inheritance.
 from __future__ import annotations
 
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from enum import Enum
@@ -88,22 +89,44 @@ __all__ = [
 
 
 class BufferConfig(BaseModel):
-    """Buffer capacities for pipeline communication.
+    """Pre-allocated send/receive buffer capacities for pipeline communication.
 
-    Required by :class:`_CommunicationMixin` whenever the stage
-    participates in inter-rank communication (i.e. ``prior_rank`` or
-    ``next_rank`` is set).  Buffers are lazily created via
-    ``Batch.empty()`` on the first simulation step, once a concrete
-    batch is available as a template.
+    A ``BufferConfig`` declares the maximum size of the ``Batch`` that a
+    distributed dynamics stage may exchange with a neighbouring rank. The
+    three capacities size the flattened graph tensors independently:
+    ``num_systems`` bounds how many graphs fit in the buffer, ``num_nodes``
+    bounds the combined atom count across those graphs, and ``num_edges``
+    bounds the combined edge count. Because the buffers are fixed-size, they
+    must be large enough to hold the biggest batch that will ever cross the
+    rank boundary; batches that exceed any capacity cannot be communicated.
 
-    Attributes
-    ----------
-    num_systems : int
-        Maximum number of graphs the buffer can hold.
-    num_nodes : int
-        Total node (atom) capacity across all graphs.
-    num_edges : int
-        Total edge capacity across all graphs.
+    You supply a ``BufferConfig`` when a stage participates in inter-rank
+    communication, i.e. it is wired into a :class:`DistributedPipeline` with a
+    ``prior_rank`` and/or ``next_rank``. The buffers themselves are created
+    lazily via ``Batch.empty()`` on the first simulation step, once a concrete
+    batch is available to act as a dtype/device template, so only the capacities
+    are needed up front. Set a capacity to ``0`` for a dimension the batch does
+    not carry (for example ``num_edges=0`` when edges are recomputed downstream
+    rather than communicated).
+
+    Examples
+    --------
+    Size a buffer for up to four graphs totalling 50 atoms, with no edges
+    sent across the boundary::
+
+        from nvalchemi.dynamics.base import BufferConfig
+
+        buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
+
+    A buffer that also carries edge connectivity::
+
+        buffer_cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+
+    Notes
+    -----
+    All three fields are constrained to be ``>= 0``. Choose the capacities from
+    the worst-case batch you expect to communicate: undersizing any dimension
+    fails at runtime, while oversizing wastes pre-allocated memory.
     """
 
     num_systems: Annotated[
@@ -158,7 +181,7 @@ class DynamicsStage(Enum):
 
 
 class _ConvergenceCriterion(BaseModel):
-    """A single convergence criterion evaluated against a tensor key on ``Batch``.
+    r"""A single convergence criterion evaluated against a tensor key on ``Batch``.
 
     This is an internal model and should not be instantiated directly by
     users.  Instead, pass ``dict`` mappings to :class:`ConvergenceHook`,
@@ -184,7 +207,7 @@ class _ConvergenceCriterion(BaseModel):
     key : str
         Tensor key to measure convergence against (e.g. ``"forces"``).
     threshold : float
-        Convergence threshold; values ≤ this are considered converged.
+        Convergence threshold; values :math:`\le` this are considered converged.
     reduce_dims : int | list[int]
         Dimension(s) to reduce over when ``reduce_op`` is not ``None``.
         Defaults to ``-1``.
@@ -809,47 +832,38 @@ class _CommunicationMixin:
         if incoming_batch.num_graphs == 0:
             return
 
-        if self.active_batch is None:
-            if incoming_batch.num_graphs <= self.max_batch_size:
-                # reform the batch without padding
-                self.active_batch = Batch.from_data_list(
-                    incoming_batch.to_data_list(), device=incoming_batch.device
-                )
-            else:
-                # slice out samples that will fit in the active batch
-                # and move the rest to overflow
-                data_list = incoming_batch.to_data_list()
-                fit = data_list[: self.max_batch_size]
-                overflow = data_list[self.max_batch_size :]
-                self.active_batch = Batch.from_data_list(
-                    fit, device=incoming_batch.device
-                )
-                self._overflow_to_sinks(
-                    Batch.from_data_list(overflow, device=incoming_batch.device)
-                )
-            return
+        ensure_bookkeeping = getattr(self, "_ensure_bookkeeping_fields", None)
+        if callable(ensure_bookkeeping):
+            ensure_bookkeeping(incoming_batch)
 
+        n_existing = self.active_batch_size
         room = self.room_in_active_batch
         if room <= 0:
             self._overflow_to_sinks(incoming_batch)
             return
 
         data_list = incoming_batch.to_data_list()
-        if len(data_list) <= room:
-            existing = self.active_batch.to_data_list()
-            self.active_batch = Batch.from_data_list(
-                existing + data_list, device=incoming_batch.device
-            )
+        admitted = data_list[:room]
+        overflow = data_list[room:]
+        if self.active_batch is None:
+            combined = admitted
         else:
-            fit = data_list[:room]
-            overflow = data_list[room:]
-            existing = self.active_batch.to_data_list()
-            self.active_batch = Batch.from_data_list(
-                existing + fit, device=incoming_batch.device
-            )
+            combined = self.active_batch.to_data_list() + admitted
+        self.active_batch = Batch.from_data_list(combined, device=incoming_batch.device)
+
+        if overflow:
             self._overflow_to_sinks(
                 Batch.from_data_list(overflow, device=incoming_batch.device)
             )
+
+        # Received graphs extend the active-batch layout. Preserve state for
+        # resident graphs and append freshly initialized state for arrivals.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            existing_indices = torch.arange(
+                n_existing, dtype=torch.long, device=self.active_batch.device
+            )
+            sync_state(existing_indices, len(admitted), self.active_batch)
 
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Stage incoming data through the recv buffer into the active batch.
@@ -924,8 +938,22 @@ class _CommunicationMixin:
         if self.send_buffer is None:
             raise RuntimeError("No send buffer to write to.")
 
-        self.send_buffer.put(self.active_batch, mask=mask)
-        self.active_batch = self.active_batch.trim(copied_mask=mask)
+        previous_batch = self.active_batch
+        remaining_indices = torch.where(~mask)[0]
+        self.send_buffer.put(previous_batch, mask=mask)
+        self.active_batch = previous_batch.trim(copied_mask=mask)
+
+        # Graph-indexed metadata and integrator state refer to the old batch
+        # layout. Keep only state for retained graphs and prevent the next hook
+        # context from applying stale convergence indices to the smaller batch.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1106,13 +1134,26 @@ class _CommunicationMixin:
         converged_indices : torch.Tensor
             Integer indices of converged samples.
         """
-        graduated = self.active_batch.index_select(converged_indices)
-        all_indices = set(range(self.active_batch.num_graphs))
+        previous_batch = self.active_batch
+        graduated = previous_batch.index_select(converged_indices)
+        all_indices = set(range(previous_batch.num_graphs))
         remaining = sorted(all_indices - set(converged_indices.tolist()))
         if remaining:
-            self.active_batch = self.active_batch.index_select(remaining)
+            self.active_batch = previous_batch.index_select(remaining)
         else:
             self.active_batch = None
+
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        if callable(sync_state):
+            remaining_indices = torch.tensor(
+                remaining, dtype=torch.long, device=previous_batch.device
+            )
+            template = (
+                self.active_batch if self.active_batch is not None else previous_batch
+            )
+            sync_state(remaining_indices, 0, template)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
         if self.debug_mode:
             logger.debug(
                 "[rank {}] final stage, {} converged graphs removed",
@@ -1151,6 +1192,14 @@ class _CommunicationMixin:
             Typically obtained from ``BaseDynamics._check_convergence()``.
             If ``None``, no samples are graduated.
         """
+        if self.next_rank is not None:
+            # The send buffer is reused every iteration. A fully asynchronous
+            # send must finish before its storage is cleared and repopulated.
+            if self._pending_send_handle is not None:
+                self._pending_send_handle.wait()
+                self._pending_send_handle = None
+            self.send_buffer.zero()
+
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
         if has_converged:
@@ -1631,11 +1680,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n_new: int,
         template_batch: Batch,
     ) -> None:
-        """Synchronize ``self._state`` after an inflight batch refill.
+        """Synchronize ``self._state`` after active-batch membership changes.
 
-        Called by :meth:`_refill_check` after graduated systems have been
-        removed and replacement systems appended.  Removes state rows for
-        graduated systems and appends fresh default state for the new ones.
+        Called after graduated systems have been removed, with optional
+        replacement systems appended. Removes state rows for graduated systems
+        and appends fresh default state for the new ones.
 
         If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
         this method is a no-op.
@@ -1720,6 +1769,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Perform the model forward pass to compute forces and energies.
 
         This method:
+
         1. Runs the model forward pass, which should enable gradients
         2. Adapts outputs to the standard format
         3. Validates outputs against dynamics requirements
@@ -1993,6 +2043,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         if not graduated_mask.any():
             return batch
+
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
 
         remaining_indices = torch.where(~graduated_mask)[0]
 
@@ -2848,10 +2902,9 @@ class FusedStage(BaseDynamics):
         """Fan out state sync to all sub-stages.
 
         ``FusedStage`` itself holds no ``_state``; each sub-stage does.
-        This override delegates to every sub-stage so that inflight
-        batch refills (via :meth:`~BaseDynamics._refill_check`) keep
-        each sub-stage's ``_state`` aligned with the new batch
-        composition.
+        This override delegates to every sub-stage so that active-batch
+        membership changes keep each sub-stage's ``_state`` aligned with the
+        new batch composition.
 
         Parameters
         ----------
@@ -3628,6 +3681,19 @@ class DistributedPipeline:
         for stage in self.stages.values():
             stage.debug_mode = self.debug_mode
 
+        local_stage = self.local_stage
+        local_n_steps = getattr(local_stage, "n_steps", None)
+        if local_n_steps is not None and not isinstance(local_stage, FusedStage):
+            warnings.warn(
+                f"{type(local_stage).__name__}(n_steps={local_n_steps}) is a "
+                "plain DistributedPipeline stage. Its n_steps value is used by "
+                "run(), but pipeline execution calls step() and graduates systems "
+                "only through convergence. Wrap fixed-duration stages in a "
+                "FusedStage to apply a per-system step budget.",
+                UserWarning,
+                stacklevel=2,
+            )
+
     def _setup_grouped(self) -> None:
         """Wire a 2-D ``(pipeline, domain)`` pipeline: each rank runs the one stage
         for its pipeline index (a :class:`DomainParallel` over its domain sub-mesh),
@@ -3962,7 +4028,7 @@ class DistributedPipeline:
                         rank,
                         stage.next_rank,
                     )
-                stage.send_buffer.isend(dst=stage.next_rank).wait()
+                stage._poststep_sync_buffers(None)
         else:
             n_graphs = stage.active_batch.num_graphs if stage.active_batch else 0
             if self.debug_mode:
@@ -4095,7 +4161,7 @@ class DistributedPipeline:
             iteration += 1
 
     def _run_grouped(self) -> None:
-        """Run a 2-D (pipeline × domain) pipeline until each stage-group is done.
+        r"""Run a 2-D (pipeline :math:`\times` domain) pipeline until each stage-group is done.
 
         Unlike the streaming pipeline, a grouped stage does **not** step in global
         lockstep: a downstream stage blocks in its ``_prestep`` hand-off until the

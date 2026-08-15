@@ -179,6 +179,34 @@ def _build_batch_storage(
     return storage, tracked_keys
 
 
+def set_transient(batch: "Batch", name: str, value: torch.Tensor) -> None:
+    """Overlay *value* on *batch* for the duration of a computation.
+
+    :meth:`Batch.__setattr__` routes a tensor into the batch's storage, which is
+    what ``.to()``, gathering and any rebuild of the batch read back. That is the
+    wrong lifetime for a value a single forward should see and no later reader
+    should inherit — an affine strain applied for one autograd pass, say, which
+    a rebuild would otherwise apply a second time on top of the first.
+
+    This writes an instance attribute instead, which shadows the storage
+    delegation for attribute reads while leaving the stored tensor untouched.
+
+    Parameters
+    ----------
+    batch : Batch
+        Batch to overlay.
+    name : str
+        Attribute the computation will read.
+    value : torch.Tensor
+        Value to expose.
+
+    Returns
+    -------
+    None
+    """
+    object.__setattr__(batch, name, value)
+
+
 class Batch(DataMixin):
     """Graph-aware batch built on :class:`MultiLevelStorage`.
 

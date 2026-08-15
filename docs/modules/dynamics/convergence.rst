@@ -203,6 +203,7 @@ There are two ways to use ``ConvergenceHook``:
 
    dynamics = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        convergence_hook=ConvergenceHook.from_fmax(0.01),
    )
@@ -210,6 +211,7 @@ There are two ways to use ``ConvergenceHook``:
    # Or pass a dict — auto-converted to ConvergenceHook
    dynamics = DemoDynamics(
        model=model,
+       n_steps=1000,
        dt=0.5,
        convergence_hook={"criteria": [{"key": "fmax", "threshold": 0.01}]},
    )

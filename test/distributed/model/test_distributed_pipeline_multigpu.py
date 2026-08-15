@@ -48,11 +48,6 @@ from nvalchemi.distributed.config import DomainConfig
 WORLD_SIZE = 2
 _A1, _A2, _S8 = 0.4289, 4.4407, 0.7875
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 # ====================================================================
 # C1 — DFT-D3 + Ewald (direct-force composition)
@@ -198,7 +193,7 @@ def _de_pipeline_worker(rank: int, world_size: int) -> None:
         flush=True,
     )
     torch.testing.assert_close(
-        e_local.view(1),
+        e_local.view(1).to(e_ref.dtype),
         e_ref,
         rtol=1e-4,
         atol=1e-3,
@@ -213,7 +208,7 @@ def _de_pipeline_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_dftd3_ewald_2ranks():
     """``DistributedPipelineModel(DFTD3 + Ewald)`` == summed single-models."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -314,7 +309,8 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
     from nvalchemi.distributed.distributed_pipeline import DistributedPipelineModel
     from nvalchemi.distributed.partitioner import SpatialPartitioner
     from nvalchemi.distributed.sharded_batch import ShardedBatch
-    from nvalchemi.neighbors import compute_neighbors
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.hooks import DynamicsContext
 
     dtype = torch.float64
     device = torch.device(f"cuda:{rank}")
@@ -331,7 +327,9 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
         batch = Batch.from_data_list(
             [_md_make_data(an, positions, masses, cell, pbc, device, dtype)]
         )
-        compute_neighbors(batch, config=ref_pipe.model_config.neighbor_config)
+        neighbor_ctx = DynamicsContext(batch=batch, model=ref_pipe)
+        for hook in ref_pipe.make_neighbor_hooks():
+            hook(neighbor_ctx, DynamicsStage.BEFORE_COMPUTE)
         out = ref_pipe(batch)
         e_ref.copy_(out["energy"].sum().detach().view(1))
         f_ref.copy_(out["forces"].detach())
@@ -395,7 +393,7 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_mace_dftd3_2ranks():
     """``DistributedPipelineModel(MACE[use_autograd] + DFTD3)`` == single-GPU pipeline."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -460,8 +458,8 @@ def _ap_make_data(atomic_numbers, positions, cell, pbc, device, dtype):
     )
 
 
-def _ap_build_pipeline(aim_cut_holder: list[float], device, dtype):
-    """Fresh AIMNet2(charges) -> PME(charges) wired use_autograd pipeline."""
+def _ap_build_pipeline(aim_cut_holder: list[float], device, dtype, consumer="pme"):
+    """Fresh AIMNet2(charges) -> PME/Ewald(charges) wired use_autograd pipeline."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         from nvalchemi.models.aimnet2 import AIMNet2Wrapper
@@ -471,12 +469,22 @@ def _ap_build_pipeline(aim_cut_holder: list[float], device, dtype):
 
     aim = AIMNet2Wrapper.from_checkpoint("aimnet2", device=device)
     aim.eval()
-    aim.model_config.active_outputs = {"energy", "forces", "charges"}
+    aim.model_config.active_outputs = {"energy", "forces", "stress", "charges"}
     aim_cut_holder[0] = float(aim._cutoff)
-    pme = PMEModelWrapper(cutoff=_AP_PME_CUT)  # hybrid_forces=True default
-    return PipelineModelWrapper(
+    if consumer == "ewald":
+        from nvalchemi.models.ewald import EwaldModelWrapper
+
+        pme = EwaldModelWrapper(cutoff=_AP_PME_CUT, hybrid_forces=False)
+    else:
+        pme = PMEModelWrapper(cutoff=_AP_PME_CUT)
+    pme.model_config.active_outputs = {"energy", "forces", "stress"}
+    pipeline = PipelineModelWrapper(
         groups=[PipelineGroup(steps=[aim, pme], use_autograd=True)]
     )
+    # The composite only derives what it is asked for; stress must be active for
+    # the wired group to carry the cross-model chain term.
+    pipeline.model_config.active_outputs = {"energy", "forces", "stress"}
+    return pipeline
 
 
 def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
@@ -496,6 +504,7 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
     # --- Single-GPU reference on rank 0: the full wired pipeline forward ---
     e_ref = torch.zeros(1, dtype=dtype, device=device)
     f_ref = torch.zeros(n_global, 3, dtype=dtype, device=device)
+    s_ref = torch.zeros(1, 3, 3, dtype=dtype, device=device)
     if rank == 0:
         ref_pipe = _ap_build_pipeline(aim_cut, device, dtype)
         batch = Batch.from_data_list(
@@ -505,9 +514,11 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
         out = ref_pipe(batch)
         e_ref.copy_(out["energy"].sum().detach().view(1))
         f_ref.copy_(out["forces"].detach())
+        s_ref.copy_(out["stress"].detach().reshape(1, 3, 3))
         del ref_pipe
     dist.broadcast(e_ref, src=0)
     dist.broadcast(f_ref, src=0)
+    dist.broadcast(s_ref, src=0)
 
     # --- Distributed composite over ONE shared partition (built at max cutoff) ---
     pipeline = _ap_build_pipeline(aim_cut, device, dtype)
@@ -527,6 +538,7 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
         composite = dpm(sharded)
     e_local = composite["energy"].sum().detach()
     f_owned = composite["forces"].detach()
+    s_local = composite["stress"].detach().reshape(1, 3, 3)
 
     partitioner = SpatialPartitioner(
         config=base_config,
@@ -541,8 +553,9 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
 
     de = (e_local - e_ref).abs().item()
     df = (f_owned - f_ref_owned).abs().max().item()
+    ds = (s_local.to(s_ref.dtype) - s_ref).abs().max().item()
     print(
-        f"[pipe-wired rank {rank}] ΔE={de:.3e} |ΔF|max={df:.3e} "
+        f"[pipe-wired rank {rank}] ΔE={de:.3e} |ΔF|max={df:.3e} |Δσ|max={ds:.3e} "
         f"n_owned={f_owned.shape[0]} aim_cut={aim_cut[0]:.2f} "
         f"dist_e={e_local.item():+.4f} ref_e={e_ref.item():+.4f}",
         flush=True,
@@ -566,9 +579,18 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
         atol=2e-3,
         msg=f"rank {rank}: wired composite forces mismatch |ΔF|max={df:.3e}",
     )
+    # Stress is per-system and replicated, so rank 0's value is the reference on
+    # every rank. Guards the wired group dropping the cross-model chain term.
+    torch.testing.assert_close(
+        s_local.to(s_ref.dtype),
+        s_ref,
+        rtol=1e-2,
+        atol=2e-4,
+        msg=f"rank {rank}: wired composite stress mismatch |Δσ|max={ds:.3e}",
+    )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_aimnet2_pme_2ranks():
     """``DistributedPipelineModel(AIMNet2 charges -> PME)`` == single-GPU pipeline."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -576,6 +598,88 @@ def test_distributed_pipeline_aimnet2_pme_2ranks():
     mp.spawn(
         _worker,
         args=(WORLD_SIZE, "29587", _ap_wired_pipeline_worker),
+        nprocs=WORLD_SIZE,
+    )
+
+
+def _ap_force_path_worker(rank: int, world_size: int, consumer: str) -> None:
+    """Forces must not depend on whether stress was also requested.
+
+    Asking the wired consumer for stress moves it onto the framework
+    strain-autograd path, and PME reduces its charge mesh differently there (a
+    direct all-reduce) than on the eager path (the OpAdapter escape hatch). The
+    two reductions carry opposite adjoints, so a mistake in either shows up as
+    force-only and force+stress disagreeing while each looks self-consistent.
+    """
+    from torch.distributed import DeviceMesh
+
+    from nvalchemi.distributed.distributed_pipeline import DistributedPipelineModel
+    from nvalchemi.distributed.sharded_batch import ShardedBatch
+
+    dtype = torch.float32
+    device = torch.device(f"cuda:{rank}")
+    positions, an, cell, pbc = _ap_methane_packing(dtype=dtype)
+    aim_cut = [0.0]
+
+    def _run(active: set[str]) -> torch.Tensor:
+        pipeline = _ap_build_pipeline(aim_cut, device, dtype, consumer=consumer)
+        pipeline.model_config.active_outputs = active
+        mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
+        config = DomainConfig(
+            cutoff=max(aim_cut[0], _AP_PME_CUT),
+            skin=_AP_SKIN,
+            mesh=mesh,
+            require_nondegenerate=True,
+        )
+        full = (
+            Batch.from_data_list(
+                [_ap_make_data(an, positions, cell, pbc, device, dtype)]
+            )
+            if rank == 0
+            else None
+        )
+        sharded = ShardedBatch.from_batch(batch=full, mesh=mesh, config=config, src=0)
+        with DistributedPipelineModel(pipeline, config) as dpm:
+            return dpm(sharded)["forces"].detach().clone()
+
+    f_no_stress = _run({"energy", "forces"})
+    f_stress = _run({"energy", "forces", "stress"})
+
+    df = (f_no_stress - f_stress).abs().max().item()
+    scale = f_stress.abs().max().item()
+    print(
+        f"[pipe-force-path/{consumer} rank {rank}] |ΔF|max={df:.3e} "
+        f"|F|max={scale:.3e} rel={df / max(scale, 1e-30):.3e} "
+        f"n_owned={f_stress.shape[0]}",
+        flush=True,
+    )
+    torch.testing.assert_close(
+        f_no_stress,
+        f_stress,
+        rtol=1e-3,
+        atol=1e-4,
+        msg=(
+            f"rank {rank}: {consumer} wired forces depend on whether stress was "
+            f"requested, |ΔF|max={df:.3e}"
+        ),
+    )
+
+
+@pytest.mark.multigpu
+@pytest.mark.parametrize("consumer", ["pme", "ewald"])
+def test_distributed_pipeline_wired_force_paths_agree_2ranks(consumer):
+    """Wired-group forces are identical with and without stress requested.
+
+    Requesting stress moves the consumer onto the framework autograd path. A
+    consumer that derives its own forces from the per-system energy — which DD
+    has already summed across ranks — scales them by the world size on the other
+    path, so the two disagree.
+    """
+    pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
+    pytest.importorskip("aimnet", reason="aimnet not installed")
+    mp.spawn(
+        _worker,
+        args=(WORLD_SIZE, "29591", _ap_force_path_worker, consumer),
         nprocs=WORLD_SIZE,
     )
 
@@ -764,7 +868,7 @@ def _mdc_compile_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_compile_mace_dftd3_2ranks():
     """Compiled ``DistributedPipelineModel(MACE + DFTD3)`` == single-GPU; no steady recompiles."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")

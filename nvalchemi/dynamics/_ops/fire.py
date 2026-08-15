@@ -266,10 +266,10 @@ def fire_step(
     batch_idx: torch.Tensor | None = None,
     compute_reductions: bool = True,
 ) -> None:
-    """Full FIRE optimization step.
+    r"""Full FIRE optimization step.
 
     Performs an MD integration step followed by FIRE velocity mixing and
-    adaptive parameter updates based on power P = F·v.
+    adaptive parameter updates based on power :math:`P = \mathbf{F}\cdot\mathbf{v}`.
 
     Modifies *positions*, *velocities*, *alpha*, *dt*, and
     *n_steps_positive* in-place.  Scratch buffers (*vf*, *vv*, *ff*) are
@@ -313,11 +313,11 @@ def fire_step(
         Per-system algorithm selector ``[M]``, int32.  0 = vanilla FIRE,
         1 = FIRE with uphill step checks.
     vf : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{v}`; allocated if None.
     vv : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(v·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{v}\cdot\mathbf{v}`; allocated if None.
     ff : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·F); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{F}`; allocated if None.
     batch_idx : torch.Tensor, optional
         Per-atom system index ``[N]``, int32, non-decreasing.
     compute_reductions : bool
@@ -382,10 +382,10 @@ def fire_update(
     batch_idx: torch.Tensor | None = None,
     compute_reductions: bool = True,
 ) -> None:
-    """FIRE velocity mixing and parameter update (no MD integration).
+    r"""FIRE velocity mixing and parameter update (no MD integration).
 
     Updates velocities via the FIRE mixing rule and adapts *alpha*, *dt*,
-    and *n_steps_positive* based on the sign of power P = F·v.
+    and *n_steps_positive* based on the sign of power :math:`P = \mathbf{F}\cdot\mathbf{v}`.
     Used by variable-cell FIRE workflows where the MD step is handled
     separately with cell-aware position scaling.
 
@@ -486,7 +486,7 @@ def fire2_step_coord(
     tmin: float = 0.005,
     maxstep: float = 0.1,
 ) -> None:
-    """Full FIRE2 coordinate-only optimization step.
+    r"""Full FIRE2 coordinate-only optimization step.
 
     Delegates to :func:`nvalchemiops.torch.fire2.fire2_step_coord`.
     Modifies *positions*, *velocities*, *alpha*, *dt*, and *nsteps_inc*
@@ -509,11 +509,11 @@ def fire2_step_coord(
     nsteps_inc : torch.Tensor
         Per-system consecutive positive-power step counter ``[M]``, int32.
     vf : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{v}`; allocated if None.
     v_sumsq : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(v·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{v}\cdot\mathbf{v}`; allocated if None.
     f_sumsq : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·F); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{F}`; allocated if None.
     max_norm : torch.Tensor, optional
         Scratch buffer ``[M]`` for max force norm; allocated if None.
     delaystep : int
@@ -581,7 +581,7 @@ def fire2_step_coord_cell(
     tmin: float = 0.005,
     maxstep: float = 0.1,
 ) -> None:
-    """Full FIRE2 variable-cell optimization step.
+    r"""Full FIRE2 variable-cell optimization step.
 
     Simultaneously relaxes atomic coordinates and cell degrees of freedom.
     Delegates to :func:`nvalchemiops.torch.fire2.fire2_step_coord_cell`.
@@ -599,7 +599,7 @@ def fire2_step_coord_cell(
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
     cell_velocities : torch.Tensor
-        Per-system cell velocity ḣ ``[M, 3, 3]``, same dtype.
+        Per-system cell velocity h_dot ``[M, 3, 3]``, same dtype.
     cell_force : torch.Tensor
         Per-system cell force (from stress) ``[M, 3, 3]``, same dtype.
         Compute via :func:`~nvalchemi.dynamics._ops.npt_nph.stress_to_cell_force`.
@@ -612,11 +612,11 @@ def fire2_step_coord_cell(
     nsteps_inc : torch.Tensor
         Per-system consecutive positive-power step counter ``[M]``, int32.
     vf : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{v}`; allocated if None.
     v_sumsq : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(v·v); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{v}\cdot\mathbf{v}`; allocated if None.
     f_sumsq : torch.Tensor, optional
-        Scratch buffer ``[M]`` for Σ(F·F); allocated if None.
+        Scratch buffer ``[M]`` for :math:`\sum \mathbf{F}\cdot\mathbf{F}`; allocated if None.
     max_norm : torch.Tensor, optional
         Scratch buffer ``[M]`` for max force norm; allocated if None.
     delaystep, dtgrow, dtshrink, alphashrink, alpha0, tmax, tmin, maxstep

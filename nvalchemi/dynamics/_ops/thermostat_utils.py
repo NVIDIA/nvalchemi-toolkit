@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+r"""
 PyTorch bindings for thermostat utility kernels.
 
 Wraps :mod:`nvalchemiops.dynamics.utils.thermostat_utils` and
@@ -27,9 +27,9 @@ initialize_velocities
 remove_com_motion
     Zero center-of-mass velocity for each system.
 compute_kinetic_energy
-    Compute per-system kinetic energy KE = Σ 0.5*m*v².
+    Compute per-system kinetic energy :math:`\mathrm{KE} = \sum 0.5\, m v^{2}`.
 compute_temperature
-    Compute instantaneous temperature T = 2·KE / (N_f * kB).
+    Compute instantaneous temperature :math:`T = 2\,\mathrm{KE} / (N_f\, k_B)`.
 velocity_rescale
     Rescale velocities by a per-system factor (e.g. for velocity rescaling
     thermostat).
@@ -74,12 +74,12 @@ def _remove_angular_momentum(
     batch_idx: torch.Tensor,
     num_systems: int,
 ) -> None:
-    """Zero angular momentum per system by removing rigid-body rotation.
+    r"""Zero angular momentum per system by removing rigid-body rotation.
 
-    For each system, computes the angular velocity omega = I^{-1} L
-    (from the moment of inertia tensor I and angular momentum L about
+    For each system, computes the angular velocity :math:`\omega = I^{-1} L`
+    (from the moment of inertia tensor :math:`I` and angular momentum :math:`L` about
     the center of mass) and subtracts the rotational component
-    v_rot = omega x (r - r_COM) from each atom's velocity.
+    :math:`\mathbf{v}_\mathrm{rot} = \omega \times (\mathbf{r} - \mathbf{r}_\mathrm{COM})` from each atom's velocity.
 
     Operates in-place on *velocities*.  Only meaningful for non-periodic
     (isolated) systems.  Pure-PyTorch implementation (runs once at init).
@@ -133,11 +133,11 @@ def _rescale_to_temperature(
     batch_idx: torch.Tensor,
     num_systems: int,
 ) -> None:
-    """Rescale velocities so per-system kinetic temperature matches target.
+    r"""Rescale velocities so per-system kinetic temperature matches target.
 
     After COM/rotation removal, the kinetic temperature drifts below
     the target.  This function computes the actual KE per system and
-    rescales each atom's velocity by ``sqrt(T_target / T_actual)``.
+    rescales each atom's velocity by :math:`\sqrt{T_\mathrm{target} / T_\mathrm{actual}}`.
 
     Operates in-place on *velocities*.
     """
@@ -282,9 +282,9 @@ def remove_com_motion(
     batch_idx: torch.Tensor,
     num_systems: int,
 ) -> None:
-    """Remove center-of-mass velocity for each system.
+    r"""Remove center-of-mass velocity for each system.
 
-    Computes v_COM = Σ(m*v) / Σ(m) per system and subtracts it from all
+    Computes :math:`\mathbf{v}_\mathrm{COM} = \sum(m\mathbf{v}) / \sum m` per system and subtracts it from all
     atom velocities.  Modifies *velocities* in-place.
 
     Parameters
@@ -332,7 +332,7 @@ def compute_kinetic_energy(
     batch_idx: torch.Tensor,
     num_systems: int,
 ) -> torch.Tensor:
-    """Compute per-system kinetic energy KE = Σ_i 0.5 * m_i * v_i².
+    r"""Compute per-system kinetic energy :math:`\mathrm{KE} = \sum_i 0.5\, m_i v_i^{2}`.
 
     Parameters
     ----------
@@ -379,9 +379,10 @@ def compute_temperature(
     kinetic_energy: torch.Tensor,
     num_atoms_per_system: torch.Tensor,
 ) -> torch.Tensor:
-    """Compute instantaneous temperature from kinetic energy.
+    r"""Compute instantaneous temperature from kinetic energy.
 
-    Uses the equipartition theorem: ``T = 2·KE / (3·N * kB)``.
+    Uses the equipartition theorem: :math:`T = 2\,\mathrm{KE} / (N_f\, k_B)`, where :math:`N_f` is
+    the number of degrees of freedom (:math:`N_f = 3N` for unconstrained systems).
 
     Parameters
     ----------

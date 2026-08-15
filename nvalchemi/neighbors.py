@@ -152,7 +152,7 @@ def compute_neighbors(
     useful for repeated dynamics steps.
 
     After the call, ``batch.neighbor_matrix`` / ``batch.num_neighbors``
-    (MATRIX format) or ``batch.neighbor_list`` / ``batch.unit_shifts``
+    (MATRIX format) or ``batch.neighbor_list`` / ``batch.neighbor_list_shifts``
     (COO format) are populated, and ``batch._neighbor_list_cutoff`` is
     stamped for downstream use by
     :func:`~nvalchemi.models._ops.neighbor_filter.prepare_neighbors_for_model`.

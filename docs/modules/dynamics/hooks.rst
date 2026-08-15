@@ -31,30 +31,28 @@ hook-firing points within a single dynamics step:
    digraph dynamics_stages {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10 style=bold]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10 style=bold]
 
-       BEFORE_STEP [label="BEFORE_STEP" fillcolor="#f9e2ae"]
+       BEFORE_STEP [label="BEFORE_STEP" fillcolor="#4a3315"]
 
        subgraph cluster_step {
            label="step body"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            BEFORE_PRE_UPDATE  [label="BEFORE_PRE_UPDATE"]
-           pre_update         [label="pre_update()" fillcolor="#eeeeee"]
+           pre_update         [label="pre_update()" fillcolor="#1a1a1a"]
            AFTER_PRE_UPDATE   [label="AFTER_PRE_UPDATE"]
 
            BEFORE_COMPUTE     [label="BEFORE_COMPUTE"]
-           compute            [label="compute()" fillcolor="#eeeeee"]
+           compute            [label="compute()" fillcolor="#1a1a1a"]
            AFTER_COMPUTE      [label="AFTER_COMPUTE"]
 
            BEFORE_POST_UPDATE [label="BEFORE_POST_UPDATE"]
-           post_update        [label="post_update()" fillcolor="#eeeeee"]
+           post_update        [label="post_update()" fillcolor="#1a1a1a"]
            AFTER_POST_UPDATE  [label="AFTER_POST_UPDATE"]
 
            BEFORE_PRE_UPDATE -> pre_update -> AFTER_PRE_UPDATE
@@ -64,8 +62,8 @@ hook-firing points within a single dynamics step:
            BEFORE_POST_UPDATE -> post_update -> AFTER_POST_UPDATE
        }
 
-       AFTER_STEP  [label="AFTER_STEP" fillcolor="#f9e2ae"]
-       ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#f9e2ae"]
+       AFTER_STEP  [label="AFTER_STEP" fillcolor="#4a3315"]
+       ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#4a3315"]
 
        BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
        AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
@@ -131,16 +129,16 @@ observables to a backend. The default scalars are energy (per atom), ``fmax``
 energy when velocities are present), and ``converged_fraction`` (fraction of
 samples that have met the convergence criterion).
 
-``backend`` selects the output destination:
+``backend`` is a required argument that selects the output destination. It must
+be one of ``"csv"``, ``"tensorboard"``, or ``"custom"``:
 
-- ``"loguru"`` (default) — emits a formatted line to the loguru logger. Use
-  for live console monitoring during interactive or short runs.
 - ``"csv"`` — writes one row per step to ``log_path``. Use when you need
   per-step data for post-run analysis in Python or a spreadsheet.
 - ``"tensorboard"`` — writes scalar events to ``log_path`` as a TensorBoard
   event file. Use when comparing scalar trends across experiments.
-- A callable ``fn(scalars: dict) -> None`` — routes each snapshot to a custom
-  backend, such as W&B or MLflow.
+- ``"custom"`` — routes each snapshot to a custom writer callable passed via the
+  separate ``writer_fn`` parameter (signature
+  ``fn(step_count, rows) -> None``), such as a W&B or MLflow sink.
 
 ``frequency`` throttles writes to every N steps. For long runs,
 ``frequency=10`` or higher keeps output manageable without losing trends.
@@ -229,9 +227,9 @@ whose magnitude exceeds ``max_force`` back to the threshold, preserving
 direction. Energy is not modified.
 
 ``max_force`` is in the same units as the model's force output (typically
-eV/Å). Set ``log_clamps=True`` to emit a loguru warning each time clamping
-occurs, including which atoms were affected — useful during model development
-to identify problem configurations.
+eV/Å). Clamping is applied in-place to any per-atom force whose magnitude
+exceeds the threshold. Frequent clamping during model development is a signal to
+identify problem configurations.
 
 Clamping prevents numerical blow-up from large forces in high-energy or
 poorly-sampled configurations. It is a safety net, not a model fix: if
@@ -305,7 +303,7 @@ checking so the detector sees the corrected forces:
        model=model,
        dt=0.5,
        hooks=[
-           MaxForceClampHook(max_force=50.0, log_clamps=True),
+           MaxForceClampHook(max_force=50.0),
            NaNDetectorHook(extra_keys=["stress"]),
        ],
    )
@@ -340,28 +338,25 @@ Hook ordering inside a fused step:
    digraph fused_hook_order {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10 style=bold]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10 style=bold]
 
        subgraph cluster_before {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            BEFORE_STEP [label="BEFORE_STEP hooks"]
        }
 
-       compute [label="single compute()" fillcolor="#f9e2ae"]
+       compute [label="single compute()" fillcolor="#4a3315"]
 
        subgraph cluster_after_compute {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            AFTER_COMPUTE [label="AFTER_COMPUTE hooks"]
        }
@@ -369,12 +364,11 @@ Hook ordering inside a fused step:
        subgraph cluster_update {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            BEFORE_PRE [label="BEFORE_PRE_UPDATE hooks"]
-           masked     [label="masked_update()\n(if samples match status)" fillcolor="#eeeeee"]
+           masked     [label="masked_update()\n(if samples match status)" fillcolor="#1a1a1a"]
            AFTER_POST [label="AFTER_POST_UPDATE hooks"]
            BEFORE_PRE -> masked -> AFTER_POST
        }
@@ -382,9 +376,8 @@ Hook ordering inside a fused step:
        subgraph cluster_after_step {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            AFTER_STEP [label="AFTER_STEP hooks"]
        }
@@ -392,12 +385,11 @@ Hook ordering inside a fused step:
        subgraph cluster_converge {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
-           conv_check  [label="convergence check" fillcolor="#eeeeee"]
-           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#f9e2ae"]
+           conv_check  [label="convergence check" fillcolor="#1a1a1a"]
+           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#4a3315"]
            conv_check -> ON_CONVERGE [style=dashed label="if converged"]
        }
 
@@ -425,5 +417,8 @@ API reference
    NaNDetectorHook
    MaxForceClampHook
    FreezeAtomsHook
-   StageTimingHook
-   TorchProfilerHook
+
+The general-purpose profiling hooks
+:class:`~nvalchemi.hooks.StageTimingHook` and
+:class:`~nvalchemi.hooks.TorchProfilerHook` also work with dynamics and are
+documented in :ref:`hooks-api`.

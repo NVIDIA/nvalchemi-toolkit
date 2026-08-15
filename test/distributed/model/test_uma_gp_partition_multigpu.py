@@ -22,8 +22,8 @@ LOCAL owned partials. The framework's node-partition internal path SUM-reduces
 the per-rank energy and forces across ranks (no ``/world``: the feature
 all-gather's reduce-scatter backward distributed each node's gradient to its
 owner once) and returns this rank's owned forces. We reassemble the global
-forces from the disjoint owned blocks and compare both to the single-process
-reference. Stress (omat) is not asserted — node-partition stress is a follow-on.
+forces from the disjoint owned blocks and compare energy, forces, and each
+rank's per-system stress to the single-process reference.
 """
 
 from __future__ import annotations
@@ -96,6 +96,7 @@ def _worker(rank: int, world_size: int) -> None:
         # Single-GPU reference (rank 0) on its own eager wrapper.
         e_ref = torch.zeros(1, dtype=dtype, device=device)
         f_ref = torch.zeros(n_global, 3, dtype=dtype, device=device)
+        s_ref = torch.zeros(1, 3, 3, dtype=dtype, device=device)
         if rank == 0:
             ref_wrapper = UMAWrapper.from_checkpoint(
                 _CKPT, task_name=_TASK, device=device, inference_settings="default"
@@ -103,9 +104,11 @@ def _worker(rank: int, world_size: int) -> None:
             ro = ref_wrapper(_mk())
             e_ref = ro["energy"].sum().detach().view(1)
             f_ref = ro["forces"].detach()
+            s_ref = ro["stress"].detach().clone()
             del ro, ref_wrapper
         dist.broadcast(e_ref, src=0)
         dist.broadcast(f_ref, src=0)
+        dist.broadcast(s_ref, src=0)
 
         # Node-partition runs the backbone on owned atoms; the unmerged MoLE
         # head masks per-dataset over the FULL atom set (mismatching the owned
@@ -141,6 +144,9 @@ def _worker(rank: int, world_size: int) -> None:
 
         # Energy is global (all-reduced) on every rank.
         e_gp = out["energy"].sum().detach().view(1)
+        s_gp = out["stress"].detach().clone()
+        stresses_by_rank = [torch.empty_like(s_gp) for _ in range(world_size)]
+        dist.all_gather(stresses_by_rank, s_gp)
         # Forces come back as this rank's OWNED block; reassemble the global
         # [N, 3] from the disjoint contiguous blocks (a SUM all-reduce of each
         # rank's zero-padded slice).
@@ -158,25 +164,36 @@ def _worker(rank: int, world_size: int) -> None:
             e_abs = (e_gp - e_ref).abs().item()
             e_rel = e_abs / (e_ref.abs().item() + 1e-9)
             fd = (f_gp - f_ref.double()).abs()
+            sd = torch.stack(
+                [(stress - s_ref).abs().max() for stress in stresses_by_rank]
+            )
             print(
                 f"[uma-gp-part w={world_size}] dE_abs={e_abs:.4f} dE_rel={e_rel:.4e} "
                 f"e_ref={e_ref.item():.2f} | f_max_abs={fd.max().item():.4e} "
                 f"f_ref_max={f_ref.abs().max().item():.4e} "
-                f"f_mean_abs={fd.mean().item():.4e}",
+                f"f_mean_abs={fd.mean().item():.4e} | "
+                f"stress_max_abs_by_rank={sd.tolist()} | "
+                f"stress_ref={s_ref.cpu().tolist()} | "
+                f"stress_by_rank={[stress.cpu().tolist() for stress in stresses_by_rank]}",
                 flush=True,
             )
         torch.testing.assert_close(f_gp, f_ref.double(), rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(e_gp.double(), e_ref.double(), rtol=1e-3, atol=1e-3)
-        dist.barrier()
+        if rank == 0:
+            assert s_ref.abs().max().item() > 1e-3
+            assert torch.isfinite(torch.stack(stresses_by_rank)).all()
+            for stress in stresses_by_rank:
+                torch.testing.assert_close(
+                    stress.double(), s_ref.double(), rtol=1e-3, atol=1e-5
+                )
     finally:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs",
-)
+@pytest.mark.multigpu
 def test_uma_gp_partition_2ranks() -> None:
+    pytest.importorskip("fairchem.core", reason="fairchem-core not installed")
+
     w = int(os.environ.get("UMA_GP_WORLD", "2"))
     mp.spawn(_worker, args=(w,), nprocs=w)
 

@@ -52,11 +52,6 @@ STEADY_STEPS = 4
 JITTER = 0.05
 _EWALD_CUT = 6.0
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _ewald_equivalence_worker(rank: int, world_size: int) -> None:
     """Single-GPU Ewald reference on rank 0 → broadcast → each rank
@@ -213,7 +208,7 @@ def _ewald_equivalence_worker(rank: int, world_size: int) -> None:
     # energy holds to ~1e-4 absolute; per-atom forces to ~1e-3 relative
     # (same tolerance the cueq/MACE multi-GPU test uses).
     torch.testing.assert_close(
-        e_local.view(1),
+        e_local.view(1).to(e_ref.dtype),
         e_ref,
         rtol=1e-4,
         atol=1e-4,
@@ -235,7 +230,7 @@ def _ewald_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_ewald_dist_model_equivalence_2ranks():
     """Regression: ``DistributedModel(EwaldModelWrapper)`` under halo
     matches single-GPU Ewald on total energy and per-atom forces.
@@ -249,7 +244,7 @@ def test_ewald_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29573", _ewald_equivalence_worker),
+        args=(WORLD_SIZE, "29705", _ewald_equivalence_worker),
         nprocs=WORLD_SIZE,
     )
 
@@ -394,11 +389,11 @@ def _compile_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_ewald_compile_dd_2ranks():
     """Compiled ``DistributedModel(Ewald, hybrid_forces=False)`` == single-GPU; no steady recompiles."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
-    mp.spawn(_worker, args=(WORLD_SIZE, "29591", _compile_worker), nprocs=WORLD_SIZE)
+    mp.spawn(_worker, args=(WORLD_SIZE, "29707", _compile_worker), nprocs=WORLD_SIZE)
 
 
 def _owned_counts(n: int, world: int) -> list[int]:
@@ -544,7 +539,7 @@ def _ewald_gp_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_ewald_gp_dist_model_equivalence_2ranks():
     """``DistributedModel(EwaldModelWrapper, GRAPH_PARTITION)`` matches single-GPU
     Ewald on total energy and per-atom forces (correctness-first GP path)."""

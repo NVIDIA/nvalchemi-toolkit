@@ -168,6 +168,7 @@ def wrap_custom_op(
     scatter_outputs: Sequence[int] = (),
     owned_slice_inputs: Sequence[int] = (),
     all_reduce_outputs: Sequence[int] = (),
+    all_reduce_replicated_outputs: Sequence[int] = (),
     gather_inputs_full: Sequence[int] = (),
     slice_outputs_owned: Sequence[int] = (),
 ) -> None:
@@ -190,7 +191,8 @@ def wrap_custom_op(
        rows hold owner values.
     5. ``all_reduce_outputs``: all-reduce each per-rank partial across
        the domain mesh into a globally-summed tensor replicated on every
-       rank. Backward is symmetric.
+       rank. Backward is symmetric unless the index is also listed in
+       ``all_reduce_replicated_outputs``.
 
     Sharded storage (source has ``_gather_meta``):
 
@@ -228,6 +230,13 @@ def wrap_custom_op(
         Halo storage. Positional indices of return values that are
         per-rank partials needing a global SUM all-reduce across the
         domain mesh.
+    all_reduce_replicated_outputs
+        Subset of ``all_reduce_outputs`` whose reduced value feeds a
+        computation every rank runs identically over the whole system, so
+        the gradient arriving in backward is already global. Their adjoint
+        passes that gradient through; the rest keep the symmetric adjoint,
+        which is what a value folded into each rank's own owned-atom
+        expression needs.
     gather_inputs_full
         Sharded storage. Positional indices of ``[n_owned + 1, *F]``
         ShardTensor args whose contents must be made globally available
@@ -510,6 +519,7 @@ def wrap_custom_op(
                 distributed_all_reduce,
             )
 
+            replicated = frozenset(all_reduce_replicated_outputs)
             for idx in all_reduce_outputs:
                 partial = result_list[idx]
                 if not isinstance(partial, torch.Tensor):
@@ -517,7 +527,9 @@ def wrap_custom_op(
                         f"wrap_custom_op all_reduce_output at index {idx} is "
                         f"{type(partial).__name__}, expected Tensor."
                     )
-                result_list[idx] = distributed_all_reduce(partial, config)
+                result_list[idx] = distributed_all_reduce(
+                    partial, config, identity_adjoint=idx in replicated
+                )
 
         if is_tracing():
             branches = []

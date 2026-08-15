@@ -42,10 +42,39 @@ from nvalchemi.data.transforms import Compose
 class DataLoader:
     """Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.
 
-    Wraps a batch-loadable dataset and yields ``Batch`` objects. Fused
-    prefetching is used by
-    default to amortize I/O across multiple emitted batches; CUDA streams are
-    supported for overlapping device transfers when available.
+    ``DataLoader`` is the consumer end of the pipeline
+    (``Reader -> Dataset (-> MultiDataset) -> DataLoader``). It wraps a
+    batch-loadable dataset -- a :class:`Dataset`, a
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset`, or any object
+    implementing :class:`BatchDatasetProtocol` -- and yields graph-collated
+    :class:`~nvalchemi.data.batch.Batch` objects built via
+    :meth:`~nvalchemi.data.batch.Batch.from_data_list`.
+
+    Sampling follows PyTorch's conventions. With no sampler, ``shuffle`` selects
+    a :class:`~torch.utils.data.RandomSampler` or
+    :class:`~torch.utils.data.SequentialSampler`; a custom ``sampler`` (yielding
+    sample indices) overrides ``shuffle``; and a ``batch_sampler`` (yielding
+    whole lists of indices) sets the batch composition itself and is mutually
+    exclusive with ``sampler``, ``shuffle``, and ``batch_size``. To mix several
+    datasets, pair a
+    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` with
+    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` (as
+    ``sampler=``, per-sample rates) or
+    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler` (as
+    ``batch_sampler=``, a fixed per-batch mixture); under distributed training
+    :class:`~nvalchemi.training.hooks.DDPHook` swaps in the rank-sharded
+    variants automatically.
+
+    Compared with :class:`torch.utils.data.DataLoader`, this loader yields
+    ``Batch`` graphs rather than default-collated tensors, with graph-aware
+    collation. Instead of forking worker processes it prefetches on background
+    threads and overlaps device transfers on CUDA streams, and it *fuses* reads:
+    ``prefetch_factor`` emitted batches are pulled from the backend in one
+    windowed read (effective window ``batch_size * prefetch_factor``), which
+    amortizes I/O far better than one ``__getitem__`` per sample. Set
+    ``prefetch_factor=0`` to read a single emitted batch at a time, and
+    ``pin_memory=True`` to request page-locked tensors from readers that support
+    it.
 
     Parameters
     ----------

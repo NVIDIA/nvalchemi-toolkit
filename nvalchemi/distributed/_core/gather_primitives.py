@@ -49,16 +49,16 @@ __all__ = [
 
 
 def mesh_group(mesh: Any) -> Any:
-    """Return the default ``ProcessGroup`` for *mesh*.
+    """Return the concrete ``ProcessGroup`` for *mesh*.
 
-    Accepts either a real ``DeviceMesh`` or a test-harness mock; returns
-    ``None`` for both "no distribution configured" and "mesh present but not
-    group-capable".
+    Accepts a concrete ``ProcessGroup`` unchanged, or resolves one from a real
+    ``DeviceMesh`` or test-harness mock. Returns ``None`` for both "no
+    distribution configured" and "mesh present but not group-capable".
 
     Parameters
     ----------
-    mesh : DeviceMesh or object or None
-        The device mesh to resolve a group from.
+    mesh : ProcessGroup, DeviceMesh, object, or None
+        The process group to preserve or device mesh to resolve.
 
     Returns
     -------
@@ -68,6 +68,8 @@ def mesh_group(mesh: Any) -> Any:
     """
     if mesh is None:
         return None
+    if isinstance(mesh, dist.ProcessGroup):
+        return mesh
     get_group = getattr(mesh, "get_group", None)
     if get_group is None:
         return None
@@ -100,15 +102,18 @@ def _funcol_group_arg(mesh: Any) -> Any:
     Prefers the ``(DeviceMesh, 0)`` spec — the form Dynamo special-cases (and
     the one physicsnemo's own compiled collectives use). Real distributed
     inference always carries a real ``DeviceMesh``, so the compiled path takes
-    this branch. Falls back to the resolved ``ProcessGroup`` only for eager
-    test harnesses that pass a lightweight (non-``DeviceMesh``) mesh; the
-    ``isinstance`` is a compile-time constant, so under ``torch.compile`` only
-    the traceable branch survives.
+    this branch. A concrete ``ProcessGroup`` is returned unchanged. Otherwise,
+    falls back to the resolved ``ProcessGroup`` for eager test harnesses that
+    pass a lightweight (non-``DeviceMesh``) mesh; the ``isinstance`` checks are
+    compile-time constants, so under ``torch.compile`` only the traceable branch
+    survives.
     """
     from torch.distributed.device_mesh import DeviceMesh  # noqa: PLC0415
 
     if isinstance(mesh, DeviceMesh):
         return (mesh, 0)
+    if isinstance(mesh, dist.ProcessGroup):
+        return mesh
     return funcol_group(mesh)
 
 
@@ -343,18 +348,24 @@ def _neighbor_p2p_v_1d(
             if send_counts[r] > 0:
                 recv[r_off[r] : r_off[r + 1]].copy_(send[s_off[r] : s_off[r + 1]])
             continue
+        peer = dist.get_global_rank(group, r) if group is not None else r
         if send_counts[r] > 0:
             ops.append(
                 dist.P2POp(
                     dist.isend,
                     send[s_off[r] : s_off[r + 1]].contiguous(),
-                    r,
+                    peer,
                     group=group,
                 )
             )
         if recv_counts[r] > 0:
             ops.append(
-                dist.P2POp(dist.irecv, recv[r_off[r] : r_off[r + 1]], r, group=group)
+                dist.P2POp(
+                    dist.irecv,
+                    recv[r_off[r] : r_off[r + 1]],
+                    peer,
+                    group=group,
+                )
             )
     if ops:
         for work in dist.batch_isend_irecv(ops):
@@ -421,8 +432,11 @@ def _neighbor_p2p_fixed(
         if r == rank:
             continue
         sl = slice(r * m, (r + 1) * m)
-        ops.append(dist.P2POp(dist.isend, send_rows[sl].contiguous(), r, group=group))
-        ops.append(dist.P2POp(dist.irecv, recv[sl], r, group=group))
+        peer = dist.get_global_rank(group, r) if group is not None else r
+        ops.append(
+            dist.P2POp(dist.isend, send_rows[sl].contiguous(), peer, group=group)
+        )
+        ops.append(dist.P2POp(dist.irecv, recv[sl], peer, group=group))
     if ops:
         for work in dist.batch_isend_irecv(ops):
             work.wait()
@@ -467,7 +481,7 @@ def halo_exchange_fixed(
             is_nccl = False
         if is_nccl:
             return _neighbor_p2p_fixed(send_rows, world_size, neighbors, group)
-    return funcol_all_to_all_fixed(send_rows, world_size, None)
+    return funcol_all_to_all_fixed(send_rows, world_size, group)
 
 
 def funcol_all_to_all_v_rows(
@@ -581,10 +595,11 @@ def _isend_irecv_v_1d(
         if r == rank:
             recv_slice.copy_(send_slice)
         else:
+            peer = dist.get_global_rank(group, r) if group is not None else r
             if send_slice.numel() > 0:
-                ops.append(dist.isend(send_slice, dst=r, group=group))
+                ops.append(dist.isend(send_slice, dst=peer, group=group))
             if recv_slice.numel() > 0:
-                ops.append(dist.irecv(recv_slice, src=r, group=group))
+                ops.append(dist.irecv(recv_slice, src=peer, group=group))
     for op in ops:
         op.wait()
 
@@ -1443,6 +1458,7 @@ class _DistributedAllReduceSum(torch.autograd.Function):
     def forward(  # type: ignore[override]
         tensor: torch.Tensor,
         config: "ParticleHaloConfig",
+        identity_adjoint: bool = False,
     ) -> torch.Tensor:
         # Separate forward + setup_context (no ctx) for AOT-traceability.
         if dist.is_initialized():
@@ -1451,23 +1467,31 @@ class _DistributedAllReduceSum(torch.autograd.Function):
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple, output: torch.Tensor) -> None:
-        _tensor, config = inputs
+        _tensor, config, identity_adjoint = inputs
         ctx.config = config
+        ctx.identity_adjoint = identity_adjoint
 
     @staticmethod
     def backward(ctx: Any, grad_out: torch.Tensor) -> tuple[Any, ...]:
+        if ctx.identity_adjoint:
+            # The symmetric adjoint is only correct when ``grad_out`` is this
+            # rank's own downstream partial. When the output feeds a consumer
+            # that is itself all-reduced, ``grad_out`` already holds every
+            # rank's contribution and reducing again multiplies by world size.
+            return grad_out.contiguous().clone(), None, None
         if dist.is_initialized():
             grad = funcol_all_reduce(grad_out.contiguous(), ctx.config.mesh)
         else:
             grad = grad_out.contiguous().clone()
-        # (tensor, config)
-        return grad, None
+        # (tensor, config, identity_adjoint)
+        return grad, None, None
 
 
 def distributed_all_reduce(
     tensor: torch.Tensor,
     config: "ParticleHaloConfig",
     op: dist.ReduceOp = dist.ReduceOp.SUM,
+    identity_adjoint: bool = False,
 ) -> torch.Tensor:
     """Autograd-aware SUM all-reduce across ``config.mesh``.
 
@@ -1508,4 +1532,25 @@ def distributed_all_reduce(
             f"distributed_all_reduce op={op} not implemented; only SUM is "
             "currently wired."
         )
-    return _DistributedAllReduceSum.apply(tensor, config)
+    return _DistributedAllReduceSum.apply(tensor, config, identity_adjoint)
+
+
+def all_reduce_sum_over_mesh(tensor: Any, mesh: Any) -> Any:
+    """Sum *tensor* across *mesh*'s process group, in place.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Per-rank partial to reduce.
+    mesh : DeviceMesh
+        Mesh whose group the reduction runs on.
+
+    Returns
+    -------
+    torch.Tensor
+        *tensor*, reduced across the group (unchanged single-process).
+    """
+    if not dist.is_initialized():
+        return tensor
+    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
+    return tensor
