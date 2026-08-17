@@ -141,6 +141,20 @@ class CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
         }
 
 
+class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
+    """Analytical test model declaring positions as an autograd input."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            neighbor_config=None,
+            needs_pbc=False,
+        )
+
+
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
@@ -590,7 +604,7 @@ class TestFusedStage:
 
         try:
             with torch.compiler.config.patch(force_disable_caches=True):
-                model = CompilerFriendlyModel().to(gpu_device)
+                model = CompilerFriendlyAutogradModel().to(gpu_device)
                 dynamics = BaseDynamics(model=model, device_type="cuda")
                 fused = FusedStage(
                     sub_stages=[(0, dynamics)],
@@ -604,6 +618,7 @@ class TestFusedStage:
                 with fused:
                     for _ in range(3):
                         fused.step(batch)
+                        assert not batch.positions.requires_grad
                 torch.cuda.synchronize()
 
                 assert fused.step_count == 3
@@ -617,6 +632,21 @@ class TestFusedStage:
         finally:
             counters.clear()
             torch.compiler.reset()
+
+    def test_eager_step_restores_autograd_inputs(self) -> None:
+        """An eager fused step should restore its input gradient state."""
+        model = CompilerFriendlyAutogradModel()
+        dynamics = BaseDynamics(model=model, device_type="cpu")
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            compile_step=False,
+            device_type="cpu",
+        )
+        batch = create_batch_with_status(n_graphs=3)
+
+        fused.step(batch)
+
+        assert not batch.positions.requires_grad
 
     def test_fused_stage_or_produces_pipeline(self) -> None:
         """FusedStage | BaseDynamics should produce DistributedPipeline."""

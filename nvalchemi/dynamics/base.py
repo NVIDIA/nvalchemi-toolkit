@@ -51,8 +51,8 @@ from __future__ import annotations
 import sys
 import warnings
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
-from contextlib import ExitStack, nullcontext
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import ExitStack, contextmanager, nullcontext
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -87,7 +87,66 @@ __all__ = [
     "ConvergenceHook",
     "DistributedPipeline",
     "BufferConfig",
+    "requires_grad_ctx",
 ]
+
+
+@contextmanager
+def requires_grad_ctx(
+    *tensors: torch.Tensor,
+    requires_grad: bool = True,
+) -> Iterator[None]:
+    """Temporarily set ``requires_grad`` on leaf tensors.
+
+    Tensor states are restored on exit, including when an exception is raised.
+    Duplicate tensor arguments are handled once, so nested or aliased inputs
+    preserve the state observed when this context was entered.
+
+    Parameters
+    ----------
+    *tensors : torch.Tensor
+        Leaf tensors whose autograd state should be changed temporarily.
+    requires_grad : bool, optional
+        State to apply inside the context. Default is ``True``.
+
+    Yields
+    ------
+    None
+        Control while the requested autograd state is active.
+
+    Raises
+    ------
+    TypeError
+        If an argument is not a tensor.
+    ValueError
+        If a tensor is not a leaf, or if gradients are requested for a tensor
+        that is neither floating-point nor complex.
+    """
+    unique: list[torch.Tensor] = []
+    seen: set[int] = set()
+    for tensor in tensors:
+        if not isinstance(tensor, torch.Tensor):
+            raise TypeError(f"Expected a tensor, got {type(tensor).__name__}")
+        if not tensor.is_leaf:
+            raise ValueError("requires_grad_ctx requires leaf tensors")
+        if requires_grad and not (tensor.is_floating_point() or tensor.is_complex()):
+            raise ValueError(
+                "requires_grad=True requires floating-point or complex tensors"
+            )
+        if id(tensor) not in seen:
+            seen.add(id(tensor))
+            unique.append(tensor)
+
+    original = [(tensor, tensor.requires_grad) for tensor in unique]
+    try:
+        for tensor, state in original:
+            if state != requires_grad:
+                tensor.requires_grad_(requires_grad)
+        yield
+    finally:
+        for tensor, state in reversed(original):
+            if tensor.requires_grad != state:
+                tensor.requires_grad_(state)
 
 
 class BufferConfig(BaseModel):
@@ -1777,33 +1836,45 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         return None
 
-    def _ensure_autograd_inputs(self, batch: Batch) -> None:
-        """Enable ``requires_grad`` on autograd inputs as durable leaves.
-
-        Only active when ``_persistent_autograd_inputs`` is set (see
-        :class:`FusedStage`).  With the flag on, tensors named in
-        ``model_config.autograd_inputs`` (e.g. ``positions``) keep
-        ``requires_grad=True`` across steps instead of being re-enabled via
-        ``clone().requires_grad_(True)`` inside the model's ``adapt_input``
-        — that per-step re-enable is both an extra allocation and a dynamo
-        graph break ("requires_grad_() intermediate leaked as output").
-        The counterpart contract is that all in-place kinematic updates run
-        under ``no_grad`` and :meth:`compute` skips clearing these flags.
+    def _autograd_input_tensors(
+        self, batch: Batch | AtomsLike
+    ) -> tuple[torch.Tensor, ...]:
+        """Return tensor inputs that require gradients for model evaluation.
 
         Parameters
         ----------
-        batch : Batch
-            The current batch.
+        batch : Batch | AtomsLike
+            Model input containing configured autograd fields.
+
+        Returns
+        -------
+        tuple[torch.Tensor, ...]
+            Present tensor fields requiring gradients. Conservative models
+            include ``positions`` even when a wrapper omits it from
+            ``autograd_inputs``.
         """
-        if not getattr(self, "_persistent_autograd_inputs", False):
-            return
         cfg = self.model_config
-        if not (cfg.autograd_outputs & cfg.active_outputs):
-            return
-        for key in cfg.autograd_inputs:
+        grad_keys = set(cfg.gradient_keys)
+        if cfg.autograd_outputs & cfg.active_outputs:
+            grad_keys |= cfg.autograd_inputs
+            grad_keys.add("positions")
+
+        tensors: list[torch.Tensor] = []
+        for key in grad_keys:
             value = getattr(batch, key, None)
-            if isinstance(value, torch.Tensor) and not value.requires_grad:
-                value.requires_grad_(True)
+            if isinstance(value, torch.Tensor):
+                tensors.append(value)
+        return tuple(tensors)
+
+    @contextmanager
+    def _defer_autograd_input_cleanup(self) -> Iterator[None]:
+        """Defer ``compute`` gradient restoration to an outer context."""
+        previous = getattr(self, "_autograd_cleanup_deferred", False)
+        self._autograd_cleanup_deferred = True
+        try:
+            yield
+        finally:
+            self._autograd_cleanup_deferred = previous
 
     def _ensure_state_initialized(self, batch: Batch) -> None:
         """Lazily initialize per-system integrator state on the first call.
@@ -1926,9 +1997,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         5. Detaches all output tensors from the computation graph and
            exposes them as ``_last_outputs`` for custom dynamics subclasses
            that need charges, embeddings, or other non-standard outputs.
-        6. Clears ``requires_grad`` on batch tensors that the model
-           enabled for autograd (e.g. positions), so downstream hooks
-           can safely perform in-place operations.
+        6. Restores the original ``requires_grad`` state of model autograd
+           inputs, so downstream hooks can safely perform in-place operations.
 
         The detach in step 5 is deliberate: model wrappers may return
         tensors that are still attached to the autograd graph (e.g. MACE
@@ -1958,6 +2028,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
+        if getattr(self, "_autograd_cleanup_deferred", False):
+            return self._compute(batch)
+        with requires_grad_ctx(*self._autograd_input_tensors(batch)):
+            return self._compute(batch)
+
+    def _compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+        """Execute model evaluation while autograd input state is managed."""
         self._last_outputs = None
 
         # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
@@ -1987,26 +2064,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 target = getattr(batch, batch_attr, None)
                 if target is not None:
                     target.copy_(value.view(target.shape))
-
-        # Clear requires_grad on batch tensors that the model enabled for
-        # autograd force/stress computation.  After compute() the gradients
-        # have been extracted into forces/stress and the graph is detached,
-        # so keeping requires_grad=True would only cause spurious errors in
-        # downstream hooks that perform in-place operations (e.g. copy_).
-        # Always include "positions" — it is an implicit model input that
-        # may not appear in autograd_inputs but can still carry grad from
-        # the forward pass.
-        # Persistent-leaf mode keeps requires_grad set; see _ensure_autograd_inputs.
-        if not getattr(self, "_persistent_autograd_inputs", False):
-            cfg = self.model_config
-            grad_keys: set[str] = {"positions"}
-            grad_keys |= cfg.gradient_keys
-            if cfg.autograd_outputs & cfg.active_outputs:
-                grad_keys |= cfg.autograd_inputs
-            for key in grad_keys:
-                value = getattr(batch, key, None)
-                if isinstance(value, torch.Tensor) and value.requires_grad:
-                    value.requires_grad_(False)
 
         self._last_outputs = detached
 
@@ -2889,9 +2946,6 @@ class FusedStage(BaseDynamics):
         )
 
         self.entry_status = entry_status
-        # Keep autograd inputs as durable leaves so model wrappers skip their
-        # per-step clone().requires_grad_(True); see _ensure_autograd_inputs.
-        self._persistent_autograd_inputs = True
         self.compile_kwargs: dict[str, Any] = (
             compile_kwargs if compile_kwargs is not None else {}
         )
@@ -3338,7 +3392,6 @@ class FusedStage(BaseDynamics):
         # Lazy state must be created outside the compiled step: in-graph
         # allocations break CUDA-graph replay and fullgraph shape reasoning.
         self._ensure_bookkeeping_fields(batch)
-        self._ensure_autograd_inputs(batch)
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
         if self._compiled_step is not None:
@@ -3346,7 +3399,12 @@ class FusedStage(BaseDynamics):
         step_fn = (
             self._compiled_step if self._compiled_step is not None else self._step_impl
         )
-        with self._stream_scope(batch.device):
+        autograd_inputs = self._autograd_input_tensors(batch)
+        with (
+            self._defer_autograd_input_cleanup(),
+            requires_grad_ctx(*autograd_inputs),
+            self._stream_scope(batch.device),
+        ):
             batch, newly_graduated = step_fn(batch)
         # Mask -> index conversion here, where a host sync is acceptable.
         if newly_graduated is None or not newly_graduated.any():
