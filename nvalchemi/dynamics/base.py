@@ -2418,7 +2418,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             val = getattr(batch, field)
             m = node_mask if val.shape[0] == batch.num_nodes else mask
             m = m.view(m.shape[0], *([1] * (val.dim() - 1)))
-            val.copy_(torch.where(m, val, sv))
+            torch.where(m, val, sv, out=val)
 
 
 class ConvergenceHook:
