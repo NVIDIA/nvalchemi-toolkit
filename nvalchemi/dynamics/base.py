@@ -124,6 +124,7 @@ def requires_grad_ctx(
     """
     unique: list[torch.Tensor] = []
     seen: set[int] = set()
+    # perform some intial validation of the data
     for tensor in tensors:
         if not isinstance(tensor, torch.Tensor):
             raise TypeError(f"Expected a tensor, got {type(tensor).__name__}")
@@ -138,6 +139,8 @@ def requires_grad_ctx(
             unique.append(tensor)
 
     original = [(tensor, tensor.requires_grad) for tensor in unique]
+    # set gradient tracking, release control flow back, and when it
+    # wraps up, rest to the original tracking state
     try:
         for tensor, state in original:
             if state != requires_grad:
