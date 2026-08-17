@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+from torch._dynamo.utils import counters
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import (
@@ -583,33 +584,38 @@ class TestFusedStage:
 
     @pytest.mark.slow
     def test_compiled_step_executes_on_cuda(self, gpu_device: str) -> None:
-        """A compiled fused step should execute repeatedly on CUDA."""
+        """A compiled fused step should execute with CUDA-graph capture."""
         torch.compiler.reset()
-        model = CompilerFriendlyModel().to(gpu_device)
-        dynamics = BaseDynamics(model=model, device_type="cuda")
-        fused = FusedStage(
-            sub_stages=[(0, dynamics)],
-            compile_step=True,
-            compile_kwargs={"mode": "reduce-overhead"},
-            device_type="cuda",
-        )
-        batch = create_batch_with_status(n_graphs=3, device=gpu_device)
-        expected_positions = batch.positions.clone()
+        counters.clear()
 
         try:
-            with fused:
-                for _ in range(3):
-                    fused.step(batch)
-            torch.cuda.synchronize()
+            with torch.compiler.config.patch(force_disable_caches=True):
+                model = CompilerFriendlyModel().to(gpu_device)
+                dynamics = BaseDynamics(model=model, device_type="cuda")
+                fused = FusedStage(
+                    sub_stages=[(0, dynamics)],
+                    compile_step=True,
+                    compile_kwargs={"mode": "reduce-overhead"},
+                    device_type="cuda",
+                )
+                batch = create_batch_with_status(n_graphs=3, device=gpu_device)
+                expected_positions = batch.positions.clone()
 
-            assert fused.step_count == 3
-            torch.testing.assert_close(batch.positions, expected_positions)
-            torch.testing.assert_close(batch.forces, -2 * expected_positions)
-            torch.testing.assert_close(
-                batch.energy,
-                expected_positions.square().sum(dim=-1, keepdim=True),
-            )
+                with fused:
+                    for _ in range(3):
+                        fused.step(batch)
+                torch.cuda.synchronize()
+
+                assert fused.step_count == 3
+                assert counters["inductor"]["cudagraph_skips"] == 0
+                torch.testing.assert_close(batch.positions, expected_positions)
+                torch.testing.assert_close(batch.forces, -2 * expected_positions)
+                torch.testing.assert_close(
+                    batch.energy,
+                    expected_positions.square().sum(dim=-1, keepdim=True),
+                )
         finally:
+            counters.clear()
             torch.compiler.reset()
 
     def test_fused_stage_or_produces_pipeline(self) -> None:

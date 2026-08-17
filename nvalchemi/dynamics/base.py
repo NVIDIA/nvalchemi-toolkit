@@ -3002,6 +3002,25 @@ class FusedStage(BaseDynamics):
         self._compiled_step = torch.compile(self._step_impl, **merged)
         return self
 
+    @staticmethod
+    def _mark_cudagraph_static_inputs(batch: Batch) -> None:
+        """Mark CUDA batch tensors as stable buffers for graph replay.
+
+        ``_step_impl`` mutates batch tensors in place. Inductor permits those
+        mutations in CUDA graphs when their inputs have stable addresses.
+        The default unguarded marking lets CUDA graphs re-record if a refill or
+        another batch operation replaces a tensor with a different address.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch whose current tensor fields will enter the compiled step.
+        """
+        if batch.device.type != "cuda":
+            return
+        for _, tensor in batch:
+            torch._dynamo.mark_static_address(tensor)
+
     def __enter__(self) -> FusedStage:
         """Enter the stream context and propagate to all sub-stages.
 
@@ -3322,6 +3341,8 @@ class FusedStage(BaseDynamics):
         self._ensure_autograd_inputs(batch)
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
+        if self._compiled_step is not None:
+            self._mark_cudagraph_static_inputs(batch)
         step_fn = (
             self._compiled_step if self._compiled_step is not None else self._step_impl
         )
