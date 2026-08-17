@@ -109,6 +109,37 @@ class CountingNonConservativeDemoModel(NonConservativeDemoModel):
         return super().forward(*args, **kwargs)
 
 
+class CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
+    """Minimal analytical model for end-to-end compilation tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset(),
+            neighbor_config=None,
+            needs_pbc=False,
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding outputs for this test model."""
+        return {}
+
+    def compute_embeddings(self, data: Batch) -> Batch:
+        """Return the batch unchanged because embeddings are not used."""
+        return data
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Compute analytical per-atom energies and forces."""
+        positions = batch.positions
+        return {
+            "energy": positions.square().sum(dim=-1, keepdim=True),
+            "forces": -2 * positions,
+        }
+
+
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
@@ -549,6 +580,37 @@ class TestFusedStage:
         # Verify that _compiled_step is set (compiled function)
         assert fused._compiled_step is not None
         assert callable(fused._compiled_step)
+
+    @pytest.mark.slow
+    def test_compiled_step_executes_on_cuda(self, gpu_device: str) -> None:
+        """A compiled fused step should execute repeatedly on CUDA."""
+        torch.compiler.reset()
+        model = CompilerFriendlyModel().to(gpu_device)
+        dynamics = BaseDynamics(model=model, device_type="cuda")
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            compile_step=True,
+            compile_kwargs={"mode": "reduce-overhead"},
+            device_type="cuda",
+        )
+        batch = create_batch_with_status(n_graphs=3, device=gpu_device)
+        expected_positions = batch.positions.clone()
+
+        try:
+            with fused:
+                for _ in range(3):
+                    fused.step(batch)
+            torch.cuda.synchronize()
+
+            assert fused.step_count == 3
+            torch.testing.assert_close(batch.positions, expected_positions)
+            torch.testing.assert_close(batch.forces, -2 * expected_positions)
+            torch.testing.assert_close(
+                batch.energy,
+                expected_positions.square().sum(dim=-1, keepdim=True),
+            )
+        finally:
+            torch.compiler.reset()
 
     def test_fused_stage_or_produces_pipeline(self) -> None:
         """FusedStage | BaseDynamics should produce DistributedPipeline."""
