@@ -1112,22 +1112,18 @@ class TestAggregateBiasResults:
 # ===========================================================================
 
 
-class TestCompileSpike:
+class TestCompile:
     """Verifies what can and cannot be compiled with ``torch.compile``.
 
-    **Findings (documented per proposal section 6):**
-
-    * :func:`pair_distance` — compiles with ``fullgraph=True``.  This is the
-      primary CV hot path and is the go/no-go gate for ``compile_biases=True``.
+    * :func:`pair_distance` — compiles with ``fullgraph=True``.
     * :func:`aggregate_bias_results` — compiles with ``fullgraph=True`` for
       fixed-size input lists.
     * ``ConservativeBias.evaluate()`` — does **not** compile with
       ``fullgraph=True``.  The root cause is
       ``pos_leaf = positions.detach().requires_grad_(True)``:
       ``torch.compile`` does not support ``.requires_grad_()`` mutation.
-      This is consistent with the risk identified in proposal section 6.
-      **Chosen fallback (per proposal section 6):** compile :meth:`energy`
-      independently; keep ``evaluate()`` as an eager orchestration wrapper.
+      **Chosen approach:** compile :meth:`energy` independently; keep
+      ``evaluate()`` as an eager orchestration wrapper.
       ``EnhancedSampling(compile_biases=True)`` will compile each bias's
       ``energy()`` override, not ``evaluate()``.
 

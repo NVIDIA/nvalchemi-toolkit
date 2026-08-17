@@ -228,7 +228,7 @@ def _validate_bias_result(result: BiasResult) -> None:
 class BiasPotential(Protocol):
     """Structural protocol for all enhanced-sampling bias potentials.
 
-    Every P0 built-in satisfies this protocol.  Authors may also satisfy
+    Every built-in bias satisfies this protocol.  Authors may also satisfy
     it structurally (no inheritance required).
 
     Attributes

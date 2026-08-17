@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Built-in bias implementations (P0 compile-spike stubs).
+"""Built-in bias implementations.
 
-Full implementations are added in PR 2–6.  This ``__init__`` is a
-placeholder so that ``nvalchemi.enhanced_sampling.biases`` is a valid
-importable namespace from PR 1 onward.
+This ``__init__`` is a placeholder so that
+``nvalchemi.enhanced_sampling.biases`` is a valid importable namespace.
+Built-in biases (umbrella, metadynamics, walls, ABF) are not yet implemented.
 """

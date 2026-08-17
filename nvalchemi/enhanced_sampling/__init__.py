@@ -24,10 +24,10 @@ Public surface
 * :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
 * :func:`pair_distance` — differentiable pair-distance CV; supports
   nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC
-  (unreduced cells via LLL) is deferred.
+  (unreduced cells via LLL) is not yet implemented.
 
-Deferred to later milestones
------------------------------
+Not yet implemented
+-------------------
 * :class:`EnhancedSampling` runner
 * :class:`ThermodynamicState`, :class:`ReplicaExchange`
 * Built-in biases (umbrella, metadynamics, walls, ABF)

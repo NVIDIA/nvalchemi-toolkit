@@ -14,7 +14,7 @@
 # limitations under the License.
 """Differentiable pair-distance collective variable.
 
-:func:`pair_distance` is the P0 built-in geometric CV.  It supports:
+:func:`pair_distance` supports:
 
 * Non-periodic systems (``batch.cell`` is ``None`` or ``batch.pbc`` is all
   ``False``).
@@ -30,12 +30,10 @@ reduction conditions.  For unreduced cells the minimum-image offset can
 exceed ±1 in one or more fractional components, and the search silently
 returns a longer-than-minimum image.
 
-The original proposal named this "general triclinic MIC"; that description
-is overstated.  True general triclinic MIC (arbitrary unreduced cells,
-implemented via LLL lattice reduction or an extended image search with a
-data-dependent radius) is **deferred** — its interaction with the
-strain-based virial computation in :class:`ConservativeBias` adds
-non-trivial complexity that is out of scope for this release.
+True general triclinic MIC (arbitrary unreduced cells, implemented via LLL
+lattice reduction or an extended image search with a data-dependent radius)
+is **not yet implemented** — its interaction with the strain-based virial
+computation in :class:`ConservativeBias` adds non-trivial complexity.
 
 Minkowski reduction condition
 -----------------------------

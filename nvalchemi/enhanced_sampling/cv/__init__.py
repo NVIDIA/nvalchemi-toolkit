@@ -14,11 +14,11 @@
 # limitations under the License.
 """Collective-variable functions for enhanced sampling.
 
-P0 built-in: :func:`pair_distance`.
-
 CVs are plain callables — no class hierarchy, no registration.  Any
 differentiable function ``cv(batch: Batch) -> Tensor[B, D]`` satisfies
 the CV interface.
+
+Available CVs: :func:`pair_distance`.
 """
 
 from nvalchemi.enhanced_sampling.cv.pair_distance import pair_distance
