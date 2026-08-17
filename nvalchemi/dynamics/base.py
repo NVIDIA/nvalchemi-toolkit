@@ -3273,7 +3273,6 @@ class FusedStage(BaseDynamics):
 
         outputs: ModelOutputs = self.compute(batch)
 
-        # TODO: update this when `batch` structure is done
         # Skip None placeholders — writing them only churns dynamo guards.
         for key, tensor in outputs.items():
             if key not in ("forces", "energy") and tensor is not None:
