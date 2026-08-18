@@ -376,6 +376,38 @@ class _AnisotropicBias(ConservativeBias):
         return torch.stack(energies).unsqueeze(-1)  # [B, 1]
 
 
+class _CellVolumeBias(ConservativeBias):
+    """E = (V - V0)^2 — depends on the cell but not on positions at all."""
+
+    def __init__(self, target_volume: float = 900.0) -> None:
+        self.name = "cell_volume"
+        self.target_volume = target_volume
+
+    def energy(self, current: Batch) -> Tensor:
+        volume = torch.linalg.det(current.cell.reshape(-1, 3, 3))
+        return ((volume - self.target_volume) ** 2).reshape(-1, 1)  # [B, 1]
+
+
+class _ConstantBias(ConservativeBias):
+    """E = c — depends on neither positions nor cell.
+
+    Stands in for a bias that returns a constant on one branch, e.g. a wall
+    restraint evaluated while every atom is inside the wall.
+    """
+
+    def __init__(self, value: float = 3.0) -> None:
+        self.name = "constant"
+        self.value = value
+
+    def energy(self, current: Batch) -> Tensor:
+        return torch.full(
+            (current.num_graphs, 1),
+            self.value,
+            dtype=current.positions.dtype,
+            device=current.positions.device,
+        )
+
+
 class TestConservativeBias:
     """Tests for ConservativeBias autograd helper."""
 
@@ -666,6 +698,66 @@ class TestConservativeBias:
             f"autograd stress\n{result.stress[0]}\ndiffers from finite differences\n"
             f"{fd_stress}"
         )
+
+    def test_position_independent_bias_gives_zero_forces(self, device: str) -> None:
+        """A cell-only bias must evaluate, not raise, and yield zero forces.
+
+        ``E = (V - V0)^2`` has no position dependence, so ``dE/dr`` is zero.
+        Differentiating with ``allow_unused=False`` would instead raise
+        ``RuntimeError: One of the differentiated Tensors appears to not have
+        been used in the graph`` from inside ``torch.autograd.grad``, with
+        nothing pointing at the user's ``energy()``.
+        """
+        box = 10.0
+        volume = box**3
+        target = 900.0
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+            positions=torch.tensor([[1.0, 1.0, 1.0], [2.0, 3.0, 4.0]]),
+            cell=torch.eye(3).unsqueeze(0) * box,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        result = _CellVolumeBias(target_volume=target).evaluate(batch)
+
+        assert result.forces is not None
+        assert result.forces.shape == (2, 3)
+        assert torch.count_nonzero(result.forces) == 0, (
+            f"a position-independent bias must give zero forces, got {result.forces}"
+        )
+
+        # dE/dV = 2 (V - V0);  dV/deps = V * I  =>  sigma = dE/deps / V = 2 (V - V0) I
+        assert result.stress is not None
+        expected = torch.eye(3, device=result.stress.device) * 2.0 * (volume - target)
+        assert torch.allclose(result.stress[0], expected, rtol=1e-5), (
+            f"stress = {result.stress[0]}, expected {expected}"
+        )
+
+    def test_constant_bias_gives_zero_forces_and_stress(self, device: str) -> None:
+        """A bias disconnected from the graph entirely evaluates to zeros.
+
+        This is the "returns a constant on some branch" case, e.g. a wall
+        restraint while every atom is inside the wall.
+        """
+        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        result = _ConstantBias(value=3.0).evaluate(batch)
+
+        assert result.energy is not None
+        assert torch.allclose(result.energy, torch.full_like(result.energy, 3.0))
+        assert result.forces is not None
+        assert torch.count_nonzero(result.forces) == 0
+        assert result.stress is not None
+        assert torch.count_nonzero(result.stress) == 0
+
+    def test_constant_bias_nonperiodic_gives_zero_forces(self, device: str) -> None:
+        """The no-cell path also tolerates an energy with no position dependence."""
+        batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        result = _ConstantBias(value=1.5).evaluate(batch)
+
+        assert result.forces is not None
+        assert result.forces.shape == (6, 3)
+        assert torch.count_nonzero(result.forces) == 0
+        assert result.stress is None
 
     def test_evaluate_is_read_only_no_state_change(self, device: str) -> None:
         """Multiple evaluate() calls must leave bias state unchanged."""

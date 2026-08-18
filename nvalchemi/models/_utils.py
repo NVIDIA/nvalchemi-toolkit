@@ -95,6 +95,7 @@ def autograd_forces(
     positions: NodePositions,
     training: bool = False,
     retain_graph: bool = False,
+    allow_unused: bool = False,
 ) -> Forces:
     """Compute forces as ``-dE/dr`` via autograd.
 
@@ -112,6 +113,12 @@ def autograd_forces(
         If ``True``, the computation graph is retained after the backward
         pass.  Needed when subsequent autograd calls traverse shared
         graph nodes.
+    allow_unused : bool, optional
+        If ``True``, an energy that does not depend on *positions* yields
+        zero forces instead of raising ``RuntimeError``.  Use this for
+        energy terms that are legitimately position-independent, such as a
+        pure cell/volume term.  Defaults to ``False``, which surfaces a
+        missing dependency as an error.
 
     Returns
     -------
@@ -125,6 +132,8 @@ def autograd_forces(
         grad_outputs=torch.ones_like(energy),
         create_graph=training,
         retain_graph=effective_retain,
+        allow_unused=allow_unused,
+        materialize_grads=allow_unused,
     )[0]
 
 
@@ -246,6 +255,7 @@ def autograd_stresses(
     num_graphs: int,
     training: bool = False,
     retain_graph: bool = False,
+    allow_unused: bool = False,
 ) -> Stress:
     r"""Compute tensile-positive Cauchy stress via autograd.
 
@@ -265,6 +275,10 @@ def autograd_stresses(
         If ``True``, create the computation graph for higher-order gradients.
     retain_graph : bool, optional
         If ``True``, retain the computation graph.
+    allow_unused : bool, optional
+        If ``True``, an energy that does not depend on *displacement* yields
+        zero stress instead of raising ``RuntimeError``.  Defaults to
+        ``False``, which surfaces a missing dependency as an error.
 
     Returns
     -------
@@ -278,6 +292,8 @@ def autograd_stresses(
         grad_outputs=torch.ones_like(energy),
         create_graph=training,
         retain_graph=effective_retain,
+        allow_unused=allow_unused,
+        materialize_grads=allow_unused,
     )[0]
     volume = torch.det(cell).abs().view(-1, 1, 1)
     return grad.view(num_graphs, 3, 3) / volume
@@ -291,6 +307,7 @@ def autograd_forces_and_stresses(
     num_graphs: int,
     training: bool = False,
     retain_graph: bool = False,
+    allow_unused: bool = False,
 ) -> tuple[Forces, Stress]:
     """Compute forces and tensile-positive Cauchy stress in one autograd call.
 
@@ -310,6 +327,13 @@ def autograd_forces_and_stresses(
         If ``True``, create the computation graph for higher-order gradients.
     retain_graph : bool, optional
         If ``True``, retain the computation graph.
+    allow_unused : bool, optional
+        If ``True``, whichever of *positions* and *displacement* the energy
+        does not depend on yields a zero gradient instead of raising
+        ``RuntimeError``.  Use this for energy terms that are legitimately
+        independent of one of the two, such as a pure cell/volume term that
+        produces stress but no forces.  Defaults to ``False``, which
+        surfaces a missing dependency as an error.
 
     Returns
     -------
@@ -323,6 +347,8 @@ def autograd_forces_and_stresses(
         grad_outputs=torch.ones_like(energy),
         create_graph=training,
         retain_graph=effective_retain,
+        allow_unused=allow_unused,
+        materialize_grads=allow_unused,
     )
     forces = -position_grad
     volume = torch.det(cell).abs().view(-1, 1, 1)

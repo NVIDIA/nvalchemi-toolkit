@@ -363,8 +363,10 @@ class ConservativeBias:
     def energy(self, current: Batch) -> Tensor:
         """Return bias energy ``[B, 1]`` (eV).
 
-        Must be differentiable w.r.t. ``current.positions`` (and
-        ``current.cell`` when stress is requested).
+        Must be differentiable w.r.t. ``current.positions`` and/or
+        ``current.cell``.  Depending on only one of the two is allowed: a
+        position-independent term (a volume restraint, say) yields zero
+        forces rather than an error.
 
         Parameters
         ----------
@@ -406,6 +408,15 @@ class ConservativeBias:
         strain leaf applied to the cell alone misses the position
         contribution and gives the wrong answer for pair restraints that
         span an image boundary.
+
+        Partial dependence
+        ------------------
+        :meth:`energy` need not depend on both positions and strain.  A term
+        that depends only on the cell — a volume restraint, a barostat-style
+        term — returns zero forces and a non-zero stress; a term that returns
+        a constant on some branch returns zeros for both.  These are ordinary
+        outcomes, not errors: the gradient of an energy with respect to
+        something it does not use is zero.
 
         Returns
         -------
@@ -460,16 +471,29 @@ class ConservativeBias:
                 bias_energy: Tensor = self.energy(current)  # [B, 1]
 
                 stress: Tensor | None = None
-                if strain_cell is not None and displacement is not None:
+                if not bias_energy.requires_grad:
+                    # An energy with no graph at all — a bias returning a
+                    # constant on this branch.  Every gradient is zero, but
+                    # autograd rejects such an output outright ("does not
+                    # require grad and does not have a grad_fn"), so fill the
+                    # zeros directly rather than calling it.
+                    forces = torch.zeros_like(pos_leaf)
+                    if strain_cell is not None:
+                        stress = torch.zeros_like(strain_cell)
+                elif strain_cell is not None and displacement is not None:
+                    # allow_unused: a bias need not depend on both positions
+                    # and strain.  A pure volume restraint has no position
+                    # dependence, and its zero force is an answer, not an error.
                     forces, stress = autograd_forces_and_stresses(
                         bias_energy,
                         pos_leaf,
                         displacement,
                         strain_cell,
                         current.num_graphs,
+                        allow_unused=True,
                     )
                 else:
-                    forces = autograd_forces(bias_energy, pos_leaf)
+                    forces = autograd_forces(bias_energy, pos_leaf, allow_unused=True)
 
             finally:
                 current["positions"] = original_positions
