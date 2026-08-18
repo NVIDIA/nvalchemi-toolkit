@@ -303,7 +303,75 @@ class TestForceStepOrdering:
         keys = set(runner.last_outputs)
         assert "physical/forces" in keys
         assert "bias/cf/forces" in keys
+        assert "bias_total/forces" in keys
         assert "total/forces" in keys
+
+    def test_total_is_physical_plus_bias(self, device: str) -> None:
+        """'total' must mean physical + bias, not the bias sum alone.
+
+        These differ by exactly the physical contribution, so a caller
+        plotting 'total/energy' as the system energy would silently get only
+        the restraint term.
+        """
+        batch = _make_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {
+                "a": _ConstantForceBias(1.0, name="a"),
+                "b": _ConstantForceBias(3.0, name="b"),
+            },
+        )
+        runner.prime_forces(batch)
+
+        physical = runner.last_outputs["physical/forces"]
+        bias_total = runner.last_outputs["bias_total/forces"]
+        total = runner.last_outputs["total/forces"]
+
+        assert torch.allclose(total, physical + bias_total, atol=1e-6)
+        assert torch.allclose(total, batch.forces, atol=1e-6)
+        assert not torch.allclose(total, bias_total, atol=1e-6), (
+            "total/* is still the bias sum; physical contribution missing"
+        )
+
+    def test_bias_total_is_sum_across_biases(self, device: str) -> None:
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {
+                "a": _ConstantForceBias(1.0, name="a"),
+                "b": _ConstantForceBias(3.0, name="b"),
+            },
+        )
+        runner.prime_forces(batch)
+        summed = (
+            runner.last_outputs["bias/a/forces"] + runner.last_outputs["bias/b/forces"]
+        )
+        assert torch.allclose(
+            runner.last_outputs["bias_total/forces"], summed, atol=1e-6
+        )
+
+    def test_total_energy_matches_batch(self, device: str) -> None:
+        batch = _make_batch(n_graphs=2, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"cf": _ConstantForceBias(2.0, name="cf")}
+        )
+        runner.prime_forces(batch)
+        assert torch.allclose(
+            runner.last_outputs["total/energy"].reshape(batch.energy.shape),
+            batch.energy,
+            atol=1e-6,
+        )
+
+    def test_total_snapshot_not_aliased_to_batch(self, device: str) -> None:
+        """A later in-place hook must not retroactively rewrite the record."""
+        batch = _make_batch(device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"cf": _ConstantForceBias(name="cf")}
+        )
+        runner.prime_forces(batch)
+        recorded = runner.last_outputs["total/forces"].clone()
+        batch.forces.mul_(0.0)
+        assert torch.allclose(runner.last_outputs["total/forces"], recorded)
 
     def test_observables_namespaced_by_bias_name(self, device: str) -> None:
         """Two biases emitting the same observable name must not collide."""

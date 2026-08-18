@@ -205,13 +205,23 @@ force alone.
 ### Diagnostics
 
 ```python
-sampling.last_outputs["physical/forces"]      # model only
-sampling.last_outputs["bias/umbrella/energy"] # one bias
-sampling.last_outputs["total/forces"]         # what the integrator used
+sampling.last_outputs["physical/forces"]       # model only, before any bias
+sampling.last_outputs["bias/umbrella/energy"]  # one bias's contribution
+sampling.last_outputs["bias_total/forces"]     # sum across all biases
+sampling.last_outputs["total/forces"]          # physical + bias
 ```
 
-These are the tensors a WHAM or MBAR post-processing step needs. Free-energy
-reconstruction is deliberately not built in — use `pymbar` or an equivalent.
+`total/*` is read back from the batch after the bias is applied, so
+`total == physical + bias_total`. Note that this is the state as the *runner*
+leaves it, not necessarily what the integrator consumed: the runner's hook runs
+first at `AFTER_COMPUTE` (so a force clamp acts on the total rather than the
+model force alone), which means a later hook can still modify `batch.forces`.
+Read the batch directly if you need the exact value the integrator used.
+
+For WHAM or MBAR you want `physical/energy` and the per-bias energies
+separately, not `total/energy` — the reweighting needs the unbiased potential.
+Free-energy reconstruction is deliberately not built in; use `pymbar` or an
+equivalent.
 
 ### Batch requirements
 

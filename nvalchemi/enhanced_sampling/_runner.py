@@ -187,8 +187,11 @@ class EnhancedSampling:
         if compile_biases:
             self._compile_bias_energies()
 
-        # Diagnostics from the most recent force evaluation, keyed
-        # 'bias/<name>/<field>' plus the 'physical/*' and 'total/*' views.
+        # Diagnostics from the most recent force evaluation:
+        #   physical/<field>        model only, before any bias
+        #   bias/<name>/<field>     one bias's contribution
+        #   bias_total/<field>      the sum across biases
+        #   total/<field>           physical + bias, read back from the batch
         self.last_outputs: dict[str, torch.Tensor] = {}
 
         # Per-bias observation captured at its observation_stage, consumed by
@@ -332,8 +335,9 @@ class EnhancedSampling:
         )
         self._record_diagnostics(results, total)
 
-        # 7. Apply the total contribution.
+        # 7. Apply the total contribution, then record the combined result.
         self._apply(batch, total)
+        self._record_totals(batch)
 
     def _namespace(self, name: str, result: BiasResult) -> BiasResult:
         """Return *result* with its observables prefixed ``bias/<name>/``.
@@ -368,14 +372,20 @@ class EnhancedSampling:
     def _record_diagnostics(
         self, results: dict[str, BiasResult], total: BiasResult
     ) -> None:
-        """Populate :attr:`last_outputs` with physical, per-bias, and total views.
+        """Populate :attr:`last_outputs` with the physical and bias views.
+
+        Writes ``physical/*``, ``bias/<name>/*``, and ``bias_total/*``.
+        ``total/*`` is *not* written here: at this point the bias has not
+        been applied yet, so there is no combined value to record.
+        :meth:`_record_totals` adds it afterwards.
 
         Parameters
         ----------
         results:
             Per-bias results, un-namespaced.
         total:
-            The aggregated result.
+            The aggregated bias result — the sum across biases, **not**
+            physical plus bias.
         """
         outputs: dict[str, torch.Tensor] = {}
         for key, value in self._physical.items():
@@ -390,8 +400,35 @@ class EnhancedSampling:
         for key in ("energy", "forces", "stress", "virial"):
             value = getattr(total, key)
             if value is not None:
-                outputs[f"total/{key}"] = value
+                outputs[f"bias_total/{key}"] = value
         self.last_outputs = outputs
+
+    def _record_totals(self, batch: Batch) -> None:
+        """Record ``total/*`` — physical plus bias — from the live batch.
+
+        Must run *after* :meth:`_apply`.  Reading the batch rather than
+        adding ``physical/*`` and ``bias_total/*`` back together keeps the
+        record faithful to what was actually written, including any reshape
+        :meth:`_apply` performed.
+
+        Parameters
+        ----------
+        batch:
+            The live batch, immediately after the bias has been applied.
+
+        Notes
+        -----
+        This is the state as the runner leaves it, not necessarily the state
+        the integrator sees.  The runner's hook is deliberately first at
+        ``AFTER_COMPUTE`` (so a force clamp acts on the total rather than on
+        the model force alone), which means any later hook at that stage can
+        still modify ``batch.forces`` afterwards.  Read the batch directly if
+        you need the value the integrator consumed.
+        """
+        for key in ("energy", "forces", "stress"):
+            value = getattr(batch, key, None)
+            if value is not None:
+                self.last_outputs[f"total/{key}"] = value.detach().clone()
 
     @staticmethod
     def _apply(batch: Batch, total: BiasResult) -> None:
@@ -527,6 +564,7 @@ class EnhancedSampling:
         )
         self._record_diagnostics(results, total)
         self._apply(batch, total)
+        self._record_totals(batch)
 
     # ------------------------------------------------------------------
     # Public API
