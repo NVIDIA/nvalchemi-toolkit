@@ -315,6 +315,45 @@ class TestBiasPotentialProtocol:
 
         assert not isinstance(NotABias(), BiasPotential)
 
+    def test_protocol_inherits_nothing(self) -> None:
+        """The boundary must stay inheritance-free.
+
+        A third party implementing a novel method must not be forced to
+        inherit BaseModelMixin, nn.Module, or anything else.  If this ever
+        fails, the Protocol has stopped being a structural boundary.
+        """
+        from typing import Generic, Protocol
+
+        from nvalchemi.models.base import BaseModelMixin
+
+        bases = set(BiasPotential.__mro__) - {
+            BiasPotential,
+            object,
+            Protocol,
+            Generic,
+        }
+        assert not bases, f"BiasPotential gained base classes: {bases}"
+        assert not issubclass(BiasPotential, BaseModelMixin)
+        assert not issubclass(BiasPotential, torch.nn.Module)
+
+    def test_plain_object_satisfies_protocol_without_any_base(self) -> None:
+        """A bias with no base class at all is a valid BiasPotential."""
+
+        class StandaloneBias:
+            name = "standalone"
+
+            def evaluate(self, current: Batch) -> BiasResult:
+                return BiasResult(energy=torch.zeros(current.num_graphs, 1))
+
+        bias = StandaloneBias()
+        assert isinstance(bias, BiasPotential)
+        assert type(bias).__mro__ == (StandaloneBias, object)
+
+    def test_conservative_bias_satisfies_protocol_via_mixins(self) -> None:
+        """ConservativeBias satisfies the protocol through composition."""
+        bias = _QuadraticBias()
+        assert isinstance(bias, BiasPotential)
+
 
 # ===========================================================================
 # 3. ConservativeBias — autograd helper
@@ -325,7 +364,7 @@ class _QuadraticBias(ConservativeBias):
     """E = 0.5 * k * ||positions||^2 per graph — analytically tractable."""
 
     def __init__(self, k: float = 1.0) -> None:
-        self.name = "quadratic"
+        super().__init__(name="quadratic")
         self.k = k
 
     def energy(self, current: Batch) -> Tensor:
@@ -344,7 +383,7 @@ class _PairDistanceBias(ConservativeBias):
     """E = 0.5 * k * pair_distance^2 — uses the pair_distance CV."""
 
     def __init__(self, atom_indices: Tensor, k: float = 1.0) -> None:
-        self.name = "pair_dist_bias"
+        super().__init__(name="pair_dist_bias")
         self.atom_indices = atom_indices
         self.k = k
 
@@ -365,7 +404,7 @@ class _AnisotropicBias(ConservativeBias):
     """
 
     def __init__(self) -> None:
-        self.name = "anisotropic"
+        super().__init__(name="anisotropic")
 
     def energy(self, current: Batch) -> Tensor:
         ptr = current.batch_ptr
@@ -380,7 +419,7 @@ class _CellVolumeBias(ConservativeBias):
     """E = (V - V0)^2 — depends on the cell but not on positions at all."""
 
     def __init__(self, target_volume: float = 900.0) -> None:
-        self.name = "cell_volume"
+        super().__init__(name="cell_volume")
         self.target_volume = target_volume
 
     def energy(self, current: Batch) -> Tensor:
@@ -396,7 +435,7 @@ class _ConstantBias(ConservativeBias):
     """
 
     def __init__(self, value: float = 3.0) -> None:
-        self.name = "constant"
+        super().__init__(name="constant")
         self.value = value
 
     def energy(self, current: Batch) -> Tensor:
@@ -618,16 +657,34 @@ class TestConservativeBias:
         assert result.stress is None
         assert result.virial is None
 
-    def test_supports_stress_false_skips_stress(self, device: str) -> None:
-        """``_supports_stress = False`` skips the strain leaf on a periodic batch."""
+    def test_compute_stress_false_skips_stress(self, device: str) -> None:
+        """``compute_stress=False`` drops 'stress' from active_outputs."""
 
         class _ForceOnlyBias(_QuadraticBias):
-            _supports_stress = False
+            def __init__(self) -> None:
+                super().__init__()
+                self.model_config.active_outputs = {"energy", "forces"}
+
+        bias = _ForceOnlyBias()
+        assert "stress" not in bias.model_config.active_outputs
+        # Capability is unchanged; only the runtime selection narrowed.
+        assert "stress" in bias.model_config.outputs
 
         batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
-        result = _ForceOnlyBias().evaluate(batch)
+        result = bias.evaluate(batch)
         assert result.forces is not None
         assert result.stress is None
+
+    def test_active_outputs_toggled_at_runtime(self, device: str) -> None:
+        """active_outputs is a runtime field: flipping it changes the result."""
+        batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
+        bias = _QuadraticBias()
+
+        assert bias.evaluate(batch).stress is not None
+        bias.model_config.active_outputs = {"energy", "forces"}
+        assert bias.evaluate(batch).stress is None
+        bias.model_config.active_outputs = {"energy", "forces", "stress"}
+        assert bias.evaluate(batch).stress is not None
 
     def test_live_batch_cell_restored(self, device: str) -> None:
         """batch.cell must be restored to the original tensor after evaluate()."""
@@ -766,6 +823,120 @@ class TestConservativeBias:
         r1 = bias.evaluate(batch)
         r2 = bias.evaluate(batch)
         assert result_close(r1, r2)
+
+
+class TestConservativeBiasModelMixin:
+    """ConservativeBias composes nn.Module + BaseModelMixin correctly."""
+
+    def test_mro_is_house_idiom(self) -> None:
+        """nn.Module before BaseModelMixin, as PyTorch requires."""
+        from nvalchemi.models.base import BaseModelMixin
+
+        mro = ConservativeBias.__mro__
+        assert issubclass(ConservativeBias, torch.nn.Module)
+        assert issubclass(ConservativeBias, BaseModelMixin)
+        assert mro.index(torch.nn.Module) < mro.index(BaseModelMixin)
+
+    def test_declares_model_config(self) -> None:
+        bias = _QuadraticBias()
+        assert bias.model_config.outputs == frozenset({"energy", "forces", "stress"})
+        assert bias.model_config.autograd_outputs == frozenset({"forces", "stress"})
+        assert bias.model_config.autograd_inputs == frozenset({"positions", "cell"})
+
+    def test_missing_super_init_raises(self) -> None:
+        """A subclass that forgets super().__init__() must fail loudly."""
+
+        class BrokenBias(ConservativeBias):
+            def __init__(self) -> None:
+                self.k = 1.0  # no super().__init__()
+
+            def energy(self, current: Batch) -> Tensor:
+                return torch.zeros(current.num_graphs, 1)
+
+        with pytest.raises((AttributeError, TypeError)):
+            BrokenBias()
+
+    def test_embeddings_stubbed_like_lj_and_dftd3(self) -> None:
+        bias = _QuadraticBias()
+        assert bias.embedding_shapes == {}
+        with pytest.raises(NotImplementedError, match="does not produce embeddings"):
+            bias.compute_embeddings(_make_nonperiodic_batch())
+
+    def test_export_model_raises(self, tmp_path) -> None:
+        with pytest.raises(NotImplementedError, match="no exportable model"):
+            _QuadraticBias().export_model(tmp_path / "x.pt")
+
+    def test_distribution_spec_is_none_by_default(self) -> None:
+        """None makes DomainParallel raise rather than shard undefined semantics."""
+        assert _QuadraticBias().distribution_spec() is None
+        assert _QuadraticBias().distribution_spec(strategy=None) is None
+
+    def test_distribution_spec_is_overridable(self) -> None:
+        """A bias that is genuinely local can declare its output semantics."""
+        from nvalchemi.distributed.output_kinds import OutputKind, OutputSpec, Reduce
+        from nvalchemi.distributed.spec import (
+            DistributionSpec,
+            HaloStoragePolicy,
+            MLIPSpec,
+        )
+
+        class LocalBias(_QuadraticBias):
+            def distribution_spec(self, strategy=None):
+                return MLIPSpec(
+                    distribution=DistributionSpec(policy=HaloStoragePolicy()),
+                    outputs={
+                        "energy": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),
+                        "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+                    },
+                )
+
+        spec = LocalBias().distribution_spec()
+        assert spec is not None
+        assert spec.output_kinds["forces"] is OutputKind.PER_NODE
+
+    def test_state_dict_round_trip(self) -> None:
+        """nn.Module gives checkpointing for free."""
+        bias = _QuadraticBias()
+        bias.register_buffer("counter", torch.tensor([3.0]))
+        state = bias.state_dict()
+        assert "counter" in state
+
+        restored = _QuadraticBias()
+        restored.register_buffer("counter", torch.zeros(1))
+        restored.load_state_dict(state)
+        assert torch.allclose(restored.counter, torch.tensor([3.0]))
+
+    def test_forward_returns_model_outputs(self, device: str) -> None:
+        """forward() is the ModelOutputs view of evaluate()."""
+        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        bias = _QuadraticBias(k=1.5)
+        outputs = bias(batch)
+
+        assert isinstance(outputs, dict)
+        assert set(outputs) == {"energy", "forces", "stress"}
+        reference = bias.evaluate(batch)
+        assert torch.allclose(outputs["energy"], reference.energy)
+        assert torch.allclose(outputs["stress"], reference.stress)
+
+    def test_forward_respects_active_outputs(self, device: str) -> None:
+        batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        bias = _QuadraticBias()
+        bias.model_config.active_outputs = {"energy"}
+        assert set(bias(batch)) == {"energy"}
+
+    def test_forward_output_sums_with_model_outputs(self, device: str) -> None:
+        """The point of ModelOutputs: bias output composes via sum_outputs."""
+        from nvalchemi.models._utils import sum_outputs
+
+        batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        bias_out = _QuadraticBias(k=1.0)(batch)
+        model_out = {
+            "energy": torch.ones(1, 1, device=device),
+            "forces": torch.ones(3, 3, device=device),
+        }
+        total = sum_outputs(model_out, bias_out)
+        assert torch.allclose(total["energy"], model_out["energy"] + bias_out["energy"])
+        assert torch.allclose(total["forces"], model_out["forces"] + bias_out["forces"])
 
 
 def result_close(a: BiasResult, b: BiasResult, atol: float = 1e-6) -> bool:

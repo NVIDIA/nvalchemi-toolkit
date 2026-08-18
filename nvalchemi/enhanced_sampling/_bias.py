@@ -37,10 +37,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -48,9 +48,15 @@ from nvalchemi.models._utils import (
     prepare_strain,
     sum_outputs,
 )
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
+    from pathlib import Path
+
+    from nvalchemi._typing import ModelOutputs
+    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.distributed.config import StrategyKind
+    from nvalchemi.distributed.spec import MLIPSpec
 
 __all__ = [
     "BiasResult",
@@ -239,8 +245,28 @@ def _validate_bias_result(result: BiasResult) -> None:
 class BiasPotential(Protocol):
     """Structural protocol for all enhanced-sampling bias potentials.
 
-    Every built-in bias satisfies this protocol.  Authors may also satisfy
-    it structurally (no inheritance required).
+    This is the **boundary**, and it deliberately inherits nothing.  A third
+    party implementing a novel method satisfies it structurally, with no
+    base class, no registration, and no dependency on anything in this
+    package beyond :class:`BiasResult`.
+
+    Batteries are supplied as **composable mixins that satisfy this protocol,
+    not as parallel hierarchies**.  A bias mixes in only what applies to it:
+
+    * :class:`ConservativeBias` — for a bias defined by a differentiable
+      energy.  It mixes in :class:`~nvalchemi.models.base.BaseModelMixin`,
+      because a conservative bias genuinely is an additive potential in this
+      toolkit's terms (``DFTD3ModelWrapper`` is the closest existing
+      analogue: a pure additive energy correction with no network and no
+      embeddings).  That inheritance is what supplies ``model_config``,
+      ``active_outputs``, ``distribution_spec``, and ``+`` composition.
+    * A non-conservative bias such as ABF applies forces directly with no
+      energy to differentiate, so it must **not** be forced through
+      :class:`ConservativeBias`.  It implements this protocol directly, or
+      mixes in the adaptive/checkpointing batteries only.
+
+    The rule: inheritance is opt-in per capability.  Nothing here makes "a
+    bias is a model" true by fiat for cases where it is not.
 
     Attributes
     ----------
@@ -292,8 +318,37 @@ class BiasPotential(Protocol):
 # ---------------------------------------------------------------------------
 
 
-class ConservativeBias:
+class ConservativeBias(nn.Module, BaseModelMixin):
     """Autograd helper that derives atomic forces and stress from energy.
+
+    Composed as ``nn.Module, BaseModelMixin`` — the house multiple-inheritance
+    idiom (``LennardJonesModelWrapper(nn.Module, BaseModelMixin)``,
+    ``TrainingStrategy(BaseModel, HookRegistryMixin)``).
+    ``BaseModelMixin.__init_subclass__`` is cooperative (it calls
+    ``super().__init_subclass__(**kwargs)``), so it composes correctly with
+    further mixins added later for adaptive or checkpointable biases.
+
+    A conservative bias is an additive potential with no learned parameters,
+    which is exactly the shape of ``DFTD3ModelWrapper`` and
+    ``LennardJonesModelWrapper``.  The cost of the abstraction is the two
+    ``BaseModelMixin`` abstract methods (:attr:`embedding_shapes` and
+    :meth:`compute_embeddings`), stubbed here the same way those two wrappers
+    stub them.  What it buys:
+
+    * ``model_config.active_outputs`` declares which outputs this bias
+      produces, replacing an ad-hoc private flag.
+    * :meth:`distribution_spec` gives domain decomposition a defined answer
+      instead of an undefined one — see that method for why the default is
+      deliberately ``None``.
+    * ``+`` composition with a model via ``PipelineModelWrapper``, and
+      ``state_dict``/``load_state_dict`` from ``nn.Module`` for checkpointing.
+
+    .. note::
+
+        Subclasses **must** call ``super().__init__(name=...)``.  This is the
+        ``nn.Module`` requirement (attribute assignment before
+        ``Module.__init__`` raises), and ``BaseModelMixin.__init_subclass__``
+        additionally verifies ``self.model_config`` is set after construction.
 
     Subclass ``ConservativeBias`` and override :meth:`energy` to return a
     differentiable per-graph bias energy ``[B, 1]``.  The base class
@@ -340,10 +395,12 @@ class ConservativeBias:
         interaction.
 
     Stress computation
-        Stress is computed only when the batch carries a cell and at least
-        one periodic dimension.  Subclasses that never need stress may set
-        ``_supports_stress = False`` to skip the strain leaf entirely.
-        There is no ``compute_stress`` constructor parameter.
+        Stress is computed only when the batch carries a cell, has at least
+        one periodic dimension, **and** ``"stress"`` is in
+        ``model_config.active_outputs``.  A bias that never needs a cell
+        response passes ``compute_stress=False`` to :meth:`__init__`, which
+        drops ``"stress"`` from ``active_outputs``; callers may also flip it
+        at runtime the same way they would on any model wrapper.
 
     torch.compile compatibility
         :meth:`evaluate` runs in eager mode.  It uses
@@ -356,10 +413,138 @@ class ConservativeBias:
         ``torch.compile`` to each bias's ``energy()`` override only.
     """
 
-    # Subclasses may set this to False to skip stress computation even when
-    # a periodic cell is present (e.g. force-only biases that extend
-    # ConservativeBias but never need a cell response).
-    _supports_stress: bool = True
+    def __init__(self, name: str, *, compute_stress: bool = True) -> None:
+        """Initialise the bias and declare its output capabilities.
+
+        Parameters
+        ----------
+        name:
+            Unique identifier, used as a dict key in
+            ``EnhancedSampling(biases={...})`` and as a checkpoint group
+            name.  Satisfies the :class:`BiasPotential` protocol's ``name``.
+        compute_stress:
+            When ``False``, ``"stress"`` is dropped from
+            ``model_config.active_outputs`` and the strain leaf is skipped
+            entirely.  Use for force-only biases.
+        """
+        super().__init__()
+        self.name = name
+        outputs = {"energy", "forces", "stress"}
+        self.model_config = ModelConfig(
+            outputs=frozenset(outputs),
+            autograd_outputs=frozenset({"forces", "stress"}),
+            autograd_inputs=frozenset({"positions", "cell"}),
+            supports_pbc=True,
+            needs_pbc=False,
+            active_outputs=outputs if compute_stress else {"energy", "forces"},
+        )
+
+    # ------------------------------------------------------------------
+    # BaseModelMixin required surface
+    # ------------------------------------------------------------------
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """No embeddings: a bias potential is a closed-form energy term."""
+        return {}
+
+    def compute_embeddings(
+        self, data: AtomicData | Batch, **kwargs: Any
+    ) -> AtomicData | Batch:
+        """Not implemented — a bias potential produces no embeddings.
+
+        Follows the same stub as ``LennardJonesModelWrapper`` and
+        ``DFTD3ModelWrapper``, which are pure-physics potentials with no
+        learned representation.
+
+        Parameters
+        ----------
+        data:
+            The input system.
+        **kwargs:
+            Unused; accepted for interface compatibility.
+
+        Returns
+        -------
+        AtomicData | Batch
+            Never returns.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not produce embeddings.")
+
+    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
+        """Not implemented — a bias has no underlying model to export.
+
+        Parameters
+        ----------
+        path:
+            Unused.
+        as_state_dict:
+            Unused.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.  Use ``state_dict()`` to checkpoint bias state.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} has no exportable model; use state_dict()."
+        )
+
+    def distribution_spec(
+        self, strategy: StrategyKind | None = None
+    ) -> MLIPSpec | None:
+        """Return ``None``: a bias does not claim domain-decomposition support.
+
+        ``None`` is not an oversight, and it is not the same as "unsupported
+        forever" — it makes ``DistributedModel`` raise ``DistributionError``
+        rather than shard a bias whose cross-rank semantics are undefined
+        (an explicit ``DistributedModel(bias, cfg, spec=...)`` remains the
+        escape hatch for a caller who knows better).  Before this class mixed
+        in ``BaseModelMixin`` there was no way to express any of this, so a
+        biased simulation under domain decomposition had no defined
+        behaviour.  Now it fails loudly.
+
+        The default cannot be a halo preset, because a bias is not
+        necessarily local the way a cutoff potential is.  A CV can couple
+        atoms in different domains by construction: ``pair_distance`` over
+        two atoms on opposite sides of the cell has no cutoff, and an RMSD
+        bias reads every atom.  ``SPEC_LJ_HALO`` is correct for LJ precisely
+        because a halo exchange covers its interaction range; nothing
+        guarantees that for an arbitrary CV.
+
+        A bias that *is* local should override this and declare its outputs,
+        e.g.::
+
+            def distribution_spec(self, strategy=None):
+                return MLIPSpec(
+                    distribution=DistributionSpec(policy=HaloStoragePolicy()),
+                    outputs={
+                        "energy": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),
+                        "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+                        "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),
+                    },
+                )
+
+        Parameters
+        ----------
+        strategy:
+            Accepted for the framework contract; ignored by the default.
+
+        Returns
+        -------
+        MLIPSpec | None
+            Always ``None`` unless a subclass overrides.
+        """
+        return None
+
+    # ------------------------------------------------------------------
+    # Bias surface
+    # ------------------------------------------------------------------
 
     def energy(self, current: Batch) -> Tensor:
         """Return bias energy ``[B, 1]`` (eV).
@@ -436,9 +621,10 @@ class ConservativeBias:
         # volume would turn the stress into Inf, so gate on periodicity too.
         # bool(pbc.any()) is a data-dependent branch, which is safe here
         # because evaluate() is eager-only.
+        wants_stress = "stress" in (self.model_config.active_outputs or set())
         strain_cell: Tensor | None = None
         if (
-            self._supports_stress
+            wants_stress
             and original_cell is not None
             and (pbc is None or bool(pbc.any()))
         ):
@@ -506,6 +692,40 @@ class ConservativeBias:
             forces=forces.detach(),
             stress=None if stress is None else stress.detach(),
         )
+
+    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
+        """Evaluate the bias and return its contribution as ``ModelOutputs``.
+
+        The ``BaseModelMixin`` view of :meth:`evaluate`.  Keys are restricted
+        to ``model_config.active_outputs``, so this composes with
+        ``sum_outputs`` and with a model via ``+``.
+
+        :meth:`evaluate` remains the :class:`BiasPotential` entry point and
+        is what the enhanced-sampling runner calls: ``BiasResult`` carries
+        ``observables`` and ``state_version``, which have no place in
+        ``ModelOutputs``, and those are dropped here.
+
+        Parameters
+        ----------
+        data:
+            The current batch.
+        **kwargs:
+            Unused; accepted for interface compatibility.
+
+        Returns
+        -------
+        ModelOutputs
+            ``energy``, ``forces``, and — when active and the batch is
+            periodic — ``stress``.
+        """
+        result = self.evaluate(data)  # type: ignore[arg-type]
+        active = self.model_config.active_outputs or set()
+        outputs: ModelOutputs = {}
+        for key in ("energy", "forces", "stress"):
+            value = getattr(result, key)
+            if value is not None and key in active:
+                outputs[key] = value
+        return outputs
 
 
 # ---------------------------------------------------------------------------
