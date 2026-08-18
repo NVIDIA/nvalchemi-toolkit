@@ -549,7 +549,7 @@ jobs:
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
 
       - name: Run UMA multi-GPU tests (.venv-uma)
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
@@ -557,7 +557,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase \
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase --no-group build \
             pytest -m multigpu \
             test/distributed/model/test_uma_multigpu.py \
             test/distributed/model/test_uma_gp_partition_multigpu.py
