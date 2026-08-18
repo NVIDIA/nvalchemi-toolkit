@@ -20,7 +20,8 @@ Public surface
 * :class:`BiasPotential` — ``@runtime_checkable`` Protocol; structural
   interface every bias must satisfy.
 * :class:`ConservativeBias` — autograd helper; subclass and override
-  :meth:`~ConservativeBias.energy` to get forces and virial for free.
+  :meth:`~ConservativeBias.energy` to get forces and tensile-positive
+  Cauchy stress for free.
 * :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
 * :func:`pair_distance` — differentiable pair-distance CV; supports
   nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC

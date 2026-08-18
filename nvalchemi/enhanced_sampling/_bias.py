@@ -27,10 +27,10 @@ Design guarantees
 * ``BiasPotential`` is a ``@runtime_checkable`` Protocol.  Bias authors
   may satisfy it structurally without inheriting from any base class.
 * ``ConservativeBias`` encapsulates the autograd subgraph that derives
-  atomic forces and the canonical cell virial from a scalar energy
-  function.  The subgraph is isolated from the live ``Batch`` so that no
-  ``requires_grad`` leaf ever escapes into model state, batch storage, or
-  ``BiasResult``.
+  atomic forces and the tensile-positive Cauchy stress from a scalar
+  energy function.  The subgraph is isolated from the live ``Batch`` so
+  that no ``requires_grad`` leaf ever escapes into model state, batch
+  storage, or ``BiasResult``.
 """
 
 from __future__ import annotations
@@ -41,6 +41,12 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
+
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    prepare_strain,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
@@ -73,11 +79,15 @@ class BiasResult:
     forces:
         Per-atom bias forces, shape ``[N_atoms, 3]``, unit eV/Å.
     stress:
-        Tensile-positive Cauchy stress, shape ``[B, 3, 3]``.
-        Mutually exclusive with ``virial``.
+        Tensile-positive Cauchy stress ``σ = −W/V``, shape ``[B, 3, 3]``,
+        unit eV/Å³.  This is the toolkit-wide convention and what
+        :class:`ConservativeBias` produces.  Mutually exclusive with
+        ``virial``.
     virial:
-        Canonical virial ``W = −dE/dstrain``, shape ``[B, 3, 3]``.
-        Mutually exclusive with ``stress``.
+        Virial ``W = −dE/dε`` with ``ε`` the symmetric infinitesimal
+        strain tensor, shape ``[B, 3, 3]``, unit eV.  Provided for biases
+        that compute a virial directly.  Mutually exclusive with
+        ``stress``.
     state_version:
         Integer version IDs used by ``ReplicaExchange`` to validate that
         accepted state assignments are coherent, shape ``[B]``.
@@ -282,7 +292,7 @@ class BiasPotential(Protocol):
 
 
 class ConservativeBias:
-    """Autograd helper that derives atomic forces and cell virial from energy.
+    """Autograd helper that derives atomic forces and stress from energy.
 
     Subclass ``ConservativeBias`` and override :meth:`energy` to return a
     differentiable per-graph bias energy ``[B, 1]``.  The base class
@@ -291,19 +301,14 @@ class ConservativeBias:
     1. Enters a local ``torch.enable_grad()`` region (safe inside
        ``torch.no_grad()`` outer contexts).
     2. Creates a detached positions leaf ``pos_leaf`` (for forces) and,
-       when a cell is present and ``_supports_virial=True``, a per-graph
-       strain leaf ``F_b`` of shape ``[B, 3, 3]`` initialised to the
-       identity (for the canonical cell virial).
-    3. Right-multiplies both positions and cell by ``F_b`` so that a single
-       ``autograd.grad`` call on the strained batch yields forces from
-       ``dE/d(pos_leaf)`` and the canonical virial ``W = −dE/dF_b``.
-       The batch is restored to its original tensors unconditionally in a
-       ``finally`` block.
-    4. Derives forces and virial in one ``autograd.grad`` call with
-       ``create_graph=False, retain_graph=False``.
+       for periodic batches, a per-graph strain leaf via
+       :func:`~nvalchemi.models._utils.prepare_strain` (for stress).
+    3. Substitutes the strained positions and cell into the batch, calls
+       :meth:`energy`, and restores the original tensors unconditionally
+       in a ``finally`` block.
+    4. Derives forces and stress in one ``autograd.grad`` call through
+       :func:`~nvalchemi.models._utils.autograd_forces_and_stresses`.
     5. Constructs a ``BiasResult`` from fully detached output tensors.
-    6. Drops all references to the autograd subgraph before returning, so
-       that no ``grad_fn`` ever escapes into the live batch or result.
 
     The framework must never place a tensor with ``requires_grad=True`` or
     a non-null ``grad_fn`` into the live ``Batch``, ``BiasResult``,
@@ -311,11 +316,33 @@ class ConservativeBias:
 
     Notes
     -----
-    Virial computation
-        Virial is controlled by the class attribute ``_supports_virial``
-        (default ``True``).  Subclasses that never need virial may set
-        ``_supports_virial = False`` to skip the strain-leaf construction.
-        There is no ``compute_virial`` constructor parameter.
+    Stress rather than virial
+        ``evaluate`` populates :attr:`BiasResult.stress`, never
+        :attr:`BiasResult.virial`.  Tensile-positive Cauchy stress is the
+        toolkit-wide public convention: every model wrapper emits
+        ``"stress"``, ``sum_outputs`` treats it as additive, and the
+        NPT/NPH integrators read ``batch.stress``.  Emitting stress lets a
+        bias contribution be summed directly with model outputs with no
+        volume conversion at the boundary.  ``BiasResult.virial`` remains
+        available for hand-written biases that produce a virial directly.
+
+    Strain convention
+        The strain leaf comes from
+        :func:`~nvalchemi.models._utils.prepare_strain`, which applies only
+        the symmetric part of the leaf as strain.  The resulting gradient
+        is therefore symmetric by construction, matching the project
+        definition ``W_ab = −dE/dε_ab`` with ``ε`` the symmetric
+        infinitesimal strain tensor (see
+        :doc:`/userguide/about/conventions`).  Differentiating with respect
+        to the full (unsymmetrised) deformation gradient instead yields an
+        asymmetric tensor for any bias that is not a central pair
+        interaction.
+
+    Stress computation
+        Stress is computed only when the batch carries a cell and at least
+        one periodic dimension.  Subclasses that never need stress may set
+        ``_supports_stress = False`` to skip the strain leaf entirely.
+        There is no ``compute_stress`` constructor parameter.
 
     torch.compile compatibility
         :meth:`evaluate` runs in eager mode.  It uses
@@ -328,145 +355,131 @@ class ConservativeBias:
         ``torch.compile`` to each bias's ``energy()`` override only.
     """
 
-    # Subclasses may set this to False to skip virial computation even when
-    # a cell is present (e.g. force-only biases that extend ConservativeBias
-    # but never need stress/virial).
-    _supports_virial: bool = True
+    # Subclasses may set this to False to skip stress computation even when
+    # a periodic cell is present (e.g. force-only biases that extend
+    # ConservativeBias but never need a cell response).
+    _supports_stress: bool = True
 
     def energy(self, current: Batch) -> Tensor:
         """Return bias energy ``[B, 1]`` (eV).
 
         Must be differentiable w.r.t. ``current.positions`` (and
-        ``current.cell`` when virial is requested).
+        ``current.cell`` when stress is requested).
 
         Parameters
         ----------
         current:
-            A *read-only view* of the live batch where ``positions`` has
-            been replaced by ``pos_leaf @ strain_per_atom`` and ``cell``
-            (when present) by ``cell.detach() @ strain_leaf``.  Do not
-            assign to any batch field inside this method.
+            A *read-only view* of the live batch whose ``positions`` and
+            ``cell`` have been replaced by their strained counterparts from
+            :func:`~nvalchemi.models._utils.prepare_strain`.  Do not assign
+            to any batch field inside this method.
         """
         raise NotImplementedError(
             f"{type(self).__name__} must implement energy(self, current: Batch) -> Tensor"
         )
 
     def evaluate(self, current: Batch) -> BiasResult:
-        """Compute energy, forces, and canonical cell virial via autograd.
+        """Compute energy, forces, and Cauchy stress via autograd.
 
-        This method runs in eager mode.  See class docstring for the
+        This method runs in eager mode.  See the class docstring for the
         compile boundary note and the chosen fallback.
 
-        Virial derivation
+        Stress derivation
         -----------------
-        The canonical virial is ``W = −dE/dstrain`` evaluated at the
-        identity strain.  Under a homogeneous deformation ``F`` (ASE
-        row-vector convention), both atomic positions and the cell
-        transform together::
+        Under a homogeneous strain ``ε`` (ASE row-vector convention), both
+        atomic positions and the cell deform together::
 
-            r_n → r_n @ F
-            cell_b → cell_b @ F
+            r_n    → r_n    @ (I + ε)
+            cell_b → cell_b @ (I + ε)
 
-        A per-graph strain leaf ``F_b`` (initialised to ``I``) is applied
-        to both, and a single ``autograd.grad`` call then yields:
+        :func:`~nvalchemi.models._utils.prepare_strain` applies exactly this
+        deformation through a leaf whose symmetric part is used, so a single
+        ``autograd.grad`` call yields:
 
-        * ``dE/d(pos_leaf[n])`` at ``F=I`` → forces (negated).
-        * ``dE/d(F_b)`` at ``F=I`` → canonical virial ``W_b = −dE/dF_b``.
+        * ``dE/d(pos_leaf[n])`` at ``ε=0`` → forces (negated).
+        * ``dE/dε`` at ``ε=0`` → ``σ = (dE/dε) / V``, tensile-positive
+          Cauchy stress, equivalently ``σ = −W/V``.
 
-        This is the correct formulation for position-dependent biases that
-        use MIC displacements: the position term ``Σ_n r_n ⊗ (−F_n)`` and
-        the cell gradient term are automatically combined.  Using an
-        independent cell leaf (without straining positions) misses the
-        position contribution and returns incorrect virials for pair
-        restraints across image boundaries.
+        Straining positions and cell together is what makes this correct for
+        position-dependent biases built on MIC displacements: the position
+        term and the cell gradient term are combined automatically.  A
+        strain leaf applied to the cell alone misses the position
+        contribution and gives the wrong answer for pair restraints that
+        span an image boundary.
+
+        Returns
+        -------
+        BiasResult
+            With ``energy``, ``forces``, and — for periodic batches —
+            ``stress``.  ``virial`` is always ``None``; see the class
+            docstring for why stress is the chosen field.
         """
-        has_cell = (
-            self._supports_virial
-            and getattr(current, "cell", None) is not None
-            and current.cell is not None
-        )
-
-        B = current.num_graphs
         original_positions = current.positions
-        original_cell = current.cell if has_cell else None
+        original_cell = getattr(current, "cell", None)
+        pbc = getattr(current, "pbc", None)
+        cell_is_4d = original_cell is not None and original_cell.dim() == 4
+
+        # Stress needs a cell to strain and a non-zero volume to divide by.  A
+        # batch may carry a placeholder cell with pbc all-False, whose zero
+        # volume would turn the stress into Inf, so gate on periodicity too.
+        # bool(pbc.any()) is a data-dependent branch, which is safe here
+        # because evaluate() is eager-only.
+        strain_cell: Tensor | None = None
+        if (
+            self._supports_stress
+            and original_cell is not None
+            and (pbc is None or bool(pbc.any()))
+        ):
+            # Detach the stored cell so only the strain leaf carries the
+            # gradient; a [B, 1, 3, 3] cell is squeezed to [B, 3, 3].
+            strain_cell = original_cell.detach()
+            if cell_is_4d:
+                strain_cell = strain_cell.squeeze(1)
 
         with torch.enable_grad():
-            # --- Positions leaf (for forces) --------------------------------
             # requires_grad_() is not supported by torch.compile; evaluate()
             # is intentionally kept eager (see class docstring).
-            pos_leaf = current.positions.detach().requires_grad_(True)  # [N, 3]
+            pos_leaf = original_positions.detach().requires_grad_(True)  # [N, 3]
 
-            # --- Per-graph strain leaf (for canonical virial) ---------------
-            # Initialised to the identity; both positions and cell are
-            # right-multiplied by F_b so that dE/dF_b|_{F=I} = −W_b.
-            strain_leaf: Tensor | None = None
+            displacement: Tensor | None = None
             pos_for_energy: Tensor = pos_leaf
+            cell_for_energy: Tensor | None = None
 
-            if has_cell:
-                cell = original_cell
-                if cell is not None and cell.dim() == 4:
-                    cell = cell.squeeze(1)  # [B, 3, 3]
-
-                strain_leaf = (
-                    torch.eye(3, device=pos_leaf.device, dtype=pos_leaf.dtype)
-                    .unsqueeze(0)
-                    .expand(B, -1, -1)
-                    .clone()
-                    .requires_grad_(True)
-                )  # [B, 3, 3]
-
-                # Apply per-graph strain to each atom's position:
-                # pos_n → pos_n @ F_{b(n)}
-                strain_per_atom = strain_leaf[current.batch_idx]  # [N, 3, 3]
-                pos_for_energy = torch.einsum(
-                    "nk,nkj->nj", pos_leaf, strain_per_atom
-                )  # [N, 3]
-
-                # Apply per-graph strain to the cell:  cell_b → cell_b @ F_b
-                # Detach the stored cell values; only F carries the gradient.
-                cell_for_energy = torch.bmm(cell.detach(), strain_leaf)  # [B, 3, 3]
+            if strain_cell is not None:
+                pos_for_energy, cell_for_energy, displacement = prepare_strain(
+                    pos_leaf, strain_cell, current.batch_idx
+                )
 
             try:
                 current["positions"] = pos_for_energy
-                if has_cell and strain_leaf is not None:
-                    # Store in the same shape as the original cell tensor.
-                    stored = cell_for_energy  # type: ignore[possibly-undefined]
-                    if original_cell is not None and original_cell.dim() == 4:
-                        stored = stored.unsqueeze(1)
-                    current["cell"] = stored
+                if cell_for_energy is not None:
+                    current["cell"] = (
+                        cell_for_energy.unsqueeze(1) if cell_is_4d else cell_for_energy
+                    )
 
                 bias_energy: Tensor = self.energy(current)  # [B, 1]
 
-                inputs: list[Tensor] = [pos_leaf]
-                if strain_leaf is not None:
-                    inputs.append(strain_leaf)
-
-                grads = torch.autograd.grad(
-                    outputs=(bias_energy,),
-                    inputs=inputs,
-                    grad_outputs=(torch.ones_like(bias_energy),),
-                    create_graph=False,
-                    retain_graph=False,
-                    allow_unused=False,
-                )
+                stress: Tensor | None = None
+                if strain_cell is not None and displacement is not None:
+                    forces, stress = autograd_forces_and_stresses(
+                        bias_energy,
+                        pos_leaf,
+                        displacement,
+                        strain_cell,
+                        current.num_graphs,
+                    )
+                else:
+                    forces = autograd_forces(bias_energy, pos_leaf)
 
             finally:
                 current["positions"] = original_positions
-                if has_cell and original_cell is not None:
+                if original_cell is not None:
                     current["cell"] = original_cell
-
-        # grads[0] = dE/d(pos_leaf) at strain=I → forces = −grad.
-        forces = -grads[0].detach()  # [N, 3]
-
-        virial: Tensor | None = None
-        if strain_leaf is not None and len(grads) > 1 and grads[1] is not None:
-            # grads[1] = dE/dF_b at F=I; canonical virial W_b = −dE/dF_b.
-            virial = -grads[1].detach()  # [B, 3, 3]
 
         return BiasResult(
             energy=bias_energy.detach(),
-            forces=forces,
-            virial=virial,
+            forces=forces.detach(),
+            stress=None if stress is None else stress.detach(),
         )
 
 

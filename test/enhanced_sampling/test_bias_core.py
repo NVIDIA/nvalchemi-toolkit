@@ -21,9 +21,9 @@ Covers:
 * :class:`~nvalchemi.enhanced_sampling.BiasPotential` — structural
   Protocol check.
 * :class:`~nvalchemi.enhanced_sampling.ConservativeBias` — forces and
-  virial from autograd; compare with finite differences; no
-  ``requires_grad`` escape into live batch or result; no memory growth
-  across 10 repeated evaluations.
+  tensile-positive Cauchy stress from autograd; compare both with finite
+  differences; stress symmetry; no ``requires_grad`` escape into live
+  batch or result; no memory growth across 10 repeated evaluations.
 * :func:`~nvalchemi.enhanced_sampling.pair_distance` — nonperiodic and
   Minkowski-reduced triclinic MIC; shared and per-graph atom indices;
   gradients via ``torch.autograd.gradcheck``; compile-stability under
@@ -353,6 +353,29 @@ class _PairDistanceBias(ConservativeBias):
         return 0.5 * self.k * d**2  # [B, 1]
 
 
+class _AnisotropicBias(ConservativeBias):
+    """E = sum_n (x_n * y_n) per graph — couples distinct Cartesian components.
+
+    Because the energy mixes the x and y components rather than depending
+    only on interatomic distances, its derivative with respect to the full
+    deformation gradient F is asymmetric.  The derivative with respect to
+    the symmetric strain tensor eps is symmetric, which is what the project
+    virial/stress convention requires.  A bias like this is what
+    distinguishes the two derivatives; a central pair interaction does not.
+    """
+
+    def __init__(self) -> None:
+        self.name = "anisotropic"
+
+    def energy(self, current: Batch) -> Tensor:
+        ptr = current.batch_ptr
+        energies = []
+        for b in range(current.num_graphs):
+            pos_b = current.positions[ptr[b] : ptr[b + 1]]
+            energies.append((pos_b[:, 0] * pos_b[:, 1]).sum())
+        return torch.stack(energies).unsqueeze(-1)  # [B, 1]
+
+
 class TestConservativeBias:
     """Tests for ConservativeBias autograd helper."""
 
@@ -475,40 +498,38 @@ class TestConservativeBias:
                 f"GPU memory grew by {mem_end - mem_start} bytes across 10 evaluate() calls"
             )
 
-    def test_virial_canonical_analytical(self, device: str) -> None:
-        """Canonical virial W = −dE/dstrain is correct for a pair bias across an image.
+    def test_stress_analytical_across_image_boundary(self, device: str) -> None:
+        """Cauchy stress is correct for a pair bias whose MIC vector crosses an image.
 
         Setup
         -----
-        Box: 10 Å cubic. Atom 0 at [0.5, 0, 0], atom 1 at [9.5, 0, 0].
-        MIC distance = 1 Å (image at x − 10, so dr_mic = [−1, 0, 0]).
-        Bias: E = 0.5 · k · d²  (k = 1 eV/Å²).
+        Box: 10 Å cubic (V = 1000 Å³). Atom 0 at [0.5, 0, 0], atom 1 at
+        [9.5, 0, 0].  MIC distance = 1 Å (image at x − 10, so
+        dr_mic = [−1, 0, 0]).  Bias: E = 0.5 · k · d²  (k = 1 eV/Å²).
 
         Analytical derivation
         ---------------------
-        Under a homogeneous strain F both positions and cell right-multiply:
-            r_n → r_n @ F,  cell → cell @ F
-            dr_mic → dr_mic @ F   (image index n = [−1,0,0] is fixed)
-            d = |dr_mic @ F|
+        Under a homogeneous symmetric strain ε both positions and cell deform,
+        so the MIC vector deforms with them (the image index [−1, 0, 0] is
+        fixed)::
 
-        dE/d(F_{kl})|_{F=I} = k · dr_mic[k] · dr_mic[l]
-        W_{kl} = −k · dr_mic[k] · dr_mic[l]
+            dr_mic → dr_mic @ (I + ε)
+            d²     = |dr_mic|² + 2 · dr_mic · ε · dr_micᵀ + O(ε²)
 
-        For dr_mic = [−1, 0, 0]:  W[0,0] = −1 eV,  all other elements = 0.
+        dE/dε_kl |_{ε=0} = k · dr_mic[k] · dr_mic[l]
+        σ_kl = (dE/dε_kl) / V = k · dr_mic[k] · dr_mic[l] / V
+
+        For dr_mic = [−1, 0, 0], k = 1, V = 1000:
+        σ[0,0] = +1e-3 eV/Å³, all other elements = 0.  Positive (tensile) is
+        the expected sign: the harmonic restraint pulls the two atoms together.
 
         This is only correct when positions and cell are strained together.
-        Using an independent cell leaf (the prior implementation) misses the
-        atomic position contribution and returns the wrong virial.
+        A strain leaf applied to the cell alone misses the atomic-position
+        contribution and returns the wrong answer.
         """
-        if device == "cuda":
-            pytest.skip(
-                "Strain-based virial on CUDA triggers a cudagraph_trees assertion "
-                "in this environment.  CPU correctness is verified here; CUDA will "
-                "be covered in the GPU integration test suite."
-            )
-
         k = 1.0
         box = 10.0
+        volume = box**3
         # MIC distance = |9.5 - 0.5 - 10| = 1 Å; dr_mic = [-1, 0, 0]
         positions = torch.tensor([[0.5, 0.0, 0.0], [9.5, 0.0, 0.0]])
         cell = torch.eye(3).unsqueeze(0) * box  # [1, 3, 3]
@@ -525,20 +546,125 @@ class TestConservativeBias:
         bias = _PairDistanceBias(atom_indices=idx, k=k)
         result = bias.evaluate(batch)
 
-        assert result.virial is not None, "virial should be non-None for periodic batch"
-        assert result.virial.shape == (1, 3, 3)
+        assert result.stress is not None, "stress should be non-None for periodic batch"
+        assert result.stress.shape == (1, 3, 3)
+        assert result.virial is None, "ConservativeBias emits stress, not virial"
 
-        # Analytical: W = −k · outer(dr_mic, dr_mic)
-        # dr_mic = [−1, 0, 0]  →  W = [[-1,0,0],[0,0,0],[0,0,0]]
-        # W[0,0] = -1,  all other elements = 0
-        W = result.virial[0]  # [3, 3]
-        assert torch.allclose(W[0, 0], torch.tensor(-k, device=device), atol=1e-4), (
-            f"W[0,0] = {W[0, 0].item():.6f}, expected {-k:.6f}. "
-            "Virial may be missing the atomic-position contribution (strain not "
-            "applied to both positions and cell simultaneously)."
+        # Analytical: σ = k · outer(dr_mic, dr_mic) / V with dr_mic = [−1, 0, 0]
+        expected = torch.zeros(3, 3, device=device)
+        expected[0, 0] = k / volume
+        sigma = result.stress[0]  # [3, 3]
+        assert torch.allclose(sigma, expected, atol=1e-8), (
+            f"stress = {sigma}, expected {expected}.  Stress may be missing the "
+            "atomic-position contribution (strain not applied to both positions "
+            "and cell simultaneously)."
         )
-        assert torch.allclose(W[1:, :], torch.zeros(2, 3, device=device), atol=1e-4), (
-            f"Off-diagonal/off-axis virial elements should be zero, got {W}"
+
+    def test_stress_is_symmetric(self, device: str) -> None:
+        """Stress must be symmetric: the project strain tensor ε is symmetric.
+
+        A bias whose energy is not a central pair interaction is the case that
+        distinguishes a symmetric strain derivative from a raw deformation
+        gradient derivative.  ``_AnisotropicBias`` below uses a per-component
+        weighting so that dE/dF is asymmetric while dE/dε is not.
+        """
+        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=5, device=device)
+        bias = _AnisotropicBias()
+        result = bias.evaluate(batch)
+
+        assert result.stress is not None
+        sigma = result.stress
+        assert torch.allclose(sigma, sigma.mT, atol=1e-6), (
+            f"stress is not symmetric:\n{sigma}\nvs transpose\n{sigma.mT}"
+        )
+
+    def test_no_stress_for_nonperiodic_batch(self, device: str) -> None:
+        """A batch with no cell yields forces but no stress."""
+        batch = _make_nonperiodic_batch(device=device)
+        result = _QuadraticBias().evaluate(batch)
+        assert result.forces is not None
+        assert result.stress is None
+        assert result.virial is None
+
+    def test_supports_stress_false_skips_stress(self, device: str) -> None:
+        """``_supports_stress = False`` skips the strain leaf on a periodic batch."""
+
+        class _ForceOnlyBias(_QuadraticBias):
+            _supports_stress = False
+
+        batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
+        result = _ForceOnlyBias().evaluate(batch)
+        assert result.forces is not None
+        assert result.stress is None
+
+    def test_live_batch_cell_restored(self, device: str) -> None:
+        """batch.cell must be restored to the original tensor after evaluate()."""
+        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=4, device=device)
+        original_cell = batch.cell
+        original_data = original_cell.clone()
+        _QuadraticBias().evaluate(batch)
+        assert batch.cell is original_cell
+        assert torch.allclose(batch.cell, original_data)
+        assert not batch.cell.requires_grad
+        assert batch.cell.grad_fn is None
+
+    def test_stress_finite_difference(self, device: str) -> None:
+        """Compare autograd stress to a finite-difference strain derivative.
+
+        Applies a symmetric strain ``ε`` to both positions and cell, and
+        checks ``σ_kl ≈ (E(+ε) − E(−ε)) / (2 h V)`` for each component.
+        Uses float64 so the central difference is not dominated by
+        cancellation error.
+        """
+        h = 1e-5
+        box = 6.0
+        volume = box**3
+        torch.manual_seed(7)
+        positions = torch.rand(5, 3, dtype=torch.float64) * box
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * box
+
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6] * 5, dtype=torch.long),
+            positions=positions,
+            cell=cell,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        bias = _PairDistanceBias(
+            atom_indices=torch.tensor([0, 3], device=device), k=1.5
+        )
+
+        result = bias.evaluate(batch)
+        assert result.stress is not None
+
+        base_pos = batch.positions.clone()
+        base_cell = batch.cell.clone()
+        eye = torch.eye(3, dtype=base_pos.dtype, device=base_pos.device)
+
+        fd_stress = torch.zeros(3, 3, dtype=base_pos.dtype, device=base_pos.device)
+        for a in range(3):
+            for b in range(3):
+                # Symmetric strain perturbation in component (a, b).
+                eps = torch.zeros(3, 3, dtype=base_pos.dtype, device=base_pos.device)
+                eps[a, b] += 0.5
+                eps[b, a] += 0.5
+                eps = eps * h
+
+                energies = []
+                for sign in (+1.0, -1.0):
+                    deform = eye + sign * eps
+                    batch["positions"] = base_pos @ deform
+                    batch["cell"] = base_cell @ deform
+                    energies.append(bias.evaluate(batch).energy.sum().item())
+
+                fd_stress[a, b] = (energies[0] - energies[1]) / (2 * h * volume)
+
+        batch["positions"] = base_pos
+        batch["cell"] = base_cell
+
+        assert torch.allclose(result.stress[0], fd_stress, atol=1e-7), (
+            f"autograd stress\n{result.stress[0]}\ndiffers from finite differences\n"
+            f"{fd_stress}"
         )
 
     def test_evaluate_is_read_only_no_state_change(self, device: str) -> None:
