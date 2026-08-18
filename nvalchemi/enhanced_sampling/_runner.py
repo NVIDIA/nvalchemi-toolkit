@@ -336,7 +336,7 @@ class EnhancedSampling:
         self._record_diagnostics(results, total)
 
         # 7. Apply the total contribution, then record the combined result.
-        self._apply(batch, total)
+        self._apply(batch, total, results)
         self._record_totals(batch)
 
     def _namespace(self, name: str, result: BiasResult) -> BiasResult:
@@ -430,9 +430,20 @@ class EnhancedSampling:
             if value is not None:
                 self.last_outputs[f"total/{key}"] = value.detach().clone()
 
-    @staticmethod
-    def _apply(batch: Batch, total: BiasResult) -> None:
+    def _apply(
+        self,
+        batch: Batch,
+        total: BiasResult,
+        results: dict[str, BiasResult] | None = None,
+    ) -> None:
         """Add the aggregated bias contribution to the batch, in place.
+
+        Every non-``None`` output must have a destination buffer.  Skipping a
+        field whose buffer is absent would discard that contribution in
+        silence — for ``stress`` that is precisely the barostat-invisibility
+        failure this API exists to remove, arrived at from a different
+        direction: the bias is computed correctly, applied nowhere, and the
+        cell evolves as though it did not exist.
 
         Parameters
         ----------
@@ -440,12 +451,14 @@ class EnhancedSampling:
             The live batch.
         total:
             The aggregated bias result.
+        results:
+            Per-bias results, used only to name the contributors in an error.
 
         Raises
         ------
         ValueError
-            If the aggregate carries a virial, which has no cell volume
-            available here to convert into the batch's stress convention.
+            If the aggregate carries a virial, or if any non-``None`` output
+            has no destination buffer on the batch.
         """
         if total.virial is not None:
             raise ValueError(
@@ -454,13 +467,72 @@ class EnhancedSampling:
                 "the bias before returning it; the cell volume is the bias's "
                 "to supply."
             )
+        self._check_destinations(batch, total, results or {})
         with torch.no_grad():
-            if total.energy is not None and getattr(batch, "energy", None) is not None:
+            if total.energy is not None:
                 batch.energy.add_(total.energy.reshape(batch.energy.shape))
-            if total.forces is not None and getattr(batch, "forces", None) is not None:
+            if total.forces is not None:
                 batch.forces.add_(total.forces)
-            if total.stress is not None and getattr(batch, "stress", None) is not None:
+            if total.stress is not None:
                 batch.stress.add_(total.stress.reshape(batch.stress.shape))
+
+    @staticmethod
+    def _check_destinations(
+        batch: Batch, total: BiasResult, results: dict[str, BiasResult]
+    ) -> None:
+        """Raise if any produced output has nowhere to go on the batch.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        total:
+            The aggregated bias result.
+        results:
+            Per-bias results, used to name which biases produced each field.
+
+        Raises
+        ------
+        ValueError
+            Listing every missing destination, the biases responsible, and
+            both ways to resolve it.
+        """
+        _ALLOCATION_HINT = {
+            "energy": "energy=torch.zeros(1, 1)",
+            "forces": "forces=torch.zeros(n_atoms, 3)",
+            "stress": "stress=torch.zeros(1, 3, 3)",
+        }
+        missing = [
+            key
+            for key in ("energy", "forces", "stress")
+            if getattr(total, key) is not None and getattr(batch, key, None) is None
+        ]
+        if not missing:
+            return
+
+        lines = []
+        for key in missing:
+            contributors = sorted(
+                name
+                for name, result in results.items()
+                if getattr(result, key, None) is not None
+            )
+            who = f" (from {contributors})" if contributors else ""
+            lines.append(f"  '{key}'{who}: add {_ALLOCATION_HINT[key]} to AtomicData")
+        detail = "\n".join(lines)
+        extra = ""
+        if "stress" in missing:
+            extra = (
+                "\nA bias that produces stress with nowhere to put it is "
+                "invisible to an NPT/NPH barostat — the cell would evolve as "
+                "if the bias were absent. If this run genuinely has no use for "
+                "a cell response (NVE/NVT), pass compute_stress=False to those "
+                "biases instead of leaving the output to be discarded."
+            )
+        raise ValueError(
+            f"EnhancedSampling: bias output has no destination buffer on the "
+            f"batch, so it would be silently discarded:\n{detail}{extra}"
+        )
 
     # ------------------------------------------------------------------
     # Phase 3 — observe and update (AFTER_STEP)
@@ -563,7 +635,7 @@ class EnhancedSampling:
             [self._namespace(name, r) for name, r in results.items()]
         )
         self._record_diagnostics(results, total)
-        self._apply(batch, total)
+        self._apply(batch, total, results)
         self._record_totals(batch)
 
     # ------------------------------------------------------------------
@@ -612,8 +684,10 @@ class EnhancedSampling:
                 "EnhancedSampling.prime_forces: batch has no 'forces' field. "
                 "Model outputs are written back in place, so the buffer must "
                 "exist first — construct AtomicData with "
-                "forces=torch.zeros(n_atoms, 3) and energy=torch.zeros(1, 1) "
-                "(plus stress=torch.zeros(1, 3, 3) for a periodic run)."
+                "forces=torch.zeros(n_atoms, 3) and energy=torch.zeros(1, 1), "
+                "plus stress=torch.zeros(1, 3, 3) whenever a bias produces "
+                "stress (any periodic batch, unless the bias was built with "
+                "compute_stress=False)."
             )
         self.dynamics._ensure_state_initialized(batch)
         self._stamp_identity(batch)

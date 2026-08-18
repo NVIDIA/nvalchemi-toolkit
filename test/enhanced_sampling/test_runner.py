@@ -439,6 +439,104 @@ class TestForceStepOrdering:
 # ===========================================================================
 
 
+class TestMissingDestinationBuffers:
+    """A bias output with nowhere to go must fail loudly, never silently."""
+
+    @staticmethod
+    def _periodic_batch_without(field: str, device: str) -> Batch:
+        """Return a periodic batch missing exactly one output buffer."""
+        kwargs = {
+            "positions": torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]),
+            "atomic_numbers": torch.tensor([6, 6], dtype=torch.long),
+            "atomic_masses": torch.ones(2),
+            "forces": torch.zeros(2, 3),
+            "energy": torch.zeros(1, 1),
+            "cell": torch.eye(3).unsqueeze(0) * 10.0,
+            "pbc": torch.tensor([[True, True, True]]),
+            "stress": torch.zeros(1, 3, 3),
+        }
+        kwargs.pop(field)
+        data = AtomicData(**kwargs)
+        data.add_node_property("velocities", torch.zeros(2, 3))
+        return Batch.from_data_list([data]).to(device)
+
+    @staticmethod
+    def _umbrella(device: str, **kwargs) -> HarmonicUmbrellaBias:
+        idx = torch.tensor([0, 1], device=device)
+        return HarmonicUmbrellaBias(
+            cv=lambda b: pair_distance(b, idx),
+            centers=torch.tensor([2.0]),
+            stiffness=5.0,
+            name="umbrella",
+            **kwargs,
+        )
+
+    def test_missing_stress_buffer_raises(self, device: str) -> None:
+        """The dangerous case: a periodic bias stress with nowhere to land.
+
+        Silently dropping it makes the bias invisible to an NPT/NPH barostat
+        — the same failure the deprecated BiasedPotentialHook has, reached
+        from a different direction.
+        """
+        batch = self._periodic_batch_without("stress", device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"umbrella": self._umbrella(device)}
+        )
+        with pytest.raises(ValueError, match="no destination buffer"):
+            runner.prime_forces(batch)
+
+    def test_missing_stress_error_names_bias_and_barostat_risk(
+        self, device: str
+    ) -> None:
+        batch = self._periodic_batch_without("stress", device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"umbrella": self._umbrella(device)}
+        )
+        with pytest.raises(ValueError) as excinfo:
+            runner.prime_forces(batch)
+        message = str(excinfo.value)
+        assert "'stress'" in message
+        assert "umbrella" in message
+        assert "barostat" in message
+        assert "compute_stress=False" in message
+
+    def test_compute_stress_false_is_the_documented_escape(self, device: str) -> None:
+        """An NVT run with a periodic cell may legitimately want no stress."""
+        batch = self._periodic_batch_without("stress", device)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"umbrella": self._umbrella(device, compute_stress=False)},
+        )
+        runner.prime_forces(batch)
+        assert "bias_total/stress" not in runner.last_outputs
+
+    def test_missing_energy_buffer_raises(self, device: str) -> None:
+        batch = self._periodic_batch_without("energy", device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"cf": _ConstantForceBias(name="cf")}
+        )
+        with pytest.raises(ValueError, match="'energy'"):
+            runner.prime_forces(batch)
+
+    def test_error_fires_before_any_step_is_taken(self, device: str) -> None:
+        """Priming is what makes this a setup error, not a mid-run surprise."""
+        batch = self._periodic_batch_without("stress", device)
+        dynamics = _make_dynamics(device)
+        runner = EnhancedSampling(dynamics, {"umbrella": self._umbrella(device)})
+        with pytest.raises(ValueError, match="no destination buffer"):
+            runner.run(batch, n_steps=100)
+        assert dynamics.step_count == 0, "a step ran before the error surfaced"
+
+    def test_allocated_stress_buffer_receives_contribution(self, device: str) -> None:
+        """The positive case: with the buffer present, stress lands on it."""
+        batch = _make_batch(n_graphs=1, device=device, with_cell=True)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"umbrella": self._umbrella(device)}
+        )
+        runner.prime_forces(batch)
+        assert torch.count_nonzero(batch.stress) > 0
+
+
 class TestPriming:
     """Force priming, and the error when buffers are missing."""
 

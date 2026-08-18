@@ -232,12 +232,25 @@ AtomicData(
     positions=..., atomic_numbers=..., atomic_masses=...,
     forces=torch.zeros(n_atoms, 3),
     energy=torch.zeros(1, 1),
-    stress=torch.zeros(1, 3, 3),   # periodic runs only
+    stress=torch.zeros(1, 3, 3),   # required whenever a bias produces stress
 )
 ```
 
-`prime_forces` raises a named `ValueError` if `forces` is missing rather than
-letting the model output be silently discarded.
+The runner raises a named `ValueError` naming the field, the biases that
+produced it, and how to allocate the buffer — rather than skipping the field
+and letting the contribution vanish. Because `run()` primes before the first
+step, this surfaces at setup, not part-way through a trajectory.
+
+:::{warning}
+`stress` is the one that matters most. `ConservativeBias` produces stress
+whenever the batch has a cell and at least one periodic dimension, so a
+periodic run needs the buffer even under NVT. A stress contribution dropped on
+the floor is invisible to an NPT/NPH barostat — the cell evolves as if the
+bias were absent, with nothing to indicate it. If a run genuinely has no use
+for a cell response, pass `compute_stress=False` to the bias, which drops
+`"stress"` from its `active_outputs` and skips the strain leaf entirely. That
+is a deliberate choice; a missing buffer is not.
+:::
 
 ### Walker identity
 
