@@ -3403,6 +3403,8 @@ class FusedStage(BaseDynamics):
         )
         autograd_inputs = self._autograd_input_tensors(batch)
         with (
+            # TODO ideally we unify the API for both fused and single stage dynamics
+            # so that the `_defer_autograd_input_cleanup` is not needed as a shim
             self._defer_autograd_input_cleanup(),
             requires_grad_ctx(*autograd_inputs),
             self._stream_scope(batch.device),
