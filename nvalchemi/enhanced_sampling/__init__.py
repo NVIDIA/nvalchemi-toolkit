@@ -34,6 +34,41 @@ Not yet implemented
 * Built-in biases (umbrella, metadynamics, walls, ABF)
 * Zarr checkpoint support
 * General triclinic MIC for unreduced cells
+
+Relationship to ``BiasedPotentialHook``
+---------------------------------------
+:class:`~nvalchemi.hooks.BiasedPotentialHook` covers the same ground with a
+narrower contract and is **deprecated** in favour of this subpackage.  It
+still works, and it is not scheduled for removal before the
+:class:`EnhancedSampling` runner ships, because until then it is the only
+way to actually apply a bias during dynamics.
+
+============================  ==============================  ==========================================
+Concern                       ``BiasedPotentialHook``         ``enhanced_sampling``
+============================  ==============================  ==========================================
+Contract                      ``bias_fn(batch) -> (E, F)``    ``BiasPotential.evaluate -> BiasResult``
+Forces                        written by hand                 autograd, from one energy definition
+Cell response                 none                            symmetric-strain ``stress``
+Composing several biases      in-place, sequential            summed against unmodified model output
+Diagnostics                   none                            namespaced ``observables``
+Runs in dynamics today        yes                             not until the runner ships
+============================  ==============================  ==========================================
+
+Which to use
+    Write new biases against :class:`ConservativeBias` (or
+    :class:`BiasPotential` directly).  Its cell response is the substantive
+    difference: a ``bias_fn`` bias contributes no stress, so under NPT/NPH
+    the barostat reads a ``batch.stress`` the bias never touched and the
+    cell evolves as if the bias were absent — with no error raised.  Reach
+    for the hook only when you need a bias applied during dynamics right
+    now and can accept that limitation (NVE/NVT, where no barostat reads
+    the stress, is the safe case).
+
+No adapter is provided
+    Bridging a :class:`BiasPotential` onto ``bias_fn`` would have to drop
+    :attr:`BiasResult.stress` on the floor, since the hook has nowhere to
+    put it — reintroducing the exact failure the new API exists to remove.
+    A silent adapter would be worse than none.
 """
 
 from nvalchemi.enhanced_sampling._bias import (
