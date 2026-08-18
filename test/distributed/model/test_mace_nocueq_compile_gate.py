@@ -69,11 +69,6 @@ WARMUP_STEPS = 8
 STEADY_STEPS = 8
 JITTER = 0.06  # Å per-step RMS displacement (within cutoff+skin headroom)
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _build_pbc_argon(nx: int = 12, nyz: int = 3, dtype: torch.dtype = torch.float64):
     """Argon on an ELONGATED cell — long along x (the axis the 2-rank domain
@@ -239,7 +234,7 @@ def _nocueq_gate_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_mace_nocueq_compile_dd_equivalence_and_zero_recompiles_2ranks():
     """Non-cueq MACE halo + compile under DD: owned forces match an eager-DD
     reference (guarding the closure-cell interaction hook that survives the

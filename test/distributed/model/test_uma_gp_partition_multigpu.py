@@ -190,10 +190,7 @@ def _worker(rank: int, world_size: int) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="Need 2+ CUDA GPUs",
-)
+@pytest.mark.multigpu
 def test_uma_gp_partition_2ranks() -> None:
     pytest.importorskip("fairchem.core", reason="fairchem-core not installed")
 

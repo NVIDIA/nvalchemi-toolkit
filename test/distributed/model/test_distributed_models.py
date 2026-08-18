@@ -743,24 +743,20 @@ cuda_model_tier = pytest.mark.skipif(
 )
 
 
+# ======================================================================
+# MACE — multi-step NVE via DomainParallel
+#
 # Real-multi-GPU tier: the full DomainParallel NVE dynamics path (gather +
 # per-step halo migration) needs raw cuda-tensor send/recv, which gloo's TCP
 # transport rejects ("Bad address"). It therefore runs on genuine NCCL across
 # >=2 physical GPUs (rank r -> cuda:r) rather than the N-ranks-share-one-GPU
-# gloo tier. Skipped on <2 GPUs.
-cuda_multigpu_tier = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="full distributed NVE dynamics run on real NCCL across >=2 GPUs",
-)
-
-
-# ======================================================================
-# MACE — multi-step NVE via DomainParallel
+# gloo tier above — hence ``multigpu``, not ``cuda_model_tier``.
+#
 # Shares the parameterized ``_nve_via_domain_parallel_worker`` above.
 # ======================================================================
 
 
-@cuda_multigpu_tier
+@pytest.mark.multigpu
 @pytest.mark.parametrize(
     "system_name,world_size,n_steps,dt_fs,energy_tol", _MACE_NVE_CASES
 )
