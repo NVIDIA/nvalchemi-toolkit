@@ -93,7 +93,7 @@ tensorboard = [
     "tensorboard",
 ]
 uma = [
-    "fairchem-core>=2.0.0",
+    "fairchem-core>=2.22.0",
     # torchtnt imports pkg_resources, which setuptools 81 removed.
     "setuptools>=70.0.0,<81",
 ]
