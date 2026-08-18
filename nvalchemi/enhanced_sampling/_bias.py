@@ -46,6 +46,7 @@ from nvalchemi.models._utils import (
     autograd_forces,
     autograd_forces_and_stresses,
     prepare_strain,
+    sum_outputs,
 )
 
 if TYPE_CHECKING:
@@ -530,9 +531,25 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
       with a message identifying which indices contributed each field.
       Converting between the two requires the cell volume and is the
       caller's responsibility before aggregation.
-    * ``observables`` dicts are merged; duplicate keys raise ``ValueError``
-      so that namespacing (``bias/<name>/<key>``) must be applied before
-      calling this function.
+    * ``observables`` dicts are merged, not summed; duplicate keys raise
+      ``ValueError`` so that namespacing (``bias/<name>/<key>``) must be
+      applied before calling this function.
+
+    Relationship to :func:`~nvalchemi.models._utils.sum_outputs`
+    -----------------------------------------------------------
+    The element-wise tensor sum is delegated to ``sum_outputs``, which
+    already implements exactly this contract for model composition.  The
+    two rules above stay here because they are stricter than what
+    ``sum_outputs`` can offer its own callers:
+
+    * ``sum_outputs`` resolves a non-additive key collision by
+      last-write-wins, which the model pipeline depends on (two composed
+      models may both emit ``charges``).  Silently dropping one bias's
+      observable is not acceptable, so the collision is an error here.
+    * ``observables`` is a nested mapping, not part of ``ModelOutputs``.
+      Flattening it into the same dict would let an observable named
+      ``energy`` be summed into the bias energy, so it is merged
+      separately.
 
     Parameters
     ----------
@@ -547,12 +564,6 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
     """
     if not results:
         return BiasResult()
-
-    energy_total: Tensor | None = None
-    forces_total: Tensor | None = None
-    stress_total: Tensor | None = None
-    virial_total: Tensor | None = None
-    observables_total: dict[str, Tensor] = {}
 
     # Detect stress/virial mixing up-front so the error is raised here with
     # a clear message, not inside BiasResult.__post_init__ with a generic
@@ -570,27 +581,36 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
             "the caller's responsibility before aggregation."
         )
 
-    for r in results:
-        if r.energy is not None:
-            energy_total = r.energy if energy_total is None else energy_total + r.energy
-        if r.forces is not None:
-            forces_total = r.forces if forces_total is None else forces_total + r.forces
-        if r.stress is not None:
-            stress_total = r.stress if stress_total is None else stress_total + r.stress
-        if r.virial is not None:
-            virial_total = r.virial if virial_total is None else virial_total + r.virial
+    summed = sum_outputs(
+        *(
+            {
+                "energy": r.energy,
+                "forces": r.forces,
+                "stress": r.stress,
+                "virial": r.virial,
+            }
+            for r in results
+        ),
+        additive_keys={"energy", "forces", "stress", "virial"},
+    )
+
+    observables_total: dict[str, Tensor] = {}
+    observable_source: dict[str, int] = {}
+    for i, r in enumerate(results):
         for key, val in r.observables.items():
             if key in observables_total:
                 raise ValueError(
-                    f"aggregate_bias_results: duplicate observable key {key!r}. "
-                    "Apply 'bias/<name>/<key>' namespacing before aggregation."
+                    f"aggregate_bias_results: duplicate observable key {key!r} from "
+                    f"results[{observable_source[key]}] and results[{i}].  Apply "
+                    "'bias/<name>/<key>' namespacing before aggregation."
                 )
             observables_total[key] = val
+            observable_source[key] = i
 
     return BiasResult(
-        energy=energy_total,
-        forces=forces_total,
-        stress=stress_total,
-        virial=virial_total,
+        energy=summed.get("energy"),
+        forces=summed.get("forces"),
+        stress=summed.get("stress"),
+        virial=summed.get("virial"),
         observables=observables_total,
     )

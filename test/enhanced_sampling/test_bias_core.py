@@ -1309,6 +1309,42 @@ class TestAggregateBiasResults:
         with pytest.raises(ValueError, match="duplicate observable key"):
             aggregate_bias_results([r1, r2])
 
+    def test_duplicate_observable_error_identifies_indices(self) -> None:
+        """The message must name both colliding results, not just the key.
+
+        Observables are merged rather than summed, so a collision silently
+        dropping one bias's diagnostic is exactly what this guards against;
+        the message has to say which two biases collided.
+        """
+        results = [
+            BiasResult(observables={"bias/a/cv": torch.zeros(1)}),  # index 0
+            BiasResult(energy=torch.zeros(1, 1)),
+            BiasResult(observables={"bias/b/cv": torch.zeros(1)}),
+            BiasResult(observables={"bias/a/cv": torch.ones(1)}),  # index 3
+        ]
+        with pytest.raises(ValueError) as excinfo:
+            aggregate_bias_results(results)
+        message = str(excinfo.value)
+        assert "results[0]" in message
+        assert "results[3]" in message
+        assert "bias/a/cv" in message
+
+    def test_observables_not_summed_with_matching_field_name(self) -> None:
+        """An observable named 'energy' must not be added to the bias energy.
+
+        observables are merged in a separate namespace from the tensor
+        fields, so a name collision between the two is not possible.
+        """
+        r1 = BiasResult(
+            energy=torch.ones(1, 1),
+            observables={"energy": torch.tensor([100.0])},
+        )
+        r2 = BiasResult(energy=torch.ones(1, 1))
+        agg = aggregate_bias_results([r1, r2])
+        assert agg.energy is not None
+        assert torch.allclose(agg.energy, torch.full((1, 1), 2.0))
+        assert torch.allclose(agg.observables["energy"], torch.tensor([100.0]))
+
     def test_distinct_observable_keys_merged(self) -> None:
         r1 = BiasResult(observables={"bias/a/cv": torch.tensor([1.0])})
         r2 = BiasResult(observables={"bias/b/cv": torch.tensor([2.0])})
