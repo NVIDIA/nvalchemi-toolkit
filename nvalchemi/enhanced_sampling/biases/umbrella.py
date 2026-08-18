@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor
 
-from nvalchemi.enhanced_sampling._bias import ConservativeBias
+from nvalchemi.enhanced_sampling._bias import BiasResult, ConservativeBias
 from nvalchemi.enhanced_sampling.cv._periodic import periodic_difference
 
 if TYPE_CHECKING:
@@ -231,10 +231,71 @@ class HarmonicUmbrellaBias(ConservativeBias):
                 "the restraint repulsive along that direction."
             )
 
+    def _validate_state_ids(self, current: Batch) -> None:
+        """Raise if any ``thermodynamic_state_id`` is out of range.
+
+        Called from :meth:`evaluate`, never from :meth:`energy`.  That
+        placement is deliberate: ``energy()`` is the path
+        ``EnhancedSampling(compile_biases=True)`` hands to ``torch.compile``,
+        and ``bool(tensor.any())`` there is a data-dependent Python branch
+        that breaks ``fullgraph=True`` outright.  ``evaluate()`` is eager by
+        construction, so hoisting the check keeps it running in **every**
+        mode, rather than skipping it under compile the way the eager-only
+        guards in ``pair_distance`` must.
+
+        Parameters
+        ----------
+        current:
+            The batch; read for ``thermodynamic_state_id`` if present.
+
+        Raises
+        ------
+        IndexError
+            If a state id is negative or beyond the configured windows.
+        """
+        state_ids = getattr(current, "thermodynamic_state_id", None)
+        if state_ids is None:
+            return
+        index = state_ids.reshape(-1).to(torch.long)
+        n_states = self.centers.shape[0]
+        out_of_range = (index < 0) | (index >= n_states)
+        if bool(out_of_range.any()):
+            bad = out_of_range.nonzero(as_tuple=False).squeeze(-1).tolist()
+            raise IndexError(
+                f"HarmonicUmbrellaBias: thermodynamic_state_id out of range for "
+                f"{n_states} configured window(s). Graph(s) {bad} have "
+                f"{index[out_of_range].tolist()}; valid ids are 0..{n_states - 1}."
+            )
+
+    def evaluate(self, current: Batch) -> BiasResult:
+        """Validate the state ids, then derive energy, forces, and stress.
+
+        Parameters
+        ----------
+        current:
+            The live batch.
+
+        Returns
+        -------
+        BiasResult
+            As :meth:`ConservativeBias.evaluate`.
+
+        Raises
+        ------
+        IndexError
+            If a ``thermodynamic_state_id`` is out of range.
+        """
+        self._validate_state_ids(current)
+        return super().evaluate(current)
+
     def _select_per_graph(
         self, current: Batch, values: Tensor
     ) -> tuple[Tensor, Tensor]:
         """Return ``(centers, stiffness)`` broadcast to this batch.
+
+        Contains no data-dependent Python branch, so it compiles with
+        ``fullgraph=True``.  Bounds checking lives in
+        :meth:`_validate_state_ids`, which :meth:`evaluate` runs first.
 
         Parameters
         ----------
@@ -247,25 +308,12 @@ class HarmonicUmbrellaBias(ConservativeBias):
         -------
         tuple[Tensor, Tensor]
             ``centers`` ``[B, D]`` and ``stiffness`` ``[B, D, D]``.
-
-        Raises
-        ------
-        IndexError
-            If a state id is out of range for the configured windows.
         """
-        n_graphs = values.shape[0]
         state_ids = getattr(current, "thermodynamic_state_id", None)
         if state_ids is None:
-            index = torch.zeros(n_graphs, dtype=torch.long, device=values.device)
+            index = torch.zeros(values.shape[0], dtype=torch.long, device=values.device)
         else:
             index = state_ids.reshape(-1).to(torch.long)
-            n_states = self.centers.shape[0]
-            if bool(((index < 0) | (index >= n_states)).any()):
-                raise IndexError(
-                    f"HarmonicUmbrellaBias: thermodynamic_state_id out of range "
-                    f"for {n_states} configured window(s): "
-                    f"{index.tolist()}."
-                )
         return self.centers[index], self.stiffness[index]
 
     def energy(self, current: Batch) -> Tensor:

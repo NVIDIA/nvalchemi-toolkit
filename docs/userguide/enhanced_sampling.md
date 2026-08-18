@@ -158,6 +158,20 @@ Notes:
   `evaluate()` calls `requires_grad_()`, which `torch.compile` cannot trace.
   `EnhancedSampling(compile_biases=True)` compiles each bias's `energy()`.
 
+:::{important}
+Because `compile_biases=True` hands `energy()` to `torch.compile`, **keep
+data-dependent Python branches out of it**. A `bool(tensor.any())` there —
+a bounds check, a "did anything violate this" guard — breaks `fullgraph=True`
+outright with a "Could not guard on data-dependent expression" error.
+
+Put such validation in an override of `evaluate()` instead, which is eager by
+construction, then call `super().evaluate(current)`. `HarmonicUmbrellaBias`
+validates `thermodynamic_state_id` this way. That placement is strictly better
+than an eager-only `torch.compiler.is_compiling()` guard: the check still runs
+when `energy()` is compiled, rather than being skipped exactly when a mistake
+is hardest to diagnose.
+:::
+
 ### Adaptive biases
 
 `AdaptivePotentialMixin` separates read-only evaluation from state mutation:

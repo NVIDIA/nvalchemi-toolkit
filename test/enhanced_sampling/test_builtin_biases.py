@@ -346,3 +346,145 @@ class TestWalls:
         minus = wall.evaluate(_pair_batch([4.0 - eps], device=device)).energy
         numeric = -(float(plus) - float(minus)) / (2 * eps)
         assert abs(float(analytic) - numeric) < 1e-2
+
+
+# ===========================================================================
+# 4. torch.compile on the built-ins
+# ===========================================================================
+
+
+class TestBuiltinBiasCompile:
+    """``compile_biases=True`` hands ``energy()`` to ``torch.compile``.
+
+    That makes every built-in's ``energy()`` a compiled path in practice, so
+    a data-dependent Python branch there is a real defect rather than a
+    stylistic one — it breaks ``fullgraph=True`` outright.  These are
+    regressions against that, per built-in.
+    """
+
+    @staticmethod
+    def _state_batch(device: str) -> Batch:
+        """Two graphs at distance 3.0, in windows 0 and 1."""
+        batch = _pair_batch([3.0, 3.0], device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1], device=device)
+        return batch
+
+    @staticmethod
+    def _umbrella(device: str = "cpu") -> HarmonicUmbrellaBias:
+        """Calling energy() directly bypasses evaluate()'s device alignment."""
+        return HarmonicUmbrellaBias(
+            cv=_cv,
+            centers=torch.tensor([[2.0], [3.0]]),
+            stiffness=4.0,
+            name="u",
+        ).to(device)
+
+    def test_umbrella_energy_compiles_fullgraph_with_state_ids(
+        self, device: str
+    ) -> None:
+        """Per-state selection must not introduce a data-dependent branch."""
+        torch._dynamo.reset()
+        batch = self._state_batch(device)
+        bias = self._umbrella(device)
+        compiled = torch.compile(bias.energy, fullgraph=True)
+        energy = compiled(batch)
+        assert energy.shape == (2, 1)
+
+    def test_umbrella_compiled_matches_eager(self, device: str) -> None:
+        torch._dynamo.reset()
+        batch = self._state_batch(device)
+        bias = self._umbrella(device)
+        eager = bias.energy(batch)
+        compiled = torch.compile(bias.energy, fullgraph=True)(batch)
+        assert torch.allclose(eager, compiled, atol=1e-6)
+        # window 0: 0.5*4*(3-2)^2 = 2.0 ; window 1 sits at its center
+        assert torch.allclose(
+            eager.flatten(), torch.tensor([2.0, 0.0], device=eager.device), atol=1e-5
+        )
+
+    def test_umbrella_compiles_without_state_ids(self, device: str) -> None:
+        torch._dynamo.reset()
+        bias = self._umbrella(device)
+        compiled = torch.compile(bias.energy, fullgraph=True)
+        assert compiled(_pair_batch([3.0], device=device)).shape == (1, 1)
+
+    def test_state_id_validation_survives_compilation(self, device: str) -> None:
+        """Moving the check to evaluate() must not have removed it.
+
+        The bounds check cannot live in energy(), but hoisting it to the eager
+        evaluate() means it still runs when energy() is compiled — strictly
+        better than the eager-only guards elsewhere, which skip under compile.
+        """
+        torch._dynamo.reset()
+        batch = _pair_batch([3.0], device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([7], device=device)
+        bias = self._umbrella(device)
+        bias.energy = torch.compile(bias.energy, fullgraph=True)
+        with pytest.raises(IndexError, match="out of range"):
+            bias.evaluate(batch)
+
+    def test_state_id_error_names_graph_and_valid_range(self, device: str) -> None:
+        batch = _pair_batch([3.0, 3.0], device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 9], device=device)
+        with pytest.raises(IndexError) as excinfo:
+            self._umbrella().evaluate(batch)
+        message = str(excinfo.value)
+        assert "[1]" in message  # the offending graph
+        assert "0..1" in message  # the valid range
+
+    @pytest.mark.parametrize("wall_factory", ["upper", "lower", "flat"])
+    def test_wall_energy_compiles_fullgraph(
+        self, wall_factory: str, device: str
+    ) -> None:
+        torch._dynamo.reset()
+        walls = {
+            "upper": lambda: UpperWall(cv=_cv, threshold=2.0, stiffness=6.0),
+            "lower": lambda: LowerWall(cv=_cv, threshold=4.0, stiffness=6.0),
+            "flat": lambda: FlatBottomRestraint(
+                cv=_cv, lower=2.0, upper=4.0, stiffness=6.0
+            ),
+        }
+        bias = walls[wall_factory]().to(device)
+        batch = _pair_batch([3.0, 5.0], device=device)
+        eager = bias.energy(batch)
+        compiled = torch.compile(bias.energy, fullgraph=True)(batch)
+        assert torch.allclose(eager, compiled, atol=1e-6)
+
+    def test_runner_compile_biases_end_to_end(self, device: str) -> None:
+        """The path a user actually takes: compile_biases=True on the runner."""
+        from nvalchemi.dynamics import NVTLangevin
+        from nvalchemi.enhanced_sampling import EnhancedSampling
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        torch._dynamo.reset()
+
+        def make_batch() -> Batch:
+            data_list = []
+            for _ in range(2):
+                data = AtomicData(
+                    positions=torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]),
+                    atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                    atomic_masses=torch.ones(2),
+                    forces=torch.zeros(2, 3),
+                    energy=torch.zeros(1, 1),
+                )
+                data.add_node_property("velocities", torch.zeros(2, 3))
+                data_list.append(data)
+            batch = Batch.from_data_list(data_list).to(device)
+            batch["thermodynamic_state_id"] = torch.tensor([0, 1], device=device)
+            return batch
+
+        results = []
+        for compile_biases in (False, True):
+            batch = make_batch()
+            # DemoModel has random weights; seed so the physical contribution
+            # is identical and any difference is attributable to the bias.
+            torch.manual_seed(0)
+            model = DemoModelWrapper(DemoModel()).to(device)
+            dynamics = NVTLangevin(model=model, dt=0.1, temperature=300.0, friction=0.1)
+            runner = EnhancedSampling(
+                dynamics, {"u": self._umbrella()}, compile_biases=compile_biases
+            )
+            runner.prime_forces(batch)
+            results.append(batch.forces.clone())
+        assert torch.allclose(results[0], results[1], atol=1e-5)
