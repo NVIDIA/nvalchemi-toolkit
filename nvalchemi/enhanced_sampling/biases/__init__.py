@@ -14,7 +14,23 @@
 # limitations under the License.
 """Built-in bias implementations.
 
-This ``__init__`` is a placeholder so that
-``nvalchemi.enhanced_sampling.biases`` is a valid importable namespace.
-Built-in biases (umbrella, metadynamics, walls, ABF) are not yet implemented.
+Available: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
+:class:`LowerWall`, :class:`FlatBottomRestraint`.
+
+Metadynamics (well-tempered and xTB-style RMSD) and adaptive biasing force
+are not yet implemented.
 """
+
+from nvalchemi.enhanced_sampling.biases.umbrella import HarmonicUmbrellaBias
+from nvalchemi.enhanced_sampling.biases.walls import (
+    FlatBottomRestraint,
+    LowerWall,
+    UpperWall,
+)
+
+__all__ = [
+    "FlatBottomRestraint",
+    "HarmonicUmbrellaBias",
+    "LowerWall",
+    "UpperWall",
+]

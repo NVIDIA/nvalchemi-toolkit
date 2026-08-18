@@ -4,6 +4,27 @@
 
 ### Added
 
+- `EnhancedSampling` runner for biased dynamics, plus the first built-in
+  biases. The runner installs one internal hook on an existing `BaseDynamics`
+  and owns what a bias cannot: walker identity stamping (`walker_id`,
+  `thermodynamic_state_id`, `sampling_step`, `exchange_segment`,
+  `sampling_epoch`), the force-step ordering, exactly-once `update()`
+  delivery, and force priming. Every bias is evaluated against the same
+  unmodified model output and the contributions summed once, so no bias can
+  observe another's forces and the total is independent of registration
+  order. Built-ins: `HarmonicUmbrellaBias` (per-window centers and stiffness
+  selected by `thermodynamic_state_id`, validated symmetric
+  positive-semidefinite), `UpperWall`, `LowerWall`, and
+  `FlatBottomRestraint`. `AdaptivePotentialMixin` supplies the
+  `update`/`commit_epoch`/state-version battery for biases whose state
+  evolves during sampling; it must precede `nn.Module` in the base list, and
+  raises `TypeError` otherwise rather than letting `nn.Module.state_dict`
+  shadow it and drop bias history from checkpoints. `periodic_difference`
+  wraps CV differences onto a circle. Checkpointing
+  (`EnhancedSampling.checkpoint`/`restore`) is not implemented yet;
+  `warm_start()` gives approximate continuation and individual biases expose
+  `state_dict()`.
+
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,

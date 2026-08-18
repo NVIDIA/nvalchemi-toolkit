@@ -18,9 +18,11 @@ CVs are plain callables — no class hierarchy, no registration.  Any
 differentiable function ``cv(batch: Batch) -> Tensor[B, D]`` satisfies
 the CV interface.
 
-Available CVs: :func:`pair_distance`.
+Available CVs: :func:`pair_distance`.  :func:`periodic_difference` is a
+helper for comparing CV values that live on a circle.
 """
 
+from nvalchemi.enhanced_sampling.cv._periodic import periodic_difference
 from nvalchemi.enhanced_sampling.cv.pair_distance import pair_distance
 
-__all__ = ["pair_distance"]
+__all__ = ["pair_distance", "periodic_difference"]

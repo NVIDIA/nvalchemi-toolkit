@@ -546,6 +546,27 @@ class ConservativeBias(nn.Module, BaseModelMixin):
     # Bias surface
     # ------------------------------------------------------------------
 
+    def _align_device(self, reference: Tensor) -> None:
+        """Move this bias's buffers to *reference*'s device if they differ.
+
+        A bias holds its parameters as buffers (window centers, stiffness,
+        wall thresholds), and a user who builds the bias before moving the
+        batch to GPU would otherwise hit a bare "expected all tensors to be
+        on the same device" from inside the energy expression, naming
+        neither the bias nor the fix.  Moving once here is cheaper than
+        making every bias author remember ``.to(device)``.
+
+        Eager-only, like the rest of :meth:`evaluate`.
+
+        Parameters
+        ----------
+        reference:
+            Any tensor from the live batch; its device is the target.
+        """
+        buffer = next(self.buffers(), None)
+        if buffer is not None and buffer.device != reference.device:
+            self.to(reference.device)
+
     def energy(self, current: Batch) -> Tensor:
         """Return bias energy ``[B, 1]`` (eV).
 
@@ -612,6 +633,7 @@ class ConservativeBias(nn.Module, BaseModelMixin):
             docstring for why stress is the chosen field.
         """
         original_positions = current.positions
+        self._align_device(original_positions)
         original_cell = getattr(current, "cell", None)
         pbc = getattr(current, "pbc", None)
         cell_is_4d = original_cell is not None and original_cell.dim() == 4

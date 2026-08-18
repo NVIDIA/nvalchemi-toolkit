@@ -44,6 +44,7 @@ For install options, refer to the install guide below.
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
+- {doc}`Enhanced Sampling: Biases and Free Energy <enhanced_sampling>`
 
 ## Distributed Simulations
 
@@ -84,6 +85,7 @@ serialization
 hooks
 reporting
 dynamics
+enhanced_sampling
 ```
 
 ```{toctree}

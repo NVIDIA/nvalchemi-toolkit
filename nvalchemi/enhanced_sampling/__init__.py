@@ -22,17 +22,24 @@ Public surface
 * :class:`ConservativeBias` — autograd helper; subclass and override
   :meth:`~ConservativeBias.energy` to get forces and tensile-positive
   Cauchy stress for free.
+* :class:`AdaptivePotentialMixin` — battery for biases whose state evolves
+  during sampling; supplies ``update`` / ``commit_epoch`` / state versioning.
 * :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
 * :func:`pair_distance` — differentiable pair-distance CV; supports
   nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC
   (unreduced cells via LLL) is not yet implemented.
+* :func:`periodic_difference` — CV differences wrapped onto a circle.
+* :class:`EnhancedSampling` — the runner: walker identity, force-step
+  ordering, exactly-once ``update()``, and force priming.
+* Built-in biases: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
+  :class:`LowerWall`, :class:`FlatBottomRestraint`.
 
 Not yet implemented
 -------------------
-* :class:`EnhancedSampling` runner
 * :class:`ThermodynamicState`, :class:`ReplicaExchange`
-* Built-in biases (umbrella, metadynamics, walls, ABF)
-* Zarr checkpoint support
+* Metadynamics (well-tempered, xTB-style RMSD) and adaptive biasing force
+* Zarr checkpoint support — ``EnhancedSampling.checkpoint`` / ``restore``
+  raise ``NotImplementedError``; individual biases expose ``state_dict``
 * General triclinic MIC for unreduced cells
 
 Relationship to ``BiasedPotentialHook``
@@ -71,20 +78,37 @@ No adapter is provided
     A silent adapter would be worse than none.
 """
 
+from nvalchemi.enhanced_sampling._adaptive import AdaptivePotentialMixin
 from nvalchemi.enhanced_sampling._bias import (
     BiasPotential,
     BiasResult,
     ConservativeBias,
     aggregate_bias_results,
 )
-from nvalchemi.enhanced_sampling.cv import pair_distance
+from nvalchemi.enhanced_sampling._runner import EnhancedSampling
+from nvalchemi.enhanced_sampling.biases import (
+    FlatBottomRestraint,
+    HarmonicUmbrellaBias,
+    LowerWall,
+    UpperWall,
+)
+from nvalchemi.enhanced_sampling.cv import pair_distance, periodic_difference
 
 __all__ = [
     # Core abstractions
     "BiasResult",
     "BiasPotential",
     "ConservativeBias",
+    "AdaptivePotentialMixin",
     "aggregate_bias_results",
+    # Runner
+    "EnhancedSampling",
     # Collective variables
     "pair_distance",
+    "periodic_difference",
+    # Built-in biases
+    "HarmonicUmbrellaBias",
+    "UpperWall",
+    "LowerWall",
+    "FlatBottomRestraint",
 ]
