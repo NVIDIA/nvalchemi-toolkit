@@ -628,6 +628,89 @@ class TestAdaptiveUpdates:
                 observed[:, 0], physical[:, 0] - 5.0, atol=1e-6
             ), "AFTER_COMPUTE observation captured biased forces"
 
+    def test_after_step_update_receives_its_own_bias_result(self, device: str) -> None:
+        """update() must get the result its bias produced, at either stage.
+
+        AFTER_STEP is the default and what metadynamics uses; a bias sizing
+        its next hill from the bias energy it just applied needs the real
+        value, not an empty placeholder.
+        """
+        received: list[BiasResult] = []
+
+        class _ResultRecordingBias(AdaptivePotentialMixin, _ConstantForceBias):
+            def __init__(self) -> None:
+                super().__init__(2.0, name="recorder")
+
+            def update(self, frames: Batch, result: BiasResult) -> None:
+                received.append(result)
+
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"recorder": _ResultRecordingBias()}
+        )
+        runner.run(batch, n_steps=2)
+
+        assert received, "update() never called"
+        for result in received:
+            assert result.energy is not None, "update() got an empty BiasResult"
+            assert result.forces is not None
+            # E = 2 * sum(x)  =>  F = -2 on x only.
+            assert torch.allclose(
+                result.forces[:, 0],
+                torch.full_like(result.forces[:, 0], -2.0),
+                atol=1e-5,
+            )
+
+    def test_after_compute_update_also_receives_its_result(self, device: str) -> None:
+        received: list[BiasResult] = []
+
+        class _ResultRecordingBias(AdaptivePotentialMixin, _ConstantForceBias):
+            observation_stage = DynamicsStage.AFTER_COMPUTE
+
+            def __init__(self) -> None:
+                super().__init__(3.0, name="recorder")
+
+            def update(self, frames: Batch, result: BiasResult) -> None:
+                received.append(result)
+
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"recorder": _ResultRecordingBias()}
+        )
+        runner.run(batch, n_steps=2)
+
+        assert received
+        for result in received:
+            assert result.energy is not None
+            assert torch.allclose(
+                result.forces[:, 0],
+                torch.full_like(result.forces[:, 0], -3.0),
+                atol=1e-5,
+            )
+
+    def test_each_bias_gets_its_own_result_not_anothers(self, device: str) -> None:
+        """With several adaptive biases, results must not be crossed."""
+        seen: dict[str, list[float]] = {"a": [], "b": []}
+
+        def _make(tag: str, coefficient: float):
+            class _Bias(AdaptivePotentialMixin, _ConstantForceBias):
+                def __init__(self) -> None:
+                    super().__init__(coefficient, name=tag)
+
+                def update(self, frames: Batch, result: BiasResult) -> None:
+                    seen[tag].append(float(result.forces[0, 0]))
+
+            return _Bias()
+
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"a": _make("a", 1.0), "b": _make("b", 4.0)}
+        )
+        runner.run(batch, n_steps=2)
+
+        assert all(abs(v - (-1.0)) < 1e-5 for v in seen["a"]), seen["a"]
+        assert all(abs(v - (-4.0)) < 1e-5 for v in seen["b"]), seen["b"]
+
     def test_non_adaptive_bias_never_asked_to_update(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner = EnhancedSampling(

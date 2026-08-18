@@ -197,6 +197,12 @@ class EnhancedSampling:
         # Per-bias observation captured at its observation_stage, consumed by
         # the next update() call.
         self._pending: dict[str, tuple[Batch, BiasResult]] = {}
+
+        # Per-bias results from the most recent force evaluation. Held because
+        # an AFTER_STEP capture happens after that evaluation has returned,
+        # and update() is documented to receive the result its bias produced
+        # during it.
+        self._last_results: dict[str, BiasResult] = {}
         self._last_update_step: dict[str, int] = {}
         self._last_seen_version: dict[str, int] = {
             name: getattr(bias, "state_version", 0)
@@ -323,6 +329,7 @@ class EnhancedSampling:
         # 2-3. Evaluate each bias against the same unmodified batch.
         #      BiasResult validates itself on construction.
         results = {name: bias.evaluate(batch) for name, bias in self.biases.items()}
+        self._last_results = results
 
         # 4. Capture AFTER_COMPUTE observations while batch.forces still
         #    holds unbiased physical forces.  ABF depends on this: an
@@ -546,12 +553,21 @@ class EnhancedSampling:
     ) -> None:
         """Snapshot the batch for adaptive biases observing at *stage*.
 
+        The stored pair is exactly what :meth:`AdaptivePotentialMixin.update`
+        is documented to receive: the frame at the bias's
+        ``observation_stage``, and the :class:`BiasResult` that bias returned
+        during the preceding force evaluation.  An ``AFTER_STEP`` capture
+        happens after that evaluation has returned, so the results are read
+        from :attr:`_last_results` rather than recomputed — a metadynamics
+        bias sizing its next hill from the bias energy it just applied needs
+        the real value, not an empty placeholder.
+
         Parameters
         ----------
         batch:
             The live batch.
         results:
-            Per-bias results from this force evaluation.
+            Per-bias results from the preceding force evaluation.
         stage:
             The stage being captured.
         """
@@ -581,7 +597,7 @@ class EnhancedSampling:
             return
 
         step = self.dynamics.step_count
-        self._capture(batch, {}, DynamicsStage.AFTER_STEP)
+        self._capture(batch, self._last_results, DynamicsStage.AFTER_STEP)
 
         changed = False
         for name, bias in adaptive.items():
@@ -590,7 +606,9 @@ class EnhancedSampling:
             # Exactly once per step, even if this hook is dispatched twice.
             if self._last_update_step.get(name) == step:
                 continue
-            frames, result = self._pending.pop(name, (batch, BiasResult()))
+            frames, result = self._pending.pop(
+                name, (batch, self._last_results.get(name, BiasResult()))
+            )
             bias.update(frames, result)  # type: ignore[attr-defined]
             self._last_update_step[name] = step
 
@@ -631,6 +649,7 @@ class EnhancedSampling:
                 if target is not None:
                     target.copy_(value.reshape(target.shape))
         results = {name: bias.evaluate(batch) for name, bias in self.biases.items()}
+        self._last_results = results
         total = aggregate_bias_results(
             [self._namespace(name, r) for name, r in results.items()]
         )
