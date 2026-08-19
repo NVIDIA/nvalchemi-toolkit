@@ -136,6 +136,20 @@
 
 ### Deprecated
 
+- `BiasedPotentialHook`, superseded by the `nvalchemi.enhanced_sampling`
+  subpackage. Its `bias_fn(batch) -> (energy, forces)` contract has no slot
+  for a cell response, so a bias applied through the hook contributes no
+  stress and is invisible to the NPT/NPH barostat — the cell evolves as if
+  the bias were absent, with no error raised. It also requires bias forces
+  to be written by hand (nothing checks they are `-dE/dr`), and composes
+  several biases by sequential in-place mutation of `batch.forces` rather
+  than summing them against the unmodified model output. Constructing the
+  hook now emits a `DeprecationWarning`. It remains functional and will not
+  be removed before the `EnhancedSampling` runner ships, since until then it
+  is the only way to apply a bias during dynamics. No adapter is provided:
+  bridging a `BiasPotential` onto `bias_fn` would have to discard
+  `BiasResult.stress`, reintroducing the exact failure the new API removes.
+
 - `cells_inv` argument on `_cell_kinetic_energy`. Cell kinetic energy
   is computed directly from the strain rate `ε̇` and no longer needs
   the cell inverse. The argument is retained for backwards

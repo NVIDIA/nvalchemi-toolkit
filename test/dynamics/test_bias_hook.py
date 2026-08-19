@@ -15,6 +15,11 @@
 """Unit tests for ``nvalchemi.hooks.bias`` — Tier 1 bias hook.
 
 Covers :class:`BiasedPotentialHook`.
+
+``BiasedPotentialHook`` is deprecated in favour of
+:mod:`nvalchemi.enhanced_sampling` but remains functional, so these tests
+still assert its behaviour.  The construction warning is silenced module-wide
+and asserted explicitly in :class:`TestBiasedPotentialHookDeprecation`.
 """
 
 from __future__ import annotations
@@ -27,6 +32,10 @@ from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.hooks import BiasedPotentialHook, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from test.dynamics.conftest import make_dynamics_context
+
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:BiasedPotentialHook is deprecated:DeprecationWarning"
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -224,6 +233,44 @@ class TestBiasedPotentialHook:
 
         bias_hook(ctx, DynamicsStage.AFTER_COMPUTE)
         nan_hook(ctx, DynamicsStage.AFTER_COMPUTE)  # should not raise
+
+
+class TestBiasedPotentialHookDeprecation:
+    """BiasedPotentialHook is deprecated but must remain functional."""
+
+    @pytest.mark.filterwarnings("default::DeprecationWarning")
+    def test_construction_warns(self) -> None:
+        with pytest.warns(
+            DeprecationWarning, match="BiasedPotentialHook is deprecated"
+        ):
+            BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+
+    @pytest.mark.filterwarnings("default::DeprecationWarning")
+    def test_warning_points_at_enhanced_sampling(self) -> None:
+        """The message must name the replacement, not just say 'deprecated'."""
+        with pytest.warns(DeprecationWarning) as record:
+            BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+        message = str(record[0].message)
+        assert "nvalchemi.enhanced_sampling" in message
+        # The substantive reason to migrate, not just a pointer.
+        assert "stress" in message
+
+    def test_still_applies_bias_after_deprecation(self, device: str) -> None:
+        """Deprecated does not mean broken: the hook must still work."""
+        batch = _make_batch(device=device)
+        dynamics = _make_dynamics()
+        forces_before = batch.forces.clone()
+        energies_before = batch.energy.clone()
+
+        bias_e = torch.ones_like(batch.energy) * 0.25
+        bias_f = torch.ones_like(batch.forces) * 0.75
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (bias_e, bias_f), stage=DynamicsStage.AFTER_COMPUTE
+        )
+        hook(_make_ctx(batch, dynamics), DynamicsStage.AFTER_COMPUTE)
+
+        assert torch.allclose(batch.forces, forces_before + 0.75)
+        assert torch.allclose(batch.energy, energies_before + 0.25)
 
 
 class TestBiasedPotentialHookCompile:

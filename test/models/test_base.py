@@ -701,6 +701,21 @@ class TestAutogradForces:
         forces2 = autograd_forces(energy, positions)
         torch.testing.assert_close(forces1, forces2)
 
+    def test_unused_positions_raise_by_default(self):
+        positions = torch.randn(3, 3, requires_grad=True)
+        other = torch.randn(3, 3, requires_grad=True)
+        energy = (other**2).sum()
+        with pytest.raises(RuntimeError, match="not have been used in the graph"):
+            autograd_forces(energy, positions)
+
+    def test_allow_unused_gives_zero_forces(self):
+        positions = torch.randn(3, 3, requires_grad=True)
+        other = torch.randn(3, 3, requires_grad=True)
+        energy = (other**2).sum()
+        forces = autograd_forces(energy, positions, allow_unused=True)
+        assert forces.shape == positions.shape
+        torch.testing.assert_close(forces, torch.zeros_like(positions))
+
 
 class TestAutogradStresses:
     """Tests for autograd_stresses utility."""
@@ -727,6 +742,22 @@ class TestAutogradStresses:
         energy = (displacement**2).sum()
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=3)
         assert stresses.shape == (3, 3, 3)
+
+    def test_unused_displacement_raises_by_default(self):
+        displacement = torch.zeros(1, 3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        energy = (torch.randn(3, 3, requires_grad=True) ** 2).sum()
+        with pytest.raises(RuntimeError, match="not have been used in the graph"):
+            autograd_stresses(energy, displacement, cell, num_graphs=1)
+
+    def test_allow_unused_gives_zero_stress(self):
+        displacement = torch.zeros(1, 3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        energy = (torch.randn(3, 3, requires_grad=True) ** 2).sum()
+        stresses = autograd_stresses(
+            energy, displacement, cell, num_graphs=1, allow_unused=True
+        )
+        torch.testing.assert_close(stresses, torch.zeros(1, 3, 3))
 
 
 class TestAutogradForcesAndStresses:
@@ -809,6 +840,37 @@ class TestAutogradForcesAndStresses:
         forces = autograd_forces(energy, scaled_pos)
 
         assert forces.shape == scaled_pos.shape
+
+    def test_unused_positions_raise_by_default(self):
+        positions = torch.randn(3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        _, scaled_cell, displacement = prepare_strain(positions, cell, batch_idx)
+        # Energy depends on the strained cell only, never on positions.
+        energy = torch.linalg.det(scaled_cell).sum()
+        with pytest.raises(RuntimeError, match="not have been used in the graph"):
+            autograd_forces_and_stresses(
+                energy, positions, displacement, cell, num_graphs=1
+            )
+
+    def test_allow_unused_zero_forces_with_real_stress(self):
+        """A cell-only energy yields zero forces but a genuine stress."""
+        positions = torch.randn(3, 3, dtype=torch.float64, requires_grad=True)
+        box = 10.0
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * box
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        _, scaled_cell, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = torch.linalg.det(scaled_cell).sum()
+
+        forces, stresses = autograd_forces_and_stresses(
+            energy, positions, displacement, cell, num_graphs=1, allow_unused=True
+        )
+
+        torch.testing.assert_close(forces, torch.zeros_like(positions))
+        # E = V, so dE/deps = V * I and sigma = dE/deps / V = I.
+        torch.testing.assert_close(
+            stresses, torch.eye(3, dtype=torch.float64).unsqueeze(0)
+        )
 
 
 class TestSumOutputs:

@@ -17,10 +17,19 @@ Biased potential hooks for enhanced sampling workflows.
 
 Provides :class:`BiasedPotentialHook`, which adds external bias
 potentials to the forces and energy computed by the ML model.
+
+.. deprecated::
+
+    :class:`BiasedPotentialHook` is superseded by
+    :mod:`nvalchemi.enhanced_sampling`.  See that module's docstring for
+    which to use when.  This hook still works and is not scheduled for
+    removal; see :class:`BiasedPotentialHook` for the specific limitations
+    that motivated the replacement.
 """
 
 from __future__ import annotations
 
+import warnings
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -39,6 +48,34 @@ __all__ = ["BiasedPotentialHook"]
 
 class BiasedPotentialHook:
     """Add an external bias potential to forces and energy after the forward pass.
+
+    .. deprecated::
+
+        Superseded by :mod:`nvalchemi.enhanced_sampling`.  Constructing this
+        hook emits a :class:`DeprecationWarning`.  It remains functional and
+        will not be removed before the enhanced-sampling runner ships, but
+        new biases should be written against
+        :class:`~nvalchemi.enhanced_sampling.BiasPotential` or
+        :class:`~nvalchemi.enhanced_sampling.ConservativeBias`.
+
+        Three limitations of the ``bias_fn`` contract motivated the
+        replacement:
+
+        * **No cell response.**  ``bias_fn`` returns only
+          ``(energy, forces)``, so a bias contributes no stress or virial.
+          Under NPT/NPH the barostat reads ``batch.stress``, which the bias
+          never touches, so the cell evolves as if the bias were absent —
+          silently, with no error.
+        * **Forces are hand-written.**  Nothing checks that ``bias_forces``
+          is ``-dE/dr`` for the returned ``bias_energy``, so a bias can be
+          non-conservative by accident.
+          :class:`~nvalchemi.enhanced_sampling.ConservativeBias` derives
+          forces and stress from one energy definition by autograd.
+        * **Sequential in-place composition.**  Each hook mutates
+          ``batch.forces`` in turn, so a second bias that reads
+          ``batch.forces`` observes the first one's contribution.
+          :func:`~nvalchemi.enhanced_sampling.aggregate_bias_results` sums
+          every bias against the same unmodified model output instead.
 
     This hook enables enhanced sampling techniques by composing an
     arbitrary bias potential on top of the ML potential **without**
@@ -140,6 +177,17 @@ class BiasedPotentialHook:
         frequency: int = 1,
         inplace: bool = True,
     ) -> None:
+        warnings.warn(
+            "BiasedPotentialHook is deprecated in favour of "
+            "nvalchemi.enhanced_sampling (BiasPotential / ConservativeBias), "
+            "which derives forces and stress from a single energy definition. "
+            "bias_fn returns only (energy, forces), so a bias applied through "
+            "this hook contributes no stress and is invisible to the NPT/NPH "
+            "barostat. This hook remains functional and will not be removed "
+            "before the enhanced-sampling runner ships.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.bias_fn = bias_fn
         self.stage = stage
         self.frequency = frequency
