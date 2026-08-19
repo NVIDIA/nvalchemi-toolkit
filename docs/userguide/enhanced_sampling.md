@@ -318,6 +318,15 @@ names the next valid step. This is not bookkeeping fussiness: an epoch boundary
 is the only point with no pending `update()` and no in-flight epoch commit, so
 anywhere else risks capturing a bias mid-mutation.
 
+Being *at* a boundary is not the same as being quiescent, though.
+`commit_epoch()` normally fires lazily — the first step of epoch *e+1* is what
+notices that epoch *e* ended — so immediately after `run(..., n_steps=N)` the
+commit has not happened yet. `checkpoint()` therefore drains the completed
+epoch itself before collecting any state, so a shared-history bias is recorded
+with its deposits merged rather than still pending. The drain is idempotent:
+committing is tracked per epoch index, so the lazy path on the next step sees
+it as already done and cannot double-count.
+
 ### Transactional by construction
 
 The store is written walker batch → components → **manifest last**. The

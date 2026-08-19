@@ -218,6 +218,7 @@ class EnhancedSampling:
         self._physical: dict[str, torch.Tensor] = {}
         self._next_walker_id = 0
         self._last_epoch = -1
+        self._committed_epoch = -1
         self._restored = False
         # Set on every stamp so checkpoint() matches the proposal's
         # `sampling.checkpoint(path)` signature without a batch argument.
@@ -304,12 +305,32 @@ class EnhancedSampling:
 
         epoch = step // self.steps_per_epoch
         if epoch != self._last_epoch:
-            if self._last_epoch >= 0:
-                for bias in self._adaptive_biases().values():
-                    commit = getattr(bias, "commit_epoch", None)
-                    if callable(commit):
-                        commit()
+            # Entering epoch e means epoch e-1 has completed.
+            self._commit_epoch(epoch - 1)
             self._last_epoch = epoch
+
+    def _commit_epoch(self, epoch: int) -> None:
+        """Run every adaptive bias's ``commit_epoch``, at most once per epoch.
+
+        Idempotent by design.  The commit is reached from two directions —
+        lazily, when a step observes that the epoch advanced, and eagerly,
+        when :meth:`checkpoint` drains a completed epoch — and a
+        shared-history bias that merged its pending deposits twice would
+        double-count them.
+
+        Parameters
+        ----------
+        epoch:
+            Index of the epoch that has completed.  Negative, or already
+            committed, is a no-op.
+        """
+        if epoch < 0 or epoch <= self._committed_epoch:
+            return
+        for bias in self._adaptive_biases().values():
+            commit = getattr(bias, "commit_epoch", None)
+            if callable(commit):
+                commit()
+        self._committed_epoch = epoch
 
     # ------------------------------------------------------------------
     # Phase 2 — evaluate and apply (AFTER_COMPUTE)
@@ -807,6 +828,7 @@ class EnhancedSampling:
                 "steps_per_epoch": self.steps_per_epoch,
                 "next_walker_id": self._next_walker_id,
                 "last_epoch": self._last_epoch,
+                "committed_epoch": self._committed_epoch,
                 "last_update_step": {
                     name: int(step) for name, step in self._last_update_step.items()
                 },
@@ -857,6 +879,13 @@ class EnhancedSampling:
                 "are there no pending update() calls or in-flight epoch commits "
                 "to capture mid-mutation."
             )
+
+        # Boundary-aligned is not the same as quiescent.  commit_epoch()
+        # normally fires lazily, when the *next* step observes that the epoch
+        # advanced — so at step N the epoch-0 commit has not run yet, and a
+        # checkpoint taken here would record a shared-history bias with its
+        # deposits still pending rather than merged.  Drain it first.
+        self._commit_epoch(step // self.steps_per_epoch - 1)
 
         write_checkpoint(
             path,
@@ -909,6 +938,7 @@ class EnhancedSampling:
         runner_state = states.get("runner", {})
         self._next_walker_id = int(runner_state.get("next_walker_id", 0))
         self._last_epoch = int(runner_state.get("last_epoch", -1))
+        self._committed_epoch = int(runner_state.get("committed_epoch", -1))
         self._last_update_step = {
             name: int(step)
             for name, step in (runner_state.get("last_update_step") or {}).items()

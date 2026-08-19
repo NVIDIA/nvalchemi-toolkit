@@ -115,6 +115,35 @@ class _CountingBias(AdaptivePotentialMixin, ConservativeBias):
         self.bump_state_version()
 
 
+class _SharedHistoryBias(AdaptivePotentialMixin, ConservativeBias):
+    """Deposits accumulate as pending; commit_epoch merges them.
+
+    Models the shared-history multi-walker case: the published state only
+    becomes correct once the epoch commit has run, so a checkpoint taken
+    before it records a bias mid-merge.
+    """
+
+    def __init__(self, name: str = "shared") -> None:
+        super().__init__(name=name)
+        self.register_buffer("pending", torch.zeros(1))
+        self.register_buffer("published", torch.zeros(1))
+        self.commit_calls = 0
+
+    def energy(self, current: Batch) -> Tensor:
+        return (
+            torch.zeros(current.num_graphs, 1, device=current.positions.device)
+            + 0.0 * current.positions.sum()
+        )
+
+    def update(self, frames: Batch, result: BiasResult) -> None:
+        self.pending += 1
+
+    def commit_epoch(self) -> None:
+        self.commit_calls += 1
+        self.published += self.pending
+        self.pending.zero_()
+
+
 # ===========================================================================
 # 1. State encoding
 # ===========================================================================
@@ -645,6 +674,114 @@ class TestRunnerCheckpointRestore:
         restored = runner2.restore(path)
         assert torch.count_nonzero(restored.forces) > 0
         assert runner2.last_outputs, "restore did not prime forces"
+
+    def test_checkpoint_drains_the_epoch_commit(self, tmp_path, device: str) -> None:
+        """Boundary-aligned is not quiescent unless the commit has run.
+
+        commit_epoch() normally fires lazily, when the *next* step notices
+        the epoch advanced. At step N that has not happened, so without an
+        explicit drain the checkpoint records a shared-history bias with its
+        deposits still pending rather than merged.
+        """
+        batch = _make_batch(device=device)
+        bias = _SharedHistoryBias()
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        assert float(bias.pending) == 4, "precondition: commit has not run yet"
+        assert float(bias.published) == 0
+
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        _, states, _ = read_checkpoint(path, device)
+        recorded = states["biases/shared"]
+        assert float(recorded["published"]) == 4, "checkpoint captured pre-commit state"
+        assert float(recorded["pending"]) == 0
+
+    def test_commit_is_not_run_twice(self, tmp_path, device: str) -> None:
+        """Draining at checkpoint must not double-count against the lazy path.
+
+        A shared-history bias that merged its pending deposits twice would
+        silently double them.
+        """
+        batch = _make_batch(device=device)
+        bias = _SharedHistoryBias()
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias}, steps_per_epoch=4
+        )
+        batch = runner.run(batch, n_steps=4)
+        runner.checkpoint(tmp_path / "a.zarr")
+        assert bias.commit_calls == 1
+
+        # Continuing crosses into epoch 1. Its first step observes the epoch
+        # change and takes the lazy path for epoch 0 — which must be a no-op,
+        # since the checkpoint already drained it.
+        batch = runner.run(batch, n_steps=4, prime=False)
+        assert bias.commit_calls == 1, (
+            f"epoch 0 was committed {bias.commit_calls} times"
+        )
+        assert float(bias.published) == 4
+
+        # Epoch 1 completes and is drained by the next checkpoint.
+        runner.checkpoint(tmp_path / "b.zarr")
+        assert bias.commit_calls == 2
+        assert float(bias.published) == 8
+
+    def test_repeated_checkpoint_commits_once(self, tmp_path, device: str) -> None:
+        batch = _make_batch(device=device)
+        bias = _SharedHistoryBias()
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        runner.checkpoint(tmp_path / "a.zarr")
+        runner.checkpoint(tmp_path / "b.zarr")
+        assert bias.commit_calls == 1
+        assert float(bias.published) == 4
+
+    def test_committed_epoch_survives_restore(self, tmp_path, device: str) -> None:
+        """A resumed run must not re-commit an epoch the checkpoint drained."""
+        batch = _make_batch(device=device)
+        bias = _SharedHistoryBias()
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        bias2 = _SharedHistoryBias()
+        runner2 = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias2}, steps_per_epoch=4
+        )
+        resumed = runner2.restore(path)
+        assert bias2.commit_calls == 0, "restore re-ran a committed epoch"
+        assert float(bias2.published) == 4
+
+        # Crossing into epoch 1 must not re-commit epoch 0 either.
+        resumed = runner2.run(resumed, n_steps=4, prime=False)
+        assert bias2.commit_calls == 0
+        assert float(bias2.published) == 4
+
+        # Epoch 1 is new, so its drain does fire.
+        runner2.checkpoint(tmp_path / "next.zarr")
+        assert bias2.commit_calls == 1
+        assert float(bias2.published) == 8
+
+    def test_checkpoint_at_step_zero_does_not_commit(
+        self, tmp_path, device: str
+    ) -> None:
+        """No epoch has completed at step 0, so there is nothing to drain."""
+        batch = _make_batch(device=device)
+        bias = _SharedHistoryBias()
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"shared": bias}, steps_per_epoch=4
+        )
+        runner.prime_forces(batch)
+        runner.checkpoint(tmp_path / "ck.zarr")
+        assert bias.commit_calls == 0
 
     def test_checkpoint_at_step_zero_is_a_boundary(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)

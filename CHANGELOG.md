@@ -40,6 +40,10 @@
   execute code. Checkpoints are permitted
   only at a consistency-epoch boundary, the one point with no pending
   `update()` or in-flight epoch commit; the error names the next valid step.
+  `checkpoint()` also drains the completed epoch's `commit_epoch()` before
+  collecting state, since that normally fires lazily on the next step — so a
+  shared-history bias is saved merged rather than mid-merge. The drain is
+  tracked per epoch index and cannot double-count.
   `BaseDynamics` gains `state_dict()`, `load_state_dict()`,
   `redistribute_state()`, and `apply_thermodynamic_state()`, the last
   implemented for `NVTLangevin` (velocity rescaling) and `NVTNoseHoover`
