@@ -179,6 +179,7 @@ dev = [
     "coverage>=7.2.0",
     "pyyaml>=6.0",
     "interrogate==1.5.0",
+    "ruff==0.15.4",
     "nvtx",
     "rdkit>=2025.3.3",
 ]
