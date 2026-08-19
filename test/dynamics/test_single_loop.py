@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+from torch._dynamo.utils import counters
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import (
@@ -107,6 +108,51 @@ class CountingNonConservativeDemoModel(NonConservativeDemoModel):
         """Increment counter and delegate to parent."""
         self.forward_count += 1
         return super().forward(*args, **kwargs)
+
+
+class CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
+    """Minimal analytical model for end-to-end compilation tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset(),
+            neighbor_config=None,
+            needs_pbc=False,
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding outputs for this test model."""
+        return {}
+
+    def compute_embeddings(self, data: Batch) -> Batch:
+        """Return the batch unchanged because embeddings are not used."""
+        return data
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Compute analytical per-atom energies and forces."""
+        positions = batch.positions
+        return {
+            "energy": positions.square().sum(dim=-1, keepdim=True),
+            "forces": -2 * positions,
+        }
+
+
+class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
+    """Analytical test model declaring positions as an autograd input."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            neighbor_config=None,
+            needs_pbc=False,
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -550,6 +596,58 @@ class TestFusedStage:
         assert fused._compiled_step is not None
         assert callable(fused._compiled_step)
 
+    @pytest.mark.slow
+    def test_compiled_step_executes_on_cuda(self, gpu_device: str) -> None:
+        """A compiled fused step should execute with CUDA-graph capture."""
+        torch.compiler.reset()
+        counters.clear()
+
+        try:
+            with torch.compiler.config.patch(force_disable_caches=True):
+                model = CompilerFriendlyAutogradModel().to(gpu_device)
+                dynamics = BaseDynamics(model=model, device_type="cuda")
+                fused = FusedStage(
+                    sub_stages=[(0, dynamics)],
+                    compile_step=True,
+                    compile_kwargs={"mode": "reduce-overhead"},
+                    device_type="cuda",
+                )
+                batch = create_batch_with_status(n_graphs=3, device=gpu_device)
+                expected_positions = batch.positions.clone()
+
+                with fused:
+                    for _ in range(3):
+                        fused.step(batch)
+                        assert not batch.positions.requires_grad
+                torch.cuda.synchronize()
+
+                assert fused.step_count == 3
+                assert counters["inductor"]["cudagraph_skips"] == 0
+                torch.testing.assert_close(batch.positions, expected_positions)
+                torch.testing.assert_close(batch.forces, -2 * expected_positions)
+                torch.testing.assert_close(
+                    batch.energy,
+                    expected_positions.square().sum(dim=-1, keepdim=True),
+                )
+        finally:
+            counters.clear()
+            torch.compiler.reset()
+
+    def test_eager_step_restores_autograd_inputs(self) -> None:
+        """An eager fused step should restore its input gradient state."""
+        model = CompilerFriendlyAutogradModel()
+        dynamics = BaseDynamics(model=model, device_type="cpu")
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            compile_step=False,
+            device_type="cpu",
+        )
+        batch = create_batch_with_status(n_graphs=3)
+
+        fused.step(batch)
+
+        assert not batch.positions.requires_grad
+
     def test_fused_stage_or_produces_pipeline(self) -> None:
         """FusedStage | BaseDynamics should produce DistributedPipeline."""
         dynamics1 = BaseDynamics(model=self.model)
@@ -617,8 +715,13 @@ class TestFusedStage:
         with pytest.raises(TypeError, match="other must be a BaseDynamics instance"):
             fused + mixin
 
-    def test_empty_status_mask_skips_update(self) -> None:
-        """Dynamics should not be called if no samples match its status."""
+    def test_empty_status_mask_is_noop_update(self) -> None:
+        """An all-False stage mask must leave positions/velocities untouched.
+
+        The masked update is invoked unconditionally (a data-dependent
+        ``if mask.any():`` would break full-graph compilation) but must be
+        a strict no-op for samples outside the stage's status.
+        """
         dynamics0 = TrackingDynamics(model=self.model)
         dynamics1 = TrackingDynamics(model=self.model)
 
@@ -631,11 +734,13 @@ class TestFusedStage:
 
         fused.step(batch)
 
-        # dynamics0 should not have been called (no samples with status=0)
-        assert len(dynamics0.updated_masks) == 0
+        # dynamics0 is called with an all-False mask (branchless dispatch).
+        assert len(dynamics0.updated_masks) == 1
+        assert not dynamics0.updated_masks[0].any()
 
-        # dynamics1 should have been called
+        # dynamics1 processed every sample.
         assert len(dynamics1.updated_masks) == 1
+        assert dynamics1.updated_masks[0].all()
 
     def test_three_stage_fusion(self) -> None:
         """FusedStage should support three or more sub-stages."""
@@ -947,6 +1052,22 @@ class TestFusedStageDeviceValidation:
 class TestCommunicationMixinStreamContext:
     """Tests for _CommunicationMixin.__enter__ / __exit__ stream context."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_warp(self):
+        """Mock the warp stream API — real conversion rejects mocked streams."""
+        with (
+            patch("nvalchemi.dynamics.base.wp") as mock_wp,
+            patch(
+                "torch.cuda.current_stream",
+                return_value=MagicMock(spec=torch.cuda.Stream),
+            ) as mock_current_stream,
+        ):
+            mock_wp.stream_from_torch.return_value = MagicMock()
+            mock_wp.ScopedStream.return_value = MagicMock()
+            self.mock_wp = mock_wp
+            self.mock_current_stream = mock_current_stream
+            yield
+
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         self.model = DemoModelWrapper(DemoModel())
@@ -977,17 +1098,29 @@ class TestCommunicationMixinStreamContext:
                             device=torch.device("cuda:0")
                         )
 
+                        # The dedicated stream waits for work submitted before entry.
+                        self.mock_current_stream.assert_called_once_with(
+                            torch.device("cuda:0")
+                        )
+                        mock_stream.wait_stream.assert_called_once_with(
+                            self.mock_current_stream.return_value
+                        )
+
                         # Assert torch.cuda.stream() was called with the stream
                         mock_stream_fn.assert_called_once_with(mock_stream)
 
                         # Assert the context was entered
                         mock_stream_ctx.__enter__.assert_called_once()
 
-                        # Assert _stream is the mock stream
-                        assert dyn._stream is mock_stream
+                        # Assert both stream views are exposed
+                        assert dyn.torch_stream is mock_stream
+                        assert (
+                            dyn.warp_stream
+                            is self.mock_wp.stream_from_torch.return_value
+                        )
 
-                        # Assert _stream_ctx is the mock context
-                        assert dyn._stream_ctx is mock_stream_ctx
+                        # The joint context entered the torch side
+                        assert dyn._stream_ctx is not None
 
                         # Assert returns self
                         assert result is dyn
@@ -1009,6 +1142,40 @@ class TestCommunicationMixinStreamContext:
         # Should return self
         assert result is dyn
 
+    def test_enter_and_exit_bind_warp_stream(self) -> None:
+        """__enter__ converts the torch stream to warp and enters both; __exit__ clears."""
+        mock_stream = MagicMock(spec=torch.cuda.Stream)
+        mock_stream_ctx = MagicMock()
+
+        with patch("torch.cuda.is_available", return_value=True):
+            with patch("torch.cuda.Stream", return_value=mock_stream):
+                with patch("torch.cuda.stream", return_value=mock_stream_ctx):
+                    dyn = BaseDynamics(model=self.model, device_type="cuda")
+
+                    with patch.object(
+                        type(dyn), "device", property(lambda s: torch.device("cuda:0"))
+                    ):
+                        dyn.__enter__()
+
+                        self.mock_wp.stream_from_torch.assert_called_once_with(
+                            mock_stream
+                        )
+                        assert (
+                            dyn.warp_stream
+                            is self.mock_wp.stream_from_torch.return_value
+                        )
+                        wp_ctx = self.mock_wp.ScopedStream.return_value
+                        wp_ctx.__enter__.assert_called_once()
+
+                        dyn.__exit__(None, None, None)
+                        assert wp_ctx.__exit__.call_count == 1
+                        assert wp_ctx.__exit__.call_args.args[-3:] == (
+                            None,
+                            None,
+                            None,
+                        )
+                        assert dyn.warp_stream is None
+
     def test_exit_clears_stream(self) -> None:
         """__exit__ exits the StreamContext and clears stream references."""
         mock_stream = MagicMock(spec=torch.cuda.Stream)
@@ -1026,19 +1193,25 @@ class TestCommunicationMixinStreamContext:
                         dyn.__enter__()
 
                         # Verify stream is set
-                        assert dyn._stream is mock_stream
-                        assert dyn._stream_ctx is mock_stream_ctx
+                        assert dyn.torch_stream is mock_stream
+                        assert dyn._stream_ctx is not None
 
                         # Exit the context
                         dyn.__exit__(None, None, None)
 
                         # Assert __exit__ was called on the stream context
-                        mock_stream_ctx.__exit__.assert_called_once_with(
-                            None, None, None
+                        # (ExitStack invokes it via the type, so the mock
+                        # records itself as the first argument).
+                        assert mock_stream_ctx.__exit__.call_count == 1
+                        assert mock_stream_ctx.__exit__.call_args.args[-3:] == (
+                            None,
+                            None,
+                            None,
                         )
 
-                        # Assert stream and context are cleared
-                        assert dyn._stream is None
+                        # Assert streams and context are cleared
+                        assert dyn.torch_stream is None
+                        assert dyn.warp_stream is None
                         assert dyn._stream_ctx is None
 
     def test_stream_property_returns_active_stream(self) -> None:
@@ -1054,16 +1227,19 @@ class TestCommunicationMixinStreamContext:
                     with patch.object(
                         type(dyn), "device", property(lambda s: torch.device("cuda:0"))
                     ):
-                        # Before __enter__, stream is None
+                        # Before __enter__, nothing is active
                         assert dyn.stream is None
+                        assert dyn.torch_stream is None
 
-                        # After __enter__, stream is the mock stream
+                        # After __enter__, the joint context and streams exist
                         dyn.__enter__()
-                        assert dyn.stream is mock_stream
+                        assert dyn.stream is dyn._stream_ctx
+                        assert dyn.torch_stream is mock_stream
 
-                        # After __exit__, stream is None again
+                        # After __exit__, everything clears again
                         dyn.__exit__(None, None, None)
                         assert dyn.stream is None
+                        assert dyn.torch_stream is None
 
     def test_context_manager_protocol(self) -> None:
         """'with dynamics_instance:' works end-to-end."""
@@ -1080,21 +1256,36 @@ class TestCommunicationMixinStreamContext:
                     ):
                         # Use the context manager protocol
                         with dyn:
-                            # Inside the with block, stream should be active
-                            assert dyn.stream is mock_stream
-                            assert dyn._stream_ctx is mock_stream_ctx
+                            # Inside the with block, streams should be active
+                            assert dyn.torch_stream is mock_stream
+                            assert dyn.stream is not None
 
-                        # After exiting, stream should be cleared
+                        # After exiting, everything should be cleared
                         assert dyn.stream is None
-                        assert dyn._stream_ctx is None
+                        assert dyn.torch_stream is None
 
                         # Verify __enter__ and __exit__ were called on the stream context
                         mock_stream_ctx.__enter__.assert_called_once()
-                        mock_stream_ctx.__exit__.assert_called_once()
+                        assert mock_stream_ctx.__exit__.call_count == 1
 
 
 class TestFusedStageStreamContext:
     """Tests for FusedStage.__enter__ / __exit__ stream propagation to sub-stages."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_warp(self):
+        """Mock the warp stream API — real conversion rejects mocked streams."""
+        with (
+            patch("nvalchemi.dynamics.base.wp") as mock_wp,
+            patch(
+                "torch.cuda.current_stream",
+                return_value=MagicMock(spec=torch.cuda.Stream),
+            ),
+        ):
+            mock_wp.stream_from_torch.return_value = MagicMock()
+            mock_wp.ScopedStream.return_value = MagicMock()
+            self.mock_wp = mock_wp
+            yield
 
     def setup_method(self) -> None:
         """Set up test fixtures."""
@@ -1172,12 +1363,12 @@ class TestFusedStageStreamContext:
                     ):
                         with fused:
                             # Inside: all sub-stages share the stream
-                            assert fused.stream is mock_stream
+                            assert fused.torch_stream is mock_stream
                             assert dyn0._stream is mock_stream
                             assert dyn1._stream is mock_stream
 
                         # Outside: everything is cleaned up
-                        assert fused.stream is None
+                        assert fused.torch_stream is None
                         assert dyn0._stream is None
                         assert dyn1._stream is None
 
