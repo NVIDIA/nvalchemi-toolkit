@@ -25,6 +25,7 @@ from nvalchemi.dynamics.base import (
     DynamicsStage,
     FusedStage,
     Hook,
+    requires_grad_ctx,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
@@ -63,4 +64,5 @@ __all__ = [
     "initialize_velocities",
     "integrators",
     "optimizers",
+    "requires_grad_ctx",
 ]
