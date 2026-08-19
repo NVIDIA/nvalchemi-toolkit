@@ -51,7 +51,8 @@ from __future__ import annotations
 import sys
 import warnings
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import ExitStack, contextmanager, nullcontext
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -62,6 +63,7 @@ from typing import (
 )
 
 import torch
+import warp as wp
 from jaxtyping import Bool
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
@@ -85,7 +87,69 @@ __all__ = [
     "ConvergenceHook",
     "DistributedPipeline",
     "BufferConfig",
+    "requires_grad_ctx",
 ]
+
+
+@contextmanager
+def requires_grad_ctx(
+    *tensors: torch.Tensor,
+    requires_grad: bool = True,
+) -> Iterator[None]:
+    """Temporarily set ``requires_grad`` on leaf tensors.
+
+    Tensor states are restored on exit, including when an exception is raised.
+    Duplicate tensor arguments are handled once, so nested or aliased inputs
+    preserve the state observed when this context was entered.
+
+    Parameters
+    ----------
+    *tensors : torch.Tensor
+        Leaf tensors whose autograd state should be changed temporarily.
+    requires_grad : bool, optional
+        State to apply inside the context. Default is ``True``.
+
+    Yields
+    ------
+    None
+        Control while the requested autograd state is active.
+
+    Raises
+    ------
+    TypeError
+        If an argument is not a tensor.
+    ValueError
+        If a tensor is not a leaf, or if gradients are requested for a tensor
+        that is neither floating-point nor complex.
+    """
+    unique: list[torch.Tensor] = []
+    seen: set[int] = set()
+    # perform some intial validation of the data
+    for tensor in tensors:
+        if not isinstance(tensor, torch.Tensor):
+            raise TypeError(f"Expected a tensor, got {type(tensor).__name__}")
+        if not tensor.is_leaf:
+            raise ValueError("requires_grad_ctx requires leaf tensors")
+        if requires_grad and not (tensor.is_floating_point() or tensor.is_complex()):
+            raise ValueError(
+                "requires_grad=True requires floating-point or complex tensors"
+            )
+        if id(tensor) not in seen:
+            seen.add(id(tensor))
+            unique.append(tensor)
+
+    original = [(tensor, tensor.requires_grad) for tensor in unique]
+    # set gradient tracking, release control flow back, and when it
+    # wraps up, rest to the original tracking state
+    try:
+        for tensor, state in original:
+            if state != requires_grad:
+                tensor.requires_grad_(requires_grad)
+        yield
+    finally:
+        for tensor, state in reversed(original):
+            if tensor.requires_grad != state:
+                tensor.requires_grad_(state)
 
 
 class BufferConfig(BaseModel):
@@ -457,11 +521,16 @@ class _CommunicationMixin:
         Stored ``isend`` handle when send is deferred (``"fully_async"``).
         ``None`` when no send is pending.
     _stream : torch.cuda.Stream | None
-        The CUDA stream created when entering the context manager.
+        The torch CUDA stream created when entering the context manager
+        (see :attr:`torch_stream`).  ``None`` when outside a ``with``
+        block or on non-CUDA devices.
+    _wp_stream : wp.Stream | None
+        The warp view of ``_stream`` (see :attr:`warp_stream`).
         ``None`` when outside a ``with`` block or on non-CUDA devices.
-    _stream_ctx : torch.cuda.StreamContext | None
-        The active stream context wrapping ``_stream``.
-        ``None`` when outside a ``with`` block or on non-CUDA devices.
+    _stream_ctx : contextlib.ExitStack | None
+        The active joint stream context entering ``_stream`` on both the
+        torch and warp sides (see :attr:`stream`).  ``None`` when outside
+        a ``with`` block or on non-CUDA devices.
 
     Examples
     --------
@@ -558,7 +627,11 @@ class _CommunicationMixin:
         self._pending_recv_handle: Any = None
         self._pending_send_handle: Any = None
         self._stream: torch.cuda.Stream | None = None
-        self._stream_ctx: torch.cuda.StreamContext | None = None
+        self._wp_stream: wp.Stream | None = None
+        self._stream_ctx: ExitStack | None = None
+        # warp wrappers cached per torch stream: re-wrapping the same CUDA
+        # stream makes a new warp Stream object and invalidates graph capture.
+        self._wp_stream_cache: dict[int, wp.Stream] = {}
         if isinstance(buffer_config, dict):
             buffer_config = BufferConfig(**buffer_config)
         if buffer_config is not None and not isinstance(buffer_config, BufferConfig):
@@ -707,26 +780,87 @@ class _CommunicationMixin:
                     )
 
     @property
-    def stream(self) -> torch.cuda.Stream | None:
-        """Return the active CUDA stream, if any.
+    def stream(self) -> ExitStack | None:
+        """Return the active joint torch+warp stream context, if any.
 
-        Returns ``None`` when outside a ``with`` block or on non-CUDA
-        devices.
+        The joint context is an :class:`contextlib.ExitStack` that entered
+        the dedicated stream on both the torch side
+        (``torch.cuda.stream``) and the warp side (``wp.ScopedStream``).
+        Use :attr:`torch_stream` / :attr:`warp_stream` for the underlying
+        stream objects.  Returns ``None`` when outside a ``with`` block or
+        on non-CUDA devices.
+
+        Returns
+        -------
+        contextlib.ExitStack | None
+            The active joint stream context, or ``None``.
+        """
+        return self._stream_ctx
+
+    @property
+    def torch_stream(self) -> torch.cuda.Stream | None:
+        """Return the dedicated torch CUDA stream, if any.
 
         Returns
         -------
         torch.cuda.Stream | None
-            The CUDA stream created by ``__enter__``, or ``None``.
+            The stream created by ``__enter__``, or ``None``.
         """
         return self._stream
+
+    @property
+    def warp_stream(self) -> wp.Stream | None:
+        """Return the warp view of the dedicated CUDA stream, if any.
+
+        Returns
+        -------
+        wp.Stream | None
+            The converted warp stream, or ``None``.
+        """
+        return self._wp_stream
+
+    @staticmethod
+    def _enter_joint_stream_context(
+        torch_stream: torch.cuda.Stream, warp_stream: wp.Stream
+    ) -> ExitStack:
+        """Enter one CUDA stream jointly on the torch and warp sides.
+
+        The single mechanism behind both the engine context manager
+        (``__enter__``, dedicated stream) and the per-step scope for bare
+        ``run()`` calls (``_stream_scope``, caller's current stream): both
+        sides of the same stream are entered on an
+        :class:`contextlib.ExitStack`, which the caller later unwinds with
+        one ``__exit__``/``close``.
+
+        Parameters
+        ----------
+        torch_stream : torch.cuda.Stream
+            The torch stream to make current.
+        warp_stream : wp.Stream
+            The warp view of the same stream.
+
+        Returns
+        -------
+        contextlib.ExitStack
+            The entered joint context.
+        """
+        stack = ExitStack()
+        stack.enter_context(torch.cuda.stream(torch_stream))
+        stack.enter_context(wp.ScopedStream(warp_stream))
+        return stack
 
     def __enter__(self) -> _CommunicationMixin:
         """Enter the stream context manager.
 
         On CUDA devices, creates a new ``torch.cuda.Stream`` and enters
-        a ``torch.cuda.StreamContext`` so that all subsequent GPU
-        operations execute on the dedicated stream.  On non-CUDA devices
-        this is a no-op.
+        it jointly on the torch side (``torch.cuda.StreamContext``) and the
+        warp side (``wp.ScopedStream`` over the converted stream), so all
+        subsequent GPU operations — including warp-backed custom ops —
+        execute on the one dedicated stream. The dedicated stream first waits
+        for work already submitted to the caller's current torch stream. On
+        non-CUDA devices this is a no-op. See the **CUDA stream semantics**
+        notes on :class:`BaseDynamics` for how this differs from calling
+        ``run()`` without the context manager.
 
         Returns
         -------
@@ -734,9 +868,13 @@ class _CommunicationMixin:
             This instance.
         """
         if self.device_type == "cuda" and torch.cuda.is_available():
+            caller_stream = torch.cuda.current_stream(self.device)
             self._stream = torch.cuda.Stream(device=self.device)
-            self._stream_ctx = torch.cuda.stream(self._stream)
-            self._stream_ctx.__enter__()
+            self._stream.wait_stream(caller_stream)
+            self._wp_stream = wp.stream_from_torch(self._stream)
+            self._stream_ctx = self._enter_joint_stream_context(
+                self._stream, self._wp_stream
+            )
         return self
 
     def __exit__(
@@ -747,8 +885,10 @@ class _CommunicationMixin:
     ) -> None:
         """Exit the stream context manager.
 
-        Exits the ``torch.cuda.StreamContext`` (if one was entered) and
-        clears the stored stream references.
+        Exits the warp and torch stream contexts (if entered) and clears
+        the stored stream references.  Exiting does **not** synchronize the
+        dedicated stream: enqueue a ``wait_stream``/``synchronize`` before
+        consuming results from a different stream.
 
         Parameters
         ----------
@@ -762,6 +902,7 @@ class _CommunicationMixin:
         if self._stream_ctx is not None:
             self._stream_ctx.__exit__(exc_type, exc_val, exc_tb)
         self._stream = None
+        self._wp_stream = None
         self._stream_ctx = None
 
     @property
@@ -776,6 +917,37 @@ class _CommunicationMixin:
         if self.active_batch is None:
             return 0
         return self.active_batch.num_graphs or 0
+
+    def _stream_scope(self, device: torch.device):
+        """Bind warp launches to the torch stream the step runs on.
+
+        Inside the engine's context manager the joint torch+warp stream from
+        ``__enter__`` is already active and this is a no-op.  Outside it,
+        the current torch stream is converted once (cached) and entered on
+        the warp side only, so warp-backed custom ops stop launching on
+        warp's default per-device stream — which serializes against torch
+        work and invalidates CUDA-graph capture.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device the batch lives on.
+
+        Returns
+        -------
+        ContextManager
+            The entered joint stream context (see
+            ``_enter_joint_stream_context``), or a null context.
+        """
+        if device.type != "cuda" or self._stream_ctx is not None:
+            return nullcontext()
+        torch_stream = torch.cuda.current_stream(device)
+        key = torch_stream.cuda_stream
+        wp_stream = self._wp_stream_cache.get(key)
+        if wp_stream is None:
+            wp_stream = wp.stream_from_torch(torch_stream)
+            self._wp_stream_cache[key] = wp_stream
+        return self._enter_joint_stream_context(torch_stream, wp_stream)
 
     @property
     def active_batch_has_room(self) -> bool:
@@ -1353,6 +1525,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     Notes
     -----
+    **CUDA streams.** Used as a context manager, dynamics creates a dedicated
+    stream shared by torch and warp. This supports overlapping GPU work,
+    multi-stage pipelines, and CUDA-graph capture. Entry waits for prior work,
+    but exit is asynchronous; synchronize before consuming results on another
+    stream.
+
+    Without the context manager (i.e. when you just call `run()` directly),
+    dynamics uses the caller's current torch stream and binds warp operations
+    to it for each step. Callers using custom streams are responsible for
+    cross-stream ordering.
 
     Developers implementing a new integrator should override
     ``pre_update(batch)`` and ``post_update(batch)`` to implement the
@@ -1657,6 +1839,46 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         return None
 
+    def _autograd_input_tensors(
+        self, batch: Batch | AtomsLike
+    ) -> tuple[torch.Tensor, ...]:
+        """Return tensor inputs that require gradients for model evaluation.
+
+        Parameters
+        ----------
+        batch : Batch | AtomsLike
+            Model input containing configured autograd fields.
+
+        Returns
+        -------
+        tuple[torch.Tensor, ...]
+            Present tensor fields requiring gradients. Conservative models
+            include ``positions`` even when a wrapper omits it from
+            ``autograd_inputs``.
+        """
+        cfg = self.model_config
+        grad_keys = set(cfg.gradient_keys)
+        if cfg.autograd_outputs & cfg.active_outputs:
+            grad_keys |= cfg.autograd_inputs
+            grad_keys.add("positions")
+
+        tensors: list[torch.Tensor] = []
+        for key in grad_keys:
+            value = getattr(batch, key, None)
+            if isinstance(value, torch.Tensor):
+                tensors.append(value)
+        return tuple(tensors)
+
+    @contextmanager
+    def _defer_autograd_input_cleanup(self) -> Iterator[None]:
+        """Defer ``compute`` gradient restoration to an outer context."""
+        previous = getattr(self, "_autograd_cleanup_deferred", False)
+        self._autograd_cleanup_deferred = True
+        try:
+            yield
+        finally:
+            self._autograd_cleanup_deferred = previous
+
     def _ensure_state_initialized(self, batch: Batch) -> None:
         """Lazily initialize per-system integrator state on the first call.
 
@@ -1778,9 +2000,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         5. Detaches all output tensors from the computation graph and
            exposes them as ``_last_outputs`` for custom dynamics subclasses
            that need charges, embeddings, or other non-standard outputs.
-        6. Clears ``requires_grad`` on batch tensors that the model
-           enabled for autograd (e.g. positions), so downstream hooks
-           can safely perform in-place operations.
+        6. Restores the original ``requires_grad`` state of model autograd
+           inputs, so downstream hooks can safely perform in-place operations.
 
         The detach in step 5 is deliberate: model wrappers may return
         tensors that are still attached to the autograd graph (e.g. MACE
@@ -1810,6 +2031,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
+        if getattr(self, "_autograd_cleanup_deferred", False):
+            return self._compute(batch)
+        with requires_grad_ctx(*self._autograd_input_tensors(batch)):
+            return self._compute(batch)
+
+    def _compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+        """Execute model evaluation while autograd input state is managed."""
         self._last_outputs = None
 
         # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
@@ -1839,24 +2067,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 target = getattr(batch, batch_attr, None)
                 if target is not None:
                     target.copy_(value.view(target.shape))
-
-        # Clear requires_grad on batch tensors that the model enabled for
-        # autograd force/stress computation.  After compute() the gradients
-        # have been extracted into forces/stress and the graph is detached,
-        # so keeping requires_grad=True would only cause spurious errors in
-        # downstream hooks that perform in-place operations (e.g. copy_).
-        # Always include "positions" — it is an implicit model input that
-        # may not appear in autograd_inputs but can still carry grad from
-        # the forward pass.
-        cfg = self.model_config
-        grad_keys: set[str] = {"positions"}
-        grad_keys |= cfg.gradient_keys
-        if cfg.autograd_outputs & cfg.active_outputs:
-            grad_keys |= cfg.autograd_inputs
-        for key in grad_keys:
-            value = getattr(batch, key, None)
-            if isinstance(value, torch.Tensor) and value.requires_grad:
-                value.requires_grad_(False)
 
         self._last_outputs = detached
 
@@ -1922,15 +2132,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
 
-        self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
-        self.pre_update(batch)
-        self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
-        self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
-        self.compute(batch)
-        self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
-        self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
-        self.post_update(batch)
-        self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
+        with self._stream_scope(batch.device):
+            self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
+            self.pre_update(batch)
+            self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
+            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            self.compute(batch)
+            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+            self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
+            self.post_update(batch)
+            self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():
@@ -1960,6 +2171,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ``n_steps`` parameter, or passed directly to this method.
         A value passed here takes precedence over the instance
         attribute.
+
+        May be called bare or inside the engine's context manager; the
+        two differ in CUDA stream behavior — see the **CUDA stream
+        semantics** notes on :class:`BaseDynamics`.
 
         Parameters
         ----------
@@ -2205,31 +2420,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         sub-stages before the shared compute, so that forces are evaluated at
         the post-pre_update positions (required for BAOAB Langevin and
         velocity-Verlet-based integrators).
+
+        The save/restore uses full-tensor clones blended back with
+        ``torch.where`` rather than boolean-mask fancy indexing: mask
+        indexing lowers to data-dependent ``nonzero`` (dynamic shapes,
+        graph breaks), while the blend is static-shaped, safe for all-False
+        masks, and CUDA-graph friendly.  The whole body runs under
+        ``no_grad``: the integrator is pure kinematics, and in-place updates
+        of a grad-requiring ``positions`` leaf are only legal without grad.
         """
         self._ensure_state_initialized(batch)
 
-        node_mask = mask[batch.batch_idx]
-        sys_mask = ~mask
-
-        saved: dict[str, torch.Tensor] = {}
-        for field in self._mutable_fields:
-            val = getattr(batch, field, None)
-            if val is None:
-                continue
-            if val.shape[0] == batch.num_nodes:
-                saved[field] = val[~node_mask].clone()
-            elif val.shape[0] == batch.num_graphs:
-                saved[field] = val[sys_mask].clone()
-
-        self.pre_update(batch)
-
         with torch.no_grad():
-            for field, sv in saved.items():
-                val = getattr(batch, field)
-                if val.shape[0] == batch.num_nodes:
-                    val[~node_mask] = sv
-                else:
-                    val[sys_mask] = sv
+            node_mask = mask[batch.batch_idx]
+            saved = self._save_mutable_fields(batch)
+            self.pre_update(batch)
+            self._restore_unmasked_fields(batch, saved, mask, node_mask)
 
     def _masked_post_update(
         self,
@@ -2241,29 +2447,38 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Called by :class:`FusedStage` after the shared compute so that
         post_update (e.g. the final BAOAB velocity half-kick) uses forces at
         the new positions.
-        """
-        node_mask = mask[batch.batch_idx]
-        sys_mask = ~mask
 
+        Uses the same static-shape save/blend strategy as
+        :meth:`_masked_pre_update` — see that method for the rationale.
+        """
+        with torch.no_grad():
+            node_mask = mask[batch.batch_idx]
+            saved = self._save_mutable_fields(batch)
+            self.post_update(batch)
+            self._restore_unmasked_fields(batch, saved, mask, node_mask)
+
+    def _save_mutable_fields(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Clone every mutable field in full (static shapes, no mask indexing)."""
         saved: dict[str, torch.Tensor] = {}
         for field in self._mutable_fields:
             val = getattr(batch, field, None)
-            if val is None:
-                continue
-            if val.shape[0] == batch.num_nodes:
-                saved[field] = val[~node_mask].clone()
-            elif val.shape[0] == batch.num_graphs:
-                saved[field] = val[sys_mask].clone()
+            if val is not None:
+                saved[field] = val.clone()
+        return saved
 
-        self.post_update(batch)
-
-        with torch.no_grad():
-            for field, sv in saved.items():
-                val = getattr(batch, field)
-                if val.shape[0] == batch.num_nodes:
-                    val[~node_mask] = sv
-                else:
-                    val[sys_mask] = sv
+    def _restore_unmasked_fields(
+        self,
+        batch: Batch,
+        saved: dict[str, torch.Tensor],
+        mask: torch.Tensor,
+        node_mask: torch.Tensor,
+    ) -> None:
+        """Blend pre-update values back into unmasked rows via ``torch.where``."""
+        for field, sv in saved.items():
+            val = getattr(batch, field)
+            m = node_mask if val.shape[0] == batch.num_nodes else mask
+            m = m.view(m.shape[0], *([1] * (val.dim() - 1)))
+            torch.where(m, val, sv, out=val)
 
 
 class ConvergenceHook:
@@ -2844,6 +3059,25 @@ class FusedStage(BaseDynamics):
         self._compiled_step = torch.compile(self._step_impl, **merged)
         return self
 
+    @staticmethod
+    def _mark_cudagraph_static_inputs(batch: Batch) -> None:
+        """Mark CUDA batch tensors as stable buffers for graph replay.
+
+        ``_step_impl`` mutates batch tensors in place. Inductor permits those
+        mutations in CUDA graphs when their inputs have stable addresses.
+        The default unguarded marking lets CUDA graphs re-record if a refill or
+        another batch operation replaces a tensor with a different address.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch whose current tensor fields will enter the compiled step.
+        """
+        if batch.device.type != "cuda":
+            return
+        for _, tensor in batch:
+            torch._dynamo.mark_static_address(tensor)
+
     def __enter__(self) -> FusedStage:
         """Enter the stream context and propagate to all sub-stages.
 
@@ -2864,6 +3098,7 @@ class FusedStage(BaseDynamics):
         super().__enter__()
         for _, dynamics in self.sub_stages:
             dynamics._stream = self._stream
+            dynamics._wp_stream = self._wp_stream
         if self.compile_step and self._compiled_step is None:
             self.compile()
         return self
@@ -2891,6 +3126,7 @@ class FusedStage(BaseDynamics):
         """
         for _, dynamics in self.sub_stages:
             dynamics._stream = None
+            dynamics._wp_stream = None
         super().__exit__(exc_type, exc_val, exc_tb)
 
     def _sync_state_to_batch(
@@ -3003,13 +3239,13 @@ class FusedStage(BaseDynamics):
 
         Returns
         -------
-        tuple[Batch, torch.Tensor | None]
-            The updated batch, and a 1-D integer tensor of sample indices
-            that newly graduated (reached ``exit_status``) during this step,
-            or ``None`` if no samples graduated.
+        tuple[Batch, torch.Tensor]
+            The updated batch, and a boolean mask over graphs of samples
+            that newly graduated (reached ``exit_status``) during this step.
+            The mask (rather than an index tensor) keeps the return value
+            static-shaped so the whole method can be captured in a single
+            dynamo graph; :meth:`step` converts it to the index contract.
         """
-        self._ensure_bookkeeping_fields(batch)
-
         self._call_fused_hooks(DynamicsStage.BEFORE_STEP, batch)
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
 
@@ -3028,17 +3264,18 @@ class FusedStage(BaseDynamics):
             mask = status == status_code
             stage_active_masks.append(mask)
             dynamics._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
-            if mask.any():
-                dynamics._masked_pre_update(batch, mask)
+            # Unconditional: `if mask.any():` would be a graph-breaking host
+            # sync, and the masked update is a no-op for all-False masks.
+            dynamics._masked_pre_update(batch, mask)
 
         # Phase 2 — shared forward pass at the updated positions.
         self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
 
         outputs: ModelOutputs = self.compute(batch)
 
-        # TODO: update this when `batch` structure is done
+        # Skip None placeholders — writing them only churns dynamo guards.
         for key, tensor in outputs.items():
-            if key not in ("forces", "energy"):
+            if key not in ("forces", "energy") and tensor is not None:
                 batch[key] = tensor
 
         self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
@@ -3048,8 +3285,7 @@ class FusedStage(BaseDynamics):
         # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
-            if mask.any():
-                dynamics._masked_post_update(batch, mask)
+            dynamics._masked_post_update(batch, mask)
             dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
 
         # Snapshot before hook and counter migration so both are reported
@@ -3081,7 +3317,8 @@ class FusedStage(BaseDynamics):
             )
             active = cur_status == status_code
 
-            counter[active] += 1
+            # Branchless: mask-indexed writes and `migrate.any()` break capture.
+            counter.add_(active.to(counter.dtype).unsqueeze(-1))
 
             next_status = (
                 self.sub_stages[i + 1][0]
@@ -3090,9 +3327,17 @@ class FusedStage(BaseDynamics):
             )
 
             migrate = active & (counter.squeeze(-1) >= dynamics.n_steps)
-            if migrate.any():
-                batch.status.view(-1)[migrate] = next_status
-                counter[migrate] = 0  # Reset for next system in this slot
+            status_flat = batch.status.view(-1)
+            status_flat.copy_(
+                torch.where(
+                    migrate,
+                    torch.full_like(status_flat, next_status),
+                    status_flat,
+                )
+            )
+            counter.copy_(
+                torch.where(migrate.unsqueeze(-1), torch.zeros_like(counter), counter)
+            )
 
         for active_mask, (_, dynamics) in zip(
             stage_active_masks, self.sub_stages, strict=True
@@ -3125,11 +3370,8 @@ class FusedStage(BaseDynamics):
         newly_graduated = (pre_migration_status < self.exit_status) & (
             post_status >= self.exit_status
         )
-        exit_converged: torch.Tensor | None = (
-            torch.where(newly_graduated)[0] if newly_graduated.any() else None
-        )
 
-        return batch, exit_converged
+        return batch, newly_graduated
 
     def step(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Execute one fused step: single forward pass + masked updates.
@@ -3149,9 +3391,29 @@ class FusedStage(BaseDynamics):
             that newly graduated (reached ``exit_status``) during this step,
             or ``None`` if no samples graduated.
         """
+        # Lazy state must be created outside the compiled step: in-graph
+        # allocations break CUDA-graph replay and fullgraph shape reasoning.
+        self._ensure_bookkeeping_fields(batch)
+        for _, dynamics in self.sub_stages:
+            dynamics._ensure_state_initialized(batch)
         if self._compiled_step is not None:
-            return self._compiled_step(batch)
-        return self._step_impl(batch)
+            self._mark_cudagraph_static_inputs(batch)
+        step_fn = (
+            self._compiled_step if self._compiled_step is not None else self._step_impl
+        )
+        autograd_inputs = self._autograd_input_tensors(batch)
+        with (
+            # TODO ideally we unify the API for both fused and single stage dynamics
+            # so that the `_defer_autograd_input_cleanup` is not needed as a shim
+            self._defer_autograd_input_cleanup(),
+            requires_grad_ctx(*autograd_inputs),
+            self._stream_scope(batch.device),
+        ):
+            batch, newly_graduated = step_fn(batch)
+        # Mask -> index conversion here, where a host sync is acceptable.
+        if newly_graduated is None or not newly_graduated.any():
+            return batch, None
+        return batch, torch.where(newly_graduated)[0]
 
     def __call__(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Call the ``step`` method on a batch."""
