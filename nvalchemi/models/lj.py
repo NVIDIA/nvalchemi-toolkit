@@ -458,6 +458,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces, virial = (
+                atomic_energies.detach(),
+                forces.detach(),
+                virial.detach(),
+            )
             atomic_virial = virial.view(N, 3, 3)
             virials = torch.zeros(
                 B, 3, 3, dtype=atomic_virial.dtype, device=positions.device
@@ -477,6 +482,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces = atomic_energies.detach(), forces.detach()
             virials = None
 
         # Scatter per-atom energies to per-system totals. For fp32 inputs,
