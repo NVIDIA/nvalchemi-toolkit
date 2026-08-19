@@ -211,10 +211,8 @@ class EnhancedSampling:
         # during it.
         self._last_results: dict[str, BiasResult] = {}
         self._last_update_step: dict[str, int] = {}
-        self._last_seen_version: dict[str, int] = {
-            name: getattr(bias, "state_version", 0)
-            for name, bias in self.biases.items()
-        }
+        self._last_seen_version: dict[str, int] = {}
+        self._sync_seen_versions()
         self._physical: dict[str, torch.Tensor] = {}
         self._next_walker_id = 0
         self._last_epoch = -1
@@ -244,6 +242,25 @@ class EnhancedSampling:
         for bias in self.biases.values():
             if hasattr(bias, "energy"):
                 bias.energy = torch.compile(bias.energy)  # type: ignore[method-assign]
+
+    def _sync_seen_versions(self) -> None:
+        """Re-baseline the cached per-bias state versions from the live biases.
+
+        :attr:`_last_seen_version` answers "has this bias changed since the
+        runner last looked", which is what decides whether forces need
+        re-priming.  It must be re-baselined after anything that changes a
+        bias's version without the runner observing it — construction, and
+        :meth:`restore`, which loads a saved version straight onto the bias.
+
+        Called from both, rather than inlined, so the two cannot drift: a
+        restore that skipped this would leave the cache at ``0`` against a
+        restored version of ``N``, and the first post-restore ``update()``
+        would re-prime on a change that never happened.
+        """
+        self._last_seen_version = {
+            name: int(getattr(bias, "state_version", 0))
+            for name, bias in self.biases.items()
+        }
 
     def _adaptive_biases(self) -> dict[str, BiasPotential]:
         """Return the biases that implement ``update``.
@@ -949,6 +966,10 @@ class EnhancedSampling:
             loader = getattr(bias, "load_state_dict", None)
             if state is not None and callable(loader):
                 loader(state)
+        # Loading wrote each bias's saved state_version straight onto it, which
+        # the runner never observed as a change; re-baseline so the first
+        # post-restore update() does not read it as one.
+        self._sync_seen_versions()
 
         # The integrator's per-system state must exist before it can be
         # restored into, and its shapes come from the batch — so initialise

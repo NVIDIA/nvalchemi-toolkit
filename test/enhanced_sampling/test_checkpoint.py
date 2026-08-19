@@ -115,6 +115,28 @@ class _CountingBias(AdaptivePotentialMixin, ConservativeBias):
         self.bump_state_version()
 
 
+class _QuietBias(AdaptivePotentialMixin, ConservativeBias):
+    """Bumps its version only when told to.
+
+    Lets a test separate "the bias actually changed" from "the runner thinks
+    it changed", which is the distinction a stale seen-version cache blurs.
+    """
+
+    def __init__(self, name: str = "quiet", bump: bool = True) -> None:
+        super().__init__(name=name)
+        self._bump = bump
+
+    def energy(self, current: Batch) -> Tensor:
+        return (
+            torch.zeros(current.num_graphs, 1, device=current.positions.device)
+            + 0.0 * current.positions.sum()
+        )
+
+    def update(self, frames: Batch, result: BiasResult) -> None:
+        if self._bump:
+            self.bump_state_version()
+
+
 class _SharedHistoryBias(AdaptivePotentialMixin, ConservativeBias):
     """Deposits accumulate as pending; commit_epoch merges them.
 
@@ -782,6 +804,94 @@ class TestRunnerCheckpointRestore:
         runner.prime_forces(batch)
         runner.checkpoint(tmp_path / "ck.zarr")
         assert bias.commit_calls == 0
+
+    def test_restore_rebaselines_seen_versions(self, tmp_path, device: str) -> None:
+        """The cache must match the restored bias, not the fresh one."""
+        batch = _make_batch(device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"quiet": _QuietBias()}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        saved_version = runner.biases["quiet"].state_version
+        assert saved_version == 4
+
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        bias2 = _QuietBias(bump=False)
+        runner2 = EnhancedSampling(
+            _make_dynamics(device), {"quiet": bias2}, steps_per_epoch=4
+        )
+        runner2.restore(path)
+        assert bias2.state_version == saved_version
+        assert runner2._last_seen_version["quiet"] == saved_version, (
+            "seen-version cache still reflects the fresh bias, not the restored one"
+        )
+
+    def test_no_spurious_reprime_after_restore(self, tmp_path, device: str) -> None:
+        """A stale cache makes the first post-restore update look like a change.
+
+        The bias here never bumps after restore, so any re-prime can only come
+        from the runner comparing the restored version against a cache that
+        was never re-baselined.
+        """
+        batch = _make_batch(device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"quiet": _QuietBias()}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        runner2 = EnhancedSampling(
+            _make_dynamics(device),
+            {"quiet": _QuietBias(bump=False)},
+            steps_per_epoch=4,
+        )
+        resumed = runner2.restore(path)
+
+        calls = {"n": 0}
+        original = runner2._reprime
+
+        def _counting_reprime(b: Batch) -> None:
+            calls["n"] += 1
+            original(b)
+
+        runner2._reprime = _counting_reprime  # type: ignore[method-assign]
+        runner2.run(resumed, n_steps=1, prime=False)
+        assert calls["n"] == 0, (
+            f"re-primed {calls['n']} time(s) although no bias changed"
+        )
+
+    def test_real_post_restore_change_still_reprimes(
+        self, tmp_path, device: str
+    ) -> None:
+        """Re-baselining must not silence a genuine change."""
+        batch = _make_batch(device=device)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"quiet": _QuietBias()}, steps_per_epoch=4
+        )
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        runner2 = EnhancedSampling(
+            _make_dynamics(device),
+            {"quiet": _QuietBias(bump=True)},
+            steps_per_epoch=4,
+        )
+        resumed = runner2.restore(path)
+
+        calls = {"n": 0}
+        original = runner2._reprime
+
+        def _counting_reprime(b: Batch) -> None:
+            calls["n"] += 1
+            original(b)
+
+        runner2._reprime = _counting_reprime  # type: ignore[method-assign]
+        runner2.run(resumed, n_steps=1, prime=False)
+        assert calls["n"] == 1, "a genuine bias change no longer re-primes"
 
     def test_checkpoint_at_step_zero_is_a_boundary(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
