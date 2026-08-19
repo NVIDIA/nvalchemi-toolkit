@@ -778,12 +778,11 @@ class TestWarmStart:
         with pytest.raises(RuntimeError, match="mutually exclusive"):
             runner.warm_start(_make_batch(device=device))
 
-    def test_checkpoint_and_restore_not_implemented(self) -> None:
+    def test_checkpoint_requires_a_batch(self) -> None:
+        """checkpoint() is implemented; it needs something to save."""
         runner = EnhancedSampling(_make_dynamics(), {})
-        with pytest.raises(NotImplementedError, match="PR 4"):
+        with pytest.raises(RuntimeError, match="no batch to save"):
             runner.checkpoint("x.zarr")
-        with pytest.raises(NotImplementedError, match="PR 4"):
-            runner.restore("x.zarr")
 
     def test_state_dict_includes_bias_state(self) -> None:
         bias = _RecordingAdaptiveBias()

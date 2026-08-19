@@ -110,6 +110,9 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
         Indices are **local to each graph** (0-based within the graph, not
         global row indices in the batched position tensor).
 
+        May live on any device; it is moved to the batch's device, so a CV
+        closure built before the batch reaches the GPU still works.
+
     Returns
     -------
     Tensor
@@ -151,6 +154,15 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
     # and [B,3] would silently drop the third column.
     if not torch.compiler.is_compiling():
         _validate_atom_indices(atom_indices, B)
+
+    # --- Follow the batch's device ---------------------------------------
+    # atom_indices names atoms; it is configuration, not data, so it is
+    # normally built once — before the batch is moved to GPU — and closed over
+    # by a CV lambda.  Combining it with batch_ptr would then raise a bare
+    # "expected all tensors to be on the same device" naming neither the CV
+    # nor the fix.  A no-op when it is already on the right device, and the
+    # same treatment ConservativeBias gives its buffers.
+    atom_indices = atom_indices.to(device=positions.device)
 
     # --- Resolve atom_indices to global row indices -----------------------
     if atom_indices.dim() == 1:

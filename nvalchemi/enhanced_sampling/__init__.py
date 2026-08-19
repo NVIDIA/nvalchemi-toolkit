@@ -45,10 +45,11 @@ Not yet implemented
 Relationship to ``BiasedPotentialHook``
 ---------------------------------------
 :class:`~nvalchemi.hooks.BiasedPotentialHook` covers the same ground with a
-narrower contract and is **deprecated** in favour of this subpackage.  It
-still works, and it is not scheduled for removal before the
-:class:`EnhancedSampling` runner ships, because until then it is the only
-way to actually apply a bias during dynamics.
+narrower contract and is **deprecated** in favour of this subpackage.  With
+:class:`EnhancedSampling` now available, the migration path is complete:
+anything the hook can do, this subpackage does, and it carries a cell
+response the hook has no slot for.  The hook remains functional so existing
+code keeps working; no removal date is set.
 
 ============================  ==============================  ==========================================
 Concern                       ``BiasedPotentialHook``         ``enhanced_sampling``
@@ -58,18 +59,18 @@ Forces                        written by hand                 autograd, from one
 Cell response                 none                            symmetric-strain ``stress``
 Composing several biases      in-place, sequential            summed against unmodified model output
 Diagnostics                   none                            namespaced ``observables``
-Runs in dynamics today        yes                             not until the runner ships
+Evolving bias state           closure-held, ad hoc            ``update()`` exactly once per due step
 ============================  ==============================  ==========================================
 
 Which to use
-    Write new biases against :class:`ConservativeBias` (or
-    :class:`BiasPotential` directly).  Its cell response is the substantive
-    difference: a ``bias_fn`` bias contributes no stress, so under NPT/NPH
-    the barostat reads a ``batch.stress`` the bias never touched and the
-    cell evolves as if the bias were absent — with no error raised.  Reach
-    for the hook only when you need a bias applied during dynamics right
-    now and can accept that limitation (NVE/NVT, where no barostat reads
-    the stress, is the safe case).
+    :class:`ConservativeBias` (or :class:`BiasPotential` directly), run
+    through :class:`EnhancedSampling`, for everything new.  The cell
+    response is the substantive difference: a ``bias_fn`` bias contributes
+    no stress, so under NPT/NPH the barostat reads a ``batch.stress`` the
+    bias never touched and the cell evolves as if the bias were absent —
+    with no error raised.  Existing hook-based code is correct under NVE and
+    NVT, where nothing reads the stress, and can be migrated when convenient
+    rather than urgently.
 
 No adapter is provided
     Bridging a :class:`BiasPotential` onto ``bias_fn`` would have to drop

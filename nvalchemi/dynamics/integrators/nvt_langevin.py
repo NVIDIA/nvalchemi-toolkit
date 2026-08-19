@@ -132,6 +132,73 @@ class NVTLangevin(BaseDynamics):
         # (e.g. after an inflight-batching refill).
         self._batch_int32: torch.Tensor = batch.batch_idx.int()
 
+    def apply_thermodynamic_state(
+        self, state_ids: torch.Tensor, temperatures: torch.Tensor
+    ) -> None:
+        """Rebind each walker's target temperature and rescale its velocities.
+
+        Langevin has no thermostat memory to transform — its noise amplitude
+        is read from the per-system ``temperature`` every step — so the
+        rebinding is the target update plus the velocity rescaling that keeps
+        the kinetic energy consistent with the new target.
+
+        Velocities scale by ``sqrt(T_new / T_old)``, applied to the batch
+        recorded by the last :meth:`_init_state` or step.
+
+        Parameters
+        ----------
+        state_ids : torch.Tensor
+            New state id per graph, shape ``[B]``.
+        temperatures : torch.Tensor
+            Temperature in Kelvin per state, shape ``[S]``.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the integrator state exists.
+        IndexError
+            If a state id has no corresponding temperature.
+        """
+        state = getattr(self, "_state", None)
+        if state is None:
+            raise RuntimeError(
+                "NVTLangevin.apply_thermodynamic_state: integrator state is "
+                "not initialised; run or prime the dynamics first."
+            )
+        index = state_ids.reshape(-1).to(device=state.temperature.device)
+        table = temperatures.reshape(-1).to(
+            device=state.temperature.device, dtype=state.temperature.dtype
+        )
+        if bool(((index < 0) | (index >= table.numel())).any()):
+            raise IndexError(
+                f"NVTLangevin.apply_thermodynamic_state: state id out of range "
+                f"for {table.numel()} temperature(s): {index.tolist()}."
+            )
+
+        old_kT = state.temperature.reshape(-1).clone()
+        new_kT = table[index.to(torch.long)] * KB_EV
+        with torch.no_grad():
+            state.temperature.copy_(new_kT.reshape(state.temperature.shape))
+        self._pending_velocity_scale = torch.sqrt(new_kT / old_kT)
+
+    def rescale_velocities_for_state(self, batch: Batch) -> None:
+        """Apply the velocity scaling queued by the last rebinding.
+
+        Kept separate because the scaling needs the live batch, which
+        :meth:`apply_thermodynamic_state` does not receive — the two together
+        are the indivisible change replica exchange requires.
+
+        Parameters
+        ----------
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+        """
+        scale = getattr(self, "_pending_velocity_scale", None)
+        if scale is None:
+            return
+        self._rescale_velocities(scale, batch)
+        self._pending_velocity_scale = None
+
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype

@@ -488,3 +488,53 @@ class TestBuiltinBiasCompile:
             runner.prime_forces(batch)
             results.append(batch.forces.clone())
         assert torch.allclose(results[0], results[1], atol=1e-5)
+
+
+# ===========================================================================
+# 5. Device transparency
+# ===========================================================================
+
+
+class TestDeviceTransparency:
+    """A CV or bias built on CPU must work against a batch on GPU.
+
+    Both are configuration built once, typically before the batch is moved
+    to the device.  Requiring the user to place them by hand produces a bare
+    "expected all tensors to be on the same device" that names neither the
+    CV nor the fix.
+    """
+
+    def test_cpu_atom_indices_against_device_batch(self, device: str) -> None:
+        """The exact shape of the quick-start snippet: no device= on the pair."""
+        batch = _pair_batch([3.0], device=device)
+        pair = torch.tensor([0, 1])  # deliberately CPU
+        distance = pair_distance(batch, pair)
+        assert distance.device.type == batch.positions.device.type
+        assert abs(float(distance) - 3.0) < 1e-5
+
+    def test_cpu_atom_indices_per_graph_form(self, device: str) -> None:
+        batch = _pair_batch([3.0, 4.0], device=device)
+        pairs = torch.tensor([[0, 1], [1, 0]])  # CPU, [B, 2]
+        distance = pair_distance(batch, pairs).flatten()
+        assert torch.allclose(
+            distance, torch.tensor([3.0, 4.0], device=distance.device), atol=1e-5
+        )
+
+    def test_cpu_built_umbrella_against_device_batch(self, device: str) -> None:
+        """A bias built before the batch moved to GPU still evaluates."""
+        batch = _pair_batch([3.0], device=device)
+        pair = torch.tensor([0, 1])  # CPU
+        bias = HarmonicUmbrellaBias(
+            cv=lambda b: pair_distance(b, pair),
+            centers=torch.tensor([2.0]),
+            stiffness=4.0,
+            name="u",
+        )  # no .to(device)
+        result = bias.evaluate(batch)
+        assert result.energy.device.type == batch.positions.device.type
+        assert abs(float(result.energy) - 2.0) < 1e-5
+
+    def test_cpu_built_wall_against_device_batch(self, device: str) -> None:
+        batch = _pair_batch([7.0], device=device)
+        wall = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0)  # no .to(device)
+        assert abs(float(wall.evaluate(batch).energy) - 20.0) < 1e-4

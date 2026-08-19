@@ -51,7 +51,7 @@ from __future__ import annotations
 import sys
 import warnings
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -1656,6 +1656,179 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             dynamics does not maintain per-system state.
         """
         return None
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the integrator state needed to resume this run exactly.
+
+        Covers the step counter, the RNG seed, and every per-system tensor in
+        ``self._state`` — thermostat chain variables, per-system timesteps,
+        barostat auxiliaries, whatever the subclass put there.
+
+        Nothing here is a Python object graph: values are tensors and
+        scalars, so the result is directly representable in Zarr without a
+        pickle payload.
+
+        Returns
+        -------
+        dict[str, Any]
+            ``step_count``, ``random_seed`` (when the integrator has one),
+            and a ``state`` submapping of per-system tensors.  ``state`` is
+            empty for an integrator that keeps none, and for one whose lazy
+            initialisation has not run yet.
+
+        Notes
+        -----
+        Reproducibility of stochastic integrators
+            ``NVTLangevin`` derives its noise from ``random_seed +
+            step_count`` rather than advancing a stateful generator, so
+            restoring those two integers reproduces the identical noise
+            sequence.  There is no generator object to serialise.
+        """
+        state: dict[str, torch.Tensor] = {}
+        internal = getattr(self, "_state", None)
+        if internal is not None:
+            # Batch yields (name, value) pairs from __iter__; it has no .items().
+            for key, value in internal:
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.detach().clone()
+
+        out: dict[str, Any] = {
+            "step_count": int(self.step_count),
+            "state": state,
+        }
+        seed = getattr(self, "_random_seed", None)
+        if seed is not None:
+            out["random_seed"] = int(seed)
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore integrator state produced by :meth:`state_dict`.
+
+        Parameters
+        ----------
+        state:
+            The mapping previously returned by :meth:`state_dict`.
+
+        Raises
+        ------
+        RuntimeError
+            If the checkpoint carries per-system state but this integrator
+            has not initialised its own — restoring into an uninitialised
+            integrator would leave the two silently out of step.  Prime the
+            dynamics once (or run a step) before restoring.
+        KeyError
+            If a restored key is absent from the live state, which means the
+            checkpoint came from a differently-configured integrator.
+        """
+        self.step_count = int(state.get("step_count", 0))
+        if "random_seed" in state and hasattr(self, "_random_seed"):
+            self._random_seed = int(state["random_seed"])
+
+        saved: Mapping[str, torch.Tensor] = state.get("state", {}) or {}
+        if not saved:
+            return
+
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.load_state_dict: the checkpoint holds "
+                f"per-system integrator state ({sorted(saved)}) but this "
+                "instance has not initialised its own yet. Prime the dynamics "
+                "against the restored batch before loading, so the shapes are "
+                "known."
+            )
+        for key, value in saved.items():
+            target = getattr(internal, key, None)
+            if target is None:
+                raise KeyError(
+                    f"{type(self).__name__}.load_state_dict: checkpoint key "
+                    f"{key!r} has no counterpart in the live integrator state "
+                    f"({sorted(k for k, _ in internal)}). The "
+                    "checkpoint was written by a differently-configured "
+                    "integrator."
+                )
+            with torch.no_grad():
+                target.copy_(value.reshape(target.shape).to(target.device))
+
+    def redistribute_state(self, walker_ids: torch.Tensor) -> None:
+        """Reorder per-system state to match a new walker layout.
+
+        Needed only when a checkpoint is restored into a batch whose rows are
+        ordered differently from the one it was written from.  Batch position
+        is not an identity, so the caller supplies the permutation.
+
+        Parameters
+        ----------
+        walker_ids : torch.Tensor
+            Row permutation, shape ``[B]``: entry *i* is the index in the
+            current state that should become row *i*.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator has no per-system state to reorder.
+        """
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.redistribute_state: no per-system "
+                "state to reorder."
+            )
+        # Index on the state's own device: ``self.device`` reports the
+        # process compute device, which is CUDA whenever a GPU is visible even
+        # for state that was never moved off the CPU.
+        index = walker_ids.reshape(-1).to(dtype=torch.long)
+        for key, value in list(internal):
+            if isinstance(value, torch.Tensor) and value.shape[0] == index.numel():
+                internal[key] = value[index.to(value.device)].contiguous()
+
+    def apply_thermodynamic_state(
+        self, state_ids: torch.Tensor, temperatures: torch.Tensor
+    ) -> None:
+        """Rebind each walker to a new thermodynamic state.
+
+        Used by replica exchange after an accepted swap: the walker stays on
+        its execution slot while its assigned temperature changes.  The
+        change must be indivisible — target temperature, velocity scaling,
+        and any thermostat private state have to move together, or detailed
+        balance is broken.
+
+        Parameters
+        ----------
+        state_ids : torch.Tensor
+            New state id per graph, shape ``[B]``.
+        temperatures : torch.Tensor
+            Temperature in Kelvin per state, shape ``[S]``.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, on the base class.  An integrator that cannot rebind
+            must fail rather than silently accept a label-only swap that
+            leaves its velocities and thermostat at the old temperature.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support thermodynamic-state "
+            "rebinding. Temperature replica exchange requires an integrator "
+            "that can rescale velocities and transform its thermostat state; "
+            "NVTLangevin and NVTNoseHoover implement this."
+        )
+
+    def _rescale_velocities(self, scale_per_graph: torch.Tensor, batch: Batch) -> None:
+        """Scale each graph's velocities by a per-graph factor, in place.
+
+        Parameters
+        ----------
+        scale_per_graph : torch.Tensor
+            Multiplicative factor per graph, shape ``[B]``.
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+        """
+        velocities = getattr(batch, "velocities", None)
+        if velocities is None:
+            return
+        with torch.no_grad():
+            velocities.mul_(scale_per_graph[batch.batch_idx].unsqueeze(-1))
 
     def _ensure_state_initialized(self, batch: Batch) -> None:
         """Lazily initialize per-system integrator state on the first call.

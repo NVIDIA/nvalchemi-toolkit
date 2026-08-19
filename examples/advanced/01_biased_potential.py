@@ -36,9 +36,10 @@ windowed histograms with WHAM or MBAR.
     of :mod:`nvalchemi.enhanced_sampling`, which derives bias forces *and*
     stress from a single energy definition by autograd.  A ``bias_fn`` bias
     contributes no stress, so it is invisible to an NPT/NPH barostat — fine
-    for the NVT run below, silently wrong under a barostat.  The hook stays
-    functional until the enhanced-sampling runner ships; see
-    :mod:`nvalchemi.enhanced_sampling` for the full comparison.
+    for the NVT run below, silently wrong under a barostat.  The equivalent
+    with the new API is in ``02_umbrella_sampling.py``; see
+    :mod:`nvalchemi.enhanced_sampling` for the full comparison.  This hook
+    stays functional and no removal date is set.
 
 Key concepts demonstrated
 -------------------------

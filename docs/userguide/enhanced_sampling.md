@@ -25,7 +25,9 @@ from nvalchemi.enhanced_sampling import (
     EnhancedSampling, HarmonicUmbrellaBias, pair_distance,
 )
 
-pair = torch.tensor([0, 5])
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+pair = torch.tensor([0, 5], device=device)
 umbrella = HarmonicUmbrellaBias(
     cv=lambda batch: pair_distance(batch, pair),
     centers=torch.tensor([[2.0], [2.5], [3.0]]),   # three windows
@@ -36,7 +38,9 @@ umbrella = HarmonicUmbrellaBias(
 dynamics = NVTLangevin(model=model, dt=0.5, temperature=300.0, friction=0.05)
 sampling = EnhancedSampling(dynamics, {"umbrella": umbrella})
 
-batch["thermodynamic_state_id"] = torch.tensor([0, 1, 2])  # window per graph
+# One window per graph. batch already carries forces/energy buffers — see
+# "Batch requirements" below.
+batch["thermodynamic_state_id"] = torch.tensor([0, 1, 2], device=device)
 batch = sampling.run(batch, n_steps=10_000)
 ```
 
@@ -49,9 +53,18 @@ A CV is **any differentiable callable** `cv(batch) -> Tensor[B, D]`. There is
 no base class, no registration, and nothing to subclass:
 
 ```python
+pair = torch.tensor([0, 5], device=device)
+
 def bond(batch):
-    return pair_distance(batch, torch.tensor([0, 5]))
+    return pair_distance(batch, pair)
 ```
+
+`atom_indices` is moved to the batch's device for you, so a CV closure built
+before the batch reaches the GPU still works — but hoisting the tensor out of
+the closure and placing it explicitly avoids reallocating it on every call.
+The same applies to a bias: `ConservativeBias` moves its buffers to the
+batch's device on first evaluation, so `HarmonicUmbrellaBias(...)` built on
+CPU evaluates correctly against a CUDA batch without an explicit `.to()`.
 
 `pair_distance` is the built-in geometric CV. It handles non-periodic systems
 and the minimum-image convention for **Minkowski-reduced** cells.
@@ -282,6 +295,74 @@ anything that must follow a physical configuration is carried as data:
 
 A `thermodynamic_state_id` you set yourself is preserved, never overwritten.
 
+## Checkpoint and restore
+
+```python
+sampling.checkpoint("run.zarr")          # only at an epoch boundary
+
+# ... later, in a fresh process ...
+sampling2 = EnhancedSampling(dynamics, {"umbrella": umbrella})
+batch = sampling2.restore("run.zarr")    # returns a force-primed batch
+batch = sampling2.run(batch, n_steps=10_000, prime=False)
+```
+
+Resuming reproduces the **identical trajectory**. `NVTLangevin` derives its
+noise from `random_seed + step_count` rather than a stateful generator, so
+restoring those two integers restores the noise sequence exactly — there is no
+RNG object to serialise.
+
+### Only at an epoch boundary
+
+`checkpoint()` raises unless `step_count % steps_per_epoch == 0`, and the error
+names the next valid step. This is not bookkeeping fussiness: an epoch boundary
+is the only point with no pending `update()` and no in-flight epoch commit, so
+anywhere else risks capturing a bias mid-mutation.
+
+### Transactional by construction
+
+The store is written walker batch → components → **manifest last**. The
+manifest is the commit marker:
+
+- No manifest ⇒ the write was interrupted ⇒ `read_checkpoint` refuses it.
+- **Everything** is checksummed (SHA-256) and verified on read, so damage
+  *after* the manifest landed is caught too: each `sampling/` component
+  individually, plus a `batch_checksum` covering `meta/`, `core/`, and
+  `custom/`. That second one matters — the walker batch is written by
+  `AtomicDataZarrWriter`, outside the component path, so checksumming only
+  the sampling state would attest to the bias and integrator while restoring
+  corrupted positions or a scrambled walker identity in silence.
+- **No pickle payloads.** State is Zarr arrays and JSON attributes, so a
+  checkpoint is readable by anything that reads Zarr and loading one cannot
+  execute code. An unsupported value type raises rather than falling back.
+
+```text
+run.zarr/
+  meta/, core/, custom/    walker batch (custom/ carries walker identity)
+  sampling/
+    manifest               written last — the commit; holds every checksum
+    dynamics/              step counter, RNG seed, per-system integrator state
+    biases/<name>/         each bias's state_dict()
+    runner/                walker-id allocation, epoch counters
+```
+
+### Model weights are not restored
+
+Reconstruct the model — including loading its weights through its own API —
+before calling `restore()`. The manifest records the model class, dynamics
+class, and bias set, and `restore()` refuses a mismatch; but that proves the
+*architecture* agrees, not the weights.
+
+### `warm_start` vs `restore`
+
+| | `warm_start(frames)` | `restore(path)` |
+|---|---|---|
+| Bias history | replayed, approximately | exact |
+| Velocities, RNG, integrator state | not restored | exact |
+| Use when | continuing from a trajectory snapshot | resuming a run exactly |
+
+They are mutually exclusive: `warm_start()` after `restore()` raises, because
+replaying history the restored state already contains would corrupt it.
+
 ## Relationship to `BiasedPotentialHook`
 
 {class}`~nvalchemi.hooks.BiasedPotentialHook` covers similar ground and is
@@ -291,17 +372,20 @@ invisible to an NPT/NPH barostat — the cell evolves as if the bias were absent
 with no error raised. It also cannot check that the returned forces are
 `-dE/dr`, and composes several biases by sequential in-place mutation.
 
-It remains functional and is not scheduled for removal. No adapter is provided:
-bridging a `BiasPotential` onto `bias_fn` would have to discard
-`BiasResult.stress`, reintroducing the exact failure the new API removes.
+With `EnhancedSampling` now available, the migration path is complete —
+anything the hook does, this subpackage does. Existing hook-based code is
+correct under NVE and NVT, where nothing reads the stress, so it can be
+migrated when convenient rather than urgently. The hook remains functional and
+no removal date is set.
+
+No adapter is provided: bridging a `BiasPotential` onto `bias_fn` would have
+to discard `BiasResult.stress`, reintroducing the exact failure the new API
+removes.
 
 ## Not yet implemented
 
 - Metadynamics (well-tempered and xTB-style RMSD) and adaptive biasing force.
 - `ThermodynamicState` and `ReplicaExchange`.
-- Zarr checkpointing: `EnhancedSampling.checkpoint()` and `restore()` raise
-  `NotImplementedError`. Individual biases expose `state_dict()` /
-  `load_state_dict()` now, and `warm_start()` gives approximate continuation.
 - General triclinic MIC for unreduced cells.
 - Domain decomposition. `ConservativeBias.distribution_spec()` returns `None`,
   which makes `DistributedModel` raise rather than shard a bias whose

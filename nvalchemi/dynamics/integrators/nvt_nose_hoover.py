@@ -173,6 +173,80 @@ class NVTNoseHoover(BaseDynamics):
             dev,
         )
 
+    def apply_thermodynamic_state(
+        self, state_ids: torch.Tensor, temperatures: torch.Tensor
+    ) -> None:
+        """Rebind target temperature, chain masses, and velocity scaling.
+
+        Unlike Langevin, a Nosé-Hoover chain carries memory: the chain masses
+        ``Q`` are proportional to ``kT tau^2`` and the chain velocities
+        ``eta_dot`` are conjugate to them.  Rebinding the target without
+        transforming both leaves the thermostat driving toward the old
+        temperature and breaks detailed balance, so all three move together:
+
+        * ``temperature`` takes the new ``kT``.
+        * ``Q`` scales by ``kT_new / kT_old``, preserving ``Q ∝ kT tau^2``.
+        * ``eta_dot`` scales by ``sqrt(kT_old / kT_new)``, which keeps the
+          chain kinetic energy ``Q eta_dot^2 / 2`` invariant under the mass
+          change rather than injecting or removing thermostat energy.
+        * atomic velocities scale by ``sqrt(kT_new / kT_old)``, queued for
+          :meth:`rescale_velocities_for_state`.
+
+        ``eta`` itself is a position-like variable and is left untouched.
+
+        Parameters
+        ----------
+        state_ids : torch.Tensor
+            New state id per graph, shape ``[B]``.
+        temperatures : torch.Tensor
+            Temperature in Kelvin per state, shape ``[S]``.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the integrator state exists.
+        IndexError
+            If a state id has no corresponding temperature.
+        """
+        state = getattr(self, "_state", None)
+        if state is None:
+            raise RuntimeError(
+                "NVTNoseHoover.apply_thermodynamic_state: integrator state is "
+                "not initialised; run or prime the dynamics first."
+            )
+        index = state_ids.reshape(-1).to(device=state.temperature.device)
+        table = temperatures.reshape(-1).to(
+            device=state.temperature.device, dtype=state.temperature.dtype
+        )
+        if bool(((index < 0) | (index >= table.numel())).any()):
+            raise IndexError(
+                f"NVTNoseHoover.apply_thermodynamic_state: state id out of "
+                f"range for {table.numel()} temperature(s): {index.tolist()}."
+            )
+
+        old_kT = state.temperature.reshape(-1).clone()
+        new_kT = table[index.to(torch.long)] * KB_EV
+        ratio = new_kT / old_kT
+        with torch.no_grad():
+            state.temperature.copy_(new_kT.reshape(state.temperature.shape))
+            state.nhc_Q.mul_(ratio.reshape(-1, 1))
+            state.nhc_eta_dot.mul_(torch.rsqrt(ratio).reshape(-1, 1))
+        self._pending_velocity_scale = torch.sqrt(ratio)
+
+    def rescale_velocities_for_state(self, batch: Batch) -> None:
+        """Apply the velocity scaling queued by the last rebinding.
+
+        Parameters
+        ----------
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+        """
+        scale = getattr(self, "_pending_velocity_scale", None)
+        if scale is None:
+            return
+        self._rescale_velocities(scale, batch)
+        self._pending_velocity_scale = None
+
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype

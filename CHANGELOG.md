@@ -20,10 +20,33 @@
   evolves during sampling; it must precede `nn.Module` in the base list, and
   raises `TypeError` otherwise rather than letting `nn.Module.state_dict`
   shadow it and drop bias history from checkpoints. `periodic_difference`
-  wraps CV differences onto a circle. Checkpointing
-  (`EnhancedSampling.checkpoint`/`restore`) is not implemented yet;
-  `warm_start()` gives approximate continuation and individual biases expose
-  `state_dict()`.
+  wraps CV differences onto a circle. `warm_start()` gives approximate
+  continuation from prior frames; for exact resumption see the checkpoint
+  entry below.
+
+- Exact checkpoint and restore for enhanced sampling.
+  `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
+  extends the existing `AtomicData` layout with a `sampling/` group holding
+  integrator, bias, and runner state; `restore()` reads it back and returns a
+  force-primed batch that reproduces the identical trajectory. The manifest is
+  written last and is the commit marker, so an interrupted write has none and
+  is refused rather than half-restored. Integrity cover is total: each
+  `sampling/` component is SHA-256 checksummed, and a separate
+  `batch_checksum` covers `meta/`, `core/`, and `custom/` — the positions,
+  velocities, pointer arrays, and walker identity that `AtomicDataZarrWriter`
+  writes outside the component path. All are verified on read. State is Zarr
+  arrays and JSON attributes with **no pickle payloads** — an unsupported
+  value type raises rather than falling back, so loading a checkpoint cannot
+  execute code. Checkpoints are permitted
+  only at a consistency-epoch boundary, the one point with no pending
+  `update()` or in-flight epoch commit; the error names the next valid step.
+  `BaseDynamics` gains `state_dict()`, `load_state_dict()`,
+  `redistribute_state()`, and `apply_thermodynamic_state()`, the last
+  implemented for `NVTLangevin` (velocity rescaling) and `NVTNoseHoover`
+  (chain masses and velocities transformed with kT, leaving the chain kinetic
+  energy invariant). Model weights are never restored from a checkpoint; the
+  manifest records model, dynamics, and bias classes and `restore()` refuses a
+  mismatch.
 
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
@@ -165,9 +188,9 @@
   to be written by hand (nothing checks they are `-dE/dr`), and composes
   several biases by sequential in-place mutation of `batch.forces` rather
   than summing them against the unmodified model output. Constructing the
-  hook now emits a `DeprecationWarning`. It remains functional and will not
-  be removed before the `EnhancedSampling` runner ships, since until then it
-  is the only way to apply a bias during dynamics. No adapter is provided:
+  hook now emits a `DeprecationWarning`. It remains functional so existing
+  code keeps working, and no removal date is set; `EnhancedSampling` (also in
+  this release) covers everything it does. No adapter is provided:
   bridging a `BiasPotential` onto `bias_fn` would have to discard
   `BiasResult.stress`, reintroducing the exact failure the new API removes.
 

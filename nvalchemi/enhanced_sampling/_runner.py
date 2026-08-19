@@ -29,10 +29,17 @@ import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.enhanced_sampling._bias import BiasResult, aggregate_bias_results
+from nvalchemi.enhanced_sampling._checkpoint import (
+    CheckpointManifest,
+    _qualified_name,
+    read_checkpoint,
+    write_checkpoint,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from enum import Enum
+    from pathlib import Path
 
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
@@ -211,6 +218,10 @@ class EnhancedSampling:
         self._physical: dict[str, torch.Tensor] = {}
         self._next_walker_id = 0
         self._last_epoch = -1
+        self._restored = False
+        # Set on every stamp so checkpoint() matches the proposal's
+        # `sampling.checkpoint(path)` signature without a batch argument.
+        self._current_batch: Batch | None = None
 
         self._hook = _BiasCompositeHook(self)
         dynamics.register_hook(self._hook, stage=DynamicsStage.AFTER_COMPUTE)
@@ -283,6 +294,7 @@ class EnhancedSampling:
                 n_graphs, dtype=torch.long, device=device
             )
 
+        self._current_batch = batch
         full = torch.full((n_graphs,), step, dtype=torch.long, device=device)
         batch["sampling_step"] = full
         batch["sampling_epoch"] = full // self.steps_per_epoch
@@ -781,42 +793,206 @@ class EnhancedSampling:
             self.prime_forces(batch)
         return self.dynamics.run(batch, n_steps=n_steps)
 
-    def checkpoint(self, path: str) -> None:
-        """Write a transactional Zarr checkpoint.
+    def _components(self) -> dict[str, dict[str, Any]]:
+        """Collect every component's state for a checkpoint.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Component name to state mapping.
+        """
+        components: dict[str, dict[str, Any]] = {
+            "dynamics": dict(self.dynamics.state_dict()),
+            "runner": {
+                "steps_per_epoch": self.steps_per_epoch,
+                "next_walker_id": self._next_walker_id,
+                "last_epoch": self._last_epoch,
+                "last_update_step": {
+                    name: int(step) for name, step in self._last_update_step.items()
+                },
+            },
+        }
+        for name, bias in self.biases.items():
+            getter = getattr(bias, "state_dict", None)
+            if callable(getter):
+                components[f"biases/{name}"] = dict(getter())
+        return components
+
+    def checkpoint(self, path: str | Path, batch: Batch | None = None) -> None:
+        """Write a transactional checkpoint at a consistency-epoch boundary.
+
+        The boundary is not a convention — it is the only point where there
+        are no pending ``update()`` calls and no in-flight epoch commit, so a
+        checkpoint taken anywhere else could capture a bias mid-mutation.
 
         Parameters
         ----------
         path:
-            Destination store.
+            Destination Zarr store.
+        batch:
+            The batch to save.  Defaults to the one last seen by the runner.
 
         Raises
         ------
-        NotImplementedError
-            Always; exact checkpointing is PR 4 work. ``nn.Module.state_dict``
-            on individual biases is available in the meantime.
+        RuntimeError
+            If no batch is available, meaning nothing has been run or primed.
+        ValueError
+            If the current step is not an epoch boundary; the message names
+            the next valid step.
         """
-        raise NotImplementedError(
-            "EnhancedSampling.checkpoint() is not implemented yet (PR 4). "
-            "Individual biases expose state_dict()/load_state_dict() now."
+        target = batch if batch is not None else self._current_batch
+        if target is None:
+            raise RuntimeError(
+                "EnhancedSampling.checkpoint: no batch to save. Run or prime "
+                "the sampler first, or pass batch= explicitly."
+            )
+
+        step = self.dynamics.step_count
+        if step % self.steps_per_epoch != 0:
+            next_step = ((step // self.steps_per_epoch) + 1) * self.steps_per_epoch
+            raise ValueError(
+                f"EnhancedSampling.checkpoint: step {step} is not a consistency "
+                f"epoch boundary (steps_per_epoch={self.steps_per_epoch}). The "
+                f"next valid checkpoint step is {next_step}. Only at a boundary "
+                "are there no pending update() calls or in-flight epoch commits "
+                "to capture mid-mutation."
+            )
+
+        write_checkpoint(
+            path,
+            target,
+            self._components(),
+            sampling_step=step,
+            sampling_epoch=step // self.steps_per_epoch,
+            steps_per_epoch=self.steps_per_epoch,
+            model_class=_qualified_name(self.dynamics.model),
+            dynamics_class=_qualified_name(self.dynamics),
+            bias_classes={
+                name: _qualified_name(bias) for name, bias in self.biases.items()
+            },
         )
 
-    def restore(self, path: str) -> Batch:
-        """Restore a checkpoint written by :meth:`checkpoint`.
+    def restore(
+        self, path: str | Path, device: torch.device | str | None = None
+    ) -> Batch:
+        """Restore a checkpoint exactly, and prime forces before returning.
+
+        The caller must have reconstructed the same model, dynamics, and
+        biases first; this validates that they match what was saved.  **Model
+        weights are not restored** — load them through the model's own API
+        before calling here.  The compatibility metadata proves the
+        architecture agrees, not that the weights do.
 
         Parameters
         ----------
         path:
-            Source store.
+            Source Zarr store.
+        device:
+            Device for the restored batch.  Defaults to the dynamics' device.
+
+        Returns
+        -------
+        Batch
+            The restored batch, force-primed and ready to run.
 
         Raises
         ------
-        NotImplementedError
-            Always; exact restore is PR 4 work.
+        ValueError
+            If the checkpoint is uncommitted, fails a checksum, or was
+            written by a different model, dynamics, or bias set.
         """
-        raise NotImplementedError(
-            "EnhancedSampling.restore() is not implemented yet (PR 4). "
-            "Use warm_start() for approximate continuation."
-        )
+        target_device = device if device is not None else self._model_device()
+        batch, states, manifest = read_checkpoint(path, target_device)
+        self._validate_compatibility(manifest)
+
+        self.steps_per_epoch = int(manifest.steps_per_epoch)
+        runner_state = states.get("runner", {})
+        self._next_walker_id = int(runner_state.get("next_walker_id", 0))
+        self._last_epoch = int(runner_state.get("last_epoch", -1))
+        self._last_update_step = {
+            name: int(step)
+            for name, step in (runner_state.get("last_update_step") or {}).items()
+        }
+
+        for name, bias in self.biases.items():
+            state = states.get(f"biases/{name}")
+            loader = getattr(bias, "load_state_dict", None)
+            if state is not None and callable(loader):
+                loader(state)
+
+        # The integrator's per-system state must exist before it can be
+        # restored into, and its shapes come from the batch — so initialise
+        # against the restored batch first, then overwrite.
+        self.dynamics._ensure_state_initialized(batch)
+        self.dynamics.load_state_dict(states.get("dynamics", {}))
+
+        self._restored = True
+        self.prime_forces(batch)
+        return batch
+
+    def _model_device(self) -> torch.device:
+        """Return the device the model's own tensors live on.
+
+        ``BaseDynamics.device`` reports the process's compute device, which
+        is CUDA whenever a GPU is visible — even for a model that was never
+        moved off the CPU.  Restoring a batch there would put the batch and
+        the model on different devices.  The model's own parameters are the
+        authority.
+
+        Returns
+        -------
+        torch.device
+            The model's device, falling back to the dynamics' device when the
+            model holds no tensors (a pure-physics wrapper such as LJ).
+        """
+        model = self.dynamics.model
+        for tensor in list(model.parameters()) + list(model.buffers()):
+            return tensor.device
+        return self.dynamics.device
+
+    def _validate_compatibility(self, manifest: CheckpointManifest) -> None:
+        """Reject a checkpoint written by a different configuration.
+
+        Parameters
+        ----------
+        manifest:
+            The committed manifest.
+
+        Raises
+        ------
+        ValueError
+            If the model class, dynamics class, or bias set disagrees.
+        """
+        problems: list[str] = []
+        actual_model = _qualified_name(self.dynamics.model)
+        if manifest.model_class and manifest.model_class != actual_model:
+            problems.append(
+                f"  model: checkpoint has {manifest.model_class}, "
+                f"this runner has {actual_model}"
+            )
+        actual_dynamics = _qualified_name(self.dynamics)
+        if manifest.dynamics_class and manifest.dynamics_class != actual_dynamics:
+            problems.append(
+                f"  dynamics: checkpoint has {manifest.dynamics_class}, "
+                f"this runner has {actual_dynamics}"
+            )
+        actual_biases = {
+            name: _qualified_name(bias) for name, bias in self.biases.items()
+        }
+        if manifest.bias_classes != actual_biases:
+            problems.append(
+                f"  biases: checkpoint has {manifest.bias_classes}, "
+                f"this runner has {actual_biases}"
+            )
+        if problems:
+            detail = "\n".join(problems)
+            raise ValueError(
+                "EnhancedSampling.restore: the checkpoint was written by a "
+                f"different configuration:\n{detail}\n"
+                "Reconstruct the same model, dynamics, and biases before "
+                "restoring. Note that model *weights* are never restored from "
+                "a checkpoint — load them through the model's own API."
+            )
 
     def __repr__(self) -> str:
         """Return a concise description of the runner."""
