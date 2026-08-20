@@ -460,6 +460,10 @@ Segments alternate even and odd offsets: `(0,1),(2,3)` then `(1,2),(3,4)`.
 No state appears twice in one segment, which is what lets every pair be
 decided simultaneously; two segments cover every neighbouring pair.
 
+A segment's pairs are attempted when it **completes** — entering segment *s*
+decides segment *s−1*, the same way entering epoch *e* commits epoch *e−1*.
+So the first swap lands at `attempt_interval`, using segment 0's pairs.
+
 ### Tuning the ladder
 
 ```python

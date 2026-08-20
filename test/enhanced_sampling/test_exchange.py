@@ -579,6 +579,73 @@ class TestRunnerIntegration:
         runner.run(batch, n_steps=3)
         assert exchange.attempts == 0
 
+    @staticmethod
+    def _record_segments(exchange: ReplicaExchange) -> list[int]:
+        """Patch ``decide`` to record which segment index each attempt uses."""
+        seen: list[int] = []
+        original = exchange.decide
+
+        def _spy(segment, *args, **kwargs):
+            seen.append(segment)
+            return original(segment, *args, **kwargs)
+
+        exchange.decide = _spy  # type: ignore[method-assign]
+        return seen
+
+    def test_first_attempt_uses_segment_zero(self, device: str) -> None:
+        """Entering segment s means segment s-1 completed; s-1 is what is due.
+
+        Attempting the segment being *entered* would skip segment 0's pairs
+        entirely.
+        """
+        batch = _make_batch(device=device)
+        runner, exchange = self._runner(device, interval=2)
+        seen = self._record_segments(exchange)
+        runner.run(batch, n_steps=6)
+        assert seen[:2] == [0, 1], f"segments attempted: {seen}"
+
+    def test_two_state_ladder_swaps_at_the_first_interval(self, device: str) -> None:
+        """Segment 0 holds the only pair a two-state ladder has.
+
+        Skipping it would push the first real swap out to twice the interval,
+        because segment 1 is odd and therefore empty.
+        """
+        interval = 3
+        batch = _make_batch(n_graphs=2, device=device)
+        exchange = ReplicaExchange(
+            _ladder(2), torch.arange(2), attempt_interval=interval, random_seed=1
+        )
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {},
+            steps_per_epoch=100,
+            replica_exchange=exchange,
+        )
+        runner.prime_forces(batch)
+        for _ in range(interval + 1):
+            runner.run(batch, n_steps=1, prime=False)
+            if exchange.attempts:
+                break
+        assert exchange.attempts == 1
+        assert runner.dynamics.step_count == interval + 1, (
+            "the first swap did not land at attempt_interval"
+        )
+
+    def test_segments_attempted_in_order_without_gaps(self, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, exchange = self._runner(device, interval=2)
+        seen = self._record_segments(exchange)
+        runner.run(batch, n_steps=12)
+        assert seen == list(range(len(seen))), f"out of order or gapped: {seen}"
+
+    def test_a_segment_is_never_attempted_twice(self, device: str) -> None:
+        """An accepted swap re-primes, which re-enters the stamp."""
+        batch = _make_batch(device=device)
+        runner, exchange = self._runner(device, interval=1)
+        seen = self._record_segments(exchange)
+        runner.run(batch, n_steps=8)
+        assert len(seen) == len(set(seen)), f"repeated segment: {seen}"
+
     def test_velocities_rescaled_on_accepted_swap(self, device: str) -> None:
         """Kinetic energy must follow the new target, not stay at the old."""
         batch = _make_batch(n_graphs=2, device=device)
@@ -699,6 +766,9 @@ class TestExchangeCheckpoint:
         runner2.restore(path)
         assert exchange2.exchange_id == saved_id
         assert exchange2.attempts == exchange.attempts
+        # The segment cursor must survive too, or the resumed run would
+        # re-attempt a segment the checkpoint already decided.
+        assert runner2._attempted_segment == runner._attempted_segment
 
     def test_restored_run_reproduces_decisions(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)

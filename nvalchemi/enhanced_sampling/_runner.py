@@ -226,6 +226,7 @@ class EnhancedSampling:
         self._last_epoch = -1
         self._committed_epoch = -1
         self._last_segment = -1
+        self._attempted_segment = -1
         # Set while prime_forces runs. Priming evaluates forces at fixed
         # coordinates; it must not also advance the sampling state.
         self._priming = False
@@ -409,6 +410,27 @@ class EnhancedSampling:
                 "equal temperatures with a multi-window bias."
             )
 
+    def _attempt_segment(self, batch: Batch, segment: int) -> None:
+        """Attempt *segment*'s pairs, at most once.
+
+        Idempotent by segment index, for the same reason
+        :meth:`_commit_epoch` is: an accepted swap re-primes forces, which
+        runs the identity stamp again, and a nested pass must not decide the
+        same segment twice.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        segment:
+            The completed segment whose pairs are due.  Negative, or already
+            attempted, is a no-op.
+        """
+        if segment < 0 or segment <= self._attempted_segment:
+            return
+        self._attempted_segment = segment
+        self._attempt_exchange(batch, segment)
+
     def _attempt_exchange(self, batch: Batch, segment: int) -> None:
         """Attempt one round of swaps and apply the accepted ones.
 
@@ -549,20 +571,16 @@ class EnhancedSampling:
         # Ordering at a boundary is exchange, then bias commit — the epoch
         # commit publishes shared history, and doing it before the swap would
         # publish under labels that are about to change.
-        if (
-            self.replica_exchange is not None
-            and not self._priming
-            and segment != self._last_segment
-        ):
-            previous = self._last_segment
-            # Mark the segment consumed *before* attempting. An accepted swap
-            # re-primes forces, which runs this stamp again — and with the
-            # marker still stale that nested pass would attempt the same
-            # segment a second time, recursing until a swap happened to be
-            # rejected.
-            self._last_segment = segment
-            if previous >= 0:
-                self._attempt_exchange(batch, segment)
+        #
+        # Entering segment s means segment s-1 has completed, and it is *that*
+        # one whose pairs are due — exactly as entering epoch e commits epoch
+        # e-1 below. Attempting the segment being entered instead would skip
+        # segment 0's pairs entirely; on a two-state ladder, where segment 0
+        # holds the only pair that exists, the first swap would be delayed to
+        # 2 * attempt_interval.
+        if self.replica_exchange is not None and not self._priming:
+            self._attempt_segment(batch, segment - 1)
+        self._last_segment = segment
 
         epoch = step // self.steps_per_epoch
         if epoch != self._last_epoch:
@@ -1101,6 +1119,7 @@ class EnhancedSampling:
                 "last_epoch": self._last_epoch,
                 "committed_epoch": self._committed_epoch,
                 "last_segment": self._last_segment,
+                "attempted_segment": self._attempted_segment,
                 "last_update_step": {
                     name: int(step) for name, step in self._last_update_step.items()
                 },
@@ -1219,6 +1238,7 @@ class EnhancedSampling:
         self._last_epoch = int(runner_state.get("last_epoch", -1))
         self._committed_epoch = int(runner_state.get("committed_epoch", -1))
         self._last_segment = int(runner_state.get("last_segment", -1))
+        self._attempted_segment = int(runner_state.get("attempted_segment", -1))
 
         exchange_state = states.get("exchange")
         if exchange_state is not None and self.replica_exchange is not None:
