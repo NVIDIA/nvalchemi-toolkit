@@ -95,6 +95,12 @@ delta = periodic_difference(values, centers, periods=torch.tensor([2 * math.pi])
 | `UpperWall` | `(k/p) * max(s - s0, 0)^p` | Stop a CV rising past a bound |
 | `LowerWall` | `(k/p) * max(s0 - s, 0)^p` | Stop a CV falling below a bound |
 | `FlatBottomRestraint` | both of the above | Confine a CV to an interval |
+| `WellTemperedMetaDynamicsBias` | `sum_i h_i exp(-(s - c_i)^2 / 2 sigma^2)` | Free energy along a CV you chose |
+| `RMSDMetaDynamicsBias` | `sum_r k_push exp(-alpha RMSD(x, x_r)^2)` | Structure search with no CV at all |
+
+The first four are static: their energy depends only on the current
+configuration. The last two are **history-dependent** — they accumulate state
+as sampling proceeds, and so mix in `AdaptivePotentialMixin`.
 
 Walls contribute **exactly zero** energy and force inside the allowed region,
 and their default quadratic form has zero force at the boundary, so switching
@@ -108,6 +114,150 @@ one on does not deliver an impulse.
 `stiffness` accepts a scalar, `[D]`, `[D, D]`, or `[S, D, D]`, and is validated
 to be symmetric positive-semidefinite — a negative eigenvalue would turn the
 restraint into an unbounded repulsion.
+
+## Metadynamics
+
+Umbrella sampling needs you to name the windows in advance. Metadynamics does
+not: it deposits a Gaussian hill wherever the system currently is, so the
+accumulated bias pushes it towards wherever it has not yet been.
+
+### Well-tempered metadynamics
+
+`WellTemperedMetaDynamicsBias` deposits one hill per walker at its current CV
+value, every `update_frequency` steps. In the well-tempered scheme each hill
+is damped by the bias already standing at that point,
+
+```text
+h_t = h_0 * exp(-V(s_t) / (k_B T (gamma - 1)))
+```
+
+so the sum converges rather than filling forever, and the converged bias is a
+free-energy estimate:
+
+```python
+from nvalchemi.enhanced_sampling import WellTemperedMetaDynamicsBias
+
+metad = WellTemperedMetaDynamicsBias(
+    cv=bond_distance,
+    height=0.005,          # h_0, eV
+    sigma=0.25,            # hill width, CV units
+    temperature=300.0,
+    bias_factor=8.0,       # gamma; None gives standard metadynamics
+    update_frequency=500,
+    storage="preallocated",
+    max_hills=2000,
+    name="metad",
+)
+...
+profile = metad.free_energy(grid)   # -(gamma / (gamma - 1)) * V(s)
+```
+
+`bias_factor=None` is the `gamma -> infinity` limit: every hill keeps height
+`h_0` and `F(s) = -V(s)`. That is standard metadynamics, which does not
+converge — the bias keeps growing and oscillates about the true profile.
+
+Pass `periods` for a CV that lives on a circle. A hill at `+3.10 rad` must
+repel a configuration at `-3.10 rad`, which is `0.083 rad` away the short way
+and `6.20 rad` the long way; without a period the bias sees the second number
+and does nothing.
+
+### Storage policies
+
+The hill table has to be bounded somehow, and the three ways of bounding it
+are not interchangeable.
+
+| `storage` | On reaching `max_hills` | Compile | `free_energy()` |
+|-----------|-------------------------|---------|-----------------|
+| `preallocated` | **raises** | Shapes fixed for the whole run | Valid |
+| `grow` | Allocates another chunk | Recompiles on each resize | Valid |
+| `fifo` | Overwrites the oldest hill | Shapes fixed | **Raises** |
+
+`preallocated` raises rather than evicting because silently dropping hills
+would change the physics of a converging run with nothing to show for it. The
+error names the ways out. `fifo` is not merely a cache policy: once hills are
+discarded the accumulated bias is no longer the integral of everything
+deposited, the well-tempered convergence argument no longer applies, and
+`free_energy()` refuses rather than returning a number that looks fine.
+
+### Multi-walker history
+
+`history` decides which hills a given walker feels.
+
+- `"shared"` (default) — every walker feels every hill. This is the
+  multiple-walker scheme: `B` walkers fill a basin roughly `B` times faster,
+  at the cost of one batched force evaluation per step rather than `B`
+  separate runs.
+- `"walker"` — each walker feels only its own hills, so one batch runs `B`
+  genuinely independent metadynamics simulations.
+- `"state"` — hills belong to the `thermodynamic_state_id` that deposited
+  them, which is what a replica-exchange ladder needs.
+
+`"state"` sets `state_dependent_for_exchange = True`, so combining it with a
+temperature ladder is rejected rather than run under an acceptance rule that
+does not cover it; see [Acceptance](#acceptance).
+
+### xTB-style RMSD metadynamics
+
+`RMSDMetaDynamicsBias` drops the collective variable entirely. Its history is
+a set of retained *structures*, and it pushes away from all of them at once:
+
+```text
+V(x, t) = sum_r f_r(t) * k_push * exp(-alpha * RMSD(x, x_r)^2)
+```
+
+RMSD is measured after optimal translation and rotation, so the bias is
+invariant to rigid motion and its forces sum to exactly zero. This is the
+scheme xTB/CREST uses for conformer and isomer searching, and it is the right
+tool when you cannot say in advance which coordinate matters.
+
+```python
+from nvalchemi.enhanced_sampling import RMSDMetaDynamicsBias
+
+explorer = RMSDMetaDynamicsBias(
+    k_push=0.08,                        # eV
+    alpha=10.0,                         # A^-2
+    update_frequency=500,
+    max_references=64,                  # FIFO by default
+    atom_indices=torch.tensor([0, 4, 7]),   # heavy atoms only
+    name="explorer",
+)
+```
+
+Choosing `alpha` is the main decision, and it must match the RMSD scale the
+system actually explores: the kernel only has usable gradient where
+`alpha * RMSD^2` is of order one. Set it far too small and
+`exp(-alpha * RMSD^2)` sits at ~1 for every structure, leaving the bias nearly
+constant and nearly forceless. A rigid cluster moving 0.3 A wants `alpha`
+around 10; a floppy molecule sampling 1 A wants `alpha` around 1.
+
+Three constraints are worth knowing before reaching for it:
+
+- **Non-periodic systems only.** A batch with a non-zero cell is rejected.
+  Cartesian RMSD against a stored reference is not defined under periodic
+  boundary conditions — an atom crossing a cell face is physically unmoved but
+  Cartesian-displaced by a lattice vector, which would inject a large spurious
+  force. Bias a periodic-aware CV with `WellTemperedMetaDynamicsBias` instead.
+- **Fixed atom correspondence.** Atom `i` is always compared with atom `i` of
+  the reference; there is no permutation search, so two structures identical
+  up to relabelling of equivalent atoms count as distinct.
+- **No free energy.** This is a structure generator, not an estimator, and
+  there is deliberately no `free_energy()` method. What it produces is a set
+  of structures worth optimising or re-scoring at a higher level of theory.
+
+`atom_indices` are **per-graph local** indices. Restricting to heavy atoms is
+the usual choice: methyl hydrogens spinning freely generate RMSD that says
+nothing about the conformer.
+
+### Deposition timing
+
+Both biases deposit at `AFTER_STEP`, so a hill marks the configuration the
+walker actually reached rather than the one it started from. A deposition
+bumps the bias state version, and the runner re-primes forces in response, so
+a new hill is felt on the very next step rather than one step late.
+
+Neither deposits during `prime_forces()`: priming evaluates forces, it does
+not advance the trajectory, and depositing there would double-count the
+starting configuration.
 
 ## Writing your own bias
 
@@ -562,7 +712,7 @@ removes.
 
 ## Not yet implemented
 
-- Metadynamics (well-tempered and xTB-style RMSD) and adaptive biasing force.
+- Adaptive biasing force.
 - Asynchronous replica exchange (pair-local rendezvous, non-blocking
   workers). `mode="asynchronous"` raises; synchronous exchange is available.
 - The combined temperature-plus-window acceptance rule; see

@@ -266,12 +266,18 @@ def _encode_state(group: zarr.Group, state: Mapping[str, Any]) -> None:
     kinds: dict[str, str] = {}
     scalars: dict[str, Any] = {}
     dtypes: dict[str, str] = {}
+    shapes: dict[str, list[int]] = {}
 
     for key, value in state.items():
         if isinstance(value, torch.Tensor):
             kinds[key] = "tensor"
             dtypes[key] = str(value.dtype)
             array = value.detach().cpu().contiguous().numpy()
+            # Zarr materialises a 0-d array as shape (1,), so the true shape
+            # is recorded separately and reapplied on decode. Without it a
+            # scalar buffer (a step counter, a deposition count) comes back
+            # rank-1 and fails its own component checksum on restore.
+            shapes[key] = list(array.shape)
             group.create_array(key, shape=array.shape, dtype=array.dtype)
             if array.size:
                 group[key][...] = array
@@ -297,6 +303,7 @@ def _encode_state(group: zarr.Group, state: Mapping[str, Any]) -> None:
     group.attrs["kinds"] = kinds
     group.attrs["scalars"] = scalars
     group.attrs["dtypes"] = dtypes
+    group.attrs["shapes"] = shapes
 
 
 def _decode_state(group: zarr.Group, device: torch.device | str) -> dict[str, Any]:
@@ -317,12 +324,17 @@ def _decode_state(group: zarr.Group, device: torch.device | str) -> dict[str, An
     kinds = dict(group.attrs.get("kinds", {}))
     scalars = dict(group.attrs.get("scalars", {}))
     dtypes = dict(group.attrs.get("dtypes", {}))
+    shapes = dict(group.attrs.get("shapes", {}))
 
     state: dict[str, Any] = {}
     for key, kind in kinds.items():
         if kind == "tensor":
             array = np.asarray(group[key][...])
             tensor = torch.from_numpy(np.ascontiguousarray(array))
+            # Missing for checkpoints written before shapes were recorded;
+            # falling back to the stored shape reads those exactly as before.
+            if key in shapes:
+                tensor = tensor.reshape(tuple(shapes[key]))
             state[key] = tensor.to(device=device, dtype=_torch_dtype(dtypes[key]))
         elif kind == "group":
             state[key] = _decode_state(group[key], device)

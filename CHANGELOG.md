@@ -54,6 +54,49 @@
   `thermodynamic_state_id` rather than indexing it, so one shared restraint
   can run alongside a multi-rung temperature ladder.
 
+- Metadynamics, in two flavours. `WellTemperedMetaDynamicsBias` deposits
+  Gaussian hills along any differentiable CV, one per walker per deposition,
+  with the well-tempered height damping
+  `h_t = h_0 exp(-V(s_t) / (k_B T (gamma - 1)))` that makes the sum converge;
+  `bias_factor=None` gives standard metadynamics. `free_energy()` returns
+  `-(gamma / (gamma - 1)) V(s)`. Three storage policies, chosen rather than
+  defaulted: `preallocated` keeps tensor shapes fixed for the whole run and
+  **raises** when capacity is exhausted, because silently dropping hills would
+  change the physics of a converging run with nothing to show for it; `grow`
+  allocates another chunk and recompiles; `fifo` bounds memory by discarding
+  the oldest hill, which is a scientific choice and not a cache policy — the
+  well-tempered convergence argument no longer applies, so `free_energy()`
+  refuses under it rather than returning a plausible number. Three history
+  modes: `shared` (the multiple-walker scheme — `B` walkers fill a basin
+  roughly `B` times faster in one batched force evaluation), `walker` (`B`
+  independent runs in one batch), and `state` (per-rung history for a
+  replica-exchange ladder, which declares `state_dependent_for_exchange`).
+  `periods` wraps the hill difference onto a circle so a hill near a branch
+  cut repels from both sides.
+
+  `RMSDMetaDynamicsBias` is the xTB/CREST-style variant, whose history is a
+  set of retained structures rather than CV values, and which therefore needs
+  no collective variable at all. Optimal translation/rotation alignment is
+  solved by the quaternion characteristic-polynomial route rather than an SVD
+  Kabsch: the proper-rotation constraint is built in instead of needing a
+  non-differentiable `det` correction, and only the largest eigenvalue is
+  taken, which stays well-conditioned for symmetric-top and linear molecules
+  where singular-vector gradients blow up. The squared RMSD is used
+  throughout — `sqrt` has infinite derivative at zero, and a reference is
+  visited at RMSD zero every time one is deposited. Consequences: the energy
+  is invariant to rigid motion and the bias forces sum to exactly zero.
+  Non-periodic systems only — a batch with a non-zero cell is rejected,
+  because an atom crossing a cell face is physically unmoved but
+  Cartesian-displaced by a lattice vector, which would inject a large spurious
+  force. Atom correspondence is fixed, `atom_indices` selects a per-graph
+  subset, warm-start references seed the history, and there is deliberately no
+  `free_energy()` — it is a structure generator, not an estimator.
+
+  Both deposit at `AFTER_STEP`, so a hill marks the configuration the walker
+  reached; both bump the state version so the runner re-primes forces and the
+  new hill is felt on the next step rather than one late; and neither deposits
+  during `prime_forces()`.
+
 - Exact checkpoint and restore for enhanced sampling.
   `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
   extends the existing `AtomicData` layout with a `sampling/` group holding
@@ -173,6 +216,14 @@
   `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
 
 ### Fixed
+
+- **Zero-dimensional tensors in enhanced-sampling checkpoints** — Zarr reads a
+  0-d array back as shape `(1,)`, so a component holding a scalar buffer (a
+  step counter, a deposition count — the kind of state a compile-safe bias
+  keeps as a tensor rather than a Python int) no longer matched the digest
+  taken when it was written, and `restore()` failed the component's own
+  checksum. The true shape is now recorded alongside the dtype and reapplied
+  on decode; checkpoints written before this are read exactly as before.
 
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
   ever differentiated with respect to positions and charges, so a non-hybrid

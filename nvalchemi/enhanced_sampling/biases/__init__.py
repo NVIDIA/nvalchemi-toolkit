@@ -14,13 +14,21 @@
 # limitations under the License.
 """Built-in bias implementations.
 
-Available: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
+Static biases: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
 :class:`LowerWall`, :class:`FlatBottomRestraint`.
 
-Metadynamics (well-tempered and xTB-style RMSD) and adaptive biasing force
-are not yet implemented.
+History-dependent biases: :class:`WellTemperedMetaDynamicsBias` (Gaussian
+hills along a chosen collective variable) and :class:`RMSDMetaDynamicsBias`
+(xTB-style repulsion from retained reference geometries, for when the
+interesting coordinates are not known in advance).
+
+Adaptive biasing force is not yet implemented.
 """
 
+from nvalchemi.enhanced_sampling.biases.metadynamics import (
+    WellTemperedMetaDynamicsBias,
+)
+from nvalchemi.enhanced_sampling.biases.rmsd_metad import RMSDMetaDynamicsBias
 from nvalchemi.enhanced_sampling.biases.umbrella import HarmonicUmbrellaBias
 from nvalchemi.enhanced_sampling.biases.walls import (
     FlatBottomRestraint,
@@ -32,5 +40,7 @@ __all__ = [
     "FlatBottomRestraint",
     "HarmonicUmbrellaBias",
     "LowerWall",
+    "RMSDMetaDynamicsBias",
     "UpperWall",
+    "WellTemperedMetaDynamicsBias",
 ]

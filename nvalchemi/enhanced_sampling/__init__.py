@@ -33,14 +33,24 @@ Public surface
   ordering, exactly-once ``update()``, and force priming.
 * :class:`ThermodynamicState`, :class:`ReplicaExchange` — synchronous
   replica exchange; swaps state labels, not coordinates.
-* Built-in biases: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
-  :class:`LowerWall`, :class:`FlatBottomRestraint`.
+* Built-in static biases: :class:`HarmonicUmbrellaBias`,
+  :class:`UpperWall`, :class:`LowerWall`, :class:`FlatBottomRestraint`.
+* :class:`WellTemperedMetaDynamicsBias` — Gaussian hills along a chosen CV,
+  with well-tempered height damping and a free-energy estimator.
+* :class:`RMSDMetaDynamicsBias` — xTB-style repulsion from retained
+  reference geometries, for exploring when the interesting coordinates are
+  not known in advance.  Non-periodic systems only.
 
 Not yet implemented
 -------------------
 * Asynchronous replica exchange
-* Metadynamics (well-tempered, xTB-style RMSD) and adaptive biasing force
+* Adaptive biasing force
 * General triclinic MIC for unreduced cells
+* Replica exchange over a temperature ladder combined with a bias whose
+  energy depends on the thermodynamic state (per-state umbrella windows,
+  per-state metadynamics history); such biases declare
+  ``state_dependent_for_exchange`` and the runner rejects the combination
+  rather than applying an acceptance rule that does not cover it.
 
 Relationship to ``BiasedPotentialHook``
 ---------------------------------------
@@ -95,7 +105,9 @@ from nvalchemi.enhanced_sampling.biases import (
     FlatBottomRestraint,
     HarmonicUmbrellaBias,
     LowerWall,
+    RMSDMetaDynamicsBias,
     UpperWall,
+    WellTemperedMetaDynamicsBias,
 )
 from nvalchemi.enhanced_sampling.cv import pair_distance, periodic_difference
 
@@ -119,4 +131,6 @@ __all__ = [
     "UpperWall",
     "LowerWall",
     "FlatBottomRestraint",
+    "WellTemperedMetaDynamicsBias",
+    "RMSDMetaDynamicsBias",
 ]

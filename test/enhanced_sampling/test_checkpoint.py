@@ -207,6 +207,29 @@ class TestStateEncoding:
         restored = _decode_state(group, "cpu")
         assert restored["empty"].shape == (0, 3)
 
+    def test_zero_dimensional_tensor_round_trips(self, tmp_path) -> None:
+        """Zarr stores a 0-d array as shape (1,); the rank must be restored.
+
+        Scalar buffers are how a compile-safe bias holds its counters — a
+        Python int would be a data-dependent value in the traced graph.  If
+        the rank comes back wrong the component no longer matches the digest
+        taken when it was written, and restore fails its own checksum.
+        """
+        state = {"count": torch.tensor(5, dtype=torch.int64)}
+        group = zarr.open_group(str(tmp_path / "s.zarr"), mode="w")
+        _encode_state(group, state)
+        restored = _decode_state(group, "cpu")
+
+        assert restored["count"].shape == ()
+        assert torch.equal(restored["count"], state["count"])
+        assert _component_checksum(restored) == _component_checksum(state)
+
+    def test_checksum_distinguishes_rank(self) -> None:
+        """A scalar and a one-element vector are not the same state."""
+        assert _component_checksum({"x": torch.tensor(5)}) != _component_checksum(
+            {"x": torch.tensor([5])}
+        )
+
     def test_unsupported_type_raises_rather_than_pickling(self, tmp_path) -> None:
         """Refusing is the point: a pickle payload would make a checkpoint
         executable and unreadable outside Python."""
