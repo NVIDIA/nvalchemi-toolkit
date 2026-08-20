@@ -33,3 +33,12 @@ molecules via task selection on ``UMAWrapper.from_checkpoint``.
 **10 — MACE Training**: Training a ScaleShiftMACE model with the ALCHEMI
 training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
 validation, and distributed launch patterns.
+
+**11 — Umbrella Sampling**: Batched umbrella sampling with
+``EnhancedSampling``; per-window centers selected by
+``thermodynamic_state_id``, composing a restraint with a wall, and reading
+per-bias diagnostics for WHAM/MBAR.
+
+**12 — Replica Exchange**: Temperature REMD over a geometric ladder; the
+even/odd pair schedule, Metropolis acceptance, per-pair acceptance rates for
+ladder tuning, and confirming the integrator target follows the assignment.
