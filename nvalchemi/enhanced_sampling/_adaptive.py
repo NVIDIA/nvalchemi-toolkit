@@ -87,8 +87,9 @@ class AdaptivePotentialMixin:
     State version
         :meth:`bump_state_version` records that the bias changed.  The runner
         reads :attr:`state_version` to decide whether forces in the batch are
-        stale and need re-priming, and (from PR 5) to validate that an
-        accepted replica-exchange state assignment is coherent.  A bias that
+        stale and need re-priming.  It is also checkpointed per bias, ready
+        for validating that an accepted replica-exchange state assignment is
+        coherent — which the exchange does not consume yet.  A bias that
         mutates state inside :meth:`update` must call it.
     """
 

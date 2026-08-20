@@ -290,10 +290,12 @@ anything that must follow a physical configuration is carried as data:
 | `walker_id` | Immutable identity, assigned once |
 | `thermodynamic_state_id` | Window / temperature / energy-function state |
 | `sampling_step` | Dynamics force-evaluation step |
-| `exchange_segment` | Exchange segment number (always 0 until replica exchange lands) |
+| `exchange_segment` | Exchange segment, `step // attempt_interval` (see [Replica exchange](#replica-exchange)) |
 | `sampling_epoch` | Consistency epoch, `step // steps_per_epoch` |
 
 A `thermodynamic_state_id` you set yourself is preserved, never overwritten.
+Without replica exchange, `exchange_segment` falls back to the epoch length,
+since there are no exchange segments to count.
 
 ## Checkpoint and restore
 
@@ -548,7 +550,10 @@ removes.
 ## Not yet implemented
 
 - Metadynamics (well-tempered and xTB-style RMSD) and adaptive biasing force.
-- `ThermodynamicState` and `ReplicaExchange`.
+- Asynchronous replica exchange (pair-local rendezvous, non-blocking
+  workers). `mode="asynchronous"` raises; synchronous exchange is available.
+- The combined temperature-plus-window acceptance rule; see
+  [Acceptance](#acceptance) for what is rejected and why.
 - General triclinic MIC for unreduced cells.
 - Domain decomposition. `ConservativeBias.distribution_spec()` returns `None`,
   which makes `DistributedModel` raise rather than shard a bias whose

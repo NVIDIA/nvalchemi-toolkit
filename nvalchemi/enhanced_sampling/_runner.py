@@ -117,8 +117,8 @@ class EnhancedSampling:
         registers a hook on it and calls its ``run``.
     biases:
         Mapping of unique name to :class:`BiasPotential`.  May be empty,
-        which reduces the runner to identity stamping (useful on its own for
-        replica exchange in PR 5).
+        which reduces the runner to identity stamping — what pure temperature
+        replica exchange needs, since the ladder alone drives the sampling.
     steps_per_epoch:
         Steps per consistency epoch, the boundary at which
         :meth:`AdaptivePotentialMixin.commit_epoch` fires.

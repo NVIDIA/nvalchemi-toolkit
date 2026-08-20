@@ -23,7 +23,7 @@ Layout, extending the existing ``AtomicData`` Zarr record in place::
         dynamics/              integrator, thermostat, and RNG counters
         biases/<name>/         each bias's state_dict()
         runner/                walker-id allocation and epoch counters
-        exchange/              reserved; replica exchange is not implemented
+        exchange/              ladder config, counters, acceptance-RNG position
 
 State is stored as Zarr arrays (tensors) and group attributes (scalars,
 strings, nested mappings).  There are **no pickle payloads**: a checkpoint is
