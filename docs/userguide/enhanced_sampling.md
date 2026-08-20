@@ -354,9 +354,15 @@ need their own correction and are P1.
 ### Sample threshold and ramp
 
 A mean force estimated from a handful of samples is noise, and applying it
-would drive the walker on the strength of that noise. Below `min_samples` a
-bin applies nothing; between `min_samples` and `full_samples` the applied
-fraction ramps linearly to one, so no bin switches on with a jump.
+would drive the walker on the strength of that noise. At or below
+`min_samples` a bin applies nothing; between `min_samples` and `full_samples`
+the applied fraction ramps linearly to one, so no bin switches on with a jump.
+
+Setting `full_samples == min_samples` asks for a step instead — nothing until
+the threshold, full force at it. That is the classic hard-threshold form, and
+it is what `min_samples=0` gives by default, so it is supported rather than
+rejected. A bin with no samples reports a ramp of zero whatever the thresholds
+are, since it has no estimate to apply.
 
 `max_force` optionally caps `|dA/dr|`, bounding what a bin visited once at an
 awkward geometry can do while its average settles.

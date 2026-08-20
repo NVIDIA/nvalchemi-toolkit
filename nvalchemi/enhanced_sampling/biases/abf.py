@@ -77,7 +77,9 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         drive the walker on the strength of that noise.
     full_samples:
         Samples at which the applied fraction reaches 1.  Defaults to
-        ``2 * min_samples``.  Between the two the force ramps linearly.
+        ``2 * min_samples``.  Between the two the force ramps linearly;
+        equal to ``min_samples`` it is a step, applying nothing until the
+        threshold and full force at it.
     max_force:
         Optional cap on ``|dA/dr|`` in eV/A.  A bin that has been visited
         once at a bad geometry can hold a large estimate; the cap bounds
@@ -368,18 +370,27 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         )
         if self.max_force is not None:
             estimate = estimate.clamp(-self.max_force, self.max_force)
-
-        span = max(self.full_samples - self.min_samples, 1)
-        ramp = ((counts - self.min_samples) / span).clamp(0.0, 1.0)
-        return estimate * ramp
+        # Reuses ramp_fraction rather than repeating it: two copies of the
+        # same schedule are two places for the endpoint to disagree.
+        return estimate * self.ramp_fraction()
 
     def ramp_fraction(self) -> Tensor:
         """Return the applied fraction per bin, shape ``[n_bins]``.
 
-        Zero below ``min_samples``, one at or above ``full_samples``, linear
-        between.  Continuous at both ends by construction: a jump straight to
-        the full estimate the moment a bin crosses its threshold would be a
-        force discontinuity of exactly the size the threshold exists to avoid.
+        Zero at or below ``min_samples``, one at or above ``full_samples``,
+        linear between.  Ramping rather than switching on at the threshold
+        avoids a force discontinuity of exactly the size the threshold exists
+        to prevent.
+
+        ``full_samples == min_samples`` is a step: nothing until the
+        threshold, full force at it.  That is a legitimate choice — it is the
+        classic hard-threshold form, and it is what ``min_samples=0`` gives
+        by default — so it is handled rather than rejected.  It needs its own
+        branch because the linear form would divide by a zero span, and
+        clamping that span to 1 would delay full force by one sample.
+
+        A bin with no samples has no estimate, so it reports zero whatever
+        the thresholds are.
 
         Returns
         -------
@@ -387,8 +398,12 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
             Fractions in ``[0, 1]``.
         """
         counts = self.bin_counts.to(self.force_sum.dtype)
-        span = max(self.full_samples - self.min_samples, 1)
-        return ((counts - self.min_samples) / span).clamp(0.0, 1.0)
+        span = self.full_samples - self.min_samples
+        if span <= 0:
+            fraction = (self.bin_counts >= self.full_samples).to(counts.dtype)
+        else:
+            fraction = ((counts - self.min_samples) / span).clamp(0.0, 1.0)
+        return torch.where(self.bin_counts > 0, fraction, torch.zeros_like(fraction))
 
     # ------------------------------------------------------------------
     # BiasPotential
@@ -493,8 +508,10 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
             # Only bump when the applied force actually changed. A bin still
             # below its threshold contributes nothing, so re-priming forces
             # over it would be pure cost — this is the case
-            # AdaptivePotentialMixin.bump_state_version documents.
-            changed = bool((self.bin_counts[bins] > self.min_samples).any())
+            # AdaptivePotentialMixin.bump_state_version documents. Asking
+            # ramp_fraction rather than re-deriving the threshold keeps the
+            # two from disagreeing at the endpoint.
+            changed = bool((self.ramp_fraction()[bins] > 0.0).any())
 
         if changed:
             self.bump_state_version()

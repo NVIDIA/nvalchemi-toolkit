@@ -133,9 +133,13 @@
   coordinate, and accepting an arbitrary CV would apply a distance-shaped
   correction to something that is not a distance.
 
-  Below `min_samples` a bin applies nothing, and between `min_samples` and
-  `full_samples` the applied fraction ramps linearly to one, so no bin
-  switches on with a jump; `max_force` optionally caps what a bin visited once
+  At or below `min_samples` a bin applies nothing, and between `min_samples`
+  and `full_samples` the applied fraction ramps linearly to one, so no bin
+  switches on with a jump. `full_samples == min_samples` asks for a step
+  instead — nothing until the threshold, full force at it — which is the
+  classic hard-threshold form and what `min_samples=0` gives by default, so it
+  is handled as its own case rather than falling through the linear formula
+  and arriving a sample late; `max_force` optionally caps what a bin visited once
   at an awkward geometry can do. `observation_stage` is `AFTER_COMPUTE`, where
   `batch.forces` still holds the unbiased physical force — an estimator shown
   its own output converges to whatever it had already decided. An update

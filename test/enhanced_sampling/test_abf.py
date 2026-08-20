@@ -353,6 +353,82 @@ class TestAppliedForce:
             bias.update(_harmonic_frame([2.5], device), BiasResult())
         assert float(bias.ramp_fraction()[0]) == pytest.approx(1.0)
 
+    def test_equal_thresholds_reach_full_force_at_the_threshold(
+        self, device: str
+    ) -> None:
+        """``full_samples == min_samples`` is a step, not a one-late ramp.
+
+        The linear form divides by a zero span here; clamping that span to 1
+        would delay full force by a sample, so the count that finally meets
+        the threshold would still apply nothing.
+        """
+        bias = _abf(device, n_bins=1, min_samples=3, full_samples=3)
+
+        fractions = []
+        for _ in range(5):
+            bias.update(_harmonic_frame([2.5], device), BiasResult())
+            fractions.append(float(bias.ramp_fraction()[0]))
+
+        assert fractions == [0.0, 0.0, 1.0, 1.0, 1.0]
+
+    def test_equal_thresholds_bump_the_version_at_the_threshold(
+        self, device: str
+    ) -> None:
+        """The bump must track the ramp, not a separately derived threshold."""
+        bias = _abf(device, n_bins=1, min_samples=3, full_samples=3)
+        for _ in range(2):
+            bias.update(_harmonic_frame([2.5], device), BiasResult())
+        assert bias.state_version == 0
+
+        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        assert int(bias.bin_counts[0]) == 3
+        assert bias.state_version == 1
+
+    def test_equal_thresholds_apply_force_at_the_threshold(self, device: str) -> None:
+        """The applied force must follow the same schedule as ramp_fraction."""
+        bias = _abf(
+            device, n_bins=1, cv_range=(1.0, 4.0), min_samples=2, full_samples=2
+        )
+        bias.update(_harmonic_frame([2.9], device), BiasResult())
+        assert (
+            torch.count_nonzero(bias.evaluate(_harmonic_frame([2.9], device)).forces)
+            == 0
+        )
+
+        bias.update(_harmonic_frame([2.9], device), BiasResult())
+        forces = bias.evaluate(_harmonic_frame([2.9], device)).forces
+        assert float(forces[1, 0]) == pytest.approx(_analytic_gradient(2.9), rel=1e-5)
+
+    def test_zero_threshold_default_is_a_step(self, device: str) -> None:
+        """``min_samples=0`` defaults full_samples to 0, i.e. no threshold."""
+        bias = AdaptiveBiasingForce(
+            atom_indices=torch.tensor([0, 1]),
+            temperature=TEMPERATURE,
+            cv_range=(1.0, 4.0),
+            n_bins=1,
+            min_samples=0,
+        ).to(device)
+        assert bias.full_samples == 0
+
+        assert float(bias.ramp_fraction()[0]) == 0.0  # no samples, no estimate
+        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        assert float(bias.ramp_fraction()[0]) == 1.0
+
+    def test_unvisited_bins_report_zero_ramp(self, device: str) -> None:
+        """A bin with no samples has no estimate whatever the thresholds are."""
+        for thresholds in ((0, 0), (3, 3), (2, 6)):
+            bias = _abf(device, min_samples=thresholds[0], full_samples=thresholds[1])
+            assert float(bias.ramp_fraction().max()) == 0.0
+
+    def test_applied_gradient_matches_ramp_fraction(self, device: str) -> None:
+        """The two must not drift: the force is the estimate times the ramp."""
+        bias = _abf(device, n_bins=1, min_samples=2, full_samples=5)
+        for _ in range(6):
+            bias.update(_harmonic_frame([2.9], device), BiasResult())
+            expected = float(bias.mean_force()[0]) * float(bias.ramp_fraction()[0])
+            forces = bias.evaluate(_harmonic_frame([2.9], device)).forces
+            assert float(forces[1, 0]) == pytest.approx(expected, rel=1e-5, abs=1e-9)
+
     def test_out_of_range_walkers_feel_nothing(self, device: str) -> None:
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=10)
         bias.update(_harmonic_frame([2.5], device), BiasResult())
