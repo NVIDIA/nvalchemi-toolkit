@@ -227,6 +227,8 @@ class EnhancedSampling:
         self._committed_epoch = -1
         self._last_segment = -1
         self._attempted_segment = -1
+        # One-shot: the walker/state bijection is checked on the first stamp.
+        self._validated_assignment = False
         # Set while prime_forces runs. Priming evaluates forces at fixed
         # coordinates; it must not also advance the sampling state.
         self._priming = False
@@ -544,8 +546,17 @@ class EnhancedSampling:
             )
             self._next_walker_id += n_graphs
 
-        if getattr(batch, "thermodynamic_state_id", None) is None:
+        existing = getattr(batch, "thermodynamic_state_id", None)
+        if existing is None:
             if self.replica_exchange is not None:
+                # Check before attaching: a ladder-sized tensor on a
+                # differently-sized batch would otherwise fail as an opaque
+                # "Length mismatch" from inside the batch storage.
+                self.replica_exchange.validate_assignment(
+                    self.replica_exchange.initial_state_ids,
+                    n_graphs,
+                    source="initial_state_ids",
+                )
                 batch["thermodynamic_state_id"] = (
                     self.replica_exchange.initial_state_ids.to(device)
                 )
@@ -553,6 +564,14 @@ class EnhancedSampling:
                 batch["thermodynamic_state_id"] = torch.zeros(
                     n_graphs, dtype=torch.long, device=device
                 )
+        elif self.replica_exchange is not None and not self._validated_assignment:
+            # A batch may arrive carrying its own assignment, which never went
+            # through the constructor's check. Validate it once — a duplicate
+            # would surface later as a KeyError from the pair lookup.
+            self.replica_exchange.validate_assignment(
+                existing, n_graphs, source="batch.thermodynamic_state_id"
+            )
+        self._validated_assignment = True
 
         self._current_batch = batch
         full = torch.full((n_graphs,), step, dtype=torch.long, device=device)

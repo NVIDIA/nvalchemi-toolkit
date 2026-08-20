@@ -158,17 +158,10 @@ class ReplicaExchange:
         self.attempt_interval = int(attempt_interval)
         self.random_seed = int(random_seed)
 
-        ids = initial_state_ids.reshape(-1).to(torch.long)
-        if sorted(ids.tolist()) != list(range(len(self.states))):
-            raise ValueError(
-                f"ReplicaExchange: initial_state_ids must be a permutation of "
-                f"0..{len(self.states) - 1}, got {ids.tolist()}. Replica "
-                "exchange presumes one walker per state; a duplicate would let "
-                "two walkers claim the same rung of the ladder."
-            )
-        self.initial_state_ids = ids
-
         self._acceptance = self._infer_acceptance()
+        self.initial_state_ids = self.validate_assignment(
+            initial_state_ids, source="initial_state_ids"
+        )
         self.exchange_id = 0
         self.attempts = 0
         self.accepted = 0
@@ -180,6 +173,72 @@ class ReplicaExchange:
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
+
+    def validate_assignment(
+        self,
+        state_ids: torch.Tensor,
+        num_graphs: int | None = None,
+        *,
+        source: str = "assignment",
+    ) -> torch.Tensor:
+        """Return *state_ids* as a validated ``[B]`` long tensor.
+
+        The bijection between walkers and states is the assumption every
+        other piece rests on: pairing looks up "which walker holds state k",
+        and a duplicate or a wrong-length assignment makes that lookup
+        meaningless.  Without this the failures surface far from their cause
+        — a length mismatch as ``ValueError: Length mismatch: 4 vs 2`` from
+        inside the batch storage, a duplicate as ``KeyError: 3`` from the
+        pair lookup — neither of which names the ladder or the batch.
+
+        Used for both the constructor argument and whatever assignment the
+        batch actually carries, so the rule lives in one place.
+
+        Parameters
+        ----------
+        state_ids : torch.Tensor
+            Candidate assignment, any shape reshapeable to ``[B]``.
+        num_graphs : int | None
+            Walker count to check the ladder against, when known.
+        source : str
+            Name of the thing being validated, used in the error.
+
+        Returns
+        -------
+        torch.Tensor
+            The assignment as a 1-D long tensor.
+
+        Raises
+        ------
+        ValueError
+            If the walker count disagrees with the ladder, or the assignment
+            is not a permutation of ``0..S-1``.
+        """
+        n_states = len(self.states)
+        if num_graphs is not None and num_graphs != n_states:
+            raise ValueError(
+                f"ReplicaExchange: the ladder has {n_states} state(s) but the "
+                f"batch has {num_graphs} walker(s). Replica exchange presumes "
+                "one walker per state — pairing looks up which walker holds "
+                "each rung, which has no answer when the counts differ. Build "
+                "the batch with one graph per ThermodynamicState."
+            )
+
+        ids = state_ids.reshape(-1).to(torch.long)
+        if ids.numel() != n_states:
+            raise ValueError(
+                f"ReplicaExchange: {source} has {ids.numel()} entr(ies) but the "
+                f"ladder has {n_states} state(s); they must agree."
+            )
+        if sorted(ids.tolist()) != list(range(n_states)):
+            raise ValueError(
+                f"ReplicaExchange: {source} must be a permutation of "
+                f"0..{n_states - 1}, got {ids.tolist()}. Replica exchange "
+                "presumes one walker per state; a duplicate would let two "
+                "walkers claim the same rung of the ladder, and leave another "
+                "rung held by none."
+            )
+        return ids
 
     def _infer_acceptance(self) -> Literal["temperature", "umbrella"]:
         """Return which acceptance rule this ladder implies.

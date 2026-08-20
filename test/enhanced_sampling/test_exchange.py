@@ -122,8 +122,63 @@ class TestLadderValidation:
             ReplicaExchange(_ladder(3), torch.tensor([0, 0, 1]))
 
     def test_assignment_size_mismatch_rejected(self) -> None:
-        with pytest.raises(ValueError, match="permutation"):
+        """A count mismatch says so, rather than "not a permutation"."""
+        with pytest.raises(ValueError, match="3 entr.* but the ladder has 4"):
             ReplicaExchange(_ladder(4), torch.arange(3))
+
+    def test_wrong_batch_size_named_clearly(self, device: str) -> None:
+        """A ladder-sized tensor on a differently-sized batch.
+
+        Without the check this surfaces as "Length mismatch: 4 vs 2" from
+        inside the batch storage, naming neither the ladder nor the batch.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        with pytest.raises(ValueError, match="4 state.*but the batch has 2 walker"):
+            runner.run(_make_batch(n_graphs=2, device=device), n_steps=2)
+
+    def test_batch_supplied_duplicate_assignment_rejected(self, device: str) -> None:
+        """A batch can carry an assignment the constructor never saw.
+
+        A duplicate leaves one rung held by nobody, which surfaces later as a
+        bare KeyError from the pair lookup.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        batch = _make_batch(n_graphs=4, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 0, 1, 2], device=device)
+        with pytest.raises(ValueError, match="batch.thermodynamic_state_id"):
+            runner.run(batch, n_steps=2)
+
+    def test_batch_supplied_out_of_range_assignment_rejected(self, device: str) -> None:
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        batch = _make_batch(n_graphs=3, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1, 9], device=device)
+        with pytest.raises(ValueError, match="permutation"):
+            runner.run(batch, n_steps=2)
+
+    def test_valid_batch_supplied_permutation_accepted(self, device: str) -> None:
+        """A caller-chosen starting assignment is legitimate."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(
+            _make_dynamics(device), {}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        batch = _make_batch(n_graphs=3, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([2, 0, 1], device=device)
+        batch = runner.run(batch, n_steps=4)
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
+
+    def test_validate_assignment_shared_by_both_paths(self) -> None:
+        """One rule, used for the constructor argument and the batch alike."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3))
+        with pytest.raises(ValueError, match="my_field must be a permutation"):
+            exchange.validate_assignment(torch.tensor([0, 0, 2]), source="my_field")
+        assert exchange.validate_assignment(torch.tensor([[2], [0], [1]])).tolist() == [
+            2,
+            0,
+            1,
+        ]
 
     def test_states_sorted_by_id(self) -> None:
         shuffled = [

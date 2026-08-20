@@ -398,6 +398,23 @@ sampling = EnhancedSampling(dynamics, biases={}, replica_exchange=exchange)
 batch = sampling.run(batch, n_steps=100_000)
 ```
 
+### One walker per rung
+
+Exchange presumes a bijection: every walker holds exactly one state and every
+state exactly one walker, because pairing looks up "which walker holds state
+*k*". The runner validates that on the first step, whether the assignment came
+from `initial_state_ids` or was already on the batch:
+
+```text
+ReplicaExchange: the ladder has 4 state(s) but the batch has 2 walker(s).
+ReplicaExchange: batch.thermodynamic_state_id must be a permutation of 0..3,
+                 got [0, 0, 1, 2].
+```
+
+Both are configuration errors that would otherwise surface much later and much
+less clearly — a size mismatch as `Length mismatch: 4 vs 2` from inside the
+batch storage, a duplicate as a bare `KeyError` from the pair lookup.
+
 ### Labels move, coordinates do not
 
 An accepted swap permutes `thermodynamic_state_id`. The walker keeps its row,
