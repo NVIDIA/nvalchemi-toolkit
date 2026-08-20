@@ -162,6 +162,16 @@ class TestRunnerConstruction:
         with pytest.raises(ValueError, match="key and the bias name must agree"):
             EnhancedSampling(_make_dynamics(), {"different_key": bias})
 
+    @pytest.mark.parametrize("steps_per_epoch", [0, -1, -10])
+    def test_non_positive_steps_per_epoch_rejected(self, steps_per_epoch: int) -> None:
+        """It is a divisor: zero raises deep in a run rather than here."""
+        with pytest.raises(ValueError, match="steps_per_epoch must be at least 1"):
+            EnhancedSampling(_make_dynamics(), {}, steps_per_epoch=steps_per_epoch)
+
+    def test_steps_per_epoch_of_one_is_allowed(self) -> None:
+        runner = EnhancedSampling(_make_dynamics(), {}, steps_per_epoch=1)
+        assert runner.steps_per_epoch == 1
+
     def test_hook_inserted_at_front(self) -> None:
         """The bias hook must run before any other AFTER_COMPUTE hook."""
         dynamics = _make_dynamics()

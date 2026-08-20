@@ -138,7 +138,8 @@ class EnhancedSampling:
     TypeError
         If any value in *biases* does not satisfy :class:`BiasPotential`.
     ValueError
-        If a bias's ``name`` disagrees with its key in *biases*.
+        If ``steps_per_epoch`` is below 1, or a bias's ``name`` disagrees
+        with its key in *biases*.
 
     Examples
     --------
@@ -173,6 +174,14 @@ class EnhancedSampling:
     ) -> None:
         from nvalchemi.enhanced_sampling._bias import BiasPotential as _Protocol
 
+        if int(steps_per_epoch) < 1:
+            raise ValueError(
+                f"EnhancedSampling: steps_per_epoch must be at least 1, got "
+                f"{steps_per_epoch}. It is a divisor — the epoch index is "
+                "step // steps_per_epoch and the checkpoint boundary is "
+                "step % steps_per_epoch — so zero raises deep in a run and a "
+                "negative value makes both meaningless."
+            )
         self.dynamics = dynamics
         self.biases: dict[str, BiasPotential] = dict(biases or {})
         self.steps_per_epoch = int(steps_per_epoch)
@@ -582,7 +591,7 @@ class EnhancedSampling:
             if self.replica_exchange is not None
             else self.steps_per_epoch
         )
-        segment = step // max(1, interval)
+        segment = step // interval
         batch["exchange_segment"] = torch.full(
             (n_graphs,), segment, dtype=torch.long, device=device
         )
@@ -1202,7 +1211,7 @@ class EnhancedSampling:
         # doing it before the swap would publish under labels that are about
         # to change.
         if self.replica_exchange is not None:
-            interval = max(1, self.replica_exchange.attempt_interval)
+            interval = self.replica_exchange.attempt_interval
             self._attempt_segment(target, step // interval - 1)
         self._commit_epoch(step // self.steps_per_epoch - 1)
 

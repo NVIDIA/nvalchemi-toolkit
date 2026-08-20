@@ -84,8 +84,8 @@ class ReplicaExchange:
     Raises
     ------
     ValueError
-        If the mode is unsupported, the ladder is not dense, the assignment
-        is not a permutation, or the acceptance rule cannot be inferred.
+        If the mode is unsupported, ``attempt_interval`` is below 1, the
+        ladder is not dense, or the assignment is not a permutation.
 
     Notes
     -----
@@ -152,6 +152,14 @@ class ReplicaExchange:
                 f"got {sorted(s.state_id for s in states)}. Pairing walks "
                 "neighbouring indices, so a sparse ladder has no defined "
                 "neighbours."
+            )
+        if int(attempt_interval) < 1:
+            raise ValueError(
+                f"ReplicaExchange: attempt_interval must be at least 1, got "
+                f"{attempt_interval}. A non-positive interval has no meaning "
+                "as a segment length — it would be clamped to every-step "
+                "exchange while the checkpoint recorded the value you passed, "
+                "so the run and its metadata would disagree."
             )
         self.states = tuple(ladder)
         self.mode = mode

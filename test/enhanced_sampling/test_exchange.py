@@ -104,6 +104,27 @@ class TestLadderValidation:
         with pytest.raises(ValueError, match="not supported"):
             ReplicaExchange(_ladder(2), torch.arange(2), mode="asynchronous")
 
+    @pytest.mark.parametrize("interval", [0, -1, -5])
+    def test_non_positive_interval_rejected(self, interval: int) -> None:
+        """A clamp would turn invalid input into every-step exchange.
+
+        Worse, the checkpoint fingerprint would record the value passed while
+        the run behaved as 1, so a restore comparing configurations would
+        agree on a number the run never used.
+        """
+        with pytest.raises(ValueError, match="attempt_interval must be at least 1"):
+            ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=interval)
+
+    def test_interval_of_one_is_allowed(self) -> None:
+        """Every-step exchange is legitimate when asked for explicitly."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=1)
+        assert exchange.attempt_interval == 1
+
+    def test_fingerprint_matches_actual_interval(self, device: str) -> None:
+        """The recorded configuration must be the one the run uses."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=3)
+        assert exchange.config_fingerprint()["attempt_interval"] == 3
+
     def test_single_state_rejected(self) -> None:
         with pytest.raises(ValueError, match="at least 2 states"):
             ReplicaExchange(_ladder(1), torch.arange(1))
