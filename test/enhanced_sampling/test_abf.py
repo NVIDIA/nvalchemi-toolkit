@@ -645,6 +645,110 @@ class TestRestart:
             float(bias.mean_force()[0]), rel=1e-6
         )
 
+    def test_restoring_a_different_cv_range_raises(self, device: str) -> None:
+        """The histogram's bins mean nothing without the range that made them.
+
+        The counts are shape-compatible, so nothing structural objects; bin
+        5 simply stops meaning one distance and starts meaning another,
+        carrying its accumulated mean force with it.
+        """
+        source = _abf(device, cv_range=(1.0, 4.0))
+        source.update(_harmonic_frame([1.5, 2.5], device), BiasResult())
+
+        target = _abf(device, cv_range=(2.0, 8.0))
+        with pytest.raises(ValueError, match="cv_range"):
+            target.load_state_dict(source.state_dict())
+
+    def test_restoring_a_different_temperature_raises(self, device: str) -> None:
+        """The metric correction is already folded into ``force_sum``."""
+        source = _abf(device)
+        source.update(_harmonic_frame([2.5], device), BiasResult())
+
+        target = _abf(device, temperature=900.0)
+        with pytest.raises(ValueError, match="temperature"):
+            target.load_state_dict(source.state_dict())
+
+    def test_restoring_a_different_atom_pair_raises(self, device: str) -> None:
+        """atom_indices is a buffer, so an unchecked load would overwrite it.
+
+        The caller's selection would be silently replaced by the
+        checkpoint's — the opposite of what asking for it meant.
+        """
+        source = _abf(device, atom_indices=torch.tensor([0, 1]))
+        source.update(_harmonic_frame([2.5], device), BiasResult())
+
+        target = _abf(device, atom_indices=torch.tensor([5, 7]))
+        with pytest.raises(ValueError, match="atom_indices"):
+            target.load_state_dict(source.state_dict())
+        # The rejection must come before the buffer is overwritten.
+        assert target.atom_indices.tolist() == [5, 7]
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("n_bins", 20),
+            ("min_samples", 7),
+            ("full_samples", 99),
+            ("max_force", 0.25),
+        ],
+    )
+    def test_restoring_a_different_setting_raises(
+        self, device: str, field: str, value: object
+    ) -> None:
+        base = {"min_samples": 1, "full_samples": 100}
+        source = _abf(device, **base)
+        source.update(_harmonic_frame([2.5], device), BiasResult())
+
+        target = _abf(device, **{**base, field: value})
+        with pytest.raises(ValueError, match=field):
+            target.load_state_dict(source.state_dict())
+
+    def test_the_error_names_every_difference(self, device: str) -> None:
+        source = _abf(device, cv_range=(1.0, 4.0))
+        source.update(_harmonic_frame([2.5], device), BiasResult())
+        target = _abf(device, cv_range=(2.0, 8.0), temperature=900.0)
+
+        with pytest.raises(ValueError) as excinfo:
+            target.load_state_dict(source.state_dict())
+        message = str(excinfo.value)
+        assert "cv_range" in message and "temperature" in message
+
+    def test_identical_configuration_still_restores(self, device: str) -> None:
+        """The check must not reject a legitimate continuation."""
+        source = _abf(device)
+        source.update(_harmonic_frame([1.5, 2.5], device), BiasResult())
+
+        target = _abf(device)
+        target.load_state_dict(source.state_dict())
+        assert torch.equal(target.bin_counts, source.bin_counts)
+
+    def test_fingerprint_survives_the_zarr_round_trip(
+        self, tmp_path, device: str
+    ) -> None:
+        """A mismatch must be caught through the runner, not only in memory."""
+        bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
+        runner = EnhancedSampling(
+            _make_dynamics(device), {"abf": bias}, steps_per_epoch=4
+        )
+        batch = runner.run(_runner_batch(device=device), n_steps=4)
+        path = tmp_path / "abf.zarr"
+        runner.checkpoint(path, batch)
+
+        wrong = AdaptiveBiasingForce(
+            atom_indices=torch.tensor([0, 3]),
+            temperature=TEMPERATURE,
+            cv_range=(9.0, 12.0),
+            n_bins=60,
+            min_samples=0,
+            full_samples=0,
+            name="abf",
+        ).to(device)
+        fresh = EnhancedSampling(
+            _make_dynamics(device), {"abf": wrong}, steps_per_epoch=4
+        )
+        with pytest.raises(ValueError, match="cv_range"):
+            fresh.restore(path, device=device)
+
     def test_checkpoint_round_trip_through_the_runner(
         self, tmp_path, device: str
     ) -> None:

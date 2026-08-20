@@ -657,6 +657,37 @@ run.zarr/
     runner/                walker-id allocation, epoch counters
 ```
 
+### Bias configuration is validated, not just bias class
+
+The manifest records each bias's *class*, but a class name says nothing about
+the settings its saved state depends on. An ABF histogram is state; the
+`cv_range` that decides what its bins mean is configuration. Restoring the
+first without the second leaves the counts shape-compatible and silently
+relabels every bin — bin 5 stops meaning `r = 1.55` and starts meaning
+`r = 3.1`, carrying its accumulated mean force with it.
+
+Every adaptive bias therefore records a `config_fingerprint()` inside its own
+`state_dict()`, checked on load:
+
+| Bias | Checked |
+|------|---------|
+| `AdaptiveBiasingForce` | `atom_indices`, `cv_range`, `n_bins`, `temperature`, `min_samples`, `full_samples`, `max_force` |
+| `WellTemperedMetaDynamicsBias` | `height`, `sigma`, `temperature`, `bias_factor`, `storage`, `history`, `ramp_depositions`, `periods` |
+| `RMSDMetaDynamicsBias` | `k_push`, `alpha`, `storage`, `history`, `ramp_depositions`, `atom_indices` |
+
+Because the check lives in `load_state_dict` rather than in the manifest, it
+covers a bias restored directly as well as one restored through the runner.
+
+Capacity (`max_hills`, `max_references`) is deliberately **not** checked:
+`storage="grow"` legitimately reaches a size the constructor never had, and
+`load_state_dict` already resizes to match.
+
+The check runs *before* delegating to `nn.Module.load_state_dict`, which
+matters for configuration held as a buffer — `sigma`, `atom_indices`. Loading
+overwrites buffers, so a check afterwards would come too late to stop the
+caller's value being replaced by the checkpoint's, which is the opposite of
+what asking for it meant.
+
 ### Model weights are not restored
 
 Reconstruct the model — including loading its weights through its own API —

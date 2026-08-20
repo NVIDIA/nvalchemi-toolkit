@@ -717,6 +717,38 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             return -bias
         return -bias * (self.bias_factor / (self.bias_factor - 1.0))
 
+    def config_fingerprint(self) -> dict[str, Any]:
+        """Return the settings the deposited hills are only valid under.
+
+        ``sigma`` and ``periods`` are held as buffers, so without this check
+        ``nn.Module.load_state_dict`` would replace the caller's values with
+        the checkpoint's rather than reject the mismatch.  ``bias_factor``
+        and ``temperature`` set the well-tempered damping the stored heights
+        were computed under, and the ratio ``free_energy`` applies to them.
+        ``storage`` and ``history`` decide retention and ownership.
+
+        ``max_hills`` is deliberately absent: ``grow`` legitimately reaches a
+        capacity the constructor never had, and :meth:`load_state_dict`
+        already resizes to match.
+
+        Returns
+        -------
+        dict[str, Any]
+            The checked configuration.
+        """
+        return {
+            "height": self.height,
+            "sigma": self.sigma.reshape(-1).tolist(),
+            "temperature": self.temperature,
+            "bias_factor": self.bias_factor,
+            "storage": self.storage,
+            "history": self.history,
+            "ramp_depositions": self.ramp_depositions,
+            "periods": None
+            if self.periods is None
+            else self.periods.reshape(-1).tolist(),
+        }
+
     def load_state_dict(
         self, state: Mapping[str, Any], *args: Any, **kwargs: Any
     ) -> Any:

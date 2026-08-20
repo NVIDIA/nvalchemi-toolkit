@@ -977,6 +977,78 @@ class TestWellTemperedRestart:
         assert int(restored.deposits) == int(bias.deposits)
         assert restored.state_version == bias.state_version
 
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("height", 0.9),
+            ("sigma", 0.9),
+            ("temperature", 900.0),
+            ("bias_factor", 2.0),
+            ("history", "walker"),
+            ("ramp_depositions", 5),
+        ],
+    )
+    def test_restoring_a_different_setting_raises(
+        self, device: str, field: str, value: object
+    ) -> None:
+        """Hills are only meaningful under the settings that deposited them.
+
+        ``bias_factor`` is the sharpest case: the stored heights were damped
+        under one gamma, and ``free_energy`` would apply a different ratio to
+        them without anything objecting.
+        """
+        source = _metad(device, max_hills=8)
+        frame = _pair_batch([1.0], device)
+        source.update(frame, source.evaluate(frame))
+
+        target = _metad(device, max_hills=8, **{field: value})
+        with pytest.raises(ValueError, match=field):
+            target.load_state_dict(source.state_dict())
+
+    def test_restoring_a_different_sigma_does_not_overwrite_it(
+        self, device: str
+    ) -> None:
+        """sigma is a buffer, so an unchecked load would replace it silently."""
+        source = _metad(device, sigma=0.2, max_hills=8)
+        frame = _pair_batch([1.0], device)
+        source.update(frame, source.evaluate(frame))
+
+        target = _metad(device, sigma=0.9, max_hills=8)
+        with pytest.raises(ValueError, match="sigma"):
+            target.load_state_dict(source.state_dict())
+        assert float(target.sigma[0]) == pytest.approx(0.9)
+
+    def test_restoring_a_different_storage_policy_raises(self, device: str) -> None:
+        """Retention semantics differ, so the same hills mean different runs."""
+        source = _metad(device, max_hills=8, storage="preallocated")
+        frame = _pair_batch([1.0], device)
+        source.update(frame, source.evaluate(frame))
+
+        target = _metad(device, max_hills=8, storage="fifo")
+        with pytest.raises(ValueError, match="storage"):
+            target.load_state_dict(source.state_dict())
+
+    def test_restoring_different_periods_raises(self, device: str) -> None:
+        source = _metad(device, max_hills=8, periods=torch.tensor([6.28]))
+        frame = _pair_batch([1.0], device)
+        source.update(frame, source.evaluate(frame))
+
+        target = _metad(device, max_hills=8)
+        with pytest.raises(ValueError, match="periods"):
+            target.load_state_dict(source.state_dict())
+
+    def test_capacity_is_not_part_of_the_fingerprint(self, device: str) -> None:
+        """``grow`` legitimately reaches a capacity the constructor never had."""
+        source = _metad(device, max_hills=2, storage="grow", sigma=0.4)
+        for d in (1.0, 2.0, 3.0, 4.0, 5.0):
+            frame = _pair_batch([d], device)
+            source.update(frame, source.evaluate(frame))
+        assert source.capacity > 2
+
+        target = _metad(device, max_hills=2, storage="grow", sigma=0.4)
+        target.load_state_dict(source.state_dict())
+        assert target.capacity == source.capacity
+
     def test_round_trip_after_growth_resizes_buffers(self, device: str) -> None:
         """A grown checkpoint has a capacity the constructor never produces."""
         bias = _metad(device, max_hills=2, storage="grow", sigma=0.4)
@@ -1535,6 +1607,54 @@ class TestRMSDRestart:
         )
         assert int(restored.reference_count) == int(bias.reference_count)
         assert restored.state_version == bias.state_version
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("k_push", 5.0),
+            ("alpha", 99.0),
+            ("history", "walker"),
+            ("ramp_depositions", 7),
+        ],
+    )
+    def test_restoring_a_different_setting_raises(
+        self, device: str, field: str, value: object
+    ) -> None:
+        """The geometries survive but what they do changes."""
+        base = {
+            "k_push": 0.02,
+            "alpha": 0.5,
+            "max_references": 8,
+            "ramp_depositions": 0,
+        }
+        source = RMSDMetaDynamicsBias(**base).to(device)
+        frame = self._molecule(device)
+        source.update(frame, source.evaluate(frame))
+
+        target = RMSDMetaDynamicsBias(**{**base, field: value}).to(device)
+        with pytest.raises(ValueError, match=field):
+            target.load_state_dict(source.state_dict())
+
+    def test_restoring_a_different_atom_selection_raises(self, device: str) -> None:
+        """atom_indices is a buffer; the rejection must precede the overwrite."""
+        source = RMSDMetaDynamicsBias(
+            k_push=0.02,
+            alpha=0.5,
+            max_references=8,
+            atom_indices=torch.tensor([0, 1, 2]),
+        ).to(device)
+        frame = self._molecule(device)
+        source.update(frame, source.evaluate(frame))
+
+        target = RMSDMetaDynamicsBias(
+            k_push=0.02,
+            alpha=0.5,
+            max_references=8,
+            atom_indices=torch.tensor([1, 2, 3]),
+        ).to(device)
+        with pytest.raises(ValueError, match="atom_indices"):
+            target.load_state_dict(source.state_dict())
+        assert target.atom_indices.tolist() == [1, 2, 3]
 
     def test_round_trip_after_growth_resizes_buffers(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(

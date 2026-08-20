@@ -150,6 +150,22 @@
   `free_energy()` raises on an interior gap because integrating across a hole
   would leave every value beyond it wrong by an unknown constant.
 
+- Adaptive biases now record a configuration fingerprint in their
+  `state_dict()` and reject a mismatched restore. The manifest records each
+  bias's class, but a class name says nothing about the settings its saved
+  state depends on: an ABF histogram restored under a different `cv_range` is
+  shape-compatible and silently relabels every bin, `bias_factor` changes the
+  ratio `free_energy()` applies to hills deposited under a different gamma,
+  and `k_push`/`alpha` change what stored RMSD references do. Worse for
+  settings held as buffers — `sigma`, `atom_indices` —
+  `nn.Module.load_state_dict` *overwrote* the caller's value with the
+  checkpoint's rather than leaving it unvalidated. `AdaptivePotentialMixin`
+  gains `config_fingerprint()` (empty by default, so other biases are
+  unaffected) and checks it before delegating, so the guard covers a bias
+  restored directly as well as through the runner. Capacity is deliberately
+  excluded, since `storage="grow"` legitimately reaches a size the
+  constructor never had.
+
 - `pair_displacement` — the vector form of `pair_distance`, exposed for
   methods that work with the CV gradient rather than its value.
   `pair_distance` is now its norm, so the two cannot drift apart in their

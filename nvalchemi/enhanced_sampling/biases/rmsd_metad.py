@@ -768,6 +768,37 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             )
         self.bump_state_version()
 
+    def config_fingerprint(self) -> dict[str, Any]:
+        """Return the settings the retained references are only valid under.
+
+        ``k_push`` and ``alpha`` set how hard and how far the stored
+        structures repel; restoring a reference set under different values
+        keeps the geometries but changes what they do.  ``atom_indices`` is
+        held as a buffer and names which atoms the stored coordinates are,
+        so without this check the caller's selection would be silently
+        overwritten by the checkpoint's.
+
+        ``max_references`` is absent for the same reason ``max_hills`` is
+        absent from the well-tempered fingerprint.
+
+        Returns
+        -------
+        dict[str, Any]
+            The checked configuration.
+        """
+        return {
+            "k_push": self.k_push,
+            "alpha": self.alpha,
+            "storage": self.storage,
+            "history": self.history,
+            "ramp_depositions": self.ramp_depositions,
+            "atom_indices": (
+                None
+                if self.atom_indices is None
+                else self.atom_indices.reshape(-1).tolist()
+            ),
+        }
+
     def load_state_dict(
         self, state: Mapping[str, Any], *args: Any, **kwargs: Any
     ) -> Any:

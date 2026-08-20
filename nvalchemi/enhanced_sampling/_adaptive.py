@@ -29,6 +29,7 @@ calls exactly once per due step, after the integration step has finished.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 from torch import nn
@@ -42,6 +43,34 @@ if TYPE_CHECKING:
     from nvalchemi.enhanced_sampling._bias import BiasResult
 
 __all__ = ["AdaptivePotentialMixin"]
+
+
+def _values_agree(left: Any, right: Any) -> bool:
+    """Return whether two fingerprint entries describe the same setting.
+
+    Floats are compared with a relative tolerance so that storing a value
+    through float32 and reading it back does not read as a configuration
+    change, while a real difference (0.2 against 0.9) still does.
+
+    Parameters
+    ----------
+    left, right:
+        Fingerprint entries: scalars, strings, ``None``, or flat sequences.
+
+    Returns
+    -------
+    bool
+        ``True`` when the two agree.
+    """
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return len(left) == len(right) and all(
+            _values_agree(a, b) for a, b in zip(left, right, strict=True)
+        )
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left is right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return math.isclose(float(left), float(right), rel_tol=1e-6, abs_tol=1e-12)
+    return bool(left == right)
 
 
 class AdaptivePotentialMixin:
@@ -181,6 +210,64 @@ class AdaptivePotentialMixin:
         """
         return None
 
+    def config_fingerprint(self) -> Mapping[str, Any]:
+        """Return the constructor configuration the saved state depends on.
+
+        Default is empty, which disables the check.  A bias whose persisted
+        state is only meaningful under the settings that produced it should
+        override this and list them.
+
+        The distinction is between *state* and *configuration*.  An ABF
+        histogram is state; the ``cv_range`` that decides what its bins mean
+        is configuration.  Restoring the first without the second silently
+        reinterprets every bin — bin 5 stops meaning ``r = 1.55`` and starts
+        meaning ``r = 3.1``, with the same numbers in it.
+
+        Include configuration held as a **buffer** too.  ``nn.Module``
+        restores buffers by overwriting, so without the check a mismatched
+        setting is not merely unvalidated: the caller's value is silently
+        replaced by the checkpoint's, which is the opposite of what asking
+        for it meant.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            Zarr-representable scalars, strings, ``None``, or flat sequences
+            of those.  Tensors must be converted to lists.
+        """
+        return {}
+
+    def _check_config_fingerprint(self, saved: Mapping[str, Any]) -> None:
+        """Reject a saved fingerprint that disagrees with this bias.
+
+        Parameters
+        ----------
+        saved:
+            The fingerprint recorded when the state was written.
+
+        Raises
+        ------
+        ValueError
+            If any recorded setting differs from the live one.
+        """
+        live = dict(self.config_fingerprint())
+        differences = []
+        for key in sorted(set(saved) | set(live)):
+            was, now = saved.get(key, "<absent>"), live.get(key, "<absent>")
+            if not _values_agree(was, now):
+                differences.append(f"  {key}: checkpoint {was!r} vs bias {now!r}")
+        if differences:
+            raise ValueError(
+                f"{type(self).__name__} "
+                f"{getattr(self, 'name', '<unnamed>')!r}: the saved state was "
+                f"produced under a different configuration:\n"
+                + "\n".join(differences)
+                + "\nThe stored state is only meaningful under the settings "
+                "that produced it, so restoring it here would reinterpret it "
+                "rather than continue it. Rebuild the bias with the "
+                "checkpoint's configuration, or start a fresh run."
+            )
+
     def state_dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Return the bias state for checkpointing, merged up the MRO.
 
@@ -198,11 +285,16 @@ class AdaptivePotentialMixin:
         Returns
         -------
         dict[str, Any]
-            Zarr-representable state, always including ``state_version``.
+            Zarr-representable state, always including ``state_version`` and,
+            when :meth:`config_fingerprint` is overridden, the configuration
+            that state is only meaningful under.
         """
         parent = getattr(super(), "state_dict", None)
         state: dict[str, Any] = dict(parent(*args, **kwargs)) if parent else {}
         state["state_version"] = self._state_version
+        fingerprint = dict(self.config_fingerprint())
+        if fingerprint:
+            state["config_fingerprint"] = fingerprint
         return state
 
     def load_state_dict(
@@ -212,7 +304,10 @@ class AdaptivePotentialMixin:
 
         Strips the mixin's own keys before delegating, so that
         ``nn.Module.load_state_dict`` does not reject them as unexpected
-        under its default ``strict=True``.
+        under its default ``strict=True``.  A recorded
+        :meth:`config_fingerprint` is checked *before* delegating, since the
+        delegate overwrites buffers and a check afterwards would come too
+        late to stop the caller's configuration being replaced.
 
         Parameters
         ----------
@@ -225,9 +320,21 @@ class AdaptivePotentialMixin:
         -------
         Any
             Whatever the next ``load_state_dict`` returns, or ``None``.
+
+        Raises
+        ------
+        ValueError
+            If the state was written under a different
+            :meth:`config_fingerprint`.
         """
         remaining = dict(state)
         self._state_version = int(remaining.pop("state_version", 0))
+        saved = remaining.pop("config_fingerprint", None)
+        if saved is not None:
+            # Before delegating: nn.Module.load_state_dict overwrites buffers,
+            # so a mismatch caught afterwards would already have replaced the
+            # caller's configuration with the checkpoint's.
+            self._check_config_fingerprint(saved)
         parent = getattr(super(), "load_state_dict", None)
         if parent is not None:
             return parent(remaining, *args, **kwargs)

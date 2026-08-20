@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor, nn
@@ -502,6 +502,31 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
     # ------------------------------------------------------------------
     # Analysis
     # ------------------------------------------------------------------
+
+    def config_fingerprint(self) -> dict[str, Any]:
+        """Return the settings the accumulated histogram is only valid under.
+
+        ``cv_range`` and ``n_bins`` decide what each bin *means*; restoring a
+        histogram under a different pair silently relabels every bin.
+        ``temperature`` scales the metric correction already folded into
+        ``force_sum``, so samples taken at 300 K cannot be extended at 900 K.
+        ``atom_indices`` names the coordinate itself.  ``min_samples`` /
+        ``full_samples`` / ``max_force`` change what the same counts apply.
+
+        Returns
+        -------
+        dict[str, Any]
+            The checked configuration.
+        """
+        return {
+            "atom_indices": self.atom_indices.reshape(-1).tolist(),
+            "cv_range": list(self.cv_range),
+            "n_bins": self.n_bins,
+            "temperature": self.temperature,
+            "min_samples": self.min_samples,
+            "full_samples": self.full_samples,
+            "max_force": self.max_force,
+        }
 
     def free_energy(self) -> Tensor:
         """Return the PMF at each bin center, shape ``[n_bins]``.
