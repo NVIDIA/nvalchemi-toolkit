@@ -24,6 +24,24 @@
   continuation from prior frames; for exact resumption see the checkpoint
   entry below.
 
+- Synchronous replica exchange. `ReplicaExchange` and `ThermodynamicState`
+  advance a ladder of states as one batch and periodically swap which walker
+  holds which rung, with an even/odd pair schedule so every pair in a segment
+  is disjoint and decidable simultaneously. Exchange permutes
+  `thermodynamic_state_id`; coordinates never move between rows. The
+  acceptance rule is inferred from the ladder rather than declared — varying
+  temperatures select the Metropolis temperature rule, equal ones the
+  umbrella rule — because a declared rule that disagreed with the ladder
+  would break detailed balance silently. An accepted swap is indivisible:
+  label, integrator target temperature, velocity rescaling, and forces move
+  together, and an integrator that cannot rebind (`NVE`) is rejected at
+  construction rather than sampling the state it just left. Acceptance draws
+  derive from `random_seed + exchange_id`, so a restored run reproduces the
+  same decisions and the checkpoint stores two integers rather than an RNG
+  blob; exchange state lives under `sampling/exchange/`. Per-pair acceptance
+  rates are reported for ladder tuning. Asynchronous exchange and force-only
+  (ABF-style) biases are rejected explicitly.
+
 - Exact checkpoint and restore for enhanced sampling.
   `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
   extends the existing `AtomicData` layout with a `sampling/` group holding

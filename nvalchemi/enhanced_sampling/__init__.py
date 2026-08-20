@@ -31,15 +31,15 @@ Public surface
 * :func:`periodic_difference` — CV differences wrapped onto a circle.
 * :class:`EnhancedSampling` — the runner: walker identity, force-step
   ordering, exactly-once ``update()``, and force priming.
+* :class:`ThermodynamicState`, :class:`ReplicaExchange` — synchronous
+  replica exchange; swaps state labels, not coordinates.
 * Built-in biases: :class:`HarmonicUmbrellaBias`, :class:`UpperWall`,
   :class:`LowerWall`, :class:`FlatBottomRestraint`.
 
 Not yet implemented
 -------------------
-* :class:`ThermodynamicState`, :class:`ReplicaExchange`
+* Asynchronous replica exchange
 * Metadynamics (well-tempered, xTB-style RMSD) and adaptive biasing force
-* Zarr checkpoint support — ``EnhancedSampling.checkpoint`` / ``restore``
-  raise ``NotImplementedError``; individual biases expose ``state_dict``
 * General triclinic MIC for unreduced cells
 
 Relationship to ``BiasedPotentialHook``
@@ -86,6 +86,10 @@ from nvalchemi.enhanced_sampling._bias import (
     ConservativeBias,
     aggregate_bias_results,
 )
+from nvalchemi.enhanced_sampling._exchange import (
+    ReplicaExchange,
+    ThermodynamicState,
+)
 from nvalchemi.enhanced_sampling._runner import EnhancedSampling
 from nvalchemi.enhanced_sampling.biases import (
     FlatBottomRestraint,
@@ -104,6 +108,9 @@ __all__ = [
     "aggregate_bias_results",
     # Runner
     "EnhancedSampling",
+    # Replica exchange
+    "ThermodynamicState",
+    "ReplicaExchange",
     # Collective variables
     "pair_distance",
     "periodic_difference",

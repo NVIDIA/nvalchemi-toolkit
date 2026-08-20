@@ -376,6 +376,102 @@ class, and bias set, and `restore()` refuses a mismatch; but that proves the
 They are mutually exclusive: `warm_start()` after `restore()` raises, because
 replaying history the restored state already contains would corrupt it.
 
+## Replica exchange
+
+A ladder of thermodynamic states, all advanced as one batch, with periodic
+swaps of which walker sits on which rung:
+
+```python
+from nvalchemi.enhanced_sampling import ReplicaExchange, ThermodynamicState
+
+states = [
+    ThermodynamicState(state_id=i, temperature=300.0 * 1.15 ** i)
+    for i in range(4)
+]
+exchange = ReplicaExchange(
+    states=states,
+    initial_state_ids=torch.arange(4),   # must be a permutation
+    attempt_interval=100,                # steps per exchange segment
+    random_seed=2024,
+)
+sampling = EnhancedSampling(dynamics, biases={}, replica_exchange=exchange)
+batch = sampling.run(batch, n_steps=100_000)
+```
+
+### Labels move, coordinates do not
+
+An accepted swap permutes `thermodynamic_state_id`. The walker keeps its row,
+its velocities, and its integrator arrays; the temperature assigned to it
+changes. Nothing is copied between rows, which is what makes the move viable
+inside a batched GPU step.
+
+The swap is **indivisible**: the label, the integrator's target temperature,
+the velocity rescaling, and the forces all move together. A walker labelled
+one rung while its thermostat targets another samples the wrong ensemble with
+no symptom, so the runner refuses at construction any integrator that cannot
+rebind:
+
+```text
+TypeError: replica exchange needs NVE to implement
+apply_thermodynamic_state(), so an accepted swap can rebind temperature,
+velocities, and thermostat state together.
+```
+
+`NVTLangevin` rescales velocities by `sqrt(T_new / T_old)`. `NVTNoseHoover`
+additionally transforms its chain: `Q` scales with `kT` and `eta_dot` with
+`1/sqrt(kT)`, which leaves the chain kinetic energy invariant — injecting
+thermostat energy on a swap is exactly what breaks detailed balance.
+
+### Acceptance
+
+The rule is **inferred from the ladder**, never declared, because a declared
+rule that disagreed with the ladder would be silent and wrong acceptance
+breaks detailed balance without any symptom a run would show.
+
+| Ladder | Rule | Formula |
+|--------|------|---------|
+| Temperatures differ | temperature | `log a = min(0, (β_i − β_j)(U_i − U_j))` |
+| Temperatures equal | umbrella | `log a = min(0, u_i(x_i) + u_j(x_j) − u_i(x_j) − u_j(x_i))` |
+
+Umbrella acceptance needs the bias evaluated under swapped labels, which
+costs one extra bias evaluation per attempt.
+
+A ladder that varies temperature *and* bias window at once needs a combined
+rule that is not implemented — and is not detectable here, since a
+`ThermodynamicState` carries only a temperature. Vary one or the other.
+
+### Pair schedule
+
+Segments alternate even and odd offsets: `(0,1),(2,3)` then `(1,2),(3,4)`.
+No state appears twice in one segment, which is what lets every pair be
+decided simultaneously; two segments cover every neighbouring pair.
+
+### Tuning the ladder
+
+```python
+exchange.acceptance_rate            # overall
+exchange.pair_acceptance_rates()    # per neighbouring pair
+```
+
+Per-pair rates are what a ladder is tuned on. A pair far below the others is
+a gap the walkers cannot cross and needs another rung; uniformly high rates
+mean the rungs are closer than they need to be.
+
+### Reproducibility
+
+Acceptance draws come from `random_seed + exchange_id` rather than a
+long-lived generator — the same counter-based scheme `NVTLangevin` uses for
+its noise. A checkpoint therefore stores two integers instead of an RNG blob,
+and a restored run reproduces the same accept/reject decisions. Exchange
+state lives under `sampling/exchange/`.
+
+### Not supported
+
+Asynchronous exchange (pair-local rendezvous, non-blocking workers) is not
+implemented; `mode="asynchronous"` raises. A force-only bias such as adaptive
+biasing force cannot participate — the acceptance rule needs a cross-state
+bias energy — and is rejected rather than silently excluded.
+
 ## Relationship to `BiasedPotentialHook`
 
 {class}`~nvalchemi.hooks.BiasedPotentialHook` covers similar ground and is

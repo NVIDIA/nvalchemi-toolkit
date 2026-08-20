@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling._bias import BiasResult, aggregate_bias_results
 from nvalchemi.enhanced_sampling._checkpoint import (
     CheckpointManifest,
@@ -35,6 +36,7 @@ from nvalchemi.enhanced_sampling._checkpoint import (
     read_checkpoint,
     write_checkpoint,
 )
+from nvalchemi.enhanced_sampling._exchange import ReplicaExchange
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -167,6 +169,7 @@ class EnhancedSampling:
         steps_per_epoch: int = 10_000,
         compile_biases: bool = False,
         prime_after_update: bool = True,
+        replica_exchange: ReplicaExchange | None = None,
     ) -> None:
         from nvalchemi.enhanced_sampling._bias import BiasPotential as _Protocol
 
@@ -174,6 +177,7 @@ class EnhancedSampling:
         self.biases: dict[str, BiasPotential] = dict(biases or {})
         self.steps_per_epoch = int(steps_per_epoch)
         self.prime_after_update = bool(prime_after_update)
+        self.replica_exchange = replica_exchange
 
         for key, bias in self.biases.items():
             if not isinstance(bias, _Protocol):
@@ -190,6 +194,10 @@ class EnhancedSampling:
                     "name must agree — both are used as identifiers, in the "
                     "output dict and in checkpoint group names respectively."
                 )
+
+        if replica_exchange is not None:
+            replica_exchange.validate_for(self.biases)
+            self._validate_exchange_capability()
 
         if compile_biases:
             self._compile_bias_energies()
@@ -217,6 +225,10 @@ class EnhancedSampling:
         self._next_walker_id = 0
         self._last_epoch = -1
         self._committed_epoch = -1
+        self._last_segment = -1
+        # Set while prime_forces runs. Priming evaluates forces at fixed
+        # coordinates; it must not also advance the sampling state.
+        self._priming = False
         self._restored = False
         # Set on every stamp so checkpoint() matches the proposal's
         # `sampling.checkpoint(path)` signature without a batch argument.
@@ -242,6 +254,136 @@ class EnhancedSampling:
         for bias in self.biases.values():
             if hasattr(bias, "energy"):
                 bias.energy = torch.compile(bias.energy)  # type: ignore[method-assign]
+
+    def _validate_exchange_capability(self) -> None:
+        """Reject a dynamics that cannot rebind a thermodynamic state.
+
+        An accepted swap must change the target temperature, rescale
+        velocities, and transform any thermostat memory as one indivisible
+        move.  An integrator that only accepts the new label would keep
+        sampling the old temperature, which breaks detailed balance with no
+        symptom the run would show — so this fails at construction rather
+        than producing a plausible-looking wrong trajectory.
+
+        Raises
+        ------
+        TypeError
+            If the dynamics does not implement the rebinding adapters.
+        """
+        for method in ("apply_thermodynamic_state", "rescale_velocities_for_state"):
+            if not callable(getattr(self.dynamics, method, None)):
+                raise TypeError(
+                    f"EnhancedSampling: replica exchange needs "
+                    f"{type(self.dynamics).__name__} to implement {method}(), "
+                    "so an accepted swap can rebind temperature, velocities, "
+                    "and thermostat state together. NVTLangevin and "
+                    "NVTNoseHoover implement this; other integrators can run "
+                    "biased dynamics without exchange."
+                )
+        # BaseDynamics defines apply_thermodynamic_state only to raise, so
+        # presence is not enough — probe it.
+        try:
+            self.dynamics.apply_thermodynamic_state(
+                torch.zeros(0, dtype=torch.long), torch.zeros(0)
+            )
+        except NotImplementedError as exc:
+            raise TypeError(
+                f"EnhancedSampling: {type(self.dynamics).__name__} does not "
+                "support thermodynamic-state rebinding, so it cannot take part "
+                "in replica exchange."
+            ) from exc
+        except Exception:  # noqa: S110 - any other failure means it is implemented
+            pass
+
+    def _reduced_bias_energy(
+        self, batch: Batch, state_ids: torch.Tensor
+    ) -> torch.Tensor:
+        """Return the reduced bias potential per walker under *state_ids*.
+
+        Umbrella acceptance needs the bias evaluated under both the current
+        and the proposed labels, so the assignment is swapped in, the biases
+        re-evaluated, and the original restored in a ``finally``.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        state_ids:
+            Assignment to evaluate under, shape ``[B]``.
+
+        Returns
+        -------
+        torch.Tensor
+            ``beta * E_bias`` per walker, shape ``[B]``.
+        """
+        exchange = self.replica_exchange
+        original = batch.thermodynamic_state_id
+        try:
+            batch["thermodynamic_state_id"] = state_ids
+            total = torch.zeros(
+                batch.num_graphs,
+                dtype=batch.positions.dtype,
+                device=batch.positions.device,
+            )
+            for bias in self.biases.values():
+                energy = bias.evaluate(batch).energy
+                if energy is not None:
+                    total = total + energy.reshape(-1)
+        finally:
+            batch["thermodynamic_state_id"] = original
+
+        temperatures = exchange.temperatures.to(total.device, total.dtype)
+        beta = 1.0 / (KB_EV * temperatures[state_ids.reshape(-1).to(torch.long)])
+        return beta * total
+
+    def _attempt_exchange(self, batch: Batch, segment: int) -> None:
+        """Attempt one round of swaps and apply the accepted ones.
+
+        Applying is the indivisible half: the batch labels, the integrator's
+        target temperature, the velocity rescaling, and the forces all move
+        together.  Leaving any of them behind would sample a state the
+        assignment says the walker is no longer in.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        segment:
+            Exchange segment index, which selects the even/odd pairing.
+        """
+        exchange = self.replica_exchange
+        if exchange is None:
+            return
+        current = batch.thermodynamic_state_id.reshape(-1).to(torch.long)
+
+        bias_current = bias_swapped = None
+        if exchange.acceptance == "umbrella":
+            proposed = exchange.proposed_assignment(segment, current)
+            bias_current = self._reduced_bias_energy(batch, current)
+            bias_swapped = self._reduced_bias_energy(batch, proposed)
+
+        energies = getattr(batch, "energy", None)
+        if energies is None:
+            energies = torch.zeros(batch.num_graphs, device=batch.positions.device)
+
+        new_ids, _pairs, accepted = exchange.decide(
+            segment,
+            current,
+            energies.reshape(-1),
+            bias_current=bias_current,
+            bias_swapped=bias_swapped,
+        )
+        if not bool(accepted.any()):
+            return
+
+        batch["thermodynamic_state_id"] = new_ids
+        self.dynamics.apply_thermodynamic_state(new_ids, exchange.temperatures)
+        self.dynamics.rescale_velocities_for_state(batch)
+        # Forces in the batch were produced under the previous labels. The
+        # integrator reads them in its next half-step before any model call,
+        # so without re-priming the first step after a swap would integrate
+        # the state the walker just left.
+        self.prime_forces(batch)
 
     def _sync_seen_versions(self) -> None:
         """Re-baseline the cached per-bias state versions from the live biases.
@@ -308,17 +450,46 @@ class EnhancedSampling:
             self._next_walker_id += n_graphs
 
         if getattr(batch, "thermodynamic_state_id", None) is None:
-            batch["thermodynamic_state_id"] = torch.zeros(
-                n_graphs, dtype=torch.long, device=device
-            )
+            if self.replica_exchange is not None:
+                batch["thermodynamic_state_id"] = (
+                    self.replica_exchange.initial_state_ids.to(device)
+                )
+            else:
+                batch["thermodynamic_state_id"] = torch.zeros(
+                    n_graphs, dtype=torch.long, device=device
+                )
 
         self._current_batch = batch
         full = torch.full((n_graphs,), step, dtype=torch.long, device=device)
         batch["sampling_step"] = full
         batch["sampling_epoch"] = full // self.steps_per_epoch
-        batch["exchange_segment"] = torch.zeros(
-            n_graphs, dtype=torch.long, device=device
+        interval = (
+            self.replica_exchange.attempt_interval
+            if self.replica_exchange is not None
+            else self.steps_per_epoch
         )
+        segment = step // max(1, interval)
+        batch["exchange_segment"] = torch.full(
+            (n_graphs,), segment, dtype=torch.long, device=device
+        )
+
+        # Ordering at a boundary is exchange, then bias commit — the epoch
+        # commit publishes shared history, and doing it before the swap would
+        # publish under labels that are about to change.
+        if (
+            self.replica_exchange is not None
+            and not self._priming
+            and segment != self._last_segment
+        ):
+            previous = self._last_segment
+            # Mark the segment consumed *before* attempting. An accepted swap
+            # re-primes forces, which runs this stamp again — and with the
+            # marker still stale that nested pass would attempt the same
+            # segment a second time, recursing until a swap happened to be
+            # rejected.
+            self._last_segment = segment
+            if previous >= 0:
+                self._attempt_exchange(batch, segment)
 
         epoch = step // self.steps_per_epoch
         if epoch != self._last_epoch:
@@ -729,6 +900,10 @@ class EnhancedSampling:
         Batch
             The same batch, primed in place.
 
+        Does not advance sampling state: no exchange is attempted and no
+        epoch is committed from here, so priming after a restore leaves the
+        run exactly where the checkpoint left it.
+
         Raises
         ------
         ValueError
@@ -759,10 +934,15 @@ class EnhancedSampling:
                 "compute_stress=False)."
             )
         self.dynamics._ensure_state_initialized(batch)
-        self._stamp_identity(batch)
-        self.dynamics._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
-        self.dynamics.compute(batch)
-        self._evaluate_and_apply(batch)
+        was_priming = self._priming
+        self._priming = True
+        try:
+            self._stamp_identity(batch)
+            self.dynamics._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            self.dynamics.compute(batch)
+            self._evaluate_and_apply(batch)
+        finally:
+            self._priming = was_priming
         return batch
 
     def warm_start(self, frames: Batch) -> None:
@@ -846,6 +1026,7 @@ class EnhancedSampling:
                 "next_walker_id": self._next_walker_id,
                 "last_epoch": self._last_epoch,
                 "committed_epoch": self._committed_epoch,
+                "last_segment": self._last_segment,
                 "last_update_step": {
                     name: int(step) for name, step in self._last_update_step.items()
                 },
@@ -855,6 +1036,8 @@ class EnhancedSampling:
             getter = getattr(bias, "state_dict", None)
             if callable(getter):
                 components[f"biases/{name}"] = dict(getter())
+        if self.replica_exchange is not None:
+            components["exchange"] = dict(self.replica_exchange.state_dict())
         return components
 
     def checkpoint(self, path: str | Path, batch: Batch | None = None) -> None:
@@ -956,6 +1139,11 @@ class EnhancedSampling:
         self._next_walker_id = int(runner_state.get("next_walker_id", 0))
         self._last_epoch = int(runner_state.get("last_epoch", -1))
         self._committed_epoch = int(runner_state.get("committed_epoch", -1))
+        self._last_segment = int(runner_state.get("last_segment", -1))
+
+        exchange_state = states.get("exchange")
+        if exchange_state is not None and self.replica_exchange is not None:
+            self.replica_exchange.load_state_dict(exchange_state)
         self._last_update_step = {
             name: int(step)
             for name, step in (runner_state.get("last_update_step") or {}).items()
@@ -1048,9 +1236,15 @@ class EnhancedSampling:
     def __repr__(self) -> str:
         """Return a concise description of the runner."""
         names = ", ".join(self.biases) or "none"
+        exchange = (
+            f", exchange={self.replica_exchange!r}"
+            if self.replica_exchange is not None
+            else ""
+        )
         return (
             f"{type(self).__name__}(dynamics={type(self.dynamics).__name__}, "
-            f"biases=[{names}], steps_per_epoch={self.steps_per_epoch})"
+            f"biases=[{names}], steps_per_epoch={self.steps_per_epoch}"
+            f"{exchange})"
         )
 
     def state_dict(self) -> Mapping[str, Any]:
