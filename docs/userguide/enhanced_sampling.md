@@ -174,7 +174,15 @@ are not interchangeable.
 
 `preallocated` raises rather than evicting because silently dropping hills
 would change the physics of a converging run with nothing to show for it. The
-error names the ways out. `fifo` is not merely a cache policy: once hills are
+error names the ways out.
+
+`grow` carries a limit that is easy to miss. Each resize changes the
+hill-tensor shape, so a compiled `energy()` retraces — and Dynamo caps
+retraces per code object at `torch._dynamo.config.recompile_limit`, 8 by
+default. The ninth growth therefore **hard-fails mid-run**, once the
+trajectory is already underway. Size `max_hills` so growths stay well under
+that, raise the limit deliberately, or use `preallocated`, which holds one
+trace for the whole run. `fifo` is not merely a cache policy: once hills are
 discarded the accumulated bias is no longer the integral of everything
 deposited, the well-tempered convergence argument no longer applies, and
 `free_energy()` refuses rather than returning a number that looks fine.

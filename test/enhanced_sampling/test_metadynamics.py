@@ -33,6 +33,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
+    BiasResult,
     EnhancedSampling,
     RMSDMetaDynamicsBias,
     WellTemperedMetaDynamicsBias,
@@ -309,7 +310,168 @@ class TestWellTemperedEnergy:
 
 
 # ===========================================================================
-# 3. Well-tempered metadynamics: periodic CVs
+# 3. Well-tempered metadynamics: CV dimensionality
+# ===========================================================================
+
+
+class TestCVDimensionality:
+    """``sigma`` and ``periods`` must match the CV, not broadcast against it."""
+
+    @staticmethod
+    def _cv_2d(batch: Batch) -> Tensor:
+        """A two-component CV: the pair distance and twice the pair distance."""
+        d = pair_distance(batch, torch.tensor([0, 1], device=batch.positions.device))
+        return torch.cat([d, 2.0 * d], dim=-1)
+
+    def test_scalar_cv_with_two_component_sigma_raises(self, device: str) -> None:
+        """The classic silent failure: a [B, 1] CV broadcast into a [H, 2] table.
+
+        The CV value is duplicated into both hill columns and the exponent
+        sums two terms instead of one, so the Gaussian silently narrows to
+        ``exp(-d^2/2 * (1/s0^2 + 1/s1^2))``.  Nothing in the run reports it.
+        """
+        bias = _metad(device, sigma=torch.tensor([0.2, 0.4]))
+        with pytest.raises(ValueError, match="cv returns 1 component"):
+            bias.evaluate(_pair_batch([1.0], device))
+
+    def test_scalar_cv_with_multi_component_periods_raises(self, device: str) -> None:
+        bias = _metad(device, periods=torch.tensor([1.0, 2.0, 3.0]))
+        with pytest.raises(ValueError, match="periods has 3"):
+            bias.evaluate(_pair_batch([1.0], device))
+
+    def test_multi_component_cv_with_scalar_periods_raises(self, device: str) -> None:
+        """A 0 entry marks a component non-periodic, so one value cannot serve.
+
+        Broadcasting a single period across every component would quietly
+        make them all periodic, which is not what a scalar can be assumed to
+        mean when the per-entry semantics carry that distinction.
+        """
+        bias = _metad(device, cv=self._cv_2d, periods=torch.tensor([6.28]))
+        with pytest.raises(ValueError, match="periods has 1"):
+            bias.evaluate(_pair_batch([1.0], device))
+
+    def test_rank_one_cv_raises(self, device: str) -> None:
+        """A CV returning [B] rather than [B, 1] is a common slip."""
+        idx = torch.tensor([0, 1])
+        bias = _metad(device, cv=lambda b: pair_distance(b, idx).reshape(-1))
+        with pytest.raises(ValueError, match=r"must return shape \[B, D\]"):
+            bias.evaluate(_pair_batch([1.0], device))
+
+    def test_validation_fires_on_update_too(self, device: str) -> None:
+        """update() also consumes CV output and must not deposit unchecked."""
+        bias = _metad(device, sigma=torch.tensor([0.2, 0.4]))
+        frame = _pair_batch([1.0], device)
+        # update() ignores the result argument; an empty one is enough here.
+        empty = BiasResult(energy=torch.zeros(1, 1, device=device))
+        with pytest.raises(ValueError, match="cv returns 1 component"):
+            bias.update(frame, empty)
+
+    def test_scalar_sigma_serves_a_multi_component_cv(self, device: str) -> None:
+        """One width shared across components is legitimate and must work.
+
+        The hill table takes its width from the CV, not from ``sigma`` — a
+        scalar says nothing about how many components there are.
+        """
+        bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+
+        assert tuple(bias.hill_centers.shape) == (4, 2)
+        assert bias.hill_centers[0].tolist() == pytest.approx([1.0, 2.0])
+
+        # Components move 0.3 and 0.6 from the hill center.
+        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        expected = 0.05 * math.exp(-0.5 * (0.3**2 + 0.6**2) / 0.2**2)
+        assert got == pytest.approx(expected, rel=1e-5)
+
+    def test_per_component_sigma_weights_components_separately(
+        self, device: str
+    ) -> None:
+        bias = _metad(
+            device, cv=self._cv_2d, sigma=torch.tensor([0.2, 0.4]), max_hills=4
+        )
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+
+        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        expected = 0.05 * math.exp(-0.5 * (0.3**2 / 0.2**2 + 0.6**2 / 0.4**2))
+        assert got == pytest.approx(expected, rel=1e-5)
+
+    def test_scalar_sigma_scalar_cv_is_unchanged(self, device: str) -> None:
+        """The common case must keep its exact previous value."""
+        bias = _metad(device, sigma=0.2, max_hills=4)
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+
+        assert tuple(bias.hill_centers.shape) == (4, 1)
+        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        assert got == pytest.approx(0.05 * math.exp(-0.5 * 0.3**2 / 0.2**2), rel=1e-5)
+
+    def test_per_component_periods_apply_to_a_multi_component_cv(
+        self, device: str
+    ) -> None:
+        """A 0 period leaves that component unwrapped."""
+        bias = _metad(
+            device,
+            cv=self._cv_2d,
+            sigma=0.2,
+            max_hills=4,
+            periods=torch.tensor([0.0, 6.28]),
+        )
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+        assert tuple(bias.hill_centers.shape) == (4, 2)
+        assert float(bias.evaluate(frame).energy.sum()) == pytest.approx(0.05, abs=1e-6)
+
+    def test_cv_changing_dimension_mid_run_raises(self, device: str) -> None:
+        """Existing hills are not comparable against a different-width CV."""
+        idx = torch.tensor([0, 1])
+        calls = {"n": 0}
+
+        def switching(batch: Batch) -> Tensor:
+            calls["n"] += 1
+            d = pair_distance(batch, idx)
+            return d if calls["n"] <= 2 else torch.cat([d, 2.0 * d], dim=-1)
+
+        bias = _metad(device, cv=switching, sigma=0.2, max_hills=8)
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+        assert tuple(bias.hill_centers.shape) == (8, 1)
+
+        with pytest.raises(RuntimeError, match="must keep its dimension"):
+            bias.update(frame, bias.evaluate(frame))
+
+    def test_free_energy_rejects_a_wrong_width_grid(self, device: str) -> None:
+        """Zeros from a width mismatch would read as a flat free energy."""
+        bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+
+        with pytest.raises(ValueError, match="deposited hills"):
+            bias.free_energy(torch.tensor([[1.0]], device=device))
+
+    def test_empty_history_still_evaluates_before_the_width_is_known(
+        self, device: str
+    ) -> None:
+        """Priming runs before any deposition resolves the CV width."""
+        bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
+        result = bias.evaluate(_pair_batch([1.0], device))
+        assert torch.count_nonzero(result.energy) == 0
+
+    def test_multi_component_cv_compiles(self, device: str) -> None:
+        """The width check is a shape guard, not a data-dependent branch."""
+        torch._dynamo.reset()
+        bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
+        frame = _pair_batch([1.0], device)
+        bias.update(frame, bias.evaluate(frame))
+
+        batch = _pair_batch([1.3, 2.0], device)
+        compiled = torch.compile(bias.energy, fullgraph=True)
+        assert torch.allclose(compiled(batch), bias.energy(batch), atol=1e-6)
+
+
+# ===========================================================================
+# 4. Well-tempered metadynamics: periodic CVs
 # ===========================================================================
 
 
@@ -397,7 +559,7 @@ class TestWellTemperedPeriodic:
 
 
 # ===========================================================================
-# 4. Well-tempered metadynamics: storage policies
+# 5. Well-tempered metadynamics: storage policies
 # ===========================================================================
 
 
@@ -490,7 +652,7 @@ class TestStoragePolicies:
 
 
 # ===========================================================================
-# 5. Well-tempered metadynamics: multi-walker history
+# 6. Well-tempered metadynamics: multi-walker history
 # ===========================================================================
 
 
@@ -553,7 +715,7 @@ class TestMultiWalkerHistory:
 
 
 # ===========================================================================
-# 6. Well-tempered metadynamics: ramping and free energy
+# 7. Well-tempered metadynamics: ramping and free energy
 # ===========================================================================
 
 
@@ -614,7 +776,7 @@ class TestRampAndFreeEnergy:
 
 
 # ===========================================================================
-# 7. Well-tempered metadynamics: compile and restart
+# 8. Well-tempered metadynamics: compile and restart
 # ===========================================================================
 
 
@@ -622,6 +784,7 @@ class TestWellTemperedCompile:
     """energy() is the compile boundary and must hold fullgraph=True."""
 
     def test_energy_compiles_fullgraph(self, device: str) -> None:
+        torch._dynamo.reset()
         bias = _metad(device, sigma=0.4)
         frame = _pair_batch([1.0], device)
         bias.update(frame, bias.evaluate(frame))
@@ -633,6 +796,7 @@ class TestWellTemperedCompile:
 
     def test_compiled_energy_tracks_new_hills(self, device: str) -> None:
         """Depositing must change the compiled result, not hit a stale trace."""
+        torch._dynamo.reset()
         bias = _metad(device, sigma=0.4, max_hills=8)
         compiled = torch.compile(bias.energy, fullgraph=True)
         batch = _pair_batch([1.0], device)
@@ -641,8 +805,54 @@ class TestWellTemperedCompile:
         bias.update(batch, bias.evaluate(batch))
         assert float(compiled(batch).sum()) == pytest.approx(0.05, abs=1e-6)
 
+    def test_grow_exhausts_the_dynamo_recompile_limit(self, device: str) -> None:
+        """Each growth retraces, and Dynamo caps retraces per code object.
+
+        ``grow`` changes the hill-tensor shape on every resize, so a compiled
+        ``energy()`` recompiles each time and hits ``recompile_limit`` (8 by
+        default) on the ninth.  This is why ``preallocated`` is the
+        production default rather than a micro-optimisation: the failure
+        arrives mid-run, after the trajectory is already underway.
+        """
+        torch._dynamo.reset()
+        bias = _metad(device, sigma=0.4, storage="grow", max_hills=1)
+        compiled = torch.compile(bias.energy, fullgraph=True)
+
+        survived = 0
+        for i in range(12):
+            frame = _pair_batch([1.0 + 0.1 * i], device)
+            bias.update(frame, bias.evaluate(frame))
+            try:
+                compiled(frame)
+            except (
+                torch._dynamo.exc.Unsupported,
+                torch._dynamo.exc.FailOnRecompileLimitHit,
+            ):
+                break
+            survived += 1
+
+        assert survived == 8, survived
+        assert bias.capacity == 9
+        torch._dynamo.reset()
+
+    def test_preallocated_never_retraces(self, device: str) -> None:
+        """The compile-stable policy holds one trace for the whole run."""
+        torch._dynamo.reset()
+        bias = _metad(device, sigma=0.4, storage="preallocated", max_hills=32)
+        compiled = torch.compile(bias.energy, fullgraph=True)
+
+        for i in range(12):
+            frame = _pair_batch([1.0 + 0.1 * i], device)
+            bias.update(frame, bias.evaluate(frame))
+            compiled(frame)
+
+        assert int(bias.hill_count) == 12
+        assert tuple(bias.hill_centers.shape) == (32, 1)
+        torch._dynamo.reset()
+
     def test_per_state_history_compiles(self, device: str) -> None:
         """The owner mask must not introduce a data-dependent branch."""
+        torch._dynamo.reset()
         bias = _metad(device, history="state", sigma=0.4)
         batch = _pair_batch([1.0, 1.2], device)
         batch.thermodynamic_state_id = torch.tensor(
@@ -707,7 +917,7 @@ class TestWellTemperedRestart:
 
 
 # ===========================================================================
-# 8. RMSD metadynamics: alignment
+# 9. RMSD metadynamics: alignment
 # ===========================================================================
 
 
@@ -819,7 +1029,7 @@ class TestRMSDInvariance:
 
 
 # ===========================================================================
-# 9. RMSD metadynamics: construction, selection, and periodicity
+# 10. RMSD metadynamics: construction, selection, and periodicity
 # ===========================================================================
 
 
@@ -944,7 +1154,7 @@ class TestRMSDSelectionAndPeriodicity:
 
 
 # ===========================================================================
-# 10. RMSD metadynamics: deposition, warm start, retention, restart
+# 11. RMSD metadynamics: deposition, warm start, retention, restart
 # ===========================================================================
 
 
@@ -1171,7 +1381,7 @@ class TestRMSDRestart:
 
 
 # ===========================================================================
-# 11. Runner integration: deposition schedule and force priming
+# 12. Runner integration: deposition schedule and force priming
 # ===========================================================================
 
 

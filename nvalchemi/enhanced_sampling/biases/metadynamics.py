@@ -68,7 +68,9 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     height:
         Initial hill height ``h_0`` in eV.
     sigma:
-        Hill width per CV component; scalar or shape ``[D]``.
+        Hill width, either a scalar shared by every CV component or shape
+        ``[D]``.  Any other length is rejected on the first evaluation
+        rather than broadcast into the hill table.
     temperature:
         Simulation temperature in Kelvin, used for the well-tempered damping.
     bias_factor:
@@ -87,9 +89,12 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         belong to the thermodynamic state that deposited them), or
         ``"walker"`` (each walker sees only its own).
     periods:
-        Period per CV component, ``0`` for non-periodic.  Applied to the
-        ``s - c`` difference so a hill near a branch cut still repels from
-        both sides.
+        Period per CV component, ``0`` for non-periodic, shape ``[D]``.
+        Applied to the ``s - c`` difference so a hill near a branch cut
+        still repels from both sides.  Unlike ``sigma`` a scalar is not
+        accepted for a multi-component CV: the entries carry per-component
+        meaning, so broadcasting one across all of them would quietly make
+        every component periodic.
     ramp_depositions:
         Number of *deposition events* over which a freshly added hill ramps
         from zero to full height.  ``0`` activates immediately.  Counted in
@@ -102,7 +107,10 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     ------
     ValueError
         For an invalid storage policy, history mode, non-positive height or
-        width, ``bias_factor <= 1``, or a missing capacity.
+        width, ``bias_factor <= 1``, or a missing capacity.  A ``sigma`` or
+        ``periods`` length that disagrees with the CV is raised on first
+        evaluation, since the CV dimension is not knowable at construction
+        from a plain callable.
 
     Notes
     -----
@@ -113,7 +121,12 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
 
         ``grow`` allocates in chunks of ``max_hills``; each growth changes
         the hill-tensor shape, which forces a recompile if ``energy()`` is
-        compiled.
+        compiled.  Dynamo caps retraces per code object at
+        ``torch._dynamo.config.recompile_limit`` (8 by default), so a
+        compiled run **hard-fails on the ninth growth** — mid-trajectory,
+        once the run is already underway.  Size ``max_hills`` so that
+        growths stay well under that, raise the limit deliberately, or use
+        ``preallocated``.
 
         ``fifo`` bounds memory by discarding the oldest hill.  This is
         **scientifically meaningful, not merely a cache eviction**: the
@@ -359,6 +372,62 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         age = (step - self.hill_step).to(self.hill_heights.dtype)
         return torch.clamp(age / float(self.ramp_depositions), min=0.0, max=1.0)
 
+    def _validate_cv(self, values: Tensor) -> int:
+        """Check the CV output against ``sigma`` and ``periods``.
+
+        Every mismatch here is a *broadcast*, not an error: a CV of width one
+        against a two-component ``sigma`` broadcasts into a two-column hill
+        table, and the exponent then sums two terms instead of one.  The
+        Gaussian silently narrows and nothing in the run reports it.
+
+        Only tensor ranks and element counts are inspected, so this is a
+        compile-time guard rather than a data-dependent branch and
+        :meth:`gaussian_sum` still traces with ``fullgraph=True``.
+
+        Parameters
+        ----------
+        values:
+            CV values, expected shape ``[B, D]``.
+
+        Returns
+        -------
+        int
+            The CV dimension ``D``.
+
+        Raises
+        ------
+        ValueError
+            If *values* is not rank 2, or if ``sigma`` or ``periods`` has an
+            element count that would broadcast against ``D`` rather than
+            match it.
+        """
+        if values.ndim != 2:
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: cv must return "
+                f"shape [B, D], got {tuple(values.shape)}. A CV returning [B] "
+                "for a scalar collective variable needs an explicit trailing "
+                "dimension — return values.unsqueeze(-1)."
+            )
+
+        dim = int(values.shape[1])
+        if self.sigma.numel() not in (1, dim):
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: cv returns "
+                f"{dim} component(s) but sigma has {self.sigma.numel()}. "
+                "sigma must be a scalar (one width shared by every component) "
+                f"or have exactly {dim} entries; any other count broadcasts "
+                "into the hill table and silently changes the Gaussian."
+            )
+        if self.periods is not None and self.periods.numel() != dim:
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: cv returns "
+                f"{dim} component(s) but periods has "
+                f"{self.periods.numel()}. periods is per-component — a 0 entry "
+                "marks that component non-periodic — so it must have exactly "
+                f"{dim} entries rather than broadcast."
+            )
+        return dim
+
     def gaussian_sum(self, values: Tensor, owner_key: Tensor) -> Tensor:
         """Return the accumulated bias at *values*, shape ``[B]``.
 
@@ -377,7 +446,20 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         -------
         Tensor
             Bias energy per graph, shape ``[B]``.
+
+        Raises
+        ------
+        ValueError
+            If *values* does not agree with ``sigma`` and ``periods``; see
+            :meth:`_validate_cv`.
         """
+        dim = self._validate_cv(values)
+        if self.hill_centers.shape[1] != dim:
+            # The hill table is still at its provisional width, which only
+            # happens before the first deposition resolves the CV dimension.
+            # An empty history contributes nothing whatever the width is.
+            return values.new_zeros(values.shape[0])
+
         slots = torch.arange(self.hill_centers.shape[0], device=values.device)
         live = slots < self.hill_count
 
@@ -491,6 +573,14 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             Post-step frame captured by the runner.
         result:
             The bias's own result from the preceding force evaluation.
+
+        Raises
+        ------
+        ValueError
+            If the CV output disagrees with ``sigma`` or ``periods``.
+        RuntimeError
+            If the CV changes dimension part-way through a run, which would
+            silently invalidate every hill already deposited.
         """
         with torch.no_grad():
             values = self.cv(frames).detach()  # [B, D]
@@ -499,6 +589,23 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             heights = self._well_tempered_height(bias_at_cv)
 
             count = values.shape[0]
+            dim = int(values.shape[1])
+            if self.hill_centers.shape[1] != dim:
+                # The constructor sizes the hill table from sigma, which is
+                # only right when sigma is per-component; a scalar sigma says
+                # nothing about the CV width. The first deposition is where
+                # the true dimension becomes known.
+                if int(self.hill_count) != 0:
+                    raise RuntimeError(
+                        f"WellTemperedMetaDynamicsBias {self.name!r}: cv "
+                        f"returned {dim} component(s) but the "
+                        f"{int(self.hill_count)} hill(s) already deposited "
+                        f"have {self.hill_centers.shape[1]}. A collective "
+                        "variable must keep its dimension for the whole run — "
+                        "the existing history is not comparable otherwise."
+                    )
+                self._allocate(self.capacity, dim)
+
             slots = self._next_slots(count)
 
             self.hill_centers[slots] = values.to(self.hill_centers.dtype)
@@ -535,6 +642,9 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
 
         Raises
         ------
+        ValueError
+            If *values* does not match the deposited hills' dimension, or
+            disagrees with ``sigma`` or ``periods``.
         RuntimeError
             Under ``storage="fifo"``, where discarded hills mean the
             accumulated bias is no longer the integral of everything
@@ -548,6 +658,17 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
                 "everything deposited, so the well-tempered relation between "
                 "bias and free energy does not hold. Use 'preallocated' or "
                 "'grow' for a run you intend to reconstruct a profile from."
+            )
+        # gaussian_sum answers a width mismatch with zeros, which is right for
+        # an empty history on the force path but reads as a flat profile here.
+        dim = self._validate_cv(values)
+        if int(self.hill_count) and self.hill_centers.shape[1] != dim:
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: free_energy() "
+                f"was given {dim}-component values but the deposited hills "
+                f"have {self.hill_centers.shape[1]}. Evaluating the profile "
+                "on a grid of the wrong width would return zeros, which is "
+                "indistinguishable from a flat free energy."
             )
         if owner_key is None:
             owner_key = torch.full(

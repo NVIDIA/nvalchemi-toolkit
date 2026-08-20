@@ -72,7 +72,14 @@
   independent runs in one batch), and `state` (per-rung history for a
   replica-exchange ladder, which declares `state_dependent_for_exchange`).
   `periods` wraps the hill difference onto a circle so a hill near a branch
-  cut repels from both sides.
+  cut repels from both sides. `sigma` and `periods` are checked against the
+  CV on first evaluation rather than broadcast against it: a mismatched
+  length would widen the hill table and silently change the Gaussian
+  exponent. `sigma` may be a scalar shared across components or one entry
+  per component; `periods` must be per-component, since a `0` entry is what
+  marks a component non-periodic and one value cannot carry that
+  distinction. The hill table takes its width from the CV, so a scalar
+  `sigma` works with a multi-component CV.
 
   `RMSDMetaDynamicsBias` is the xTB/CREST-style variant, whose history is a
   set of retained structures rather than CV values, and which therefore needs
