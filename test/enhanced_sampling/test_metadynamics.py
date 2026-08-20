@@ -707,6 +707,54 @@ class TestMultiWalkerHistory:
         bias.update(batch, bias.evaluate(batch))
         assert bias.hill_owner[:2].tolist() == [0, 1]
 
+    def test_walker_history_without_walker_id_raises(self, device: str) -> None:
+        """Defaulting a missing owner field to 0 collapses private histories.
+
+        Every hill would be filed under one key, making the result
+        numerically identical to ``history="shared"`` — the opposite of what
+        was asked for, with nothing reporting it.
+        """
+        bias = _metad(device, history="walker", sigma=0.5)
+        with pytest.raises(ValueError, match="needs batch.walker_id"):
+            bias.evaluate(_pair_batch([1.0, 1.05], device))
+
+    def test_state_history_without_state_id_raises(self, device: str) -> None:
+        bias = _metad(device, history="state", sigma=0.5)
+        with pytest.raises(ValueError, match="needs batch.thermodynamic_state_id"):
+            bias.evaluate(_pair_batch([1.0, 1.05], device))
+
+    def test_shared_history_needs_no_owner_field(self, device: str) -> None:
+        """The fields are meaningless under a shared history."""
+        bias = _metad(device, history="shared", sigma=0.5)
+        frame = _pair_batch([1.0, 1.05], device)
+        bias.update(frame, bias.evaluate(frame))
+        assert bias.hill_owner[:2].tolist() == [-1, -1]
+
+    def test_wrong_length_owner_field_raises(self, device: str) -> None:
+        """A short owner tensor broadcasts across graphs instead of erroring."""
+        bias = _metad(device, history="walker", sigma=0.5)
+        frame = _pair_batch([1.0, 1.05], device)
+        frame.walker_id = torch.tensor([7], device=frame.positions.device)
+        with pytest.raises(ValueError, match="has 1 entries but the batch has 2"):
+            bias.evaluate(frame)
+
+    def test_update_also_rejects_a_missing_owner_field(self, device: str) -> None:
+        """Deposition must not file hills under a fabricated owner either."""
+        bias = _metad(device, history="walker", sigma=0.5)
+        frame = _pair_batch([1.0, 1.05], device)
+        empty = BiasResult(energy=torch.zeros(2, 1, device=device))
+        with pytest.raises(ValueError, match="needs batch.walker_id"):
+            bias.update(frame, empty)
+
+    def test_runner_supplies_the_owner_fields(self, device: str) -> None:
+        """The stamp is what makes walker-private history work in a real run."""
+        bias = _metad(device, name="meta", history="walker", update_frequency=1)
+        runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
+        runner.run(_random_batch(device=device), n_steps=2)
+
+        assert int(bias.deposits) == 2
+        assert sorted(bias.hill_owner[:2].tolist()) == [0, 1]
+
     def test_state_history_declares_exchange_dependence(self) -> None:
         """A per-state history changes which hills a swap exposes a walker to."""
         assert _metad(history="state").state_dependent_for_exchange is True
@@ -1372,6 +1420,29 @@ class TestRMSDDeposition:
         assert bool(
             (shared.evaluate(batch).energy >= bias.evaluate(batch).energy - 1e-9).all()
         )
+
+    def test_walker_history_without_walker_id_raises(self, device: str) -> None:
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=8, history="walker"
+        ).to(device)
+        with pytest.raises(ValueError, match="needs batch.walker_id"):
+            bias.evaluate(self._molecule(device, n_graphs=2))
+
+    def test_state_history_without_state_id_raises(self, device: str) -> None:
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=8, history="state"
+        ).to(device)
+        with pytest.raises(ValueError, match="needs batch.thermodynamic_state_id"):
+            bias.evaluate(self._molecule(device, n_graphs=2))
+
+    def test_wrong_length_owner_field_raises(self, device: str) -> None:
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=8, history="walker"
+        ).to(device)
+        batch = self._molecule(device, n_graphs=2)
+        batch.walker_id = torch.tensor([4], device=batch.positions.device)
+        with pytest.raises(ValueError, match="has 1 entries but the batch has 2"):
+            bias.evaluate(batch)
 
     def test_state_history_declares_exchange_dependence(self) -> None:
         assert (

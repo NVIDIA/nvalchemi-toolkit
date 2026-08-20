@@ -204,6 +204,14 @@ deposited, the well-tempered convergence argument no longer applies, and
 temperature ladder is rejected rather than run under an acceptance rule that
 does not cover it; see [Acceptance](#acceptance).
 
+`"state"` and `"walker"` read `thermodynamic_state_id` and `walker_id` off the
+batch, and **raise** if the field is absent or the wrong length. The runner
+stamps both on every step, so this only affects a bias you evaluate directly.
+The alternative — defaulting a missing field to zero — would file every hill
+under one key and silently collapse the per-owner histories into a single
+shared one, which is the opposite of what was asked for and produces energies
+numerically identical to `history="shared"`.
+
 ### xTB-style RMSD metadynamics
 
 `RMSDMetaDynamicsBias` drops the collective variable entirely. Its history is

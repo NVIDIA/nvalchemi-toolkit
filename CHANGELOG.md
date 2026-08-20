@@ -71,6 +71,12 @@
   roughly `B` times faster in one batched force evaluation), `walker` (`B`
   independent runs in one batch), and `state` (per-rung history for a
   replica-exchange ladder, which declares `state_dependent_for_exchange`).
+  The latter two require `walker_id` / `thermodynamic_state_id` on the batch
+  and raise if it is missing or the wrong length, rather than defaulting to a
+  single owner — that fallback filed every hill under one key and produced
+  energies numerically identical to `history="shared"`, silently delivering
+  the opposite of what was configured. The runner stamps both fields on every
+  step, so only a directly evaluated bias has to supply them.
   `periods` wraps the hill difference onto a circle so a hill near a branch
   cut repels from both sides. `sigma` and `periods` are checked against the
   CV on first evaluation rather than broadcast against it: a mismatched

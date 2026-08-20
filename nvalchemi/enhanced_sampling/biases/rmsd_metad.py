@@ -150,7 +150,10 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         initial chunk for ``"grow"``.
     history:
         ``"shared"``, ``"state"``, or ``"walker"``, as for well-tempered
-        metadynamics.
+        metadynamics.  The latter two require the batch to carry
+        ``thermodynamic_state_id`` / ``walker_id`` and raise if it does not;
+        :class:`~nvalchemi.enhanced_sampling.EnhancedSampling` stamps both on
+        every step, so only direct evaluation has to supply them.
     ramp_depositions:
         Deposition events over which a new reference ramps from zero to full
         amplitude.  A freshly deposited reference is at RMSD zero, so without
@@ -507,13 +510,33 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         """
         device = self.reference_owner.device
         if self.history == "state":
-            ids = getattr(current, "thermodynamic_state_id", None)
+            field = "thermodynamic_state_id"
         elif self.history == "walker":
-            ids = getattr(current, "walker_id", None)
+            field = "walker_id"
         else:
             return torch.full((n_graphs,), -1, dtype=torch.long, device=device)
+
+        ids = getattr(current, field, None)
         if ids is None:
-            return torch.zeros(n_graphs, dtype=torch.long, device=device)
+            raise ValueError(
+                f"RMSDMetaDynamicsBias {self.name!r}: history="
+                f"{self.history!r} needs batch.{field}, which this batch "
+                f"does not carry. Falling back to a single owner would put "
+                f"every reference under one key and silently collapse the "
+                f"per-{field} histories into one shared history — the "
+                f"opposite of what history={self.history!r} asks for. "
+                "EnhancedSampling stamps this field on every step; a bias "
+                "driven directly must set it, or use history='shared' if "
+                "one history really is intended."
+            )
+        if ids.numel() != n_graphs:
+            raise ValueError(
+                f"RMSDMetaDynamicsBias {self.name!r}: batch.{field} has "
+                f"{ids.numel()} entries but the batch has {n_graphs} "
+                f"graph(s). A shorter tensor broadcasts across graphs, which "
+                f"would file every reference under one walker's key without "
+                "raising."
+            )
         return ids.reshape(-1).to(device=device, dtype=torch.long)
 
     def _reference_scale(self) -> Tensor:

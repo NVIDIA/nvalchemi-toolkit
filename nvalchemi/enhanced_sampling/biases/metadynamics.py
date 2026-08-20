@@ -88,6 +88,12 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         ``"shared"`` (every walker sees every hill), ``"state"`` (hills
         belong to the thermodynamic state that deposited them), or
         ``"walker"`` (each walker sees only its own).
+
+        ``"state"`` and ``"walker"`` require the batch to carry
+        ``thermodynamic_state_id`` / ``walker_id`` respectively, and raise if
+        it does not.  :class:`~nvalchemi.enhanced_sampling.EnhancedSampling`
+        stamps both on every step, so a runner-driven bias never sees this;
+        a bias evaluated directly must supply the field itself.
     periods:
         Period per CV component, ``0`` for non-periodic, shape ``[D]``.
         Applied to the ``s - c`` difference so a hill near a branch cut
@@ -341,13 +347,33 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         """
         device = self.hill_owner.device
         if self.history == "state":
-            ids = getattr(current, "thermodynamic_state_id", None)
+            field = "thermodynamic_state_id"
         elif self.history == "walker":
-            ids = getattr(current, "walker_id", None)
+            field = "walker_id"
         else:
             return torch.full((n_graphs,), -1, dtype=torch.long, device=device)
+
+        ids = getattr(current, field, None)
         if ids is None:
-            return torch.zeros(n_graphs, dtype=torch.long, device=device)
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: history="
+                f"{self.history!r} needs batch.{field}, which this batch "
+                f"does not carry. Falling back to a single owner would put "
+                f"every hill under one key and silently collapse the "
+                f"per-{field} histories into one shared history — the "
+                f"opposite of what history={self.history!r} asks for. "
+                "EnhancedSampling stamps this field on every step; a bias "
+                "driven directly must set it, or use history='shared' if "
+                "one history really is intended."
+            )
+        if ids.numel() != n_graphs:
+            raise ValueError(
+                f"WellTemperedMetaDynamicsBias {self.name!r}: batch.{field} has "
+                f"{ids.numel()} entries but the batch has {n_graphs} "
+                f"graph(s). A shorter tensor broadcasts across graphs, which "
+                f"would file every hill under one walker's key without "
+                "raising."
+            )
         return ids.reshape(-1).to(device=device, dtype=torch.long)
 
     def _hill_scale(self, step: Tensor) -> Tensor:
