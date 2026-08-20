@@ -463,6 +463,7 @@ class TestAppliedForce:
 
         assert set(result.observables) >= {
             "cv",
+            "bin",
             "applied_gradient",
             "samples",
             "ramp",
@@ -473,6 +474,52 @@ class TestAppliedForce:
         assert "mean_force" not in result.observables
         assert float(result.observables["cv"][0]) == pytest.approx(2.5, abs=1e-6)
         assert result.observables["in_range"].reshape(-1).tolist() == [1.0, 0.0]
+
+    def test_out_of_range_diagnostics_are_zero(self, device: str) -> None:
+        """A clamped bin index must not leak the edge bin's statistics.
+
+        ``_bin_of`` clamps so the index is always safe to gather with, which
+        means an out-of-range walker names the nearest edge bin.  Reporting
+        that bin's counts and ramp would show a converged-looking sample
+        count beside ``in_range == 0``, and any aggregation over
+        ``bias/abf/samples`` would double-count walkers that contributed
+        nothing.
+        """
+        bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
+        # Give both edge bins real statistics to leak.
+        for _ in range(5):
+            bias.update(_harmonic_frame([2.9], device), BiasResult())
+        for _ in range(3):
+            bias.update(_harmonic_frame([2.1], device), BiasResult())
+        assert int(bias.bin_counts.sum()) == 8
+
+        # Inside, far above the range, far below it.
+        result = bias.evaluate(_harmonic_frame([2.9, 9.0, 0.5], device))
+        observables = result.observables
+
+        assert observables["in_range"].reshape(-1).tolist() == [1.0, 0.0, 0.0]
+        assert observables["samples"].reshape(-1).tolist() == [5, 0, 0]
+        assert observables["ramp"].reshape(-1).tolist() == [1.0, 0.0, 0.0]
+        assert observables["applied_gradient"].reshape(-1)[1:].abs().max() == 0.0
+
+    def test_reported_bin_matches_bin_index(self, device: str) -> None:
+        """The observable and the public accessor must not disagree."""
+        bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
+        bias.update(_harmonic_frame([2.9], device), BiasResult())
+
+        probe = _harmonic_frame([2.9, 9.0, 0.5], device)
+        observables = bias.evaluate(probe).observables
+        assert (
+            observables["bin"].reshape(-1).tolist()
+            == bias.bin_index(observables["cv"].reshape(-1)).tolist()
+        )
+        assert observables["bin"].reshape(-1).tolist() == [3, -1, -1]
+
+    def test_cv_is_reported_even_out_of_range(self, device: str) -> None:
+        """The CV is genuinely measured wherever the walker is."""
+        bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
+        observables = bias.evaluate(_harmonic_frame([9.0], device)).observables
+        assert float(observables["cv"][0]) == pytest.approx(9.0, abs=1e-5)
 
 
 # ===========================================================================

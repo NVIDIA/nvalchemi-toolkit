@@ -152,7 +152,11 @@
   rather than dropping the bias from the acceptance exponent. `mean_force()`
   and `free_energy()` report unvisited bins as `nan` rather than zero, and
   `free_energy()` raises on an interior gap because integrating across a hole
-  would leave every value beyond it wrong by an unknown constant.
+  would leave every value beyond it wrong by an unknown constant. Per-step
+  diagnostics are `cv`, `bin`, `applied_gradient`, `samples`, `ramp`, and
+  `in_range`; a walker outside `cv_range` reports `bin = -1` and zero for
+  every per-bin quantity, so the diagnostics agree with the zero force it
+  receives rather than reporting the nearest edge bin's statistics.
 
 - Adaptive biases now record a configuration fingerprint in their
   `state_dict()` and reject a mismatched restore. The manifest records each

@@ -331,6 +331,12 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         tuple[Tensor, Tensor]
             Bin indices clamped into range, and a boolean mask marking which
             samples actually fell inside ``cv_range``.
+
+            The clamp makes the index always safe to gather with, but it
+            also means an out-of-range value silently names the nearest edge
+            bin.  Every caller must therefore mask what it gathers with the
+            second return value, not just the quantities that reach the
+            force.
         """
         low, high = self.cv_range
         raw = ((distance - low) / self.bin_width).floor().to(torch.long)
@@ -422,11 +428,15 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         Returns
         -------
         BiasResult
-            ``forces`` only, plus per-walker diagnostics: the CV value, the
-            ``applied_gradient`` actually used (ramped and capped, so not the
-            same as :meth:`mean_force`), the bin's sample count, its ramp
-            fraction, and whether the walker was inside ``cv_range``.
-            ``energy`` is ``None`` because there is none to report.
+            ``forces`` only, plus per-walker diagnostics: the CV value, its
+            ``bin`` (``-1`` outside ``cv_range``, matching
+            :meth:`bin_index`), the ``applied_gradient`` actually used
+            (ramped and capped, so not the same as :meth:`mean_force`), the
+            bin's sample count, its ramp fraction, and ``in_range``.  Every
+            per-bin quantity reads zero for a walker outside the range, so
+            the diagnostics agree with the force rather than reporting the
+            nearest edge bin's statistics.  ``energy`` is ``None`` because
+            there is none to report.
         """
         self._align_device(current.positions)
 
@@ -444,15 +454,30 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
             forces.index_add_(0, global_j, contribution)
             forces.index_add_(0, global_i, -contribution)
 
+            # Every per-bin diagnostic is masked the same way the gradient is.
+            # _bin_of clamps the index so it is always safe to gather with,
+            # which means an out-of-range walker would otherwise read the
+            # nearest edge bin's statistics and report them as its own — a
+            # converged-looking sample count and ramp next to in_range == 0.
+            zero_long = torch.zeros_like(self.bin_counts[bins])
+            ramp = self.ramp_fraction()[bins]
+
             # Named applied_gradient, not mean_force: this is the ramped and
             # capped value actually used, which is not what mean_force()
             # returns. Reusing that name would invite reading a
             # threshold-suppressed zero as a measured zero mean force.
             observables = {
                 "cv": distance.unsqueeze(-1),
+                "bin": torch.where(in_range, bins, torch.full_like(bins, -1)).unsqueeze(
+                    -1
+                ),
                 "applied_gradient": gradient.unsqueeze(-1),
-                "samples": self.bin_counts[bins].unsqueeze(-1),
-                "ramp": self.ramp_fraction()[bins].unsqueeze(-1),
+                "samples": torch.where(
+                    in_range, self.bin_counts[bins], zero_long
+                ).unsqueeze(-1),
+                "ramp": torch.where(in_range, ramp, torch.zeros_like(ramp)).unsqueeze(
+                    -1
+                ),
                 "in_range": in_range.to(forces.dtype).unsqueeze(-1),
             }
 

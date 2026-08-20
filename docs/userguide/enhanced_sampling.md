@@ -394,6 +394,12 @@ exponent and breaking detailed balance silently.
 The per-step diagnostic is named `bias/<name>/applied_gradient` rather than
 `mean_force`, because it is the ramped and capped value actually used — a
 threshold-suppressed zero there is not a measured zero mean force.
+
+The per-step observables are `cv`, `bin`, `applied_gradient`, `samples`,
+`ramp`, and `in_range`. A walker outside `cv_range` reports `bin = -1` and
+zero for every per-bin quantity, matching the zero force it receives. Only
+`cv` is still reported, since the coordinate is genuinely measured wherever
+the walker is.
 Bins never visited come back as `nan` rather than zero — a bin with no samples
 has no estimate, and zero is a perfectly plausible value that would hide that.
 `free_energy()` **raises** on an interior gap: integration carries the profile
