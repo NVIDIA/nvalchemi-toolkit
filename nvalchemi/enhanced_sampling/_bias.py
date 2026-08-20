@@ -101,6 +101,52 @@ class BiasResult:
     observables:
         Named diagnostic tensors exposed as ``bias/<name>/<key>`` in the
         runner's output dict.  All tensors must be detached.
+
+    Notes
+    -----
+    Why the physics fields are a closed set
+        :data:`~nvalchemi._typing.ModelOutputs` is an open mapping, and it is
+        reasonable to ask why the type that extends it is narrower.  The
+        asymmetry is deliberate, and it follows from what the two are for.
+
+        A model's outputs are its *product*: the caller decides what a
+        Hessian or a dipole is for, and a key the caller does not recognise
+        costs nothing.  A bias's outputs are a *contribution* the runner must
+        add into a specific batch buffer.  For each one the runner has to
+        know the destination (``batch.energy``, ``batch.forces``,
+        ``batch.stress``), whether it is per-graph or per-atom so it can
+        reshape, how it combines across biases, and how it converts —
+        stress and virial are the same physics in two conventions, and
+        moving between them needs the cell volume.  An unrecognised key has
+        none of that, so ``EnhancedSampling._check_destinations`` raises for
+        any produced output with no buffer to receive it.  An open payload
+        would therefore be open only up to the first key the runner could
+        not apply.
+
+        The extension point that *is* open is :attr:`observables`: an
+        arbitrary ``Mapping[str, Tensor]``, no shape checks, surfaced as
+        ``bias/<name>/<key>``.  The split is between quantities the runner
+        applies to the dynamics — closed, because each needs a defined
+        destination and combination rule — and quantities it merely reports,
+        which are unconstrained.  A per-atom energy decomposition belongs to
+        the second group: it is not a contribution to ``batch.energy``.
+
+        What this does cost is worth stating plainly.  A third party whose
+        novel method produces a genuinely new *applied* output — one the
+        integrator should act on — cannot express it without editing this
+        module.  That is a real limit, accepted because the alternative is a
+        contribution the runner silently drops.  Two escape hatches exist
+        short of a framework change: report it through ``observables``, or,
+        for cross-rank semantics, override
+        :meth:`ConservativeBias.distribution_spec`.
+
+        Three restrictions follow from the same reasoning rather than from
+        the field set itself: ``energy`` is ``[B, 1]`` because it is added to
+        a per-graph buffer; ``stress`` and ``virial`` are mutually exclusive
+        because carrying both invites two answers that can disagree; and
+        ``state_version`` is integral because
+        :class:`~nvalchemi.enhanced_sampling.ReplicaExchange` compares
+        versions for identity, which a float does not support.
     """
 
     energy: Tensor | None = None
@@ -792,6 +838,14 @@ def aggregate_bias_results(results: list[BiasResult]) -> BiasResult:
       Flattening it into the same dict would let an observable named
       ``energy`` be summed into the bias energy, so it is merged
       separately.
+
+    The stress/virial mixing check stays here for a different reason: it
+    would guard nothing in ``sum_outputs``.  Model wrappers normalise a
+    virial to a tensile-positive stress at the adapter boundary (dividing by
+    the cell volume), so the ``ModelOutputs`` that reach ``sum_outputs``
+    carry ``stress`` and never ``virial`` — which is why its default
+    ``additive_keys`` omits virial entirely.  ``BiasResult`` deliberately
+    allows either field, so only this layer can be handed both.
 
     Parameters
     ----------

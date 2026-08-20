@@ -422,6 +422,28 @@ class MyBias:
 
 That class satisfies the protocol with no base class at all.
 
+#### Why `BiasResult` is narrower than `ModelOutputs`
+
+`ModelOutputs` is an open mapping; `BiasResult` carries a fixed set of physics
+fields. The split is between what the runner **applies** and what it merely
+**reports**.
+
+An applied output needs a destination (`batch.energy`, `batch.forces`,
+`batch.stress`), a per-graph or per-atom reshape rule, a rule for combining it
+across biases, and a conversion — stress and virial are the same physics in two
+conventions, and moving between them needs the cell volume. An unrecognised key
+has none of that, and `_check_destinations` already raises for any produced
+output with no buffer to receive it. So an open payload would be open only up
+to the first key the runner could not apply.
+
+`observables` is the open half: an arbitrary `Mapping[str, Tensor]`, no shape
+checks, surfaced as `bias/<name>/<key>`. A per-atom energy decomposition
+belongs there — it is a diagnostic, not a contribution to `batch.energy`.
+
+The cost is real: a method producing a genuinely new *applied* output cannot
+express it without editing the framework. That is accepted, because the
+alternative is a contribution the runner silently drops.
+
 ### The batteries: mixins
 
 Capability is opt-in per bias, supplied as composable mixins:
