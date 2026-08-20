@@ -41,10 +41,13 @@ Public surface
   reference geometries, for exploring when the interesting coordinates are
   not known in advance.  Non-periodic systems only.
 
+* :class:`AdaptiveBiasingForce` — measures and cancels the mean force along
+  a pair distance, including the metric correction that a naive Cartesian
+  projection omits.  Force-only, so it is excluded from replica exchange.
+
 Not yet implemented
 -------------------
 * Asynchronous replica exchange
-* Adaptive biasing force
 * General triclinic MIC for unreduced cells
 * Replica exchange over a temperature ladder combined with a bias whose
   energy depends on the thermodynamic state (per-state umbrella windows,
@@ -102,6 +105,7 @@ from nvalchemi.enhanced_sampling._exchange import (
 )
 from nvalchemi.enhanced_sampling._runner import EnhancedSampling
 from nvalchemi.enhanced_sampling.biases import (
+    AdaptiveBiasingForce,
     FlatBottomRestraint,
     HarmonicUmbrellaBias,
     LowerWall,
@@ -109,7 +113,11 @@ from nvalchemi.enhanced_sampling.biases import (
     UpperWall,
     WellTemperedMetaDynamicsBias,
 )
-from nvalchemi.enhanced_sampling.cv import pair_distance, periodic_difference
+from nvalchemi.enhanced_sampling.cv import (
+    pair_displacement,
+    pair_distance,
+    periodic_difference,
+)
 
 __all__ = [
     # Core abstractions
@@ -125,6 +133,7 @@ __all__ = [
     "ReplicaExchange",
     # Collective variables
     "pair_distance",
+    "pair_displacement",
     "periodic_difference",
     # Built-in biases
     "HarmonicUmbrellaBias",
@@ -133,4 +142,5 @@ __all__ = [
     "FlatBottomRestraint",
     "WellTemperedMetaDynamicsBias",
     "RMSDMetaDynamicsBias",
+    "AdaptiveBiasingForce",
 ]

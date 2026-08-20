@@ -90,10 +90,10 @@ from torch import Tensor
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
 
-__all__ = ["pair_distance"]
+__all__ = ["pair_displacement", "pair_distance"]
 
 
-def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
+def pair_displacement(batch: Batch, atom_indices: Tensor) -> Tensor:
     """Differentiable pair distance(s) as a collective variable.
 
     Parameters
@@ -116,8 +116,8 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Shape ``[B, 1]`` — pair distance in the same length unit as
-        ``batch.positions`` (Å).  Fully differentiable w.r.t.
+        Shape ``[B, 3]`` — displacement ``r_j - r_i`` in the same length
+        unit as ``batch.positions`` (Å).  Fully differentiable w.r.t.
         ``batch.positions`` and ``batch.cell``.
 
     Raises
@@ -223,6 +223,55 @@ def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
             _check_minkowski_reduced(batch.cell, batch.pbc)
         dr = _apply_mic(dr, batch.cell, batch.pbc)
 
+    return dr  # [B, 3]
+
+
+def pair_distance(batch: Batch, atom_indices: Tensor) -> Tensor:
+    """Return the displacement between two atoms per graph, shape ``[B, 3]``.
+
+    The vector ``r_j - r_i``, minimum-image corrected when the batch is
+    periodic.  :func:`pair_distance` is its norm; the vector form is what a
+    method needs when it works with the CV *gradient* rather than the value
+    — adaptive biasing force projects atomic forces onto it.
+
+    The norm of :func:`pair_displacement`, which carries the validation,
+    device handling, and minimum-image convention documented there.
+
+    Parameters
+    ----------
+    batch:
+        Current ``Batch``; see :func:`pair_displacement`.
+    atom_indices:
+        Atom pair, shape ``[2]`` or ``[B, 2]``; see
+        :func:`pair_displacement`.
+
+    Returns
+    -------
+    Tensor
+        Pair distances in angstrom, shape ``[B, 1]``, differentiable with
+        respect to ``batch.positions`` and ``batch.cell``.
+
+    Raises
+    ------
+    IndexError
+        If an atom index is out of range for its graph.
+    ValueError
+        If *atom_indices* has the wrong shape or dtype, or if a periodic
+        cell is not Minkowski-reduced (eager mode only).
+
+    Examples
+    --------
+    >>> import torch
+    >>> from nvalchemi.enhanced_sampling import pair_distance
+    >>> from nvalchemi.data import AtomicData, Batch
+    >>> data = AtomicData(
+    ...     positions=torch.tensor([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]]),
+    ...     atomic_numbers=torch.ones(2, dtype=torch.long),
+    ... )
+    >>> pair_distance(Batch.from_data_list([data]), torch.tensor([0, 1]))
+    tensor([[5.]])
+    """
+    dr = pair_displacement(batch, atom_indices)
     return torch.linalg.vector_norm(dr, dim=-1, keepdim=True)  # [B, 1]
 
 

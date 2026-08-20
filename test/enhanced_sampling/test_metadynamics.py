@@ -857,45 +857,91 @@ class TestWellTemperedCompile:
         """Each growth retraces, and Dynamo caps retraces per code object.
 
         ``grow`` changes the hill-tensor shape on every resize, so a compiled
-        ``energy()`` recompiles each time and hits ``recompile_limit`` (8 by
-        default) on the ninth.  This is why ``preallocated`` is the
-        production default rather than a micro-optimisation: the failure
-        arrives mid-run, after the trajectory is already underway.
+        ``energy()`` recompiles each time and stops once it has exhausted
+        ``recompile_limit``.  This is why ``preallocated`` is the production
+        default rather than a micro-optimisation: the failure arrives
+        mid-run, after the trajectory is already underway.
+
+        Both relevant settings are pinned for the duration, because they are
+        **process-global** and ``nvalchemi.distributed.DistributedModel``
+        changes both — ``recompile_limit`` to 64 and
+        ``force_parameter_static_shapes`` to ``False`` — so this test's
+        result would otherwise depend on whether a distributed test ran
+        first.  ``force_parameter_static_shapes`` matters more than the
+        limit: with dynamic shapes the resize does not retrace at all, which
+        the companion test covers.
         """
+        limit = 3
+        with torch._dynamo.config.patch(
+            recompile_limit=limit, force_parameter_static_shapes=True
+        ):
+            torch._dynamo.reset()
+            bias = _metad(device, sigma=0.4, storage="grow", max_hills=1)
+            compiled = torch.compile(bias.energy, fullgraph=True)
+
+            survived = 0
+            for i in range(limit + 3):
+                frame = _pair_batch([1.0 + 0.1 * i], device)
+                bias.update(frame, bias.evaluate(frame))
+                try:
+                    compiled(frame)
+                except (
+                    torch._dynamo.exc.Unsupported,
+                    torch._dynamo.exc.FailOnRecompileLimitHit,
+                ):
+                    break
+                survived += 1
+
+            assert survived == limit, (survived, limit)
+            assert bias.capacity == limit + 1
         torch._dynamo.reset()
-        bias = _metad(device, sigma=0.4, storage="grow", max_hills=1)
-        compiled = torch.compile(bias.energy, fullgraph=True)
 
-        survived = 0
-        for i in range(12):
-            frame = _pair_batch([1.0 + 0.1 * i], device)
-            bias.update(frame, bias.evaluate(frame))
-            try:
-                compiled(frame)
-            except (
-                torch._dynamo.exc.Unsupported,
-                torch._dynamo.exc.FailOnRecompileLimitHit,
-            ):
-                break
-            survived += 1
+    def test_dynamic_shapes_avoid_the_recompile_limit(self, device: str) -> None:
+        """With dynamic parameter shapes, ``grow`` does not retrace per resize.
 
-        assert survived == 8, survived
-        assert bias.capacity == 9
+        The hard failure above is the behaviour under torch's default of
+        static parameter shapes.  Turning that off makes Dynamo trace the
+        hill-table dimension symbolically, so growth stops being a recompile
+        trigger — a real escape hatch, and the reason the documentation
+        offers it alongside ``preallocated`` rather than presenting the
+        limit as unconditional.
+        """
+        limit = 3
+        with torch._dynamo.config.patch(
+            recompile_limit=limit, force_parameter_static_shapes=False
+        ):
+            torch._dynamo.reset()
+            bias = _metad(device, sigma=0.4, storage="grow", max_hills=1)
+            compiled = torch.compile(bias.energy, fullgraph=True)
+
+            for i in range(limit + 4):
+                frame = _pair_batch([1.0 + 0.1 * i], device)
+                bias.update(frame, bias.evaluate(frame))
+                compiled(frame)  # must not raise
+
+            assert bias.capacity == limit + 4
         torch._dynamo.reset()
 
     def test_preallocated_never_retraces(self, device: str) -> None:
         """The compile-stable policy holds one trace for the whole run."""
+        with torch._dynamo.config.patch(
+            recompile_limit=3, force_parameter_static_shapes=True
+        ):
+            torch._dynamo.reset()
+            bias = _metad(device, sigma=0.4, storage="preallocated", max_hills=32)
+            compiled = torch.compile(bias.energy, fullgraph=True)
+
+            # Far more depositions than the recompile limit would allow if
+            # the shapes moved; preallocated holds them fixed.
+            for i in range(12):
+                frame = _pair_batch([1.0 + 0.1 * i], device)
+                bias.update(frame, bias.evaluate(frame))
+                compiled(frame)
+
+            assert int(bias.hill_count) == 12
+            assert tuple(bias.hill_centers.shape) == (32, 1)
+            assert int(bias.deposits) == 12
         torch._dynamo.reset()
-        bias = _metad(device, sigma=0.4, storage="preallocated", max_hills=32)
-        compiled = torch.compile(bias.energy, fullgraph=True)
-
-        for i in range(12):
-            frame = _pair_batch([1.0 + 0.1 * i], device)
-            bias.update(frame, bias.evaluate(frame))
-            compiled(frame)
-
-        assert int(bias.hill_count) == 12
-        assert tuple(bias.hill_centers.shape) == (32, 1)
         torch._dynamo.reset()
 
     def test_per_state_history_compiles(self, device: str) -> None:

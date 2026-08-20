@@ -127,12 +127,21 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
 
         ``grow`` allocates in chunks of ``max_hills``; each growth changes
         the hill-tensor shape, which forces a recompile if ``energy()`` is
-        compiled.  Dynamo caps retraces per code object at
-        ``torch._dynamo.config.recompile_limit`` (8 by default), so a
-        compiled run **hard-fails on the ninth growth** — mid-trajectory,
-        once the run is already underway.  Size ``max_hills`` so that
-        growths stay well under that, raise the limit deliberately, or use
-        ``preallocated``.
+        compiled.  Under torch's default of static parameter shapes, Dynamo
+        caps retraces per code object at
+        ``torch._dynamo.config.recompile_limit`` (8), so a compiled run
+        **hard-fails once past it** — mid-trajectory, after the run is
+        already underway.
+
+        Both settings are process-global and other code changes them:
+        ``DistributedModel`` raises the limit to 64 *and* sets
+        ``force_parameter_static_shapes = False``.  The second matters more
+        than the first — with dynamic parameter shapes the hill-table
+        dimension is traced symbolically, growth stops triggering a retrace,
+        and the limit is never reached.  So the three ways out are: size
+        ``max_hills`` so growths stay under the limit, enable dynamic
+        parameter shapes, or use ``preallocated``, which holds one trace for
+        the whole run regardless.
 
         ``fifo`` bounds memory by discarding the oldest hill.  This is
         **scientifically meaningful, not merely a cache eviction**: the

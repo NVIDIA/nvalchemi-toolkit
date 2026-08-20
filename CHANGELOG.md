@@ -114,6 +114,47 @@
   new hill is felt on the next step rather than one late; and neither deposits
   during `prime_forces()`.
 
+- `AdaptiveBiasingForce` — measures the mean force along a pair distance and
+  applies its negative, so a well-sampled bin leaves no residual force along
+  the CV and the walker diffuses across it. What it accumulates already *is*
+  the free-energy gradient, so `free_energy()` integrates it directly with no
+  hills to deconvolve and no histogram to reweight.
+
+  The estimator is
+  `dA/dr = <-(F_j - F_i).u / 2 - 2 kB T / r>`, and the second term — the
+  metric correction — is not a refinement. A naive Cartesian projection gives
+  the mean force in the *constrained* ensemble; the unconstrained free energy
+  differs by the Jacobian of the coordinate change, which for a distance in
+  three dimensions is `-2 kB T / r`. Omitting it produces a smoothly wrong
+  answer rather than noise: two non-interacting particles come out with a flat
+  PMF when the true one is the purely entropic `-2 kB T ln r`. This is why the
+  class takes an atom **pair** rather than a general `cv` callable, unlike
+  every other bias in the subpackage — the correction belongs to this
+  coordinate, and accepting an arbitrary CV would apply a distance-shaped
+  correction to something that is not a distance.
+
+  Below `min_samples` a bin applies nothing, and between `min_samples` and
+  `full_samples` the applied fraction ramps linearly to one, so no bin
+  switches on with a jump; `max_force` optionally caps what a bin visited once
+  at an awkward geometry can do. `observation_stage` is `AFTER_COMPUTE`, where
+  `batch.forces` still holds the unbiased physical force — an estimator shown
+  its own output converges to whatever it had already decided. An update
+  landing in a bin still below its threshold does not bump the state version,
+  since the applied force has not changed.
+
+  `evaluate()` returns forces with `energy=None`: there is no potential to
+  report, which is what non-conservative means here. `supplies_exchange_energy`
+  is `False`, so `ReplicaExchange` refuses the combination at construction
+  rather than dropping the bias from the acceptance exponent. `mean_force()`
+  and `free_energy()` report unvisited bins as `nan` rather than zero, and
+  `free_energy()` raises on an interior gap because integrating across a hole
+  would leave every value beyond it wrong by an unknown constant.
+
+- `pair_displacement` — the vector form of `pair_distance`, exposed for
+  methods that work with the CV gradient rather than its value.
+  `pair_distance` is now its norm, so the two cannot drift apart in their
+  validation, device handling, or minimum-image convention.
+
 - Exact checkpoint and restore for enhanced sampling.
   `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
   extends the existing `AtomicData` layout with a `sampling/` group holding

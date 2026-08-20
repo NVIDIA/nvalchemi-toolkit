@@ -22,9 +22,11 @@ hills along a chosen collective variable) and :class:`RMSDMetaDynamicsBias`
 (xTB-style repulsion from retained reference geometries, for when the
 interesting coordinates are not known in advance).
 
-Adaptive biasing force is not yet implemented.
+Force-only biases: :class:`AdaptiveBiasingForce`, which applies a measured
+mean force with no energy behind it.
 """
 
+from nvalchemi.enhanced_sampling.biases.abf import AdaptiveBiasingForce
 from nvalchemi.enhanced_sampling.biases.metadynamics import (
     WellTemperedMetaDynamicsBias,
 )
@@ -37,6 +39,7 @@ from nvalchemi.enhanced_sampling.biases.walls import (
 )
 
 __all__ = [
+    "AdaptiveBiasingForce",
     "FlatBottomRestraint",
     "HarmonicUmbrellaBias",
     "LowerWall",

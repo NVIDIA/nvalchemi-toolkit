@@ -51,3 +51,8 @@ the well-tempered height decay, and free-energy reconstruction.
 collective variable; optimal-alignment RMSD over retained references, FIFO
 retention, and an unbiased control run to separate exploration from thermal
 scatter.
+
+**15 — Adaptive Biasing Force**: Measuring and cancelling the mean force
+along a pair distance; the metric correction demonstrated against an analytic
+answer, sample thresholds and force ramps, and why a force-only bias cannot
+join a replica-exchange ladder.

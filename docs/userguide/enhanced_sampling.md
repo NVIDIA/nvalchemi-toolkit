@@ -97,10 +97,13 @@ delta = periodic_difference(values, centers, periods=torch.tensor([2 * math.pi])
 | `FlatBottomRestraint` | both of the above | Confine a CV to an interval |
 | `WellTemperedMetaDynamicsBias` | `sum_i h_i exp(-(s - c_i)^2 / 2 sigma^2)` | Free energy along a CV you chose |
 | `RMSDMetaDynamicsBias` | `sum_r k_push exp(-alpha RMSD(x, x_r)^2)` | Structure search with no CV at all |
+| `AdaptiveBiasingForce` | *(no energy — force only)* | Free-energy profile along a pair distance |
 
 The first four are static: their energy depends only on the current
-configuration. The last two are **history-dependent** — they accumulate state
-as sampling proceeds, and so mix in `AdaptivePotentialMixin`.
+configuration. The last three are **history-dependent** — they accumulate
+state as sampling proceeds, and so mix in `AdaptivePotentialMixin`.
+`AdaptiveBiasingForce` is further the only one that is **non-conservative**:
+it applies a measured force that is not the gradient of anything it holds.
 
 Walls contribute **exactly zero** energy and force inside the allowed region,
 and their default quadratic form has zero force at the boundary, so switching
@@ -176,13 +179,26 @@ are not interchangeable.
 would change the physics of a converging run with nothing to show for it. The
 error names the ways out.
 
-`grow` carries a limit that is easy to miss. Each resize changes the
-hill-tensor shape, so a compiled `energy()` retraces — and Dynamo caps
-retraces per code object at `torch._dynamo.config.recompile_limit`, 8 by
-default. The ninth growth therefore **hard-fails mid-run**, once the
-trajectory is already underway. Size `max_hills` so growths stay well under
-that, raise the limit deliberately, or use `preallocated`, which holds one
-trace for the whole run. `fifo` is not merely a cache policy: once hills are
+`grow` carries a limit that is easy to miss. Under torch's default of static
+parameter shapes, each resize changes the hill-tensor shape and a compiled
+`energy()` retraces — and Dynamo caps retraces per code object at
+`torch._dynamo.config.recompile_limit`, 8 by default. The next growth
+therefore **hard-fails mid-run**, once the trajectory is already underway.
+
+Three ways out, in rough order of preference:
+
+1. Use `preallocated`, which holds a single trace for the whole run.
+2. Size `max_hills` so the number of growths stays under the limit.
+3. Set `force_parameter_static_shapes = False` on `torch._dynamo.config`,
+   which makes Dynamo trace the hill-table dimension symbolically so growth
+   stops triggering a retrace at all.
+
+Both settings are process-global, and other code in this toolkit changes them:
+`DistributedModel` raises the limit to 64 *and* disables static parameter
+shapes, so a domain-decomposed run will not see this failure. Read the live
+config rather than assuming the defaults.
+
+`fifo` is not merely a cache policy: once hills are
 discarded the accumulated bias is no longer the integral of everything
 deposited, the well-tempered convergence argument no longer applies, and
 `free_energy()` refuses rather than returning a number that looks fine.
@@ -282,6 +298,100 @@ a new hill is felt on the very next step rather than one step late.
 Neither deposits during `prime_forces()`: priming evaluates forces, it does
 not advance the trajectory, and depositing there would double-count the
 starting configuration.
+
+## Adaptive biasing force
+
+Umbrella sampling restrains, metadynamics fills. ABF does neither: it
+*measures* the mean force along the CV in each bin and applies its negative,
+so once a bin is well sampled the residual force along the CV averages to
+zero and the walker diffuses across the coordinate.
+
+The accumulated quantity already **is** the free-energy gradient, so there is
+nothing to deconvolve or reweight at the end — `free_energy()` integrates it.
+
+```python
+from nvalchemi.enhanced_sampling import AdaptiveBiasingForce
+
+abf = AdaptiveBiasingForce(
+    atom_indices=torch.tensor([0, 1]),
+    temperature=300.0,          # must match the thermostat
+    cv_range=(2.0, 6.0),        # angstrom
+    n_bins=40,
+    min_samples=200,
+    full_samples=400,
+    name="abf",
+)
+...
+profile = abf.free_energy()      # PMF at bin_centers, in eV
+```
+
+### The metric correction
+
+For a pair distance the estimator is
+
+```text
+dA/dr = < -(F_j - F_i).u / 2  -  2 kB T / r >
+```
+
+That second term is not a refinement. Projecting Cartesian forces onto the CV
+gradient and averaging gives the mean force in the *constrained* ensemble; the
+free energy of the unconstrained one differs by the Jacobian of the coordinate
+change. For a distance in three dimensions the number of configurations at
+separation `r` grows as the sphere surface `4 pi r^2`, contributing
+`-2 kB T / r`.
+
+Omitting it does not add noise — it produces a smoothly wrong answer. Two
+non-interacting particles have zero Cartesian force, so a naive projection
+reports a **flat** PMF when the true one is `-2 kB T ln r`, a purely entropic
+profile that drives the pair apart.
+
+This is why `AdaptiveBiasingForce` takes an atom **pair** rather than a
+general `cv` callable, unlike every other bias here. The correction is
+specific to this coordinate, and accepting an arbitrary CV would mean applying
+a distance-shaped correction to something that is not a distance. Other CVs
+need their own correction and are P1.
+
+### Sample threshold and ramp
+
+A mean force estimated from a handful of samples is noise, and applying it
+would drive the walker on the strength of that noise. Below `min_samples` a
+bin applies nothing; between `min_samples` and `full_samples` the applied
+fraction ramps linearly to one, so no bin switches on with a jump.
+
+`max_force` optionally caps `|dA/dr|`, bounding what a bin visited once at an
+awkward geometry can do while its average settles.
+
+### Observation ordering
+
+`observation_stage` is `AFTER_COMPUTE`, where `batch.forces` still holds the
+**unbiased** physical force. This is load-bearing: an estimator shown its own
+output converges to whatever it had already decided, and the resulting profile
+looks perfectly smooth. The runner captures the frame before applying any bias
+contribution, so this holds even with several biases registered.
+
+For the same reason, an `update()` that only lands in a bin still below its
+threshold does **not** bump the state version — the applied force has not
+changed, so re-priming would be pure cost.
+
+### No energy, and therefore no replica exchange
+
+`evaluate()` returns `forces` with `energy=None`. There is genuinely no
+potential to report, which is what makes ABF non-conservative. The Metropolis
+acceptance rule needs each bias's energy evaluated under both states being
+swapped, so `supplies_exchange_energy` is `False` and `ReplicaExchange`
+refuses the combination at construction rather than dropping the bias from the
+exponent and breaking detailed balance silently.
+
+### Reading the profile
+
+`mean_force()` returns the per-bin estimate and `free_energy()` its integral.
+The per-step diagnostic is named `bias/<name>/applied_gradient` rather than
+`mean_force`, because it is the ramped and capped value actually used — a
+threshold-suppressed zero there is not a measured zero mean force.
+Bins never visited come back as `nan` rather than zero — a bin with no samples
+has no estimate, and zero is a perfectly plausible value that would hide that.
+`free_energy()` **raises** on an interior gap: integration carries the profile
+across a hole, so every value beyond it would be wrong by an unknown constant.
 
 ## Writing your own bias
 
@@ -736,7 +846,8 @@ removes.
 
 ## Not yet implemented
 
-- Adaptive biasing force.
+- Adaptive biasing force over any CV other than a pair distance; each
+  coordinate needs its own metric correction.
 - Asynchronous replica exchange (pair-local rendezvous, non-blocking
   workers). `mode="asynchronous"` raises; synchronous exchange is available.
 - The combined temperature-plus-window acceptance rule; see
