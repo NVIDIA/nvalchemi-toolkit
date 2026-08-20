@@ -336,10 +336,14 @@ manifest is the commit marker:
 - **Everything** is checksummed (SHA-256) and verified on read, so damage
   *after* the manifest landed is caught too: each `sampling/` component
   individually, plus a `batch_checksum` covering `meta/`, `core/`, and
-  `custom/`. That second one matters — the walker batch is written by
-  `AtomicDataZarrWriter`, outside the component path, so checksumming only
-  the sampling state would attest to the bias and integrator while restoring
-  corrupted positions or a scrambled walker identity in silence.
+  `custom/`. Cover is mandatory, not best-effort — a manifest that declares a
+  component without a checksum, carries a checksum for no component, or omits
+  the batch checksum is rejected as invalid — otherwise deleting one key from
+  the manifest would be enough to leave that component free to modify.
+- The batch checksum is the one most easily forgotten: the walker batch is
+  written by `AtomicDataZarrWriter`, outside the component path, so covering
+  only the sampling state would attest to the bias and integrator while
+  restoring corrupted positions or a scrambled walker identity in silence.
 - **No pickle payloads.** State is Zarr arrays and JSON attributes, so a
   checkpoint is readable by anything that reads Zarr and loading one cannot
   execute code. An unsupported value type raises rather than falling back.

@@ -56,7 +56,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 import zarr
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import ValidationError as PydanticValidationError
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.datapipes.backends.zarr import (
@@ -116,7 +117,8 @@ class CheckpointManifest(BaseModel):
     components:
         Names of the ``sampling/`` groups written.
     checksums:
-        SHA-256 per ``sampling/`` component, verified on read.
+        SHA-256 per ``sampling/`` component, verified on read.  Must have an
+        entry for every name in :attr:`components`, and no others.
     batch_checksum:
         SHA-256 over every array in ``meta/``, ``core/``, and ``custom/`` —
         the walker batch itself.  Kept separate from :attr:`checksums`
@@ -143,6 +145,54 @@ class CheckpointManifest(BaseModel):
     model_class: str = ""
     dynamics_class: str = ""
     bias_classes: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _every_component_is_covered(self) -> CheckpointManifest:
+        """Reject a manifest whose integrity cover has gaps.
+
+        In a manifest-gated format the manifest is the authority on what the
+        store contains, so a declared component without a checksum is not
+        "unverified" — it is invalid.  Treating a missing entry as permission
+        to skip verification would make the cover opt-out: deleting one key
+        from the manifest attributes is enough to leave that component free to
+        modify.  The same goes for the walker batch.
+
+        Returns
+        -------
+        CheckpointManifest
+            The validated manifest.
+
+        Raises
+        ------
+        ValueError
+            If a component has no checksum, a checksum names no component, or
+            the batch checksum is absent.
+        """
+        declared = set(self.components)
+        covered = set(self.checksums)
+
+        uncovered = sorted(declared - covered)
+        if uncovered:
+            raise ValueError(
+                f"Checkpoint manifest declares component(s) {uncovered} with "
+                "no checksum. Every declared component must be covered; a "
+                "missing entry is a tampered or truncated manifest, not a "
+                "component that may be read unverified."
+            )
+        orphaned = sorted(covered - declared)
+        if orphaned:
+            raise ValueError(
+                f"Checkpoint manifest has checksum(s) for {orphaned}, which it "
+                "does not declare as components. The manifest is inconsistent "
+                "with itself."
+            )
+        if not self.batch_checksum:
+            raise ValueError(
+                "Checkpoint manifest has no batch_checksum. The walker batch "
+                "— positions, velocities, and walker identity — would then be "
+                "restored unverified."
+            )
+        return self
 
 
 def _qualified_name(obj: Any) -> str:
@@ -457,8 +507,10 @@ def read_checkpoint(
     Raises
     ------
     ValueError
-        If the store has no committed manifest, if a declared component is
-        missing, or if any component's checksum does not match.
+        If the store has no committed manifest; if the manifest is internally
+        inconsistent (a declared component with no checksum, a checksum for no
+        component, or no batch checksum); if a declared component is missing;
+        or if any checksum, component or batch, does not match.
     """
     root = zarr.open_group(str(path), mode="r")
     if _MANIFEST not in root:
@@ -467,7 +519,15 @@ def read_checkpoint(
             "finished — the manifest is written last, after every component. "
             "Treat this store as an interrupted write and discard it."
         )
-    manifest = CheckpointManifest(**dict(root[_MANIFEST].attrs["manifest"]))
+    try:
+        manifest = CheckpointManifest(**dict(root[_MANIFEST].attrs["manifest"]))
+    except PydanticValidationError as exc:
+        # Surface the same way as every other checkpoint failure — one
+        # ValueError naming the store — rather than a nested pydantic report.
+        reasons = "; ".join(str(err["msg"]) for err in exc.errors())
+        raise ValueError(
+            f"Checkpoint at {path} has an invalid manifest: {reasons}"
+        ) from exc
 
     if manifest.format_version != CHECKPOINT_FORMAT_VERSION:
         raise ValueError(
@@ -489,8 +549,10 @@ def read_checkpoint(
             group = group[part]
         state = _decode_state(group, device)
         actual = _component_checksum(state)
-        expected = manifest.checksums.get(name)
-        if expected is not None and actual != expected:
+        # Unconditional: the manifest validator guarantees the entry exists,
+        # so no path reads a component without checking it.
+        expected = manifest.checksums[name]
+        if actual != expected:
             raise ValueError(
                 f"Checkpoint at {path}: component {name!r} failed its checksum "
                 f"(expected {expected[:12]}…, got {actual[:12]}…). The store "
@@ -498,16 +560,15 @@ def read_checkpoint(
             )
         states[name] = state
 
-    if manifest.batch_checksum:
-        actual = _batch_checksum(root)
-        if actual != manifest.batch_checksum:
-            raise ValueError(
-                f"Checkpoint at {path}: the walker batch failed its checksum "
-                f"(expected {manifest.batch_checksum[:12]}…, got {actual[:12]}…). "
-                "One of meta/, core/, or custom/ was modified or truncated "
-                "after the manifest was written — positions, velocities, or "
-                "walker identity can no longer be trusted."
-            )
+    actual = _batch_checksum(root)
+    if actual != manifest.batch_checksum:
+        raise ValueError(
+            f"Checkpoint at {path}: the walker batch failed its checksum "
+            f"(expected {manifest.batch_checksum[:12]}…, got {actual[:12]}…). "
+            "One of meta/, core/, or custom/ was modified or truncated after "
+            "the manifest was written — positions, velocities, or walker "
+            "identity can no longer be trusted."
+        )
 
     return _read_batch(path, manifest, device), states, manifest
 

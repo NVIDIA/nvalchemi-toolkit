@@ -558,6 +558,71 @@ class TestCheckpointTransactionality:
         restored, _, _ = read_checkpoint(path, device)
         assert restored.num_graphs == 2
 
+    @staticmethod
+    def _tamper_manifest(path, mutate) -> None:
+        """Apply *mutate* to the manifest dict and write it back."""
+        root = zarr.open_group(str(path), mode="a")
+        manifest = dict(root["sampling/manifest"].attrs["manifest"])
+        mutate(manifest)
+        root["sampling/manifest"].attrs["manifest"] = manifest
+
+    def _committed(self, tmp_path, device: str):
+        batch = _make_batch(device=device)
+        runner = _make_runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+        return path
+
+    def test_component_without_checksum_is_invalid(self, tmp_path, device: str) -> None:
+        """A missing entry is a tampered manifest, not permission to skip.
+
+        Optional verification makes the whole cover opt-out: deleting one key
+        from the manifest is then enough to modify that component freely.
+        """
+        path = self._committed(tmp_path, device)
+        self._tamper_manifest(path, lambda m: m["checksums"].pop("dynamics"))
+        root = zarr.open_group(str(path), mode="a")
+        root["sampling/dynamics/state/temperature"][...] = 999.0
+
+        with pytest.raises(ValueError, match="with no checksum"):
+            read_checkpoint(path, device)
+
+    def test_stripped_batch_checksum_is_invalid(self, tmp_path, device: str) -> None:
+        path = self._committed(tmp_path, device)
+        self._tamper_manifest(path, lambda m: m.__setitem__("batch_checksum", ""))
+        root = zarr.open_group(str(path), mode="a")
+        root["core/positions"][...] = root["core/positions"][...] * 99.0
+
+        with pytest.raises(ValueError, match="no batch_checksum"):
+            read_checkpoint(path, device)
+
+    def test_orphaned_checksum_is_invalid(self, tmp_path, device: str) -> None:
+        """A checksum for an undeclared component means the manifest is torn."""
+        path = self._committed(tmp_path, device)
+        self._tamper_manifest(
+            path, lambda m: m["checksums"].__setitem__("ghost", "0" * 64)
+        )
+        with pytest.raises(ValueError, match="does not declare as components"):
+            read_checkpoint(path, device)
+
+    def test_manifest_error_names_the_store(self, tmp_path, device: str) -> None:
+        """One ValueError naming the path, not a nested pydantic report."""
+        path = self._committed(tmp_path, device)
+        self._tamper_manifest(path, lambda m: m["checksums"].pop("runner"))
+        with pytest.raises(ValueError) as excinfo:
+            read_checkpoint(path, device)
+        assert str(path) in str(excinfo.value)
+
+    def test_written_manifest_covers_every_component(
+        self, tmp_path, device: str
+    ) -> None:
+        """The writer must never produce a manifest the reader would reject."""
+        path = self._committed(tmp_path, device)
+        _, _, manifest = read_checkpoint(path, device)
+        assert set(manifest.checksums) == set(manifest.components)
+        assert manifest.batch_checksum
+
     def test_no_pickle_in_store(self, tmp_path, device: str) -> None:
         """A checkpoint must not be executable on load."""
         batch = _make_batch(device=device)

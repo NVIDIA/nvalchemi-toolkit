@@ -34,7 +34,10 @@
   `sampling/` component is SHA-256 checksummed, and a separate
   `batch_checksum` covers `meta/`, `core/`, and `custom/` — the positions,
   velocities, pointer arrays, and walker identity that `AtomicDataZarrWriter`
-  writes outside the component path. All are verified on read. State is Zarr
+  writes outside the component path. All are verified on read, and cover is
+  mandatory: a manifest with a gap — a declared component lacking a checksum,
+  a checksum naming no component, or no batch checksum — is rejected as
+  invalid rather than read unverified. State is Zarr
   arrays and JSON attributes with **no pickle payloads** — an unsupported
   value type raises rather than falling back, so loading a checkpoint cannot
   execute code. Checkpoints are permitted
