@@ -173,13 +173,29 @@ class TestHarmonicUmbrellaBias:
         assert abs(float(bias.evaluate(batch).energy) - 4.5) < 1e-5
 
     def test_out_of_range_state_id_raises(self, device: str) -> None:
+        """A multi-window bias does index the field, so it must be in range."""
         batch = _pair_batch([2.0], device=device)
         batch["thermodynamic_state_id"] = torch.tensor([5], device=device)
         bias = HarmonicUmbrellaBias(
-            cv=_cv, centers=torch.tensor([[2.0]]), stiffness=1.0, name="u"
+            cv=_cv, centers=torch.tensor([[2.0], [3.0]]), stiffness=1.0, name="u"
         )
         with pytest.raises(IndexError, match="out of range"):
             bias.evaluate(batch)
+
+    def test_single_window_ignores_the_state_id(self, device: str) -> None:
+        """One window selects nothing, so the field is not an index into it.
+
+        This is what lets one shared restraint run alongside a multi-rung
+        temperature ladder, where `thermodynamic_state_id` addresses the
+        ladder and has nothing to do with windows.
+        """
+        batch = _pair_batch([3.0], device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([7], device=device)
+        bias = HarmonicUmbrellaBias(
+            cv=_cv, centers=torch.tensor([[2.0]]), stiffness=4.0, name="u"
+        )
+        # 0.5 * 4 * (3 - 2)^2 = 2.0, using the single window regardless of id.
+        assert abs(float(bias.evaluate(batch).energy) - 2.0) < 1e-5
 
     @pytest.mark.parametrize(
         "stiffness,shape",

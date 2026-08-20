@@ -53,6 +53,11 @@ class HarmonicUmbrellaBias(ConservativeBias):
     rather than ``S`` separate simulations.  Without that field every graph
     uses state ``0``.
 
+    A **single-window** bias ignores the field entirely rather than treating
+    it as an index.  That is what lets one shared restraint run alongside a
+    multi-rung temperature ladder, where the ids address the ladder and have
+    nothing to do with windows.
+
     Parameters
     ----------
     cv:
@@ -123,6 +128,12 @@ class HarmonicUmbrellaBias(ConservativeBias):
 
         stiffness_t = self._expand_stiffness(stiffness, n_states, dim)
         self._validate_stiffness(stiffness_t)
+
+        # A multi-window bias reads thermodynamic_state_id, so its energy
+        # depends on the assignment. Replica exchange needs to know: combining
+        # it with a temperature ladder would need cross-state bias terms that
+        # the temperature acceptance rule does not compute.
+        self.state_dependent_for_exchange = n_states > 1
 
         # Buffers, not plain attributes: nn.Module then moves them with .to()
         # and round-trips them through state_dict.
@@ -254,7 +265,11 @@ class HarmonicUmbrellaBias(ConservativeBias):
             If a state id is negative or beyond the configured windows.
         """
         state_ids = getattr(current, "thermodynamic_state_id", None)
-        if state_ids is None:
+        if state_ids is None or self.centers.shape[0] == 1:
+            # A single-window bias selects nothing, so the field is not an
+            # index into it. This is the legitimate combination of one shared
+            # restraint with a multi-rung temperature ladder, where the ids
+            # address the ladder rather than the windows.
             return
         index = state_ids.reshape(-1).to(torch.long)
         n_states = self.centers.shape[0]
@@ -310,7 +325,7 @@ class HarmonicUmbrellaBias(ConservativeBias):
             ``centers`` ``[B, D]`` and ``stiffness`` ``[B, D, D]``.
         """
         state_ids = getattr(current, "thermodynamic_state_id", None)
-        if state_ids is None:
+        if state_ids is None or self.centers.shape[0] == 1:
             index = torch.zeros(values.shape[0], dtype=torch.long, device=values.device)
         else:
             index = state_ids.reshape(-1).to(torch.long)

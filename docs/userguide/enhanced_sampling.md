@@ -437,8 +437,22 @@ Umbrella acceptance needs the bias evaluated under swapped labels, which
 costs one extra bias evaluation per attempt.
 
 A ladder that varies temperature *and* bias window at once needs a combined
-rule that is not implemented — and is not detectable here, since a
-`ThermodynamicState` carries only a temperature. Vary one or the other.
+rule that is not implemented. The temperature rule alone omits the cross-state
+bias terms, so running it anyway breaks detailed balance with no symptom —
+it is therefore **rejected**, twice over:
+
+- A bias that sets `state_dependent_for_exchange` is refused at construction.
+  `HarmonicUmbrellaBias` sets it whenever it has more than one window.
+- At prime time the runner **probes** every bias empirically: it evaluates
+  each one under the current assignment and under a rotated one, at identical
+  coordinates. A bias whose energy is independent of the assignment returns
+  the same number twice; one that reads `thermodynamic_state_id` does not.
+  That catches a user-written bias which declares nothing.
+
+Vary one or the other. A **single-window** `HarmonicUmbrellaBias` is fine
+alongside a temperature ladder — it ignores `thermodynamic_state_id` rather
+than treating it as a window index, so the ids are free to address the
+ladder.
 
 ### Pair schedule
 

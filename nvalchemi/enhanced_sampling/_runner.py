@@ -229,6 +229,8 @@ class EnhancedSampling:
         # Set while prime_forces runs. Priming evaluates forces at fixed
         # coordinates; it must not also advance the sampling state.
         self._priming = False
+        # One-shot: the empirical state-dependence probe runs at prime time.
+        self._probed_state_dependence = False
         self._restored = False
         # Set on every stamp so checkpoint() matches the proposal's
         # `sampling.checkpoint(path)` signature without a batch argument.
@@ -335,6 +337,77 @@ class EnhancedSampling:
         temperatures = exchange.temperatures.to(total.device, total.dtype)
         beta = 1.0 / (KB_EV * temperatures[state_ids.reshape(-1).to(torch.long)])
         return beta * total
+
+    def _probe_state_dependence(self, batch: Batch) -> None:
+        """Reject a state-dependent bias under a temperature ladder.
+
+        The declaration checked at construction only covers biases that know
+        to declare — ``HarmonicUmbrellaBias`` does, an arbitrary user bias
+        does not.  This probes instead of asking: evaluate every bias under
+        the current assignment and under a rotated one, at identical
+        coordinates.  A bias whose energy is independent of the assignment
+        returns the same number twice; one that reads
+        ``thermodynamic_state_id`` does not.
+
+        Temperature acceptance uses only ``U``, so a bias whose energy varies
+        with the assignment contributes cross-state terms that the rule never
+        computes — detailed balance would be wrong with no symptom.  Runs
+        once, at prime time, before any exchange has been attempted.
+
+        Parameters
+        ----------
+        batch:
+            The live batch, already carrying a state assignment.
+
+        Raises
+        ------
+        ValueError
+            If any bias's energy changes when the assignment is permuted.
+        """
+        exchange = self.replica_exchange
+        if (
+            exchange is None
+            or exchange.acceptance != "temperature"
+            or not self.biases
+            or self._probed_state_dependence
+        ):
+            return
+        self._probed_state_dependence = True
+
+        current = batch.thermodynamic_state_id.reshape(-1).to(torch.long)
+        if current.numel() < 2:
+            return
+        # Rotate by one: every walker sees a different state, and the result
+        # is still a permutation, so a per-state lookup stays in range.
+        rotated = torch.roll(current, shifts=1)
+
+        original = batch.thermodynamic_state_id
+        try:
+            offenders: list[str] = []
+            for name, bias in self.biases.items():
+                batch["thermodynamic_state_id"] = current
+                before = bias.evaluate(batch).energy
+                batch["thermodynamic_state_id"] = rotated
+                after = bias.evaluate(batch).energy
+                if before is None or after is None:
+                    continue
+                if not torch.allclose(before, after, rtol=1e-9, atol=1e-12):
+                    offenders.append(name)
+        finally:
+            batch["thermodynamic_state_id"] = original
+
+        if offenders:
+            raise ValueError(
+                f"EnhancedSampling: bias(es) {sorted(offenders)} produce a "
+                "different energy when the thermodynamic-state assignment is "
+                "permuted, so they depend on the state — but the ladder varies "
+                "temperature, which selects temperature acceptance. That rule "
+                "uses only the total energy and omits the cross-state bias "
+                "terms, so detailed balance would be wrong with nothing to "
+                "show for it. The combined acceptance rule is not implemented: "
+                "use a state-independent bias with a temperature ladder, or "
+                "equal temperatures with a multi-window bias."
+            )
 
     def _attempt_exchange(self, batch: Batch, segment: int) -> None:
         """Attempt one round of swaps and apply the accepted ones.
@@ -941,6 +1014,7 @@ class EnhancedSampling:
             self.dynamics._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
             self.dynamics.compute(batch)
             self._evaluate_and_apply(batch)
+            self._probe_state_dependence(batch)
         finally:
             self._priming = was_priming
         return batch

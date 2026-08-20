@@ -31,10 +31,12 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVE, NVTLangevin, NVTNoseHoover
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
+    ConservativeBias,
     EnhancedSampling,
     HarmonicUmbrellaBias,
     ReplicaExchange,
     ThermodynamicState,
+    UpperWall,
     pair_distance,
 )
 from nvalchemi.enhanced_sampling._exchange import log_acceptance_is_accepted
@@ -176,6 +178,131 @@ class TestAcceptanceInference:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2))
         with pytest.raises(ValueError, match="supplies no exchange energy"):
             exchange.validate_for({"abf": _ForceOnly()})
+
+
+class TestMixedExchangeRejected:
+    """Temperature ladder + state-dependent bias has no implemented rule.
+
+    Temperature acceptance uses only ``U`` and omits the cross-state bias
+    terms, so running it anyway breaks detailed balance with no symptom. Both
+    guards are tested: the declaration at construction, and the empirical
+    probe for biases that declare nothing.
+    """
+
+    @staticmethod
+    def _umbrella(n_windows: int, device: str = "cpu"):
+        idx = torch.tensor([0, 1], device=device)
+        return HarmonicUmbrellaBias(
+            cv=lambda b: pair_distance(b, idx),
+            centers=torch.arange(1.0, 1.0 + n_windows).reshape(n_windows, 1),
+            stiffness=8.0,
+            name="u",
+        )
+
+    def test_multi_window_umbrella_declares_state_dependence(self) -> None:
+        assert self._umbrella(3).state_dependent_for_exchange is True
+
+    def test_single_window_umbrella_does_not(self) -> None:
+        """One window means the same restraint for every walker."""
+        assert self._umbrella(1).state_dependent_for_exchange is False
+
+    def test_declared_bias_rejected_at_construction(self, device: str) -> None:
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        with pytest.raises(ValueError, match="per-state parameters"):
+            EnhancedSampling(
+                _make_dynamics(device),
+                {"u": self._umbrella(3, device)},
+                replica_exchange=exchange,
+            )
+
+    def test_single_window_bias_is_allowed(self, device: str) -> None:
+        """The guard must not block a legitimate combination."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"u": self._umbrella(1, device)},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        batch = _make_batch(n_graphs=3, device=device)
+        runner.run(batch, n_steps=6)
+        assert exchange.attempts > 0
+
+    def test_undeclared_bias_caught_by_probe(self, device: str) -> None:
+        """A user bias that declares nothing is still caught, empirically."""
+
+        class _Sneaky(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="sneaky")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                ids = current.thermodynamic_state_id.reshape(-1).to(
+                    current.positions.dtype
+                )
+                return (ids * 0.5).unsqueeze(-1) + 0.0 * current.positions.sum()
+
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"sneaky": _Sneaky()},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        with pytest.raises(ValueError, match="permuted"):
+            runner.run(_make_batch(n_graphs=3, device=device), n_steps=4)
+
+    def test_probe_fires_before_any_exchange(self, device: str) -> None:
+        """Failing at prime time, not after a wrong swap has been accepted."""
+
+        class _Sneaky(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="sneaky")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                ids = current.thermodynamic_state_id.reshape(-1).to(
+                    current.positions.dtype
+                )
+                return ids.unsqueeze(-1) + 0.0 * current.positions.sum()
+
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=1)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"sneaky": _Sneaky()},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        with pytest.raises(ValueError):
+            runner.run(_make_batch(n_graphs=3, device=device), n_steps=10)
+        assert exchange.attempts == 0, "an exchange was decided before the probe"
+
+    def test_state_independent_bias_passes_the_probe(self, device: str) -> None:
+        """Walls read no state id, so the probe must not flag them."""
+        idx = torch.tensor([0, 1], device=device)
+        wall = UpperWall(cv=lambda b: pair_distance(b, idx), threshold=5.0, name="wall")
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"wall": wall},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        assert exchange.attempts > 0
+
+    def test_umbrella_ladder_still_allowed_with_equal_temperatures(
+        self, device: str
+    ) -> None:
+        """The multi-window bias is fine — with the umbrella rule."""
+        exchange = ReplicaExchange(_flat_ladder(3), torch.arange(3), attempt_interval=2)
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"u": self._umbrella(3, device)},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        assert exchange.acceptance == "umbrella"
+        assert exchange.attempts > 0
 
 
 # ===========================================================================

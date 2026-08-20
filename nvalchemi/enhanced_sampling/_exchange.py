@@ -116,11 +116,13 @@ class ReplicaExchange:
 
     Not supported
         A ladder that varies temperature *and* bias window at once needs a
-        combined acceptance rule that is not implemented.  It is also not
-        detectable here — a :class:`ThermodynamicState` carries only a
-        temperature, and which windows a bias exposes is the bias's business
-        — so this is a documented constraint on the caller, not a guard.
-        Vary one or the other.
+        combined acceptance rule that is not implemented.  The temperature
+        rule alone omits the cross-state bias terms, so running it anyway
+        would break detailed balance with no symptom — it is therefore
+        **rejected**, twice over: a bias that declares
+        ``state_dependent_for_exchange`` is refused at construction, and the
+        runner additionally probes empirically at prime time by evaluating
+        every bias under a permuted assignment.  Vary one or the other.
     """
 
     def __init__(
@@ -223,7 +225,8 @@ class ReplicaExchange:
         ------
         ValueError
             If umbrella exchange is configured with no bias to exchange over,
-            or if any bias cannot supply the energy the acceptance rule needs.
+            if any bias cannot supply the energy the acceptance rule needs, or
+            if a state-dependent bias is combined with a temperature ladder.
         """
         if self._acceptance == "umbrella" and not biases:
             raise ValueError(
@@ -241,6 +244,19 @@ class ReplicaExchange:
                     "biasing force). The acceptance rule needs a cross-state "
                     "bias energy, so such a bias cannot participate; run it "
                     "without replica exchange."
+                )
+            if self._acceptance == "temperature" and (
+                getattr(bias, "state_dependent_for_exchange", False) is True
+            ):
+                raise ValueError(
+                    f"ReplicaExchange: the ladder varies temperature, which "
+                    f"selects temperature acceptance, but bias {name!r} has "
+                    "per-state parameters. The combined temperature-plus-window "
+                    "acceptance rule is not implemented, and the temperature "
+                    "rule alone omits the cross-state bias terms — so detailed "
+                    "balance would be wrong with nothing to show for it. Use a "
+                    "single-window bias with a temperature ladder, or equal "
+                    "temperatures with a multi-window bias."
                 )
 
     # ------------------------------------------------------------------

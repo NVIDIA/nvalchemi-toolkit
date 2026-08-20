@@ -45,7 +45,14 @@
   would keep the assignment and counters while silently changing the
   acceptance exponent. Per-pair acceptance
   rates are reported for ladder tuning. Asynchronous exchange and force-only
-  (ABF-style) biases are rejected explicitly.
+  (ABF-style) biases are rejected explicitly, as is the unimplemented
+  combined temperature-plus-window rule: a bias declaring
+  `state_dependent_for_exchange` is refused at construction, and the runner
+  additionally probes every bias empirically at prime time by evaluating it
+  under a permuted assignment, which catches a user bias that declares
+  nothing. A single-window `HarmonicUmbrellaBias` now ignores
+  `thermodynamic_state_id` rather than indexing it, so one shared restraint
+  can run alongside a multi-rung temperature ladder.
 
 - Exact checkpoint and restore for enhanced sampling.
   `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
