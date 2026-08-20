@@ -320,14 +320,27 @@ names the next valid step. This is not bookkeeping fussiness: an epoch boundary
 is the only point with no pending `update()` and no in-flight epoch commit, so
 anywhere else risks capturing a bias mid-mutation.
 
-Being *at* a boundary is not the same as being quiescent, though.
-`commit_epoch()` normally fires lazily — the first step of epoch *e+1* is what
-notices that epoch *e* ended — so immediately after `run(..., n_steps=N)` the
-commit has not happened yet. `checkpoint()` therefore drains the completed
-epoch itself before collecting any state, so a shared-history bias is recorded
-with its deposits merged rather than still pending. The drain is idempotent:
-committing is tracked per epoch index, so the lazy path on the next step sees
-it as already done and cannot double-count.
+Being *at* a boundary is not the same as being quiescent, though. Both the
+epoch commit and the replica exchange fire **lazily** — the first step of the
+next epoch or segment is what notices the boundary was crossed — so
+immediately after `run(..., n_steps=N)` neither has happened.
+
+`checkpoint()` therefore drains both itself before collecting any state, in
+the same order the runtime uses: **exchange first, then commit**, because the
+commit publishes shared history and doing it before the swap would publish
+under labels that are about to change. A shared-history bias is recorded with
+its deposits merged rather than still pending, and the labels are post-swap.
+
+Both drains are idempotent — tracked per epoch index and per segment index —
+so the lazy path on the next step sees them as already done and cannot
+double-count.
+
+:::{note}
+`checkpoint()` is therefore **not a passive snapshot**: it can advance the
+exchange assignment as part of reaching a quiescent point. Read
+`batch.thermodynamic_state_id` *after* checkpointing if you want the value
+that was saved.
+:::
 
 ### Transactional by construction
 

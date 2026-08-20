@@ -1192,11 +1192,18 @@ class EnhancedSampling:
                 "to capture mid-mutation."
             )
 
-        # Boundary-aligned is not the same as quiescent.  commit_epoch()
-        # normally fires lazily, when the *next* step observes that the epoch
-        # advanced — so at step N the epoch-0 commit has not run yet, and a
-        # checkpoint taken here would record a shared-history bias with its
-        # deposits still pending rather than merged.  Drain it first.
+        # Boundary-aligned is not the same as quiescent.  Both the exchange
+        # and the epoch commit normally fire lazily, when the *next* step
+        # observes that the boundary was crossed — so at step N neither has
+        # run, and a checkpoint taken here would record pre-exchange labels
+        # and a shared-history bias with its deposits still pending rather
+        # than merged.  Drain both, in the same order the runtime stamp uses:
+        # exchange first, because the commit publishes shared history and
+        # doing it before the swap would publish under labels that are about
+        # to change.
+        if self.replica_exchange is not None:
+            interval = max(1, self.replica_exchange.attempt_interval)
+            self._attempt_segment(target, step // interval - 1)
         self._commit_epoch(step // self.steps_per_epoch - 1)
 
         write_checkpoint(

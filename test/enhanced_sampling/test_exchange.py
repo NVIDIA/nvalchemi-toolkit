@@ -31,6 +31,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVE, NVTLangevin, NVTNoseHoover
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
+    AdaptivePotentialMixin,
     ConservativeBias,
     EnhancedSampling,
     HarmonicUmbrellaBias,
@@ -967,14 +968,124 @@ class TestExchangeCheckpoint:
         assert restored.num_graphs == 4
         assert exchange2.exchange_id > 0
 
+    def test_checkpoint_drains_the_due_segment(self, tmp_path, device: str) -> None:
+        """steps_per_epoch=4, attempt_interval=2 — both boundaries coincide.
+
+        The exchange fires lazily on the next step's stamp, so at step 4 the
+        segment that just completed has not been attempted. Without a drain
+        the checkpoint records pre-exchange labels, contrary to the "after
+        exchange, after bias commit" checkpoint point.
+        """
+        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {},
+            steps_per_epoch=4,
+            replica_exchange=exchange,
+        )
+        batch = runner.run(_make_batch(device=device), n_steps=4)
+        assert runner.dynamics.step_count == 4
+        assert runner._attempted_segment == 0, "precondition: segment 1 is due"
+
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+        assert runner._attempted_segment == 1, "the due segment was not drained"
+
+        saved, _, _ = read_checkpoint(path, device)
+        on_disk = saved.thermodynamic_state_id.reshape(-1).tolist()
+
+        # Advancing one step would have drained the same segment; the labels
+        # must already agree.
+        runner.run(batch, n_steps=1, prime=False)
+        assert on_disk == batch.thermodynamic_state_id.reshape(-1).tolist(), (
+            "checkpoint captured pre-exchange labels"
+        )
+
+    def test_checkpoint_drains_exchange_before_commit(
+        self, tmp_path, device: str
+    ) -> None:
+        """Order matters: the commit publishes under post-swap labels.
+
+        Committing first would publish shared history under labels that the
+        swap is about to change.
+        """
+        order: list[str] = []
+
+        class _Recording(AdaptivePotentialMixin, ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="rec")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                return (
+                    torch.zeros(current.num_graphs, 1, device=current.positions.device)
+                    + 0.0 * current.positions.sum()
+                )
+
+            def update(self, frames: Batch, result) -> None:
+                pass
+
+            def commit_epoch(self) -> None:
+                order.append("commit")
+
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {"rec": _Recording()},
+            steps_per_epoch=4,
+            replica_exchange=exchange,
+        )
+        original = exchange.decide
+
+        def _spy(*args, **kwargs):
+            order.append("exchange")
+            return original(*args, **kwargs)
+
+        exchange.decide = _spy  # type: ignore[method-assign]
+
+        runner.run(_make_batch(device=device), n_steps=4)
+        order.clear()
+        runner.checkpoint(tmp_path / "ck.zarr")
+        assert order[:2] == ["exchange", "commit"], f"drain order was {order}"
+
+    def test_checkpoint_drain_does_not_double_attempt(
+        self, tmp_path, device: str
+    ) -> None:
+        """The runtime stamp must see the segment as already decided."""
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner = EnhancedSampling(
+            _make_dynamics(device),
+            {},
+            steps_per_epoch=4,
+            replica_exchange=exchange,
+        )
+        batch = runner.run(_make_batch(device=device), n_steps=4)
+        runner.checkpoint(tmp_path / "ck.zarr")
+        after_drain = exchange.attempts
+
+        runner.run(batch, n_steps=1, prime=False)
+        assert exchange.attempts == after_drain, (
+            "the segment drained at checkpoint time was attempted again"
+        )
+
     def test_state_assignment_survives_restore(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, _ = self._runner(device)
         batch = runner.run(batch, n_steps=4)
-        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
 
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
+        # Read after checkpointing, not before: checkpoint() is not a passive
+        # snapshot — it drains any due exchange segment so the store lands at
+        # a quiescent point, which can advance the assignment.
+        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
 
         runner2, _ = self._runner(device)
         restored = runner2.restore(path)
