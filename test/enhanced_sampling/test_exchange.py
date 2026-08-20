@@ -501,6 +501,70 @@ class TestAcceptanceArithmetic:
         with pytest.raises(ValueError, match="needs the bias energy"):
             exchange.decide(0, torch.tensor([0, 1]), torch.zeros(2))
 
+    @pytest.mark.parametrize(
+        "bad,pattern",
+        [
+            (torch.tensor([0, 0, 1, 2]), "permutation"),
+            (torch.tensor([0, 1, 2, 9]), "permutation"),
+            (torch.tensor([0, 1, 2]), "3 entr"),
+        ],
+    )
+    def test_decide_validates_its_assignment(
+        self, bad: torch.Tensor, pattern: str
+    ) -> None:
+        """The public API must not fall through to a bare KeyError.
+
+        Pairing looks up "which walker holds state k"; a duplicate or short
+        assignment answers that with ``KeyError: 3`` from deep inside the
+        loop, naming neither the ladder nor the input.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        with pytest.raises(ValueError, match=pattern):
+            exchange.decide(0, bad, torch.zeros(bad.numel()))
+
+    @pytest.mark.parametrize(
+        "bad", [torch.tensor([0, 0, 1, 2]), torch.tensor([0, 1, 2, 9])]
+    )
+    def test_proposed_assignment_validates_too(self, bad: torch.Tensor) -> None:
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        with pytest.raises(ValueError, match="permutation"):
+            exchange.proposed_assignment(0, bad)
+
+    def test_rejected_decide_leaves_counters_untouched(self) -> None:
+        """Validation runs before any counter is incremented.
+
+        The pair loop bumped ``attempts`` and ``pair_attempts`` before the
+        lookup that failed, so a bad call used to corrupt the tallies on its
+        way out.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        exchange.decide(0, torch.arange(4), torch.zeros(4))
+        before = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        with pytest.raises(ValueError):
+            exchange.decide(1, torch.tensor([0, 0, 1, 2]), torch.zeros(4))
+        after = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        assert before == after, "a rejected decide() mutated the tallies"
+
+    def test_valid_assignment_still_accepted_by_both(self) -> None:
+        """The guard must not block a legitimate non-identity permutation."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        ids = torch.tensor([3, 1, 0, 2])
+        assert exchange.proposed_assignment(0, ids).numel() == 4
+        new_ids, _, _ = exchange.decide(0, ids, torch.zeros(4))
+        assert sorted(new_ids.tolist()) == [0, 1, 2, 3]
+
     def test_empty_segment_is_a_noop(self) -> None:
         exchange = ReplicaExchange(_ladder(2), torch.tensor([0, 1]))
         new_ids, pairs, accepted = exchange.decide(

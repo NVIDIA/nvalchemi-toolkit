@@ -493,11 +493,15 @@ class ReplicaExchange:
         Raises
         ------
         ValueError
-            If umbrella acceptance is in force but the bias energies were not
-            supplied.
+            If *state_ids* is not a permutation of the ladder, or if umbrella
+            acceptance is in force but the bias energies were not supplied.
         """
+        # Validate before touching any counter. Pairing looks up "which walker
+        # holds state k", which a duplicate or short assignment answers with a
+        # bare KeyError — and by then attempts/pair_attempts have already been
+        # incremented, leaving the tallies corrupted by a call that failed.
+        ids = self.validate_assignment(state_ids, source="state_ids")
         pairs = self.pair_schedule(segment)
-        ids = state_ids.reshape(-1).to(torch.long)
         walker_of_state = {int(state): row for row, state in enumerate(ids.tolist())}
 
         if not pairs:
@@ -562,8 +566,13 @@ class ReplicaExchange:
         -------
         torch.Tensor
             The all-swaps-accepted assignment, shape ``[B]``.
+
+        Raises
+        ------
+        ValueError
+            If *state_ids* is not a permutation of the ladder.
         """
-        ids = state_ids.reshape(-1).to(torch.long)
+        ids = self.validate_assignment(state_ids, source="state_ids")
         walker_of_state = {int(state): row for row, state in enumerate(ids.tolist())}
         proposed = ids.clone()
         for state_i, state_j in self.pair_schedule(segment):
