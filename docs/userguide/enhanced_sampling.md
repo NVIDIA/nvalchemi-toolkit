@@ -457,6 +457,25 @@ Per-pair rates are what a ladder is tuned on. A pair far below the others is
 a gap the walkers cannot cross and needs another rung; uniformly high rates
 mean the rungs are closer than they need to be.
 
+### Restoring an exchange run
+
+The manifest records the ladder — mode, acceptance rule, `attempt_interval`,
+and temperatures — and `restore()` refuses a mismatch. That includes both
+directions of exchange-versus-none:
+
+```text
+EnhancedSampling.restore: the checkpoint was written by a different configuration:
+  exchange temperatures: checkpoint has [300.0, 350.0, 400.0],
+                         this runner has [100.0, 200.0, 900.0]
+```
+
+This is not pedantry. The ladder decides what a swap *means*: restoring into
+different temperatures would keep the walker assignment and the acceptance
+counters while silently changing the exponent every future swap is decided
+on. `initial_state_ids` is deliberately *not* checked — it seeds the
+assignment only when the batch does not already carry one, and a restored
+batch always does.
+
 ### Reproducibility
 
 Acceptance draws come from `random_seed + exchange_id` rather than a

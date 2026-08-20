@@ -588,6 +588,133 @@ class TestExchangeCheckpoint:
         resumed = runner2.run(resumed, n_steps=4, prime=False)
         assert resumed.thermodynamic_state_id.reshape(-1).tolist() == reference
 
+    def test_restore_rejects_a_different_ladder(self, tmp_path, device: str) -> None:
+        """The ladder decides what a swap means; counters alone do not.
+
+        Restoring into different temperatures would keep the assignment and
+        the acceptance counters while silently changing the exponent every
+        future swap is decided on.
+        """
+        batch = _make_batch(device=device)
+        runner, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        hot = [
+            ThermodynamicState(state_id=i, temperature=1000.0 + 100.0 * i)
+            for i in range(4)
+        ]
+        other = EnhancedSampling(
+            _make_dynamics(device),
+            {},
+            steps_per_epoch=4,
+            replica_exchange=ReplicaExchange(hot, torch.arange(4), attempt_interval=2),
+        )
+        with pytest.raises(ValueError, match="exchange temperatures"):
+            other.restore(path)
+
+    def test_restore_rejects_missing_exchange(self, tmp_path, device: str) -> None:
+        """A REMD checkpoint into a runner with replica_exchange=None."""
+        batch = _make_batch(device=device)
+        runner, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
+        with pytest.raises(ValueError, match="replica_exchange=None"):
+            plain.restore(path)
+
+    def test_restore_rejects_unexpected_exchange(self, tmp_path, device: str) -> None:
+        """And the reverse: a plain checkpoint into a REMD runner."""
+        batch = _make_batch(device=device)
+        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
+        plain.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        plain.checkpoint(path)
+
+        runner, _ = self._runner(device)
+        with pytest.raises(ValueError, match="written without replica"):
+            runner.restore(path)
+
+    def test_restore_rejects_a_different_interval(self, tmp_path, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        other = EnhancedSampling(
+            _make_dynamics(device),
+            {},
+            steps_per_epoch=4,
+            replica_exchange=ReplicaExchange(
+                _ladder(4), torch.arange(4), attempt_interval=99
+            ),
+        )
+        with pytest.raises(ValueError, match="exchange attempt_interval"):
+            other.restore(path)
+
+    def test_manifest_records_the_ladder(self, tmp_path, device: str) -> None:
+        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+
+        batch = _make_batch(device=device)
+        runner, exchange = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        _, _, manifest = read_checkpoint(path, device)
+        assert manifest.exchange_config is not None
+        assert manifest.exchange_config["temperatures"] == pytest.approx(
+            exchange.temperatures.tolist()
+        )
+        assert manifest.exchange_config["acceptance"] == "temperature"
+
+    def test_manifest_records_none_without_exchange(
+        self, tmp_path, device: str
+    ) -> None:
+        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+
+        batch = _make_batch(device=device)
+        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
+        plain.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        plain.checkpoint(path)
+        _, _, manifest = read_checkpoint(path, device)
+        assert manifest.exchange_config is None
+
+    def test_load_state_dict_rejects_a_different_ladder(self) -> None:
+        """Defence in depth: the component validates itself, too."""
+        source = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        for segment in range(3):
+            source.decide(segment, torch.arange(3), torch.zeros(3))
+
+        target = ReplicaExchange(_flat_ladder(3), torch.arange(3), attempt_interval=5)
+        with pytest.raises(ValueError, match="configured differently"):
+            target.load_state_dict(source.state_dict())
+
+    def test_load_state_dict_does_not_overwrite_the_interval(self) -> None:
+        """attempt_interval is configuration, not restorable position."""
+        source = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        target = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        target.load_state_dict(source.state_dict())
+        assert target.attempt_interval == 5
+
+    def test_matching_ladder_still_restores(self, tmp_path, device: str) -> None:
+        """The guard must not reject a correctly-reconstructed runner."""
+        batch = _make_batch(device=device)
+        runner, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        runner2, exchange2 = self._runner(device)
+        restored = runner2.restore(path)
+        assert restored.num_graphs == 4
+        assert exchange2.exchange_id > 0
+
     def test_state_assignment_survives_restore(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, _ = self._runner(device)

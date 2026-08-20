@@ -38,7 +38,12 @@
   construction rather than sampling the state it just left. Acceptance draws
   derive from `random_seed + exchange_id`, so a restored run reproduces the
   same decisions and the checkpoint stores two integers rather than an RNG
-  blob; exchange state lives under `sampling/exchange/`. Per-pair acceptance
+  blob; exchange state lives under `sampling/exchange/`. The manifest records
+  the ladder (mode, acceptance rule, interval, temperatures) and `restore()`
+  refuses a mismatch, including exchange-versus-none in either direction —
+  the ladder decides what a swap means, so restoring into a different one
+  would keep the assignment and counters while silently changing the
+  acceptance exponent. Per-pair acceptance
   rates are reported for ladder tuning. Asynchronous exchange and force-only
   (ABF-style) biases are rejected explicitly.
 

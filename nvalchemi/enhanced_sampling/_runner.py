@@ -1099,6 +1099,11 @@ class EnhancedSampling:
             bias_classes={
                 name: _qualified_name(bias) for name, bias in self.biases.items()
             },
+            exchange_config=(
+                self.replica_exchange.config_fingerprint()
+                if self.replica_exchange is not None
+                else None
+            ),
         )
 
     def restore(
@@ -1223,6 +1228,18 @@ class EnhancedSampling:
                 f"  biases: checkpoint has {manifest.bias_classes}, "
                 f"this runner has {actual_biases}"
             )
+        # The ladder decides what a swap means, so a mismatch — including
+        # exchange-versus-none in either direction — changes the semantics of
+        # every future swap while the counters and assignment carry on looking
+        # valid.
+        problems.extend(
+            ReplicaExchange.describe_config_mismatch(
+                manifest.exchange_config,
+                self.replica_exchange.config_fingerprint()
+                if self.replica_exchange is not None
+                else None,
+            )
+        )
         if problems:
             detail = "\n".join(problems)
             raise ValueError(

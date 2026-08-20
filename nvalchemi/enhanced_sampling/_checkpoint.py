@@ -130,6 +130,11 @@ class CheckpointManifest(BaseModel):
         Fully-qualified dynamics class, validated on restore.
     bias_classes:
         Bias name to fully-qualified class, validated on restore.
+    exchange_config:
+        Replica-exchange configuration fingerprint, or ``None`` when the run
+        had no exchange.  Validated on restore: the ladder decides what a
+        swap *means*, so restoring into a different one — or into no exchange
+        at all — has to be refused rather than silently accepted.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -145,6 +150,7 @@ class CheckpointManifest(BaseModel):
     model_class: str = ""
     dynamics_class: str = ""
     bias_classes: dict[str, str] = Field(default_factory=dict)
+    exchange_config: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _every_component_is_covered(self) -> CheckpointManifest:
@@ -408,6 +414,7 @@ def write_checkpoint(
     model_class: str = "",
     dynamics_class: str = "",
     bias_classes: Mapping[str, str] | None = None,
+    exchange_config: Mapping[str, Any] | None = None,
 ) -> CheckpointManifest:
     """Write a transactional checkpoint.
 
@@ -437,6 +444,8 @@ def write_checkpoint(
         Fully-qualified dynamics class, likewise.
     bias_classes:
         Bias name to fully-qualified class, likewise.
+    exchange_config:
+        Replica-exchange configuration fingerprint, or ``None``.
 
     Returns
     -------
@@ -479,6 +488,7 @@ def write_checkpoint(
         model_class=model_class,
         dynamics_class=dynamics_class,
         bias_classes=dict(bias_classes or {}),
+        exchange_config=dict(exchange_config) if exchange_config else None,
     )
 
     # Written last: this is the commit.

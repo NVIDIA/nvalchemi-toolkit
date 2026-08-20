@@ -26,6 +26,7 @@ an exchange is a permutation of :attr:`Batch.thermodynamic_state_id`.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
@@ -493,6 +494,89 @@ class ReplicaExchange:
     # State
     # ------------------------------------------------------------------
 
+    def config_fingerprint(self) -> dict[str, Any]:
+        """Return the configuration a restored run must match.
+
+        Exchange semantics live in the ladder, not in the counters: the
+        temperatures set the acceptance exponent, the rule follows from them,
+        and the interval sets the segment cadence.  Restoring a run into a
+        different ladder would keep the counters and the walker assignment
+        while silently changing what a swap *means* — the walkers would carry
+        on labelled 0..S-1 against temperatures they were never sampled at.
+
+        ``initial_state_ids`` is deliberately excluded.  It seeds the
+        assignment only when the batch does not already carry one, and a
+        restored batch always does, so it has no effect after step zero and
+        would be a false mismatch.
+
+        Returns
+        -------
+        dict[str, Any]
+            JSON-representable configuration.
+        """
+        return {
+            "mode": self.mode,
+            "acceptance": self._acceptance,
+            "attempt_interval": int(self.attempt_interval),
+            "temperatures": [float(state.temperature) for state in self.states],
+        }
+
+    @staticmethod
+    def describe_config_mismatch(
+        saved: Mapping[str, Any] | None, actual: Mapping[str, Any] | None
+    ) -> list[str]:
+        """Return human-readable differences between two fingerprints.
+
+        Parameters
+        ----------
+        saved:
+            The checkpoint's fingerprint, or ``None`` when it had no exchange.
+        actual:
+            The live runner's fingerprint, or ``None`` when it has none.
+
+        Returns
+        -------
+        list[str]
+            One line per difference; empty when they agree.
+        """
+        if saved is None and actual is None:
+            return []
+        if saved is None:
+            return [
+                "  exchange: the checkpoint was written without replica "
+                "exchange, but this runner has one configured"
+            ]
+        if actual is None:
+            return [
+                "  exchange: the checkpoint was written with replica exchange "
+                f"({saved.get('acceptance')}, "
+                f"{len(saved.get('temperatures', []))} states), but this "
+                "runner has replica_exchange=None"
+            ]
+
+        problems: list[str] = [
+            f"  exchange {key}: checkpoint has {saved.get(key)!r}, "
+            f"this runner has {actual.get(key)!r}"
+            for key in ("mode", "acceptance", "attempt_interval")
+            if saved.get(key) != actual.get(key)
+        ]
+        saved_temps = [float(t) for t in saved.get("temperatures", [])]
+        actual_temps = [float(t) for t in actual.get("temperatures", [])]
+        if len(saved_temps) != len(actual_temps):
+            problems.append(
+                f"  exchange ladder: checkpoint has {len(saved_temps)} state(s), "
+                f"this runner has {len(actual_temps)}"
+            )
+        elif any(
+            not math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
+            for a, b in zip(saved_temps, actual_temps, strict=True)
+        ):
+            problems.append(
+                f"  exchange temperatures: checkpoint has {saved_temps}, "
+                f"this runner has {actual_temps}"
+            )
+        return problems
+
     def state_dict(self) -> dict[str, Any]:
         """Return exchange state for checkpointing.
 
@@ -507,9 +591,11 @@ class ReplicaExchange:
             "attempts": int(self.attempts),
             "accepted": int(self.accepted),
             "random_seed": int(self.random_seed),
-            "attempt_interval": int(self.attempt_interval),
             "pair_attempts": list(self.pair_attempts),
             "pair_accepted": list(self.pair_accepted),
+            # Carried so the component is self-describing: loading it into a
+            # different ladder is refused rather than silently accepted.
+            "config": self.config_fingerprint(),
         }
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
@@ -519,14 +605,32 @@ class ReplicaExchange:
         ----------
         state:
             The mapping previously returned by :meth:`state_dict`.
+
+        Raises
+        ------
+        ValueError
+            If the saved configuration disagrees with this instance's.
         """
+        saved_config = state.get("config")
+        if saved_config is not None:
+            problems = self.describe_config_mismatch(
+                saved_config, self.config_fingerprint()
+            )
+            if problems:
+                detail = "\n".join(problems)
+                raise ValueError(
+                    "ReplicaExchange.load_state_dict: the saved exchange was "
+                    f"configured differently:\n{detail}\n"
+                    "Counters and the acceptance-RNG position only mean "
+                    "anything against the ladder they were produced on."
+                )
+
         self.exchange_id = int(state.get("exchange_id", 0))
         self.attempts = int(state.get("attempts", 0))
         self.accepted = int(state.get("accepted", 0))
+        # random_seed is RNG *position* and is restored; attempt_interval is
+        # configuration and is validated above, never silently overwritten.
         self.random_seed = int(state.get("random_seed", self.random_seed))
-        self.attempt_interval = int(
-            state.get("attempt_interval", self.attempt_interval)
-        )
         pair_attempts = state.get("pair_attempts")
         if pair_attempts is not None:
             self.pair_attempts = [int(v) for v in pair_attempts]
