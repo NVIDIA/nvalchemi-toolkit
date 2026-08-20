@@ -92,10 +92,14 @@
   throughout — `sqrt` has infinite derivative at zero, and a reference is
   visited at RMSD zero every time one is deposited. Consequences: the energy
   is invariant to rigid motion and the bias forces sum to exactly zero.
-  Non-periodic systems only — a batch with a non-zero cell is rejected,
-  because an atom crossing a cell face is physically unmoved but
-  Cartesian-displaced by a lattice vector, which would inject a large spurious
-  force. Atom correspondence is fixed, `atom_indices` selects a per-graph
+  Non-periodic systems only — a periodic batch is rejected, because an atom
+  crossing a cell face is physically unmoved but Cartesian-displaced by a
+  lattice vector, which would inject a large spurious force. Periodicity is
+  read from `batch.pbc` rather than from the presence of a cell, matching
+  `pair_distance` and the rest of the toolkit: a bounding-box cell with `pbc`
+  all-False is the non-periodic case this bias is for and is accepted, a slab
+  is rejected, and a cell carrying no `pbc` flags is refused as undeclared.
+  Atom correspondence is fixed, `atom_indices` selects a per-graph
   subset, warm-start references seed the history, and there is deliberately no
   `free_energy()` — it is a structure generator, not an estimator.
 

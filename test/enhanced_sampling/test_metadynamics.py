@@ -1137,13 +1137,76 @@ class TestRMSDSelectionAndPeriodicity:
         result = bias.evaluate(self._batch(device, [4, 5]))
         assert result.energy.shape[0] == 2
 
-    def test_periodic_batch_is_rejected(self, device: str) -> None:
+    @staticmethod
+    def _boxed(device: str, pbc: list[bool] | None, n_graphs: int = 2) -> Batch:
+        """Return a batch with a bounding box and the given PBC flags."""
+        torch.manual_seed(0)
+        items = []
+        for _ in range(n_graphs):
+            kwargs = {
+                "positions": torch.randn(4, 3),
+                "atomic_numbers": torch.ones(4, dtype=torch.long),
+                "cell": torch.eye(3).unsqueeze(0) * 20.0,
+            }
+            if pbc is not None:
+                kwargs["pbc"] = torch.tensor([pbc])
+            items.append(AtomicData(**kwargs))
+        return Batch.from_data_list(items).to(device)
+
+    def test_fully_periodic_batch_is_rejected(self, device: str) -> None:
         """Cartesian RMSD is undefined once atoms can cross a cell face."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
-        batch = self._batch(device, [4, 4])
-        batch.cell = torch.eye(3, device=batch.positions.device).repeat(2, 1, 1) * 10.0
+        with pytest.raises(ValueError, match="not defined under periodic"):
+            bias.evaluate(self._boxed(device, [True, True, True]))
+
+    def test_slab_is_rejected(self, device: str) -> None:
+        """Wrapping along any one axis is enough to break the metric."""
+        bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
+        with pytest.raises(ValueError, match="not defined under periodic"):
+            bias.evaluate(self._boxed(device, [True, True, False]))
+
+    def test_mixed_batch_is_rejected(self, device: str) -> None:
+        """One periodic graph poisons the batch; the bias cannot serve it."""
+        bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
+        items = [
+            AtomicData(
+                positions=torch.randn(4, 3),
+                atomic_numbers=torch.ones(4, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * 20.0,
+                pbc=torch.tensor([[flag, flag, flag]]),
+            )
+            for flag in (False, True)
+        ]
+        batch = Batch.from_data_list(items).to(device)
         with pytest.raises(ValueError, match="not defined under periodic"):
             bias.evaluate(batch)
+
+    def test_bounding_box_with_pbc_false_is_accepted(self, device: str) -> None:
+        """A cell is a box; only pbc says whether atoms wrap through it.
+
+        A solvated or boxed molecule carries a bounding-box cell with all
+        PBC flags false.  That is the non-periodic case this bias exists
+        for, so rejecting it on the cell alone would refuse the intended
+        input.
+        """
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=4, ramp_depositions=0
+        ).to(device)
+        batch = self._boxed(device, [False, False, False])
+
+        result = bias.evaluate(batch)
+        assert torch.count_nonzero(result.energy) == 0
+
+        # It must be usable, not merely accepted.
+        bias.update(batch, result)
+        assert int(bias.reference_count) == 2
+        assert float(bias.evaluate(batch).energy.sum()) > 0.0
+
+    def test_cell_without_pbc_flags_is_refused_as_undeclared(self, device: str) -> None:
+        """A cell with no boundary condition has not said which case it is."""
+        bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
+        with pytest.raises(ValueError, match="no pbc flags"):
+            bias.evaluate(self._boxed(device, None))
 
     def test_zero_cell_is_not_periodic(self, device: str) -> None:
         """A zero cell is how a molecular batch spells "no cell"."""
@@ -1151,6 +1214,11 @@ class TestRMSDSelectionAndPeriodicity:
         batch = self._batch(device, [4, 4])
         batch.cell = torch.zeros(2, 3, 3, device=batch.positions.device)
         bias.evaluate(batch)
+
+    def test_no_cell_at_all_is_not_periodic(self, device: str) -> None:
+        """The plain molecular case carries neither cell nor pbc."""
+        bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
+        bias.evaluate(self._batch(device, [4, 4]))
 
 
 # ===========================================================================

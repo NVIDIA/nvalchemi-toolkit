@@ -80,11 +80,15 @@ torch.manual_seed(0)
 # %%
 # Build the cluster
 # -----------------
-# A non-periodic molecular batch. This bias **rejects** any batch carrying a
-# non-zero cell: Cartesian RMSD against a stored reference is not defined
-# under periodic boundary conditions, because an atom crossing a cell face is
-# physically unmoved but Cartesian-displaced by a lattice vector. Rather than
-# return a plausible wrong number, ``evaluate()`` raises.
+# A non-periodic molecular batch. This bias **rejects** a periodic one:
+# Cartesian RMSD against a stored reference is not defined under periodic
+# boundary conditions, because an atom crossing a cell face is physically
+# unmoved but Cartesian-displaced by a lattice vector. Rather than return a
+# plausible wrong number, ``evaluate()`` raises.
+#
+# Periodicity is read from ``batch.pbc``, not from the presence of a cell. A
+# bounding box with ``pbc=False`` — a boxed or solvated molecule — is fine;
+# this cluster simply carries no cell at all.
 
 
 def make_cluster() -> AtomicData:

@@ -182,8 +182,15 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         vector, so the RMSD jumps and the bias delivers a large spurious
         force.  Making this correct needs a minimum-image-aware,
         correspondence-resolving metric.  Rather than return a plausible
-        wrong number, :meth:`evaluate` raises for any batch carrying a
-        non-zero cell.
+        wrong number, :meth:`evaluate` raises.
+
+        Periodicity is read from ``batch.pbc``, not from the presence of a
+        cell.  A molecular batch carrying a **bounding box** with ``pbc``
+        all-False is accepted, which is the common case for a solvated or
+        boxed molecule; a slab (``pbc=[True, True, False]``) is rejected,
+        since wrapping along any axis is enough to break the metric.  A
+        non-zero cell with no ``pbc`` flags at all is refused as undeclared
+        rather than assumed non-periodic.
 
     Fixed atom correspondence
         Atom ``i`` is always compared against atom ``i`` of the reference.
@@ -579,15 +586,32 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         Raises
         ------
         ValueError
-            If the batch carries a non-zero cell, or if graphs in the batch
-            have differing atom counts while ``atom_indices`` is ``None``.
+            If the batch is periodic according to ``batch.pbc``, if it
+            carries a non-zero cell with no ``pbc`` flags, or if graphs in
+            the batch have differing atom counts while ``atom_indices`` is
+            ``None``.
         """
         self._reject_periodic(current)
         self._validate_sites(current)
         return super().evaluate(current)
 
     def _reject_periodic(self, current: Batch) -> None:
-        """Raise if the batch is periodic.
+        """Raise if the batch is under periodic boundary conditions.
+
+        Periodicity is read from ``batch.pbc`` when it is present, matching
+        :func:`~nvalchemi.enhanced_sampling.pair_distance` and the rest of
+        the toolkit: a cell is a box, and only the flags say whether atoms
+        wrap through its faces.  A molecular batch carrying a bounding box
+        with ``pbc`` all-False is therefore accepted — it is exactly the
+        non-periodic case this bias is for.
+
+        Without ``pbc`` there is nothing to read, and a non-zero cell is
+        refused rather than assumed harmless.  A batch that declares a cell
+        but no boundary condition has not said which case it is, and the
+        failure this guard exists to prevent is silent.
+
+        Runs in ``evaluate`` rather than ``energy`` so the flag reduction
+        stays off the compiled path.
 
         Parameters
         ----------
@@ -597,19 +621,35 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         Raises
         ------
         ValueError
-            If any cell vector is non-zero.
+            If any graph is periodic along any axis, or if a non-zero cell
+            is present with no ``pbc`` flags to interpret it.
         """
         cell = getattr(current, "cell", None)
         if cell is None or not bool((cell != 0).any()):
             return
+
+        pbc = getattr(current, "pbc", None)
+        if pbc is None:
+            raise ValueError(
+                f"RMSDMetaDynamicsBias {self.name!r}: the batch carries a "
+                "non-zero cell but no pbc flags, so whether atoms wrap "
+                "through its faces is undeclared. Set pbc=False on a "
+                "molecular system with a bounding box; Cartesian RMSD is "
+                "only defined for the non-periodic case."
+            )
+        if not bool(pbc.any()):
+            return
+
         raise ValueError(
-            f"RMSDMetaDynamicsBias {self.name!r}: the batch carries a non-zero "
-            "cell, and Cartesian RMSD against a stored reference is not "
-            "defined under periodic boundary conditions — an atom crossing a "
-            "cell face is physically unmoved but Cartesian-displaced by a "
-            "lattice vector, which would inject a large spurious force. Use "
-            "this bias on non-periodic (molecular) systems, or bias a "
-            "periodic-aware CV with WellTemperedMetaDynamicsBias instead."
+            f"RMSDMetaDynamicsBias {self.name!r}: the batch is periodic "
+            f"(pbc={pbc.reshape(-1, pbc.shape[-1])[0].tolist()}), and "
+            "Cartesian RMSD against a stored reference is not defined under "
+            "periodic boundary conditions — an atom crossing a cell face is "
+            "physically unmoved but Cartesian-displaced by a lattice vector, "
+            "which would inject a large spurious force. Use this bias on "
+            "non-periodic (molecular) systems — a bounding-box cell with "
+            "pbc=False is fine — or bias a periodic-aware CV with "
+            "WellTemperedMetaDynamicsBias instead."
         )
 
     def _validate_sites(self, current: Batch) -> None:

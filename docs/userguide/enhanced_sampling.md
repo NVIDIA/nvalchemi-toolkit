@@ -240,11 +240,19 @@ around 10; a floppy molecule sampling 1 A wants `alpha` around 1.
 
 Three constraints are worth knowing before reaching for it:
 
-- **Non-periodic systems only.** A batch with a non-zero cell is rejected.
-  Cartesian RMSD against a stored reference is not defined under periodic
-  boundary conditions — an atom crossing a cell face is physically unmoved but
-  Cartesian-displaced by a lattice vector, which would inject a large spurious
-  force. Bias a periodic-aware CV with `WellTemperedMetaDynamicsBias` instead.
+- **Non-periodic systems only.** Cartesian RMSD against a stored reference is
+  not defined under periodic boundary conditions — an atom crossing a cell face
+  is physically unmoved but Cartesian-displaced by a lattice vector, which would
+  inject a large spurious force. Bias a periodic-aware CV with
+  `WellTemperedMetaDynamicsBias` instead.
+
+  Periodicity is read from `batch.pbc`, not from the presence of a cell. A cell
+  is a box; only the flags say whether atoms wrap through its faces. So a
+  molecular batch carrying a **bounding box** with `pbc` all-False is accepted
+  — the common case for a boxed or solvated molecule — while a slab
+  (`pbc=[True, True, False]`) is rejected, since wrapping along any one axis is
+  enough to break the metric. A non-zero cell with no `pbc` flags at all is
+  refused as undeclared rather than assumed harmless.
 - **Fixed atom correspondence.** Atom `i` is always compared with atom `i` of
   the reference; there is no permutation search, so two structures identical
   up to relabelling of equivalent atoms count as distinct.
