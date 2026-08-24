@@ -7,16 +7,12 @@ from __future__ import annotations
 
 import pytest
 import torch
-import warp as wp
-from nvalchemiops.torch._warp_op_helpers import scoped_warp_stream
 
 from nvalchemi.dynamics.paths.neb._ops.equations import (
     neb_effective_force_from_gram_stats,
 )
 from nvalchemi.dynamics.paths.neb._ops.launchers import (
-    _NEB_TILE_DIM,
     _get_neb_forces_kernel_overloads,
-    _neb_kernel_arg_types,
 )
 from nvalchemi.dynamics.paths.neb._ops.modes import (
     CLIMBING_NEB,
@@ -64,50 +60,6 @@ def _inputs(device: str = "cuda", dtype: torch.dtype = torch.float64):
         torch.linalg.inv(cell).contiguous(),
         torch.zeros((1, 3), device=device, dtype=torch.bool),
     )
-
-
-def _launch_neb_kernel_on_cuda(
-    method: str,
-    inputs: tuple[torch.Tensor, ...],
-    *,
-    tiled: bool,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Launch one NEB kernel variant directly against CUDA Torch storage."""
-    scalar_dtype = wp.float32 if inputs[0].dtype == torch.float32 else wp.float64
-    stored_tangent = isinstance(get_neb_method(method), _StoredTangentMethod)
-    tangent = torch.empty_like(inputs[0]) if stored_tangent else None
-    effective_forces = torch.empty_like(inputs[0])
-    link_lengths = torch.empty_like(inputs[6])
-    tensors = [*inputs]
-    if tangent is not None:
-        tensors.append(tangent)
-    tensors.extend((effective_forces, link_lengths))
-    arg_types = _neb_kernel_arg_types(scalar_dtype, stored_tangent)
-    args = [
-        wp.from_torch(tensor, dtype=arg_type.dtype)
-        for tensor, arg_type in zip(tensors, arg_types, strict=True)
-    ]
-    variant = "cuda" if tiled else "cpu"
-    kernel = _get_neb_forces_kernel_overloads(method, variant)[scalar_dtype]
-
-    with scoped_warp_stream(inputs[0].device):
-        if tiled:
-            wp.launch_tiled(
-                kernel,
-                dim=inputs[2].shape[0],
-                inputs=args,
-                block_dim=_NEB_TILE_DIM,
-                device=args[0].device,
-            )
-        else:
-            wp.launch(
-                kernel,
-                dim=inputs[2].shape[0],
-                inputs=args,
-                device=args[0].device,
-            )
-
-    return effective_forces, link_lengths
 
 
 # =============================================================================
@@ -274,21 +226,9 @@ class TestNEBMethodRegistry:
                 climbing_force_fn=stored_method.climbing_force_fn,
             )
 
-    @pytest.mark.parametrize(
-        "device",
-        [
-            "cpu",
-            pytest.param(
-                "cuda",
-                marks=pytest.mark.skipif(
-                    not torch.cuda.is_available(), reason="CUDA is required"
-                ),
-            ),
-        ],
-    )
-    def test_method_overloads_are_cached_by_device(self, device: str) -> None:
-        first = _get_neb_forces_kernel_overloads("improved_tangent", device)
-        second = _get_neb_forces_kernel_overloads("improved_tangent", device)
+    def test_method_overloads_are_cached(self) -> None:
+        first = _get_neb_forces_kernel_overloads("improved_tangent")
+        second = _get_neb_forces_kernel_overloads("improved_tangent")
         assert first is second
 
 
@@ -391,7 +331,7 @@ class TestImprovedTangentNumerics:
 
 
 class TestNEBKernelParity:
-    """Compare equivalent NEB kernel strategies and launch implementations."""
+    """Compare equivalent NEB kernel strategies."""
 
     @pytest.mark.parametrize(
         "dtype",
@@ -439,60 +379,6 @@ class TestNEBKernelParity:
             atol=tolerance,
             rtol=tolerance,
         )
-
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
-    @pytest.mark.parametrize(
-        "use_gram_stats",
-        [
-            pytest.param(False, id="stored-tangent"),
-            pytest.param(True, id="gram-stats"),
-        ],
-    )
-    @pytest.mark.parametrize(
-        "mode",
-        [
-            pytest.param(REGULAR_NEB, id="regular"),
-            pytest.param(CLIMBING_NEB, id="climbing"),
-        ],
-    )
-    @pytest.mark.parametrize(
-        "dtype",
-        [
-            pytest.param(torch.float32, id="float32"),
-            pytest.param(torch.float64, id="float64"),
-        ],
-    )
-    def test_scalar_and_tiled_neb_kernels_match_on_cuda(
-        self,
-        use_gram_stats: bool,
-        mode: int,
-        dtype: torch.dtype,
-    ) -> None:
-        """Scalar and tiled kernels produce the same outputs on one CUDA device."""
-        method = "improved_tangent"
-        if use_gram_stats:
-            stored_method = get_neb_method("improved_tangent")
-            assert isinstance(stored_method, _StoredTangentMethod)
-            method = "improved_tangent_gram_stats"
-            register_neb_method(
-                name=method,
-                tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
-                climbing_force_fn=stored_method.climbing_force_fn,
-            )
-        inputs = list(_inputs(device="cuda", dtype=dtype))
-        inputs[8] = torch.tensor(
-            [FIXED_ENDPOINT, mode, FIXED_ENDPOINT],
-            dtype=torch.int32,
-            device="cuda",
-        )
-        cuda_inputs = tuple(inputs)
-
-        scalar = _launch_neb_kernel_on_cuda(method, cuda_inputs, tiled=False)
-        tiled = _launch_neb_kernel_on_cuda(method, cuda_inputs, tiled=True)
-
-        tolerance = 2.0e-5 if dtype == torch.float32 else 1.0e-11
-        torch.testing.assert_close(scalar, tiled, atol=tolerance, rtol=tolerance)
 
 
 # =============================================================================

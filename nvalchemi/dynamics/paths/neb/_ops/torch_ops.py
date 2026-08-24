@@ -24,9 +24,8 @@ Execution flow
          -> validate inputs and allocate missing output buffers
          -> *_neb_forces_out_op             (PyTorch custom-op boundary)
             -> _launch_neb_from_torch       (Torch-to-Warp conversion)
-               -> launch_neb_forces_kernel  (device and dtype selection)
-                  -> wp.launch               (CPU scalar kernel)
-                  -> wp.launch_tiled         (CUDA tiled kernel)
+               -> launch_neb_forces_kernel  (method and dtype selection)
+                  -> Warp kernel             (CPU or CUDA)
 
 During FakeTensor tracing, PyTorch dispatches ``*_out_op`` to its registered no-op fake
 implementation instead of executing the real implementation, so no Warp kernel is launched.

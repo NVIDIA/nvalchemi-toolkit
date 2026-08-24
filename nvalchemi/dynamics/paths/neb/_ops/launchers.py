@@ -23,16 +23,14 @@ import warp as wp
 from nvalchemiops.warp_dispatch import register_overloads
 
 from .kernels import (
-    build_scalar_gram_stats_neb_kernel,
-    build_scalar_stored_tangent_neb_kernel,
-    build_tiled_gram_stats_neb_kernel,
-    build_tiled_stored_tangent_neb_kernel,
+    build_gram_stats_neb_kernel,
+    build_stored_tangent_neb_kernel,
 )
 from .registry import _GramStatsMethod, _StoredTangentMethod, get_neb_method
 
 __all__ = ["launch_neb_forces_kernel"]
 
-_NEB_TILE_DIM = 128
+_NEB_BLOCK_DIM = 128
 _NEB_DTYPES = (wp.float32, wp.float64)
 
 
@@ -70,29 +68,20 @@ def _neb_kernel_arg_types(dtype: object, stored: bool) -> list[object]:
 @cache
 def _get_neb_forces_kernel_overloads(
     method: str,
-    device_type: str,
 ) -> dict[object, wp.Kernel]:
-    """Return cached dtype overloads for an NEB method and device."""
+    """Return cached dtype overloads for an NEB method."""
     spec = get_neb_method(method)
     if isinstance(spec, _StoredTangentMethod):
         stored_tangent = True
-        scalar_builder = build_scalar_stored_tangent_neb_kernel
-        tiled_builder = build_tiled_stored_tangent_neb_kernel
+        builder = build_stored_tangent_neb_kernel
     elif isinstance(spec, _GramStatsMethod):
         stored_tangent = False
-        scalar_builder = build_scalar_gram_stats_neb_kernel
-        tiled_builder = build_tiled_gram_stats_neb_kernel
+        builder = build_gram_stats_neb_kernel
     else:
         raise RuntimeError(
             f"NEB method {method!r} has unsupported specification {type(spec).__name__}"
         )
 
-    if device_type == "cpu":
-        builder = scalar_builder
-    elif device_type == "cuda":
-        builder = tiled_builder
-    else:
-        raise ValueError(f"unsupported NEB device type {device_type!r}")
     kernel = builder(
         spec.tangent_fn,
         spec.force_fn,
@@ -118,8 +107,8 @@ def launch_neb_forces_kernel(
 ) -> None:
     """Launch the fused NEB force kernel on a CPU or CUDA device.
 
-    The kernel implementation and dtype overload are selected from the registered NEB method
-    and the device associated with ``args``.
+    The kernel implementation and dtype overload are selected from the registered
+    NEB method. The launch device is taken from ``args``.
 
     Parameters
     ----------
@@ -142,20 +131,15 @@ def launch_neb_forces_kernel(
     if num_images == 0:
         return
 
-    # Launch kernel with the correct device type and dtype
     device = args[0].device
-    if device.is_cpu:
-        kernel = _get_neb_forces_kernel_overloads(method, "cpu")[scalar_dtype]
-        wp.launch(kernel, dim=num_images, inputs=args, device=device)
-        return
-    if device.is_cuda:
-        kernel = _get_neb_forces_kernel_overloads(method, "cuda")[scalar_dtype]
-        wp.launch_tiled(
-            kernel,
-            dim=num_images,
-            inputs=args,
-            block_dim=_NEB_TILE_DIM,
-            device=device,
-        )
-        return
-    raise ValueError(f"unsupported NEB Warp device {device}")
+    if not device.is_cpu and not device.is_cuda:
+        raise ValueError(f"unsupported NEB Warp device {device}")
+
+    kernel = _get_neb_forces_kernel_overloads(method)[scalar_dtype]
+    wp.launch_tiled(
+        kernel,
+        dim=num_images,
+        inputs=args,
+        block_dim=_NEB_BLOCK_DIM,
+        device=device,
+    )

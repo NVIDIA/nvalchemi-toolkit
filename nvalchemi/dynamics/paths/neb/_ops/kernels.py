@@ -43,10 +43,8 @@ from .modes import (
 )
 
 __all__ = [
-    "build_tiled_gram_stats_neb_kernel",
-    "build_tiled_stored_tangent_neb_kernel",
-    "build_scalar_gram_stats_neb_kernel",
-    "build_scalar_stored_tangent_neb_kernel",
+    "build_gram_stats_neb_kernel",
+    "build_stored_tangent_neb_kernel",
 ]
 
 _SCALAR_DTYPES = (wp.float32, wp.float64)
@@ -141,16 +139,16 @@ def _select_tangent_fallback(
 
 
 # =============================================================================
-# Tiled NEB force kernels -- primary CUDA execution
+# NEB force kernels
 # =============================================================================
 
 
-def build_tiled_stored_tangent_neb_kernel(
+def build_stored_tangent_neb_kernel(
     tangent_weights_fn: wp.Function,
     effective_force_fn: wp.Function,
     climbing_force_fn: wp.Function,
 ) -> wp.Kernel:
-    r"""Build a tiled NEB effective-force kernel with stored tangents.
+    r"""Build an NEB effective-force kernel with stored tangents.
 
     The generated kernel evaluates the registered NEB tangent and effective-force
     functions for a batch of path images. It computes and stores each per-atom
@@ -177,12 +175,12 @@ def build_tiled_stored_tangent_neb_kernel(
     evaluate the regular effective force :math:`\mathbf{F}^{\mathrm{NEB}}`.
     Climbing images instead use the injected ``climbing_force_fn``.
 
-    The tiled implementation assigns one CUDA block to each image and is selected
-    for CUDA execution.
+    The implementation assigns one cooperative block to each image. On CPU,
+    Warp executes the block with one lane, which serially scans the image atoms.
     """
 
     @wp.kernel(enable_backward=False)
-    def tiled_stored_tangent_neb_forces_kernel(
+    def stored_tangent_neb_forces_kernel(
         positions: wp.array(dtype=Any),
         physical_forces: wp.array(dtype=Any),
         image_energies: wp.array(dtype=Any),
@@ -202,6 +200,9 @@ def build_tiled_stored_tangent_neb_kernel(
         link_lengths: wp.array(dtype=Any),
     ):
         """Compute fused NEB forces using a stored per-atom tangent.
+        
+        One block owns each image. The kernel stores per-atom tangents and
+        reduces only the scalar statistics needed to construct effective forces.
 
         Parameters
         ----------
@@ -233,11 +234,6 @@ def build_tiled_stored_tangent_neb_kernel(
             Output effective NEB force for each atom.
         link_lengths : wp.array, shape (num_images - num_paths,), dtype wp.float32 or wp.float64
             Output minimum-image length of each forward link.
-
-        Notes
-        -----
-        One tiled block owns each image. The kernel stores per-atom tangents and
-        reduces only the scalar statistics needed to construct effective forces.
 
         Modifies
         --------
@@ -413,15 +409,15 @@ def build_tiled_stored_tangent_neb_kernel(
                 )
             atom_idx = atom_idx + wp.block_dim()
 
-    return tiled_stored_tangent_neb_forces_kernel
+    return stored_tangent_neb_forces_kernel
 
 
-def build_tiled_gram_stats_neb_kernel(
+def build_gram_stats_neb_kernel(
     tangent_weights_fn: wp.Function,
     effective_force_fn: wp.Function,
     climbing_force_fn: wp.Function,
 ) -> wp.Kernel:
-    r"""Build a tiled NEB effective-force kernel using Gram statistics.
+    r"""Build an NEB effective-force kernel using Gram statistics.
 
     The kernel reduces image-wide inner products among the physical force and the
     forward and backward path displacements. These statistics expose the
@@ -456,12 +452,12 @@ def build_tiled_gram_stats_neb_kernel(
     materializing :math:`\hat{\boldsymbol{\tau}}` in a scratch buffer. Climbing
     images instead use the injected ``climbing_force_fn``.
 
-    The tiled implementation assigns one CUDA block to each image and is selected
-    for CUDA execution.
+    The implementation assigns one cooperative block to each image. On CPU,
+    Warp executes the block with one lane, which serially scans the image atoms.
     """
 
     @wp.kernel(enable_backward=False)
-    def tiled_gram_stats_neb_forces_kernel(
+    def gram_stats_neb_forces_kernel(
         positions: wp.array(dtype=Any),
         physical_forces: wp.array(dtype=Any),
         image_energies: wp.array(dtype=Any),
@@ -480,6 +476,9 @@ def build_tiled_gram_stats_neb_kernel(
         link_lengths: wp.array(dtype=Any),
     ):
         """Compute fused NEB forces from per-image Gram statistics.
+
+        One block owns each image. The kernel stores no per-atom tangent scratch.
+        Instead, it reduces pairwise products of the link and force vectors.
 
         Parameters
         ----------
@@ -509,11 +508,6 @@ def build_tiled_gram_stats_neb_kernel(
             Output effective NEB force for each atom.
         link_lengths : wp.array, shape (num_images - num_paths,), dtype wp.float32 or wp.float64
             Output minimum-image length of each forward link.
-
-        Notes
-        -----
-        One tiled block owns each image. The kernel stores no per-atom tangent
-        scratch; it reduces pairwise products of the link and force vectors.
 
         Modifies
         --------
@@ -727,410 +721,4 @@ def build_tiled_gram_stats_neb_kernel(
                 )
             atom_idx = atom_idx + wp.block_dim()
 
-    return tiled_gram_stats_neb_forces_kernel
-
-
-# =============================================================================
-# Scalar NEB force kernels -- device-generic CPU execution
-# =============================================================================
-
-
-def build_scalar_stored_tangent_neb_kernel(
-    tangent_weights_fn: wp.Function,
-    effective_force_fn: wp.Function,
-    climbing_force_fn: wp.Function,
-) -> wp.Kernel:
-    """Build the scalar counterpart of the tiled stored-tangent NEB kernel.
-
-    This uses the same force formulation and tangent-buffer strategy as
-    :func:`build_tiled_stored_tangent_neb_kernel`, but uses one thread per image
-    for CPU execution.
-    """
-
-    @wp.kernel(enable_backward=False)
-    def scalar_stored_tangent_neb_forces_kernel(
-        positions: wp.array(dtype=Any),
-        physical_forces: wp.array(dtype=Any),
-        image_energies: wp.array(dtype=Any),
-        image_ptr: wp.array(dtype=wp.int32),
-        path_ptr: wp.array(dtype=wp.int32),
-        image_path_idx: wp.array(dtype=wp.int32),
-        spring_constants: wp.array(dtype=Any),
-        fixed_atom_mask: wp.array(dtype=wp.bool),
-        image_force_mode: wp.array(dtype=wp.int32),
-        path_energy_ref: wp.array(dtype=Any),
-        path_energy_max: wp.array(dtype=Any),
-        cell: wp.array(dtype=Any),
-        inv_cell: wp.array(dtype=Any),
-        pbc: wp.array(dtype=wp.vec3b),
-        tangent_buffer: wp.array(dtype=Any),
-        effective_forces: wp.array(dtype=Any),
-        link_lengths: wp.array(dtype=Any),
-    ):
-        """Scalar, one-thread-per-image counterpart of the tiled stored-tangent kernel.
-
-        Same parameters, tangent-buffer strategy, and outputs as
-        :func:`tiled_stored_tangent_neb_forces_kernel`; see that kernel's
-        docstring for details.
-        """
-        image_idx = wp.tid()
-        path_idx = image_path_idx[image_idx]
-        atom_start = image_ptr[image_idx]
-        atom_stop = image_ptr[image_idx + 1]
-        is_first = image_idx == path_ptr[path_idx]
-        is_last = image_idx == path_ptr[path_idx + 1] - 1
-        mode = image_force_mode[image_idx]
-        should_compute_force = (
-            not is_first and not is_last and mode != INACTIVE_INTERIOR
-        )
-        zero = type(image_energies[0])(0.0)
-
-        energy_prev = image_energies[image_idx]
-        energy_curr = image_energies[image_idx]
-        energy_next = image_energies[image_idx]
-        weight_plus = zero
-        weight_minus = zero
-        if should_compute_force:
-            energy_prev = image_energies[image_idx - 1]
-            energy_next = image_energies[image_idx + 1]
-            weight_plus, weight_minus = tangent_weights_fn(
-                energy_prev, energy_curr, energy_next
-            )
-
-        dplus_sq = zero
-        dminus_sq = zero
-        tangent_sq = zero
-        if not is_last:
-            atom_idx = atom_start
-            while atom_idx < atom_stop:
-                atom_local = atom_idx - atom_start
-                next_atom_idx = image_ptr[image_idx + 1] + atom_local
-                d_plus = _mic(
-                    positions[next_atom_idx],
-                    positions[atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    pbc[path_idx],
-                )
-                dplus_sq = dplus_sq + wp.dot(d_plus, d_plus)
-                if should_compute_force:
-                    prev_atom_idx = image_ptr[image_idx - 1] + atom_local
-                    d_minus = _mic(
-                        positions[atom_idx],
-                        positions[prev_atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        pbc[path_idx],
-                    )
-                    tangent = weight_plus * d_plus + weight_minus * d_minus
-                    tangent_buffer[atom_idx] = tangent
-                    dminus_sq = dminus_sq + wp.dot(d_minus, d_minus)
-                    tangent_sq = tangent_sq + wp.dot(tangent, tangent)
-                atom_idx = atom_idx + 1
-            link_lengths[image_idx - path_idx] = wp.sqrt(dplus_sq)
-
-        if not should_compute_force:
-            atom_idx = atom_start
-            while atom_idx < atom_stop:
-                if mode == RELAXED_ENDPOINT and not fixed_atom_mask[atom_idx]:
-                    effective_forces[atom_idx] = physical_forces[atom_idx]
-                else:
-                    effective_forces[atom_idx] = positions[atom_idx] * zero
-                atom_idx = atom_idx + 1
-            return
-
-        dplus_norm = wp.sqrt(dplus_sq)
-        dminus_norm = wp.sqrt(dminus_sq)
-        tangent_norm = wp.sqrt(tangent_sq)
-        fallback, tangent_norm = _select_tangent_fallback(
-            weight_plus,
-            weight_minus,
-            dplus_norm,
-            dminus_norm,
-            tangent_norm,
-        )
-
-        atom_idx = atom_start
-        while atom_idx < atom_stop:
-            atom_local = atom_idx - atom_start
-            tangent = positions[atom_idx] * zero
-            if fallback == 0:
-                tangent = tangent_buffer[atom_idx] / tangent_norm
-            elif fallback == 1:
-                next_atom_idx = image_ptr[image_idx + 1] + atom_local
-                tangent = (
-                    _mic(
-                        positions[next_atom_idx],
-                        positions[atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        pbc[path_idx],
-                    )
-                    / tangent_norm
-                )
-            elif fallback == 2:
-                prev_atom_idx = image_ptr[image_idx - 1] + atom_local
-                tangent = (
-                    _mic(
-                        positions[atom_idx],
-                        positions[prev_atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        pbc[path_idx],
-                    )
-                    / tangent_norm
-                )
-            tangent_buffer[atom_idx] = tangent
-            atom_idx = atom_idx + 1
-
-        force_dot_tangent = zero
-        atom_idx = atom_start
-        while atom_idx < atom_stop:
-            force_dot_tangent = force_dot_tangent + wp.dot(
-                physical_forces[atom_idx], tangent_buffer[atom_idx]
-            )
-            atom_idx = atom_idx + 1
-
-        forward_link = image_idx - path_idx
-        k_plus = spring_constants[forward_link]
-        k_minus = spring_constants[forward_link - 1]
-        atom_idx = atom_start
-        while atom_idx < atom_stop:
-            if fallback == 3 or fixed_atom_mask[atom_idx]:
-                effective_forces[atom_idx] = positions[atom_idx] * zero
-            elif mode == CLIMBING_NEB:
-                effective_forces[atom_idx] = climbing_force_fn(
-                    physical_forces[atom_idx],
-                    tangent_buffer[atom_idx],
-                    force_dot_tangent,
-                )
-            else:
-                effective_forces[atom_idx] = effective_force_fn(
-                    physical_forces[atom_idx],
-                    tangent_buffer[atom_idx],
-                    force_dot_tangent,
-                    k_plus,
-                    k_minus,
-                    dplus_norm,
-                    dminus_norm,
-                    energy_prev,
-                    energy_curr,
-                    energy_next,
-                    path_energy_ref[path_idx],
-                    path_energy_max[path_idx],
-                )
-            atom_idx = atom_idx + 1
-
-    return scalar_stored_tangent_neb_forces_kernel
-
-
-def build_scalar_gram_stats_neb_kernel(
-    tangent_weights_fn: wp.Function,
-    effective_force_fn: wp.Function,
-    climbing_force_fn: wp.Function,
-) -> wp.Kernel:
-    """Build the scalar counterpart of the tiled Gram-statistics NEB kernel.
-
-    This uses the same force formulation and Gram-statistics strategy as
-    :func:`build_tiled_gram_stats_neb_kernel`, but uses one thread per image for
-    CPU execution.
-    """
-
-    @wp.kernel(enable_backward=False)
-    def scalar_gram_stats_neb_forces_kernel(
-        positions: wp.array(dtype=Any),
-        physical_forces: wp.array(dtype=Any),
-        image_energies: wp.array(dtype=Any),
-        image_ptr: wp.array(dtype=wp.int32),
-        path_ptr: wp.array(dtype=wp.int32),
-        image_path_idx: wp.array(dtype=wp.int32),
-        spring_constants: wp.array(dtype=Any),
-        fixed_atom_mask: wp.array(dtype=wp.bool),
-        image_force_mode: wp.array(dtype=wp.int32),
-        path_energy_ref: wp.array(dtype=Any),
-        path_energy_max: wp.array(dtype=Any),
-        cell: wp.array(dtype=Any),
-        inv_cell: wp.array(dtype=Any),
-        pbc: wp.array(dtype=wp.vec3b),
-        effective_forces: wp.array(dtype=Any),
-        link_lengths: wp.array(dtype=Any),
-    ):
-        """Scalar, one-thread-per-image counterpart of the tiled Gram-stats kernel.
-
-        Same parameters, Gram-statistics strategy, and outputs as
-        :func:`tiled_gram_stats_neb_forces_kernel`; see that kernel's docstring
-        for details.
-        """
-        image_idx = wp.tid()
-        path_idx = image_path_idx[image_idx]
-        atom_start = image_ptr[image_idx]
-        atom_stop = image_ptr[image_idx + 1]
-        is_first = image_idx == path_ptr[path_idx]
-        is_last = image_idx == path_ptr[path_idx + 1] - 1
-        mode = image_force_mode[image_idx]
-        should_compute_force = (
-            not is_first and not is_last and mode != INACTIVE_INTERIOR
-        )
-        zero = type(image_energies[0])(0.0)
-
-        energy_prev = image_energies[image_idx]
-        energy_curr = image_energies[image_idx]
-        energy_next = image_energies[image_idx]
-        weight_plus = zero
-        weight_minus = zero
-        if should_compute_force:
-            energy_prev = image_energies[image_idx - 1]
-            energy_next = image_energies[image_idx + 1]
-            weight_plus, weight_minus = tangent_weights_fn(
-                energy_prev, energy_curr, energy_next
-            )
-
-        dplus_sq = zero
-        dplus_dot_dminus = zero
-        dminus_sq = zero
-        force_dot_dplus = zero
-        force_dot_dminus = zero
-        force_sq = zero
-        if not is_last:
-            atom_idx = atom_start
-            while atom_idx < atom_stop:
-                atom_local = atom_idx - atom_start
-                next_atom_idx = image_ptr[image_idx + 1] + atom_local
-                d_plus = _mic(
-                    positions[next_atom_idx],
-                    positions[atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    pbc[path_idx],
-                )
-                dplus_sq = dplus_sq + wp.dot(d_plus, d_plus)
-                if should_compute_force:
-                    prev_atom_idx = image_ptr[image_idx - 1] + atom_local
-                    d_minus = _mic(
-                        positions[atom_idx],
-                        positions[prev_atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        pbc[path_idx],
-                    )
-                    force = physical_forces[atom_idx]
-                    dplus_dot_dminus = dplus_dot_dminus + wp.dot(d_plus, d_minus)
-                    dminus_sq = dminus_sq + wp.dot(d_minus, d_minus)
-                    force_dot_dplus = force_dot_dplus + wp.dot(force, d_plus)
-                    force_dot_dminus = force_dot_dminus + wp.dot(force, d_minus)
-                    force_sq = force_sq + wp.dot(force, force)
-                atom_idx = atom_idx + 1
-            link_lengths[image_idx - path_idx] = wp.sqrt(dplus_sq)
-
-        if not should_compute_force:
-            atom_idx = atom_start
-            while atom_idx < atom_stop:
-                if mode == RELAXED_ENDPOINT and not fixed_atom_mask[atom_idx]:
-                    effective_forces[atom_idx] = physical_forces[atom_idx]
-                else:
-                    effective_forces[atom_idx] = positions[atom_idx] * zero
-                atom_idx = atom_idx + 1
-            return
-
-        dplus_norm = wp.sqrt(dplus_sq)
-        dminus_norm = wp.sqrt(dminus_sq)
-        tangent_sq = (
-            weight_plus * weight_plus * dplus_sq
-            + type(dplus_sq)(2.0) * weight_plus * weight_minus * dplus_dot_dminus
-            + weight_minus * weight_minus * dminus_sq
-        )
-        tangent_norm = wp.sqrt(wp.max(tangent_sq, zero))
-        fallback, tangent_norm = _select_tangent_fallback(
-            weight_plus,
-            weight_minus,
-            dplus_norm,
-            dminus_norm,
-            tangent_norm,
-        )
-
-        force_dot_tangent = zero
-        dplus_dot_tangent = zero
-        dminus_dot_tangent = zero
-        if fallback == 0:
-            force_dot_tangent = (
-                weight_plus * force_dot_dplus + weight_minus * force_dot_dminus
-            ) / tangent_norm
-            dplus_dot_tangent = (
-                weight_plus * dplus_sq + weight_minus * dplus_dot_dminus
-            ) / tangent_norm
-            dminus_dot_tangent = (
-                weight_plus * dplus_dot_dminus + weight_minus * dminus_sq
-            ) / tangent_norm
-        elif fallback == 1:
-            force_dot_tangent = force_dot_dplus / dplus_norm
-            dplus_dot_tangent = dplus_norm
-            dminus_dot_tangent = dplus_dot_dminus / dplus_norm
-        elif fallback == 2:
-            force_dot_tangent = force_dot_dminus / dminus_norm
-            dplus_dot_tangent = dplus_dot_dminus / dminus_norm
-            dminus_dot_tangent = dminus_norm
-
-        forward_link = image_idx - path_idx
-        k_plus = spring_constants[forward_link]
-        k_minus = spring_constants[forward_link - 1]
-        atom_idx = atom_start
-        while atom_idx < atom_stop:
-            atom_local = atom_idx - atom_start
-            next_atom_idx = image_ptr[image_idx + 1] + atom_local
-            prev_atom_idx = image_ptr[image_idx - 1] + atom_local
-            d_plus = _mic(
-                positions[next_atom_idx],
-                positions[atom_idx],
-                cell[path_idx],
-                inv_cell[path_idx],
-                pbc[path_idx],
-            )
-            d_minus = _mic(
-                positions[atom_idx],
-                positions[prev_atom_idx],
-                cell[path_idx],
-                inv_cell[path_idx],
-                pbc[path_idx],
-            )
-            tangent = positions[atom_idx] * zero
-            if fallback == 0:
-                tangent = (weight_plus * d_plus + weight_minus * d_minus) / tangent_norm
-            elif fallback == 1:
-                tangent = d_plus / dplus_norm
-            elif fallback == 2:
-                tangent = d_minus / dminus_norm
-
-            if fallback == 3 or fixed_atom_mask[atom_idx]:
-                effective_forces[atom_idx] = positions[atom_idx] * zero
-            elif mode == CLIMBING_NEB:
-                effective_forces[atom_idx] = climbing_force_fn(
-                    physical_forces[atom_idx],
-                    tangent,
-                    force_dot_tangent,
-                )
-            else:
-                effective_forces[atom_idx] = effective_force_fn(
-                    physical_forces[atom_idx],
-                    tangent,
-                    d_plus,
-                    d_minus,
-                    force_dot_tangent,
-                    dplus_dot_tangent,
-                    dminus_dot_tangent,
-                    dplus_norm,
-                    dminus_norm,
-                    dplus_dot_dminus,
-                    force_dot_dplus,
-                    force_dot_dminus,
-                    force_sq,
-                    k_plus,
-                    k_minus,
-                    energy_prev,
-                    energy_curr,
-                    energy_next,
-                    path_energy_ref[path_idx],
-                    path_energy_max[path_idx],
-                )
-            atom_idx = atom_idx + 1
-
-    return scalar_gram_stats_neb_forces_kernel
+    return gram_stats_neb_forces_kernel
