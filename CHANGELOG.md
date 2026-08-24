@@ -4,6 +4,27 @@
 
 ### Added
 
+- `EnhancedSampling` runner for biased dynamics, plus the first built-in
+  biases. The runner installs one internal hook on an existing `BaseDynamics`
+  and owns what a bias cannot: walker identity stamping (`walker_id`,
+  `thermodynamic_state_id`, `sampling_step`, `exchange_segment`,
+  `sampling_epoch`), the force-step ordering, exactly-once `update()`
+  delivery, and force priming. Every bias is evaluated against the same
+  unmodified model output and the contributions summed once, so no bias can
+  observe another's forces and the total is independent of registration
+  order. Built-ins: `HarmonicUmbrellaBias` (per-window centers and stiffness
+  selected by `thermodynamic_state_id`, validated symmetric
+  positive-semidefinite), `UpperWall`, `LowerWall`, and
+  `FlatBottomRestraint`. `AdaptivePotentialMixin` supplies the
+  `update`/`commit_epoch`/state-version battery for biases whose state
+  evolves during sampling; it must precede `nn.Module` in the base list, and
+  raises `TypeError` otherwise rather than letting `nn.Module.state_dict`
+  shadow it and drop bias history from checkpoints. `periodic_difference`
+  wraps CV differences onto a circle. Checkpointing
+  (`EnhancedSampling.checkpoint`/`restore`) is not implemented yet;
+  `warm_start()` gives approximate continuation and individual biases expose
+  `state_dict()`.
+
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
@@ -135,6 +156,20 @@
   (e.g. `DistributedPipeline`) silently dropped such samples.
 
 ### Deprecated
+
+- `BiasedPotentialHook`, superseded by the `nvalchemi.enhanced_sampling`
+  subpackage. Its `bias_fn(batch) -> (energy, forces)` contract has no slot
+  for a cell response, so a bias applied through the hook contributes no
+  stress and is invisible to the NPT/NPH barostat — the cell evolves as if
+  the bias were absent, with no error raised. It also requires bias forces
+  to be written by hand (nothing checks they are `-dE/dr`), and composes
+  several biases by sequential in-place mutation of `batch.forces` rather
+  than summing them against the unmodified model output. Constructing the
+  hook now emits a `DeprecationWarning`. It remains functional and will not
+  be removed before the `EnhancedSampling` runner ships, since until then it
+  is the only way to apply a bias during dynamics. No adapter is provided:
+  bridging a `BiasPotential` onto `bias_fn` would have to discard
+  `BiasResult.stress`, reintroducing the exact failure the new API removes.
 
 - `cells_inv` argument on `_cell_kinetic_energy`. Cell kinetic energy
   is computed directly from the strain rate `ε̇` and no longer needs
