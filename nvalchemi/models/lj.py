@@ -346,6 +346,24 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             keys.add("stress")
         return keys
 
+    def direct_derivative_keys(self) -> set[str]:
+        """Report which outputs are computed analytically by the kernel.
+
+        Returns
+        -------
+        set[str]
+            ``{"forces", "stress"}`` intersected with the declared outputs. LJ
+            evaluates forces and the virial directly in the Warp kernel and its
+            kernel energy carries no autograd graph, so a pipeline autograd group
+            keeps and sums them rather than recomputing them from the energy.
+        """
+        keys: set[str] = set()
+        if "forces" in self.model_config.outputs:
+            keys.add("forces")
+        if "stress" in self.model_config.outputs:
+            keys.add("stress")
+        return keys
+
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
@@ -440,6 +458,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces, virial = (
+                atomic_energies.detach(),
+                forces.detach(),
+                virial.detach(),
+            )
             atomic_virial = virial.view(N, 3, 3)
             virials = torch.zeros(
                 B, 3, 3, dtype=atomic_virial.dtype, device=positions.device
@@ -459,6 +482,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces = atomic_energies.detach(), forces.detach()
             virials = None
 
         # Scatter per-atom energies to per-system totals. For fp32 inputs,
