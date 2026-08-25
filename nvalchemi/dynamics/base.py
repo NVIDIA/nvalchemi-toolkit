@@ -2911,10 +2911,12 @@ class FusedStage(BaseDynamics):
     **Fired on sub-stages (in order):**
 
     - ``BEFORE_STEP`` — at the start of each fused step, before any work.
-    - ``AFTER_COMPUTE`` — after the shared model forward pass completes.
-    - ``BEFORE_PRE_UPDATE`` — before each sub-stage's ``masked_update``
+    - ``BEFORE_PRE_UPDATE`` — before each sub-stage's ``pre_update``
       (fires even when no samples match the sub-stage's status code).
-    - ``AFTER_POST_UPDATE`` — after each sub-stage's ``masked_update``
+    - ``AFTER_PRE_UPDATE`` — after each sub-stage's ``pre_update``.
+    - ``AFTER_COMPUTE`` — after the shared model forward pass completes.
+    - ``BEFORE_POST_UPDATE`` — before each sub-stage's ``post_update``.
+    - ``AFTER_POST_UPDATE`` — after each sub-stage's ``post_update``
       (fires even when no samples match the sub-stage's status code).
     - ``AFTER_STEP`` — after all masked updates are complete.
     - ``ON_CONVERGE`` — when a sub-stage's ``_check_convergence`` detects
@@ -2925,9 +2927,6 @@ class FusedStage(BaseDynamics):
     - ``BEFORE_COMPUTE`` — the forward pass is shared across all sub-stages,
       not executed per-sub-stage; there is no meaningful "before compute"
       point for individual sub-stages.
-    - ``AFTER_PRE_UPDATE`` — ``masked_update`` combines ``pre_update`` and
-      ``post_update`` atomically; there is no intermediate hook point.
-    - ``BEFORE_POST_UPDATE`` — same reason as ``AFTER_PRE_UPDATE``.
 
     **Step count semantics:** Each sub-stage's ``step_count`` is incremented
     alongside the ``FusedStage``'s own ``step_count`` after every fused step,
@@ -3321,12 +3320,12 @@ class FusedStage(BaseDynamics):
 
         Performs the following sequence:
         1. Fire BEFORE_STEP hooks (fused, self, sub-stages).
-        2. For each sub-stage: fire BEFORE_PRE_UPDATE, run pre_update
-           (positions advance to r(t+dt)).
+        2. For each sub-stage: fire BEFORE_PRE_UPDATE, run pre_update, then
+           fire AFTER_PRE_UPDATE (positions advance to r(t+dt)).
         3. Fire BEFORE_COMPUTE hooks (fused / self, e.g. NeighborListHook
            with new positions) → single shared forward pass → AFTER_COMPUTE.
-        4. For each sub-stage: run post_update (final velocity kick at
-           r(t+dt) forces), fire AFTER_POST_UPDATE.
+        4. For each sub-stage: fire BEFORE_POST_UPDATE, run post_update (final
+           velocity kick at r(t+dt) forces), then fire AFTER_POST_UPDATE.
         5. Snapshot status, then fire AFTER_STEP hooks on each sub-stage
            (ConvergenceHook migrates here) and apply counter migration.
         6. Check convergence per sub-stage and fire ON_CONVERGE if
@@ -3394,6 +3393,11 @@ class FusedStage(BaseDynamics):
             # graph-breaking host sync, and the masked update is a no-op for
             # all-False masks.
             dynamics._masked_pre_update(batch, active_graph_mask)
+            dynamics._call_hooks(
+                DynamicsStage.AFTER_PRE_UPDATE,
+                batch,
+                active_graph_mask,
+            )
 
         # Phase 2 — shared forward pass at the updated positions.
         self._call_hooks(

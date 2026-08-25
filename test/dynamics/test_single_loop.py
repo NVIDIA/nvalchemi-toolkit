@@ -1647,7 +1647,8 @@ class TestFusedStageSubstageHooks:
 
     Verifies that hooks registered on substages fire correctly during
     FusedStage.step(), including:
-    - BEFORE_STEP, AFTER_COMPUTE, BEFORE_PRE_UPDATE, AFTER_POST_UPDATE, AFTER_STEP
+    - BEFORE_STEP, BEFORE_PRE_UPDATE, AFTER_PRE_UPDATE, AFTER_COMPUTE
+    - BEFORE_POST_UPDATE, AFTER_POST_UPDATE, AFTER_STEP
     - ON_CONVERGE (when convergence is detected)
     - Hook frequency is respected
     - Correct firing order
@@ -1655,8 +1656,6 @@ class TestFusedStageSubstageHooks:
 
     Stages that are NOT fired on substages:
     - BEFORE_COMPUTE (compute is shared, not per-substage)
-    - AFTER_PRE_UPDATE (masked_update is atomic, no intermediate hooks)
-    - BEFORE_POST_UPDATE (same reason)
     """
 
     def setup_method(self) -> None:
@@ -1856,12 +1855,12 @@ class TestFusedStageSubstageHooks:
         assert len(cap1.masks) == 1
         assert cap1.masks[0].tolist() == [False, False, True]
 
-    def test_substage_before_post_update_hooks_fire(self) -> None:
-        """Only BEFORE_POST_UPDATE fires on substages before masked post-update.
+    def test_substage_split_update_hooks_fire(self) -> None:
+        """Split-update hooks fire around the shared model computation.
 
-        BEFORE_COMPUTE is shared, and AFTER_PRE_UPDATE has no intermediate
-        fused-stage boundary. BEFORE_POST_UPDATE is dispatched so hooks can
-        sanitize forces before each substage consumes them.
+        BEFORE_COMPUTE remains shared rather than firing per substage.
+        AFTER_PRE_UPDATE and BEFORE_POST_UPDATE fire at the corresponding
+        substage boundaries.
         """
         dynamics0 = BaseDynamics(model=self.model)
 
@@ -1881,7 +1880,7 @@ class TestFusedStageSubstageHooks:
         fused.step(batch)
 
         assert hook_before_compute.call_count == 0
-        assert hook_after_pre.call_count == 0
+        assert hook_after_pre.call_count == 1
         assert hook_before_post.call_count == 1
 
     def test_substage_step_count_incremented(self) -> None:
