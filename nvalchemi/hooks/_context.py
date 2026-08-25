@@ -67,10 +67,16 @@ class DynamicsContext(HookContext):
     converged_mask : torch.Tensor | None
         Boolean mask of samples that converged at the current hook stage.
         ``None`` when convergence has not fired for this dispatch.
+    active_graph_mask : torch.Tensor | None
+        Boolean mask of shape ``(batch.num_graphs,)`` selecting graphs active in
+        the current dynamics dispatch. ``None`` when the dispatch has no status-based
+        filtering (typically standalone ``BaseDynamics``). In a ``FusedStage``
+        substage, it selects graphs whose status matches that substage.
     """
 
     step_count: int = 0
     converged_mask: torch.Tensor | None = None
+    active_graph_mask: torch.Tensor | None = None
 
 
 @dataclass(kw_only=True)

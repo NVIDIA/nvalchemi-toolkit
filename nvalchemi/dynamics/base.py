@@ -1667,12 +1667,26 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             f"hooks={n_hooks})"
         )
 
-    def _call_hooks(self, stage: DynamicsStage, batch: Batch) -> None:
+    def _call_hooks(
+        self,
+        stage: DynamicsStage,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None,
+    ) -> None:
         """Execute hooks for the given stage with dynamics-specific tracking."""
         self.current_hook_stage = stage
-        super()._call_hooks(stage, batch)
+        super()._call_hooks(
+            stage,
+            batch,
+            active_graph_mask=active_graph_mask,
+        )
 
-    def _build_context(self, batch: Batch) -> DynamicsContext:
+    def _build_context(
+        self,
+        batch: Batch,
+        *,
+        active_graph_mask: torch.Tensor | None = None,
+    ) -> DynamicsContext:
         """Build a dynamics-specific hook context."""
         if self._last_converged is None:
             _mask = None
@@ -1688,6 +1702,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             batch=batch,
             step_count=self.step_count,
             model=self.model,
+            active_graph_mask=active_graph_mask,
             converged_mask=_mask,
             global_rank=self.global_rank,
             workflow=self,
@@ -2107,25 +2122,30 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         self._ensure_state_initialized(batch)
 
-        self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
+        # Prepare status-based active-graph filtering for this step.
+        status = getattr(batch, "status", None)
+        if status is None:
+            active_graph_mask = None
+        else:
+            status = status.squeeze(-1) if status.dim() == 2 else status
+            active_graph_mask = status[: batch.num_graphs] < self.exit_status
 
-        active_mask: torch.Tensor | None = None
-        if hasattr(batch, "status") and batch.status is not None:
-            status = (
-                batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
-            )
-            active_mask = status[: batch.num_graphs] < self.exit_status
+        self._call_hooks(
+            DynamicsStage.BEFORE_STEP,
+            batch,
+            active_graph_mask,
+        )
 
         saved: dict[str, torch.Tensor] = {}
-        if active_mask is not None:
+        if status is not None:
             node_mask_occupied = torch.repeat_interleave(
-                active_mask, batch.num_nodes_per_graph
+                active_graph_mask, batch.num_nodes_per_graph
             )
             node_mask = torch.zeros(
                 batch.num_nodes, dtype=torch.bool, device=batch.device
             )
             node_mask[: len(node_mask_occupied)] = node_mask_occupied
-            sys_mask = ~active_mask
+            sys_mask = ~active_graph_mask
             for field in self._mutable_fields:
                 val = getattr(batch, field, None)
                 if val is None:
@@ -2136,16 +2156,32 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     saved[field] = val[sys_mask].clone()
 
         with self._stream_scope(batch.device):
-            self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
+            self._call_hooks(
+                DynamicsStage.BEFORE_PRE_UPDATE,
+                batch,
+                active_graph_mask,
+            )
             self.pre_update(batch)
-            self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
-            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            self._call_hooks(
+                DynamicsStage.AFTER_PRE_UPDATE,
+                batch,
+                active_graph_mask,
+            )
+            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
             self.compute(batch)
-            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
-            self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
+            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
+            self._call_hooks(
+                DynamicsStage.BEFORE_POST_UPDATE,
+                batch,
+                active_graph_mask,
+            )
             self.post_update(batch)
-            self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
-        if active_mask is not None:
+            self._call_hooks(
+                DynamicsStage.AFTER_POST_UPDATE,
+                batch,
+                active_graph_mask,
+            )
+        if status is not None:
             with torch.no_grad():
                 for field, sv in saved.items():
                     val = getattr(batch, field)
@@ -2154,12 +2190,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     else:
                         val[sys_mask] = sv
 
-        self._call_hooks(DynamicsStage.AFTER_STEP, batch)
+        self._call_hooks(DynamicsStage.AFTER_STEP, batch, active_graph_mask)
 
         converged = self._check_convergence(batch)
         self._last_converged = converged
         if converged is not None:
-            self._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+            self._call_hooks(DynamicsStage.ON_CONVERGE, batch, active_graph_mask)
 
         self.step_count += 1
 
@@ -3215,7 +3251,13 @@ class FusedStage(BaseDynamics):
             )
         self.fused_hooks.append(hook)
 
-    def _call_fused_hooks(self, stage: DynamicsStage, batch: Batch) -> None:
+    def _call_fused_hooks(
+        self,
+        stage: DynamicsStage,
+        batch: Batch,
+        *,
+        active_graph_mask: torch.Tensor,
+    ) -> None:
         """Invoke all fused hooks registered for the given stage.
 
         Parameters
@@ -3225,7 +3267,7 @@ class FusedStage(BaseDynamics):
         batch : Batch
             The current full batch.
         """
-        ctx = self._build_context(batch)
+        ctx = self._build_context(batch, active_graph_mask=active_graph_mask)
         for hook in self.fused_hooks:
             runs_on_stage = getattr(hook, "_runs_on_stage", None)
             if runs_on_stage is not None:
@@ -3268,30 +3310,59 @@ class FusedStage(BaseDynamics):
             static-shaped so the whole method can be captured in a single
             dynamo graph; :meth:`step` converts it to the index contract.
         """
-        self._call_fused_hooks(DynamicsStage.BEFORE_STEP, batch)
-        self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
+        # Prepare status-based active-graph filtering for this step.
+        status = batch.status
+        if status.dim() == 2:
+            status = status.squeeze(-1)
+        status = status[: batch.num_graphs]
+        overall_active_graph_mask: torch.Tensor = status < self.exit_status
+        # Snapshot each sub-stage's ownership.
+        stage_active_masks: list[torch.Tensor] = [
+            status == status_code for status_code, _ in self.sub_stages
+        ]
 
-        for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(DynamicsStage.BEFORE_STEP, batch)
+        # Phase 0 - before step
+        self._call_fused_hooks(
+            DynamicsStage.BEFORE_STEP,
+            batch,
+            overall_active_graph_mask,
+        )
+        self._call_hooks(
+            DynamicsStage.BEFORE_STEP,
+            batch,
+            overall_active_graph_mask,
+        )
+        for (_, dynamics), active_graph_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
+        ):
+            dynamics._call_hooks(
+                DynamicsStage.BEFORE_STEP,
+                batch,
+                active_graph_mask,
+            )
 
         # Phase 1 — pre_update for each sub-stage.
         # This moves positions to r(t+dt) so that the shared compute can
         # evaluate forces at the correct (updated) positions.
-        status = batch.status
-        if status.dim() == 2:
-            status = status.squeeze(-1)
-
-        stage_active_masks: list[torch.Tensor] = []
-        for status_code, dynamics in self.sub_stages:
-            mask = status == status_code
-            stage_active_masks.append(mask)
-            dynamics._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
-            # Unconditional: `if mask.any():` would be a graph-breaking host
-            # sync, and the masked update is a no-op for all-False masks.
-            dynamics._masked_pre_update(batch, mask)
+        for (_, dynamics), active_graph_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
+        ):
+            dynamics._call_hooks(
+                DynamicsStage.BEFORE_PRE_UPDATE,
+                batch,
+                active_graph_mask,
+            )
+            # Unconditional: `if active_graph_mask.any():` would be a
+            # graph-breaking host sync, and the masked update is a no-op for
+            # all-False masks.
+            dynamics._masked_pre_update(batch, active_graph_mask)
 
         # Phase 2 — shared forward pass at the updated positions.
-        self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+        self._call_hooks(
+            DynamicsStage.BEFORE_COMPUTE,
+            batch,
+            overall_active_graph_mask,
+        )
 
         outputs: ModelOutputs = self.compute(batch)
 
@@ -3300,15 +3371,30 @@ class FusedStage(BaseDynamics):
             if key not in ("forces", "energy") and tensor is not None:
                 batch[key] = tensor
 
-        self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
-        for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+        self._call_hooks(
+            DynamicsStage.AFTER_COMPUTE,
+            batch,
+            overall_active_graph_mask,
+        )
+        for (_, dynamics), active_graph_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
+        ):
+            dynamics._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
 
         # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
-        for status_code, dynamics in self.sub_stages:
-            mask = status == status_code
-            dynamics._masked_post_update(batch, mask)
-            dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
+        for (_, dynamics), active_graph_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
+        ):
+            dynamics._masked_post_update(batch, active_graph_mask)
+            dynamics._call_hooks(
+                DynamicsStage.AFTER_POST_UPDATE,
+                batch,
+                active_graph_mask,
+            )
 
         # Snapshot before hook and counter migration so both are reported
         # in exit_converged.
@@ -3316,11 +3402,25 @@ class FusedStage(BaseDynamics):
         if pre_migration_status.dim() == 2:
             pre_migration_status = pre_migration_status.squeeze(-1)
 
-        for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(DynamicsStage.AFTER_STEP, batch)
+        for (_, dynamics), active_graph_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
+        ):
+            dynamics._call_hooks(
+                DynamicsStage.AFTER_STEP,
+                batch,
+                active_graph_mask,
+            )
 
-        self._call_hooks(DynamicsStage.AFTER_STEP, batch)
-        self._call_fused_hooks(DynamicsStage.AFTER_STEP, batch)
+        self._call_hooks(
+            DynamicsStage.AFTER_STEP,
+            batch,
+            overall_active_graph_mask,
+        )
+        self._call_fused_hooks(
+            DynamicsStage.AFTER_STEP,
+            batch,
+            active_graph_mask=overall_active_graph_mask,
+        )
 
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
             if dynamics.n_steps is None:
@@ -3361,8 +3461,8 @@ class FusedStage(BaseDynamics):
                 torch.where(migrate.unsqueeze(-1), torch.zeros_like(counter), counter)
             )
 
-        for active_mask, (_, dynamics) in zip(
-            stage_active_masks, self.sub_stages, strict=True
+        for (_, dynamics), active_mask in zip(
+            self.sub_stages, stage_active_masks, strict=True
         ):
             hook = dynamics.convergence_hook
             if hook is None:
@@ -3375,7 +3475,11 @@ class FusedStage(BaseDynamics):
             stage_converged = hook.evaluate_mask(batch) & active_mask
             dynamics._last_converged = stage_converged
             if dynamics._has_hooks_for_stage(DynamicsStage.ON_CONVERGE):
-                dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+                dynamics._call_hooks(
+                    DynamicsStage.ON_CONVERGE,
+                    batch,
+                    active_mask,
+                )
 
         self.step_count += 1
         for _, dynamics in self.sub_stages:
@@ -3562,9 +3666,16 @@ class FusedStage(BaseDynamics):
             # them.  _step_impl now runs pre_update BEFORE compute, so without
             # this initial forward pass the first step would integrate with
             # zero (uninitialised) forces.
-            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            status = getattr(batch, "status", None)
+            if status is None:
+                active_graph_mask = None
+            else:
+                if status.dim() == 2:
+                    status = status.squeeze(-1)
+                active_graph_mask = status[: batch.num_graphs] < self.exit_status
+            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
             self.compute(batch)
-            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
 
             step_num = 0
             while True:

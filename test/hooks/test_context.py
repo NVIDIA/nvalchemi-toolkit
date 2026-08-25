@@ -69,12 +69,14 @@ class TestDynamicsContext:
         mock_batch = MagicMock()
         mock_model = MagicMock()
         mock_converged = torch.tensor([True, False])
+        mock_active = torch.tensor([False, True])
 
         ctx = DynamicsContext(
             batch=mock_batch,
             step_count=42,
             model=mock_model,
             converged_mask=mock_converged,
+            active_graph_mask=mock_active,
             global_rank=2,
         )
 
@@ -82,6 +84,7 @@ class TestDynamicsContext:
         assert ctx.step_count == 42
         assert ctx.model is mock_model
         assert ctx.converged_mask is mock_converged
+        assert ctx.active_graph_mask is mock_active
         assert ctx.global_rank == 2
 
     def test_default_values_for_dynamics_fields(self):
@@ -90,6 +93,7 @@ class TestDynamicsContext:
 
         assert ctx.step_count == 0
         assert ctx.converged_mask is None
+        assert ctx.active_graph_mask is None
         assert ctx.model is None
         assert ctx.global_rank == 0
 
