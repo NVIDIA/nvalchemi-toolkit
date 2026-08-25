@@ -249,6 +249,7 @@ def neb_effective_force_from_gram_stats(
 # Equations for climbing NEB
 # =============================================================================
 
+
 @wp.func
 def climbing_image_effective_force(
     physical_force: Any,

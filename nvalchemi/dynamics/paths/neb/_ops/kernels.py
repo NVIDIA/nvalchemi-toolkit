@@ -195,7 +195,7 @@ def build_stored_tangent_neb_kernel(
         link_lengths: wp.array(dtype=Any),
     ):
         """Compute fused NEB forces using a stored per-atom tangent.
-        
+
         One block owns each image. The kernel stores per-atom tangents and
         reduces only the scalar statistics needed to construct effective forces.
 
