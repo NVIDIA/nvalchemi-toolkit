@@ -36,11 +36,7 @@ from typing import Any
 
 import warp as wp
 
-from .modes import (
-    CLIMBING_NEB,
-    INACTIVE_INTERIOR,
-    RELAXED_ENDPOINT,
-)
+from .modes import CLIMBING_NEB, ENDPOINT
 
 __all__ = [
     "build_gram_stats_neb_kernel",
@@ -188,7 +184,6 @@ def build_stored_tangent_neb_kernel(
         path_ptr: wp.array(dtype=wp.int32),
         image_path_idx: wp.array(dtype=wp.int32),
         spring_constants: wp.array(dtype=Any),
-        fixed_atom_mask: wp.array(dtype=wp.bool),
         image_force_mode: wp.array(dtype=wp.int32),
         path_energy_ref: wp.array(dtype=Any),
         path_energy_max: wp.array(dtype=Any),
@@ -218,8 +213,6 @@ def build_stored_tangent_neb_kernel(
             Path index of each image.
         spring_constants : wp.array, shape (num_images - num_paths,), dtype wp.float32 or wp.float64
             Spring constant for each forward link in path-major order.
-        fixed_atom_mask : wp.array, shape (num_atoms,), dtype wp.bool
-            Whether the effective force of each atom is constrained to zero.
         image_force_mode : wp.array, shape (num_images,), dtype wp.int32
             Effective-force mode of each image.
         path_energy_ref, path_energy_max : wp.array, shape (num_paths,), dtype wp.float32 or wp.float64
@@ -250,7 +243,7 @@ def build_stored_tangent_neb_kernel(
         is_first = image_idx == path_ptr[path_idx]
         is_last = image_idx == path_ptr[path_idx + 1] - 1
         is_interior = not is_first and not is_last
-        should_compute_force = is_interior and mode != INACTIVE_INTERIOR
+        should_compute_force = is_interior
         zero = type(image_energies[0])(0.0)
 
         # --- Tangent-weight selection ---
@@ -308,12 +301,12 @@ def build_stored_tangent_neb_kernel(
             if lane == 0:
                 link_lengths[image_idx - path_idx] = wp.sqrt(dplus_sq)
 
-        # --- Endpoints and fixed atoms ---
+        # --- Endpoint forces ---
 
         if not should_compute_force:
             atom_idx = atom_start + lane
             while atom_idx < atom_stop:
-                if mode == RELAXED_ENDPOINT and not fixed_atom_mask[atom_idx]:
+                if mode == ENDPOINT:
                     effective_forces[atom_idx] = physical_forces[atom_idx]
                 else:
                     effective_forces[atom_idx] = positions[atom_idx] * zero
@@ -384,7 +377,7 @@ def build_stored_tangent_neb_kernel(
         k_minus = spring_constants[forward_link - 1]
         atom_idx = atom_start + lane
         while atom_idx < atom_stop:
-            if fallback == 3 or fixed_atom_mask[atom_idx]:
+            if fallback == 3:
                 effective_forces[atom_idx] = positions[atom_idx] * zero
             elif mode == CLIMBING_NEB:
                 effective_forces[atom_idx] = climbing_force_fn(
@@ -465,7 +458,6 @@ def build_gram_stats_neb_kernel(
         path_ptr: wp.array(dtype=wp.int32),
         image_path_idx: wp.array(dtype=wp.int32),
         spring_constants: wp.array(dtype=Any),
-        fixed_atom_mask: wp.array(dtype=wp.bool),
         image_force_mode: wp.array(dtype=wp.int32),
         path_energy_ref: wp.array(dtype=Any),
         path_energy_max: wp.array(dtype=Any),
@@ -494,8 +486,6 @@ def build_gram_stats_neb_kernel(
             Path index of each image.
         spring_constants : wp.array, shape (num_images - num_paths,), dtype wp.float32 or wp.float64
             Spring constant for each forward link in path-major order.
-        fixed_atom_mask : wp.array, shape (num_atoms,), dtype wp.bool
-            Whether the effective force of each atom is constrained to zero.
         image_force_mode : wp.array, shape (num_images,), dtype wp.int32
             Effective-force mode of each image.
         path_energy_ref, path_energy_max : wp.array, shape (num_paths,), dtype wp.float32 or wp.float64
@@ -523,7 +513,7 @@ def build_gram_stats_neb_kernel(
         is_first = image_idx == path_ptr[path_idx]
         is_last = image_idx == path_ptr[path_idx + 1] - 1
         is_interior = not is_first and not is_last
-        should_compute_force = is_interior and mode != INACTIVE_INTERIOR
+        should_compute_force = is_interior
         zero = type(image_energies[0])(0.0)
 
         # --- Tangent-weight selection ---
@@ -594,12 +584,12 @@ def build_gram_stats_neb_kernel(
             if lane == 0:
                 link_lengths[image_idx - path_idx] = wp.sqrt(dplus_sq)
 
-        # --- Endpoints and fixed atoms ---
+        # --- Endpoint forces ---
 
         if not should_compute_force:
             atom_idx = atom_start + lane
             while atom_idx < atom_stop:
-                if mode == RELAXED_ENDPOINT and not fixed_atom_mask[atom_idx]:
+                if mode == ENDPOINT:
                     effective_forces[atom_idx] = physical_forces[atom_idx]
                 else:
                     effective_forces[atom_idx] = positions[atom_idx] * zero
@@ -688,7 +678,7 @@ def build_gram_stats_neb_kernel(
             elif fallback == 2:
                 tangent = d_minus / dminus_norm
 
-            if fallback == 3 or fixed_atom_mask[atom_idx]:
+            if fallback == 3:
                 effective_forces[atom_idx] = positions[atom_idx] * zero
             elif mode == CLIMBING_NEB:
                 effective_forces[atom_idx] = climbing_force_fn(

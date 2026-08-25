@@ -66,7 +66,6 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         path_ptr,
         image_path_idx,
         springs,
-        fixed,
         modes,
         energy_ref,
         energy_max,
@@ -120,13 +119,6 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
             or not tensor.is_contiguous()
         ):
             raise ValueError(f"{name} must be a matching contiguous int32 tensor")
-    if (
-        fixed.shape != (a,)
-        or fixed.dtype != torch.bool
-        or fixed.device != pos.device
-        or not fixed.is_contiguous()
-    ):
-        raise ValueError("fixed_atom_mask must be a matching contiguous bool tensor")
     if (
         pbc.shape != (p, 3)
         or pbc.dtype != torch.bool
@@ -221,7 +213,6 @@ def _stored_tangent_neb_forces_out_op(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -243,7 +234,6 @@ def _stored_tangent_neb_forces_out_op(
             path_ptr,
             image_path_idx,
             spring_constants,
-            fixed_atom_mask,
             image_force_mode,
             path_energy_ref,
             path_energy_max,
@@ -269,7 +259,6 @@ def _gram_stats_neb_forces_out_op(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -290,7 +279,6 @@ def _gram_stats_neb_forces_out_op(
             path_ptr,
             image_path_idx,
             spring_constants,
-            fixed_atom_mask,
             image_force_mode,
             path_energy_ref,
             path_energy_max,
@@ -322,7 +310,6 @@ def stored_tangent_neb_forces(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -351,8 +338,6 @@ def stored_tangent_neb_forces(
         Path index of every image.
     spring_constants : torch.Tensor, shape (num_images - num_paths,)
         Effective spring constant of every path link.
-    fixed_atom_mask : torch.Tensor, shape (num_atoms,), dtype bool
-        Whether each atom's effective force is constrained to zero.
     image_force_mode : torch.Tensor, shape (num_images,), dtype int32
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
@@ -385,7 +370,6 @@ def stored_tangent_neb_forces(
         path_ptr,
         image_path_idx,
         spring_constants,
-        fixed_atom_mask,
         image_force_mode,
         path_energy_ref,
         path_energy_max,
@@ -429,7 +413,6 @@ def gram_stats_neb_forces(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -457,8 +440,6 @@ def gram_stats_neb_forces(
         Path index of every image.
     spring_constants : torch.Tensor, shape (num_images - num_paths,)
         Effective spring constant of every path link.
-    fixed_atom_mask : torch.Tensor, shape (num_atoms,), dtype bool
-        Whether each atom's effective force is constrained to zero.
     image_force_mode : torch.Tensor, shape (num_images,), dtype int32
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
@@ -489,7 +470,6 @@ def gram_stats_neb_forces(
         path_ptr,
         image_path_idx,
         spring_constants,
-        fixed_atom_mask,
         image_force_mode,
         path_energy_ref,
         path_energy_max,
@@ -524,7 +504,6 @@ def neb_forces(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -554,8 +533,6 @@ def neb_forces(
         Path index of every image.
     spring_constants : torch.Tensor, shape (num_images - num_paths,)
         Effective spring constant of every path link.
-    fixed_atom_mask : torch.Tensor, shape (num_atoms,), dtype bool
-        Whether each atom's effective force is constrained to zero.
     image_force_mode : torch.Tensor, shape (num_images,), dtype int32
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
@@ -591,7 +568,6 @@ def neb_forces(
         path_ptr,
         image_path_idx,
         spring_constants,
-        fixed_atom_mask,
         image_force_mode,
         path_energy_ref,
         path_energy_max,

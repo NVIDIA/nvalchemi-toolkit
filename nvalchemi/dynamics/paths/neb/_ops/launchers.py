@@ -52,7 +52,6 @@ def _neb_kernel_arg_types(dtype: object, stored: bool) -> list[object]:
         wp.array(dtype=wp.int32),
         wp.array(dtype=wp.int32),
         wp.array(dtype=dtype),
-        wp.array(dtype=wp.bool),
         wp.array(dtype=wp.int32),
         wp.array(dtype=dtype),
         wp.array(dtype=dtype),

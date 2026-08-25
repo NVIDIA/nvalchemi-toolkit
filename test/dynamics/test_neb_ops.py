@@ -16,7 +16,7 @@ from nvalchemi.dynamics.paths.neb._ops.launchers import (
 )
 from nvalchemi.dynamics.paths.neb._ops.modes import (
     CLIMBING_NEB,
-    FIXED_ENDPOINT,
+    ENDPOINT,
     REGULAR_NEB,
 )
 from nvalchemi.dynamics.paths.neb._ops.registry import (
@@ -52,7 +52,6 @@ def _inputs(device: str = "cuda", dtype: torch.dtype = torch.float64):
         torch.tensor([0, 3], device=device, dtype=torch.int32),
         torch.zeros(3, device=device, dtype=torch.int32),
         torch.tensor([0.1, 0.15], device=device, dtype=dtype),
-        torch.zeros(6, device=device, dtype=torch.bool),
         torch.tensor([0, 2, 0], device=device, dtype=torch.int32),
         torch.tensor([0], device=device, dtype=dtype),
         torch.tensor([1], device=device, dtype=dtype),
@@ -88,7 +87,6 @@ def _naive_improved_tangent_neb_forces(
     path_ptr: torch.Tensor,
     image_path_idx: torch.Tensor,
     spring_constants: torch.Tensor,
-    fixed_atom_mask: torch.Tensor,
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
@@ -107,6 +105,12 @@ def _naive_improved_tangent_neb_forces(
     for path_idx in range(num_paths):
         image_start = int(path_ptr[path_idx])
         image_stop = int(path_ptr[path_idx + 1])
+        for image_idx in (image_start, image_stop - 1):
+            atom_start = int(image_ptr[image_idx])
+            atom_stop = int(image_ptr[image_idx + 1])
+            effective_forces[atom_start:atom_stop] = physical_forces[
+                atom_start:atom_stop
+            ]
         for image_idx in range(image_start, image_stop - 1):
             atom_start = int(image_ptr[image_idx])
             atom_stop = int(image_ptr[image_idx + 1])
@@ -170,11 +174,7 @@ def _naive_improved_tangent_neb_forces(
                     + (spring_parallel - force_dot_tangent) * unit_tangent
                 )
 
-    return torch.where(
-        fixed_atom_mask[:, None],
-        torch.zeros_like(effective_forces),
-        effective_forces,
-    ), link_lengths
+    return effective_forces, link_lengths
 
 
 # =============================================================================
@@ -312,8 +312,8 @@ class TestImprovedTangentNumerics:
     ) -> None:
         """Warp improved-tangent and climbing forces match an independent oracle."""
         inputs = list(_inputs(device=device, dtype=dtype))
-        inputs[8] = torch.tensor(
-            [FIXED_ENDPOINT, mode, FIXED_ENDPOINT],
+        inputs[7] = torch.tensor(
+            [ENDPOINT, mode, ENDPOINT],
             dtype=torch.int32,
             device=device,
         )
