@@ -2201,6 +2201,38 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         return batch, converged
 
+    def _prime_forces(
+        self,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None,
+    ) -> None:
+        """Run the compute hook lifecycle before the first integration step.
+
+        Executes ``BEFORE_COMPUTE`` hooks, :meth:`compute`, and
+        ``AFTER_COMPUTE`` hooks once to initialize the batch's model outputs.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch whose model outputs are initialized in-place.
+        active_graph_mask : torch.Tensor | None
+            Boolean mask selecting active graphs, or ``None`` when the batch
+            does not use status-based filtering.
+        """
+        self._ensure_state_initialized(batch)
+        with self._stream_scope(batch.device):
+            self._call_hooks(
+                DynamicsStage.BEFORE_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
+            self.compute(batch)
+            self._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
+
     def run(self, batch: Batch, n_steps: int | None = None) -> Batch:
         """
         Run the dynamics simulation for a specified number of steps.
@@ -2244,6 +2276,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             )
         self._open_hooks()
         try:
+            status = getattr(batch, "status", None)
+            if status is None:
+                active_graph_mask = None
+            else:
+                status = status.squeeze(-1) if status.dim() == 2 else status
+                active_graph_mask = status[: batch.num_graphs] < self.exit_status
+            self._prime_forces(batch, active_graph_mask)
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
                 # Early exit when every system has satisfied the convergence
@@ -3255,7 +3294,6 @@ class FusedStage(BaseDynamics):
         self,
         stage: DynamicsStage,
         batch: Batch,
-        *,
         active_graph_mask: torch.Tensor,
     ) -> None:
         """Invoke all fused hooks registered for the given stage.
@@ -3389,6 +3427,11 @@ class FusedStage(BaseDynamics):
         for (_, dynamics), active_graph_mask in zip(
             self.sub_stages, stage_active_masks, strict=True
         ):
+            dynamics._call_hooks(
+                DynamicsStage.BEFORE_POST_UPDATE,
+                batch,
+                active_graph_mask,
+            )
             dynamics._masked_post_update(batch, active_graph_mask)
             dynamics._call_hooks(
                 DynamicsStage.AFTER_POST_UPDATE,
@@ -3595,6 +3638,33 @@ class FusedStage(BaseDynamics):
         for _, dynamics in self.sub_stages:
             dynamics._close_hooks()
 
+    def _prime_forces(
+        self,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None,
+    ) -> None:
+        """Prime shared forces and dispatch post-compute substage hooks.
+
+        Parameters
+        ----------
+        batch : Batch
+            Shared batch whose model outputs are initialized in-place.
+        active_graph_mask : torch.Tensor | None
+            Boolean mask selecting all active graphs.
+        """
+        super()._prime_forces(batch, active_graph_mask)
+
+        status = batch.status
+        if status.dim() == 2:
+            status = status.squeeze(-1)
+        status = status[: batch.num_graphs]
+        for status_code, dynamics in self.sub_stages:
+            dynamics._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                batch,
+                status == status_code,
+            )
+
     def run(
         self, batch: Batch | None = None, n_steps: int | None = None
     ) -> Batch | None:
@@ -3666,16 +3736,11 @@ class FusedStage(BaseDynamics):
             # them.  _step_impl now runs pre_update BEFORE compute, so without
             # this initial forward pass the first step would integrate with
             # zero (uninitialised) forces.
-            status = getattr(batch, "status", None)
-            if status is None:
-                active_graph_mask = None
-            else:
-                if status.dim() == 2:
-                    status = status.squeeze(-1)
-                active_graph_mask = status[: batch.num_graphs] < self.exit_status
-            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
-            self.compute(batch)
-            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
+            status = batch.status
+            if status.dim() == 2:
+                status = status.squeeze(-1)
+            active_graph_mask = status[: batch.num_graphs] < self.exit_status
+            self._prime_forces(batch, active_graph_mask)
 
             step_num = 0
             while True:

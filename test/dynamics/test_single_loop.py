@@ -39,6 +39,7 @@ from nvalchemi.dynamics.base import (
     Hook,
     _CommunicationMixin,
 )
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext
@@ -571,6 +572,25 @@ class TestFusedStage:
 
         # Should stop after 1 step since all migrate to exit_status=1
         assert fused.step_count == 1
+
+    def test_run_matches_standalone_dynamics(self) -> None:
+        """Single-stage fused and standalone runs have identical trajectories."""
+        model = CompilerFriendlyModel()
+        standalone = DemoDynamics(model=model, n_steps=3, dt=0.1)
+        fused_dynamics = DemoDynamics(model=model, n_steps=3, dt=0.1)
+        fused = FusedStage(sub_stages=[(0, fused_dynamics)])
+
+        standalone_batch = create_batch_with_status(n_graphs=3)
+        standalone_batch.status = torch.zeros(3, dtype=torch.long)
+        standalone_batch.velocities = torch.arange(9, dtype=torch.float32).view(3, 3)
+        fused_batch = standalone_batch.clone()
+
+        standalone.run(standalone_batch)
+        fused.run(fused_batch)
+
+        torch.testing.assert_close(fused_batch.positions, standalone_batch.positions)
+        torch.testing.assert_close(fused_batch.velocities, standalone_batch.velocities)
+        torch.testing.assert_close(fused_batch.forces, standalone_batch.forces)
 
     def test_step_increments_count(self) -> None:
         """step() should increment step_count."""
@@ -1836,16 +1856,12 @@ class TestFusedStageSubstageHooks:
         assert len(cap1.masks) == 1
         assert cap1.masks[0].tolist() == [False, False, True]
 
-    def test_non_applicable_stages_not_fired(self) -> None:
-        """BEFORE_COMPUTE, AFTER_PRE_UPDATE, and BEFORE_POST_UPDATE should NOT fire on substages.
+    def test_substage_before_post_update_hooks_fire(self) -> None:
+        """Only BEFORE_POST_UPDATE fires on substages before masked post-update.
 
-        These stages are intentionally not fired on substages because:
-        - BEFORE_COMPUTE: compute is shared, not per-substage
-        - AFTER_PRE_UPDATE: masked_update is atomic, no intermediate hooks
-        - BEFORE_POST_UPDATE: same reason
-
-        Registers hooks for all three stages, steps once, and verifies
-        all hooks have call_count == 0.
+        BEFORE_COMPUTE is shared, and AFTER_PRE_UPDATE has no intermediate
+        fused-stage boundary. BEFORE_POST_UPDATE is dispatched so hooks can
+        sanitize forces before each substage consumes them.
         """
         dynamics0 = BaseDynamics(model=self.model)
 
@@ -1866,7 +1882,7 @@ class TestFusedStageSubstageHooks:
 
         assert hook_before_compute.call_count == 0
         assert hook_after_pre.call_count == 0
-        assert hook_before_post.call_count == 0
+        assert hook_before_post.call_count == 1
 
     def test_substage_step_count_incremented(self) -> None:
         """Substages and FusedStage should have step_count incremented together.
