@@ -123,6 +123,29 @@ class TestFreezeAtomsHook:
         # Unfrozen positions should remain perturbed
         assert torch.allclose(batch.positions[~mask], original_unfrozen_positions + 1.0)
 
+    def test_only_active_graphs_are_frozen(self, device: str) -> None:
+        """Leave frozen atoms in inactive substages untouched."""
+        batch = _make_batch(n_atoms=2, n_frozen=1, n_graphs=2, device=device)
+        hook = FreezeAtomsHook()
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False], device=device)
+        positions_before = batch.positions.clone()
+        velocities_before = batch.velocities.clone()
+        forces_before = batch.forces.clone()
+
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
+        batch.positions.add_(1.0)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
+
+        assert torch.allclose(batch.positions[1], positions_before[1])
+        assert torch.allclose(
+            batch.velocities[1], torch.zeros_like(batch.velocities[1])
+        )
+        assert torch.allclose(batch.forces[1], torch.zeros_like(batch.forces[1]))
+        assert torch.allclose(batch.positions[3], positions_before[3] + 1.0)
+        assert torch.allclose(batch.velocities[3], velocities_before[3])
+        assert torch.allclose(batch.forces[3], forces_before[3])
+
     def test_velocities_zeroed(self, device: str) -> None:
         """Verify frozen atom velocities are zeroed."""
         batch = _make_batch(n_atoms=6, n_frozen=2, device=device)

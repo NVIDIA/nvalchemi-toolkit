@@ -307,12 +307,17 @@ class MaxForceClampHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place."""
-        self._clamp_forces(ctx.batch)
+        self._clamp_forces(ctx.batch, ctx.active_graph_mask)
 
-    def _clamp_forces(self, batch: Batch) -> None:
+    def _clamp_forces(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place."""
         norms = torch.linalg.vector_norm(batch.forces, dim=-1, keepdim=True)  # (V, 1)
         needs_clamp = norms > self.max_force  # (V, 1) bool
+        if active_graph_mask is not None:
+            active_atoms = active_graph_mask[batch.batch_idx].unsqueeze(-1)
+            needs_clamp = needs_clamp & active_atoms
 
         # Always compute and apply scale unconditionally (torch.compile-friendly).
         # torch.where is a no-op when nothing needs clamping.

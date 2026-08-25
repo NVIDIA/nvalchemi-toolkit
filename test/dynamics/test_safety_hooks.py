@@ -293,6 +293,21 @@ class TestMaxForceClampHook:
 
         assert torch.allclose(batch.forces, forces_before)
 
+    def test_only_active_graphs_are_clamped(self) -> None:
+        """Clamp forces only for graphs selected by the substage mask."""
+        hook = MaxForceClampHook(max_force=1.0)
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2)
+        batch.__dict__["forces"] = torch.tensor(
+            [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0], [20.0, 0.0, 0.0]]
+        )
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False])
+
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert torch.allclose(batch.forces[:2, 0], torch.ones(2))
+        assert torch.allclose(batch.forces[2:, 0], torch.full((2,), 20.0))
+
     def test_clamps_above_threshold(self) -> None:
         """Verify forces above threshold are clamped to max_force."""
         max_force = 5.0

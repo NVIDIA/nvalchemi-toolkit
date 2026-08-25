@@ -150,7 +150,9 @@ class FreezeAtomsHook:
         """
         return stage in self._active_stages
 
-    def _restore(self, batch: Batch) -> None:
+    def _restore(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
         """Restore frozen atom positions and zero velocities/forces.
 
         The restore logic runs under :func:`torch.no_grad` because
@@ -166,7 +168,10 @@ class FreezeAtomsHook:
         """
         with torch.no_grad():
             # mask shape: [V] -> [V, 1] for broadcasting with [V, 3]
-            mask = (batch.atom_categories == self.freeze_category).unsqueeze(-1)
+            mask = batch.atom_categories == self.freeze_category
+            if active_graph_mask is not None:
+                mask = mask & active_graph_mask[batch.batch_idx]
+            mask = mask.unsqueeze(-1)
             zeros = torch.zeros_like(batch.positions)
 
             batch.positions.copy_(
@@ -181,4 +186,4 @@ class FreezeAtomsHook:
         if stage == DynamicsStage.BEFORE_PRE_UPDATE:
             self._saved_positions = ctx.batch.positions.clone()
         else:
-            self._restore(ctx.batch)
+            self._restore(ctx.batch, ctx.active_graph_mask)
