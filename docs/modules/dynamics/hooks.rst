@@ -312,23 +312,17 @@ checking so the detector sees the corrected forces:
 Hooks inside ``FusedStage``
 ---------------------------
 
-When hooks are registered on sub-stage dynamics inside a
-:class:`~nvalchemi.dynamics.FusedStage`, their firing semantics differ
-slightly from standalone execution:
+Hooks may be registered directly on a
+:class:`~nvalchemi.dynamics.FusedStage` or on any of its sub-stages. Shared step
+and compute boundaries fire at both levels. Integrator update boundaries fire
+only on sub-stages, which own the corresponding masked updates. Fused-stage
+hooks receive the full batch with the overall active mask, while each sub-stage
+hook receives the same batch with its status-specific mask.
 
-**Fired on each sub-stage:**
-
-- ``BEFORE_STEP``, ``AFTER_COMPUTE``, ``BEFORE_PRE_UPDATE``,
-  ``AFTER_POST_UPDATE``, ``AFTER_STEP``, ``ON_CONVERGE``
-
-**Not fired on sub-stages** (because the forward pass is shared):
-
-- ``BEFORE_COMPUTE``, ``AFTER_PRE_UPDATE``, ``BEFORE_POST_UPDATE``
-
-This means safety hooks (``NaNDetectorHook``, ``MaxForceClampHook``)
-and observer hooks (``LoggingHook``, ``SnapshotHook``) work as expected
-inside fused stages, since they fire at ``AFTER_COMPUTE`` or
-``AFTER_STEP``.
+At shared ``BEFORE_*`` boundaries, the fused-stage hooks fire before the
+sub-stage hooks. At shared ``AFTER_*`` boundaries, the sub-stage hooks fire
+before the fused-stage hooks. The update boundaries and ``ON_CONVERGE`` are
+sub-stage-only; registering those hooks on ``FusedStage`` emits a warning.
 
 Hook ordering inside a fused step:
 
@@ -341,46 +335,41 @@ Hook ordering inside a fused step:
        node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
        edge [fontsize=10 style=bold]
 
-       subgraph cluster_before {
-           label="for each sub-stage"
-           style=dashed
-           color="#76b900"
-           fontcolor="#76b900"
-           fontsize=10
-           BEFORE_STEP [label="BEFORE_STEP hooks"]
-       }
+       fused_before_step [label="FusedStage BEFORE_STEP hooks" fillcolor="#4a3315"]
+       sub_before_step [label="each sub-stage BEFORE_STEP hooks\n(in sub-stage order)"]
 
-       compute [label="single compute()" fillcolor="#4a3315"]
-
-       subgraph cluster_after_compute {
-           label="for each sub-stage"
-           style=dashed
-           color="#76b900"
-           fontcolor="#76b900"
-           fontsize=10
-           AFTER_COMPUTE [label="AFTER_COMPUTE hooks"]
-       }
-
-       subgraph cluster_update {
+       subgraph cluster_pre_update {
            label="for each sub-stage"
            style=dashed
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
            BEFORE_PRE [label="BEFORE_PRE_UPDATE hooks"]
-           masked     [label="masked_update()\n(if samples match status)" fillcolor="#1a1a1a"]
-           AFTER_POST [label="AFTER_POST_UPDATE hooks"]
-           BEFORE_PRE -> masked -> AFTER_POST
+           pre_update [label="masked_pre_update()" fillcolor="#1a1a1a"]
+           AFTER_PRE [label="AFTER_PRE_UPDATE hooks"]
+           BEFORE_PRE -> pre_update -> AFTER_PRE
        }
 
-       subgraph cluster_after_step {
+       fused_before_compute [label="FusedStage BEFORE_COMPUTE hooks" fillcolor="#4a3315"]
+       sub_before_compute [label="each sub-stage BEFORE_COMPUTE hooks\n(in sub-stage order)"]
+       compute [label="single shared compute()" fillcolor="#4a3315"]
+       sub_after_compute [label="each sub-stage AFTER_COMPUTE hooks\n(in sub-stage order)"]
+       fused_after_compute [label="FusedStage AFTER_COMPUTE hooks" fillcolor="#4a3315"]
+
+       subgraph cluster_post_update {
            label="for each sub-stage"
            style=dashed
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
-           AFTER_STEP [label="AFTER_STEP hooks"]
+           BEFORE_POST [label="BEFORE_POST_UPDATE hooks"]
+           post_update [label="masked_post_update()" fillcolor="#1a1a1a"]
+           AFTER_POST [label="AFTER_POST_UPDATE hooks"]
+           BEFORE_POST -> post_update -> AFTER_POST
        }
+
+       sub_after_step [label="each sub-stage AFTER_STEP hooks\n(in sub-stage order)"]
+       fused_after_step [label="FusedStage AFTER_STEP hooks" fillcolor="#4a3315"]
 
        subgraph cluster_converge {
            label="for each sub-stage"
@@ -388,18 +377,29 @@ Hook ordering inside a fused step:
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
-           conv_check  [label="convergence check" fillcolor="#1a1a1a"]
-           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#4a3315"]
-           conv_check -> ON_CONVERGE [style=dashed label="if converged"]
+           conv_check  [label="convergence evaluation" fillcolor="#1a1a1a"]
+           ON_CONVERGE [label="ON_CONVERGE hooks\n(with convergence mask)"]
+           conv_check -> ON_CONVERGE [style=dashed]
        }
 
-       BEFORE_STEP -> compute
-       compute -> AFTER_COMPUTE
-       AFTER_COMPUTE -> BEFORE_PRE
-       AFTER_POST -> AFTER_STEP
-       AFTER_STEP -> conv_check
+       fused_before_step -> sub_before_step
+       sub_before_step -> BEFORE_PRE [lhead=cluster_pre_update]
+       AFTER_PRE -> fused_before_compute [ltail=cluster_pre_update]
+       fused_before_compute -> sub_before_compute
+       sub_before_compute -> compute
+       compute -> sub_after_compute
+       sub_after_compute -> fused_after_compute
+       fused_after_compute -> BEFORE_POST [lhead=cluster_post_update]
+       AFTER_POST -> sub_after_step [ltail=cluster_post_update]
+       sub_after_step -> fused_after_step
+       fused_after_step -> conv_check [lhead=cluster_converge]
    }
 
+Initial force priming follows the same nested ``BEFORE_COMPUTE`` and
+``AFTER_COMPUTE`` ordering. Safety hooks (``NaNDetectorHook``,
+``MaxForceClampHook``) and observer hooks (``LoggingHook``, ``SnapshotHook``)
+therefore behave consistently whether they are registered on the fused stage
+or on a specific sub-stage.
 
 API reference
 -------------
