@@ -1571,6 +1571,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ),
     }
 
+    @staticmethod
+    def _validate_n_steps(n_steps: int | None) -> None:
+        """Validate that a step count is a non-negative integer or None."""
+        if n_steps is not None and (
+            not isinstance(n_steps, int) or isinstance(n_steps, bool)
+        ):
+            raise TypeError("n_steps must be an integer or None.")
+        if n_steps is not None and n_steps < 0:
+            raise ValueError("n_steps must be non-negative.")
+
     @classmethod
     def register_bookkeeping_key(
         cls,
@@ -1627,6 +1637,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             Additional keyword arguments forwarded to the next class
             in the MRO (for cooperative multiple inheritance).
         """
+        self._validate_n_steps(n_steps)
         super().__init__(**kwargs)
         if not isinstance(model, BaseModelMixin):
             raise TypeError(
@@ -2274,6 +2285,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 "or set it at construction time via "
                 f"`{type(self).__name__}(..., n_steps=N)`."
             )
+        self._validate_n_steps(resolved)
         self._open_hooks()
         try:
             status = getattr(batch, "status", None)
@@ -3701,7 +3713,8 @@ class FusedStage(BaseDynamics):
         batch : Batch | None, optional
             The initial batch. If ``None``, uses the sampler to build one.
         n_steps : int | None, optional
-            Maximum number of steps to run.  When ``None``, falls back to
+            Maximum number of steps to run. Must be non-negative if provided.
+            When ``None``, falls back to
             ``self.n_steps``.  When both are ``None``, the loop runs until
             ``all_complete`` (Mode 1) or sampler exhaustion (Mode 2).
             Sub-stages that have no exit criterion (e.g. a plain MD stage)
@@ -3733,6 +3746,7 @@ class FusedStage(BaseDynamics):
         self._ensure_bookkeeping_fields(batch)
 
         resolved_steps = n_steps if n_steps is not None else self.n_steps
+        self._validate_n_steps(resolved_steps)
 
         self._open_hooks()
         try:
