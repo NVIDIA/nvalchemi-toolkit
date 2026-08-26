@@ -31,7 +31,7 @@ Topics covered:
 * **Part 3** — Inflight batching (Mode 2): :class:`~nvalchemi.dynamics.SizeAwareSampler`
   feeds a dataset into :class:`~nvalchemi.dynamics.FusedStage` so that
   graduated systems are replaced on the fly, keeping the GPU fully occupied.
-* **Part 4** — ``register_fused_hook`` attaches a hook that sees the
+* **Part 4** — ``register_hook`` attaches a hook that sees the
   combined batch at every step regardless of which sub-stage is active,
   enabling global status inspection.
 
@@ -339,9 +339,9 @@ result_inflight = fused_inflight.run(batch=None, n_steps=300)
 logging.info("Part 3 done: trajectory_sink contains %d snapshots", len(trajectory_sink))
 
 # %%
-# Part 4 — Global status monitoring via register_fused_hook
+# Part 4 — Global status monitoring via register_hook
 # ----------------------------------------------------------
-# :meth:`FusedStage.register_fused_hook` attaches a hook that fires at the
+# :meth:`FusedStage.register_hook` attaches a hook that fires at the
 # requested stage on the **combined** batch (all active systems from all
 # sub-stages concatenated).  This is the right place to monitor global
 # metrics like the status distribution or the mean energy.
@@ -410,7 +410,7 @@ nvt_inspect = NVTLangevin(
 fused_inspect = fire_inspect + nvt_inspect
 
 snapshot_hook = StatusSnapshotHook(frequency=2, max_steps=12)
-fused_inspect.register_fused_hook(snapshot_hook)
+fused_inspect.register_hook(snapshot_hook)
 
 snapshot_batch = fused_inspect.run(snapshot_batch, n_steps=60)
 

@@ -3143,8 +3143,6 @@ class FusedStage(BaseDynamics):
 
         self.init_fn = init_fn
 
-        self.fused_hooks: list[Hook] = []
-
         for i in range(len(self.sub_stages)):
             source_code, source_dynamics = self.sub_stages[i]
             if i + 1 < len(self.sub_stages):
@@ -3345,60 +3343,30 @@ class FusedStage(BaseDynamics):
                 batch[key] = default_fn(batch.num_graphs, batch.device)
 
     def register_fused_hook(self, hook: Hook) -> None:
-        """Register a hook that fires at the FusedStage level on the full batch.
+        """Register a hook on the full fused batch.
 
-        Unlike hooks registered on individual sub-stages (which only receive
-        the sub-batched view), fused hooks observe the complete batch at the
-        ``BEFORE_STEP``, ``AFTER_STEP``, ``BEFORE_COMPUTE``, and
-        ``AFTER_COMPUTE`` stages of every fused step.
+        .. deprecated:: 0.3.0
+            Use :meth:`register_hook` instead. ``FusedStage``'s inherited hook
+            registry already observes the complete batch.
 
         Parameters
         ----------
         hook : Hook
-            The hook to register.  Only ``BEFORE_STEP`` and ``AFTER_STEP``
-            stages are meaningful at the fused level; other stages are
-            silently accepted but will not fire during normal execution.
+            The hook to register.
 
-        Raises
-        ------
-        ValueError
-            If ``hook.frequency`` is not a positive integer.
+        Warns
+        -----
+        DeprecationWarning
+            Always emitted because this method is deprecated.
         """
-        if not isinstance(hook.frequency, int) or hook.frequency < 1:
-            raise ValueError(
-                f"Hook {hook!r} has frequency={hook.frequency!r}. "
-                "frequency must be a positive integer (>= 1)."
-            )
-        self.fused_hooks.append(hook)
-
-    def _call_fused_hooks(
-        self,
-        stage: DynamicsStage,
-        batch: Batch,
-        active_graph_mask: torch.Tensor,
-    ) -> None:
-        """Invoke all fused hooks registered for the given stage.
-
-        Parameters
-        ----------
-        stage : DynamicsStage
-            The hook stage to fire.
-        batch : Batch
-            The current full batch.
-        """
-        ctx = self._build_context(
-            batch,
-            active_graph_mask=active_graph_mask,
+        warnings.warn(
+            "FusedStage.register_fused_hook() is deprecated; use "
+            "FusedStage.register_hook() instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        for hook in self.fused_hooks:
-            runs_on_stage = getattr(hook, "_runs_on_stage", None)
-            if runs_on_stage is not None:
-                if not runs_on_stage(stage):
-                    continue
-            elif stage != hook.stage:
-                continue
-            if self.step_count % hook.frequency == 0:
-                hook(ctx, stage)
+        self.register_hook(hook)
+
 
     def _mark_reprime_entries(
         self,
@@ -3469,11 +3437,6 @@ class FusedStage(BaseDynamics):
         ]
 
         # Phase 0 - before step
-        self._call_fused_hooks(
-            DynamicsStage.BEFORE_STEP,
-            batch,
-            overall_active_graph_mask,
-        )
         self._call_hooks(
             DynamicsStage.BEFORE_STEP,
             batch,
@@ -3577,12 +3540,6 @@ class FusedStage(BaseDynamics):
             batch,
             overall_active_graph_mask,
         )
-        self._call_fused_hooks(
-            DynamicsStage.AFTER_STEP,
-            batch,
-            active_graph_mask=overall_active_graph_mask,
-        )
-
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
             if dynamics.n_steps is None:
                 continue
@@ -3738,33 +3695,15 @@ class FusedStage(BaseDynamics):
         return bool((status == exit_status).all())
 
     def _open_hooks(self) -> None:
-        """Enter context-manager hooks on this stage, fused hooks, and sub-stages."""
+        """Enter context-manager hooks on this stage and its sub-stages."""
         super()._open_hooks()
-
-        seen: set[int] = set()
-        for hook in self.fused_hooks:
-            hook_id = id(hook)
-            if hook_id not in seen and hasattr(hook, "__enter__"):
-                seen.add(hook_id)
-                hook.__enter__()
 
         for _, dynamics in self.sub_stages:
             dynamics._open_hooks()
 
     def _close_hooks(self) -> None:
-        """Exit context-manager hooks on this stage, fused hooks, and sub-stages."""
+        """Exit context-manager hooks on this stage and its sub-stages."""
         super()._close_hooks()
-
-        seen: set[int] = set()
-        for hook in self.fused_hooks:
-            hook_id = id(hook)
-            if hook_id in seen:
-                continue
-            seen.add(hook_id)
-            if hasattr(hook, "__exit__"):
-                hook.__exit__(None, None, None)
-            elif hasattr(hook, "close"):
-                hook.close()
 
         for _, dynamics in self.sub_stages:
             dynamics._close_hooks()
