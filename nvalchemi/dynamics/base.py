@@ -3713,8 +3713,7 @@ class FusedStage(BaseDynamics):
         batch : Batch | None, optional
             The initial batch. If ``None``, uses the sampler to build one.
         n_steps : int | None, optional
-            Maximum number of steps to run. Must be non-negative if provided.
-            When ``None``, falls back to
+            Maximum number of steps to run.  When ``None``, falls back to
             ``self.n_steps``.  When both are ``None``, the loop runs until
             ``all_complete`` (Mode 1) or sampler exhaustion (Mode 2).
             Sub-stages that have no exit criterion (e.g. a plain MD stage)
