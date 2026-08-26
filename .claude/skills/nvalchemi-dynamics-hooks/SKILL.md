@@ -77,6 +77,7 @@ class HookContext:
 class DynamicsContext(HookContext):
     step_count: int = 0
     converged_mask: torch.Tensor | None = None
+    active_graph_mask: torch.Tensor | None = None
 ```
 
 Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
@@ -87,9 +88,11 @@ Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
 
 ### Dynamics — `DynamicsStage`
 
-Each `step()` call fires hooks at 9 stages in this order:
+Dynamics exposes 10 lifecycle stages. `ON_ADMISSION` fires once when a
+batch is admitted, while the remaining 9 stages fire within each `step()`:
 
 ```text
+ON_ADMISSION (-1)  ← once before force priming and the first step
 BEFORE_STEP (0)
   BEFORE_PRE_UPDATE (1)  →  pre_update()  →  AFTER_PRE_UPDATE (2)
   BEFORE_COMPUTE (3)     →  compute()      →  AFTER_COMPUTE (4)
@@ -102,11 +105,24 @@ ON_CONVERGE (8)   ← only if convergence detected
 
 | Goal | Stage |
 |------|-------|
+| Validate or allocate for a newly admitted batch | `DynamicsStage.ON_ADMISSION` |
 | Modify forces/energy after model | `DynamicsStage.AFTER_COMPUTE` |
 | Observe final state (logging, snapshots) | `DynamicsStage.AFTER_STEP` |
 | Wrap positions after velocity update | `DynamicsStage.AFTER_POST_UPDATE` |
 | Instrument timing / profiling | `DynamicsStage.BEFORE_STEP` |
 | React to convergence | `DynamicsStage.ON_CONVERGE` |
+
+`ON_ADMISSION` is reset for every new `run()` and for managed membership
+changes such as refill or pipeline communication. In `FusedStage`, it runs
+outside compiled `_step_impl`, making it suitable for shape-dependent allocation
+and Python setup that per-step hooks cannot safely perform under `fullgraph=True`.
+
+In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
+fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
+`AFTER_*` hooks run after it. This includes the pre-update and post-update
+boundaries. Fused hooks receive the overall active mask, while hooks registered
+on a sub-stage receive only that sub-stage's status mask. `ON_CONVERGE` remains
+sub-stage-only because convergence is evaluated independently per sub-stage.
 
 ---
 

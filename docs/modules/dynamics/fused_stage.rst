@@ -207,6 +207,12 @@ When ``compile_step=True``, the internal ``_step_impl`` method is
 wrapped with ``torch.compile``. This can significantly improve
 throughput by fusing GPU kernels across the entire fused step.
 
+Before entering ``_step_impl``, :class:`FusedStage` initializes bookkeeping and
+sub-stage state, then dispatches ``ON_ADMISSION`` hooks at the fused and sub-stage
+levels. Admission runs once for a new run or managed batch replacement and stays
+outside the compiled graph. Use it for validation, shape-dependent allocation,
+or other Python setup that is not safe in a per-step compiled hook.
+
 
 Combining with hooks and sinks
 -------------------------------

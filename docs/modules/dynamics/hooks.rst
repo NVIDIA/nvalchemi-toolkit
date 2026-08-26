@@ -22,11 +22,12 @@ For the general hook protocol, context, and registry see
 DynamicsStage
 --------------
 
-:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates the nine
-hook-firing points within a single dynamics step:
+:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates ten lifecycle
+hook-firing points: ``ON_ADMISSION`` for batch setup, followed by nine stages
+within each dynamics step:
 
 .. graphviz::
-   :caption: DynamicsStage hook firing points within a single step.
+   :caption: DynamicsStage lifecycle hook firing points.
 
    digraph dynamics_stages {
        rankdir=TB
@@ -34,6 +35,7 @@ hook-firing points within a single dynamics step:
        node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
        edge [fontsize=10 style=bold]
 
+       ON_ADMISSION [label="ON_ADMISSION\n(once per admission)" fillcolor="#4a3315"]
        BEFORE_STEP [label="BEFORE_STEP" fillcolor="#4a3315"]
 
        subgraph cluster_step {
@@ -65,6 +67,7 @@ hook-firing points within a single dynamics step:
        AFTER_STEP  [label="AFTER_STEP" fillcolor="#4a3315"]
        ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#4a3315"]
 
+       ON_ADMISSION -> BEFORE_STEP
        BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
        AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
        AFTER_STEP -> ON_CONVERGE [style=dashed]
@@ -77,6 +80,9 @@ hook-firing points within a single dynamics step:
    * - Stage
      - Value
      - When it fires
+   * - ``ON_ADMISSION``
+     - -1
+     - Once when a batch enters the engine, before force priming and the first step.
    * - ``BEFORE_STEP``
      - 0
      - Very start of each step, before any operations.
@@ -104,6 +110,10 @@ hook-firing points within a single dynamics step:
    * - ``ON_CONVERGE``
      - 8
      - Only when the convergence hook detects converged samples.
+
+``ON_ADMISSION`` fires once per run or managed batch replacement, before force
+priming. In :class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
+``_step_impl``, making it suitable for validation and shape-dependent setup.
 
 
 Built-in dynamics hooks
@@ -240,17 +250,18 @@ Constraint hooks
 ~~~~~~~~~~~~~~~~
 
 Constraint hooks enforce geometric constraints across integration steps. They
-fire at both ``BEFORE_PRE_UPDATE`` (to snapshot positions) and
-``AFTER_POST_UPDATE`` (to restore them).
+can span the pre-update, compute, and post-update boundaries to prevent frozen
+state from influencing either half of the integrator while still presenting a
+constrained geometry to the model.
 
 FreezeAtomsHook
 ...............
 
 :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` keeps selected atoms fixed:
-it snapshots their positions at ``BEFORE_PRE_UPDATE`` and restores them —
-with zeroed velocities — at ``AFTER_POST_UPDATE``. The integrator runs
-normally and the positions are overwritten afterward, so no integrator
-modification is required.
+it snapshots positions and clears frozen state at ``BEFORE_PRE_UPDATE``, restores
+the constrained geometry at ``AFTER_PRE_UPDATE``, clears model forces before the
+post-update, and restores positions with zeroed velocities at
+``AFTER_POST_UPDATE``.
 
 ``categories`` is a string or list of strings matching atom type categories in
 the batch (for example, ``"substrate"`` or ``["substrate", "boundary"]``). Only
@@ -313,16 +324,32 @@ Hooks inside ``FusedStage``
 ---------------------------
 
 Hooks may be registered directly on a
-:class:`~nvalchemi.dynamics.FusedStage` or on any of its sub-stages. Shared step
-and compute boundaries fire at both levels. Integrator update boundaries fire
-only on sub-stages, which own the corresponding masked updates. Fused-stage
-hooks receive the full batch with the overall active mask, while each sub-stage
-hook receives the same batch with its status-specific mask.
+:class:`~nvalchemi.dynamics.FusedStage` or on any of its sub-stages. Step,
+compute, and integrator update boundaries all fire at both levels. Fused-stage
+hooks receive the full batch with the overall active mask (all systems whose
+status is below ``exit_status``), while each sub-stage hook receives the same
+batch with its status-specific mask. At admission,
+the fused-stage ``ON_ADMISSION`` hooks fire first, followed by each sub-stage's
+admission hooks in sub-stage order.
 
-At shared ``BEFORE_*`` boundaries, the fused-stage hooks fire before the
-sub-stage hooks. At shared ``AFTER_*`` boundaries, the sub-stage hooks fire
-before the fused-stage hooks. The update boundaries and ``ON_CONVERGE`` are
-sub-stage-only; registering those hooks on ``FusedStage`` emits a warning.
+At every ``BEFORE_*`` boundary, the fused-stage hooks fire before the sub-stage
+hooks. At every ``AFTER_*`` boundary, the sub-stage hooks fire before the
+fused-stage hooks. Only ``ON_CONVERGE`` remains sub-stage-only because
+convergence is evaluated independently for each sub-stage.
+
+Register a cross-stage constraint once on the fused stage when it should apply
+to every active system, regardless of its current sub-stage:
+
+.. code-block:: python
+
+   from nvalchemi.dynamics.hooks import FreezeAtomsHook
+
+   fused = optimizer + md
+   fused.register_hook(FreezeAtomsHook())
+   fused.run(batch)
+
+Register the hook on an individual sub-stage instead when the constraint should
+apply only during that phase.
 
 Hook ordering inside a fused step:
 
@@ -331,11 +358,16 @@ Hook ordering inside a fused step:
 
    digraph fused_hook_order {
        rankdir=TB
+       ranksep=0.3
        compound=true
        node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
        edge [fontsize=10 style=bold]
 
+       fused_on_admission [label="FusedStage ON_ADMISSION hooks\n(outside compiled step)" fillcolor="#4a3315"]
+       sub_on_admission [label="each sub-stage ON_ADMISSION hooks\n(in sub-stage order)"]
        fused_before_step [label="FusedStage BEFORE_STEP hooks" fillcolor="#4a3315"]
+       fused_before_pre [label="FusedStage BEFORE_PRE_UPDATE hooks" fillcolor="#4a3315"]
+       fused_after_pre [label="FusedStage AFTER_PRE_UPDATE hooks" fillcolor="#4a3315"]
        sub_before_step [label="each sub-stage BEFORE_STEP hooks\n(in sub-stage order)"]
 
        subgraph cluster_pre_update {
@@ -354,6 +386,8 @@ Hook ordering inside a fused step:
        sub_before_compute [label="each sub-stage BEFORE_COMPUTE hooks\n(in sub-stage order)"]
        compute [label="single shared compute()" fillcolor="#4a3315"]
        sub_after_compute [label="each sub-stage AFTER_COMPUTE hooks\n(in sub-stage order)"]
+       fused_before_post [label="FusedStage BEFORE_POST_UPDATE hooks" fillcolor="#4a3315"]
+       fused_after_post [label="FusedStage AFTER_POST_UPDATE hooks" fillcolor="#4a3315"]
        fused_after_compute [label="FusedStage AFTER_COMPUTE hooks" fillcolor="#4a3315"]
 
        subgraph cluster_post_update {
@@ -382,15 +416,21 @@ Hook ordering inside a fused step:
            conv_check -> ON_CONVERGE [style=dashed]
        }
 
+       fused_on_admission -> sub_on_admission
+       sub_on_admission -> fused_before_step
        fused_before_step -> sub_before_step
-       sub_before_step -> BEFORE_PRE [lhead=cluster_pre_update]
-       AFTER_PRE -> fused_before_compute [ltail=cluster_pre_update]
+       sub_before_step -> fused_before_pre
+       fused_before_pre -> BEFORE_PRE [lhead=cluster_pre_update]
+       AFTER_PRE -> fused_after_pre [ltail=cluster_pre_update]
+       fused_after_pre -> fused_before_compute
        fused_before_compute -> sub_before_compute
        sub_before_compute -> compute
        compute -> sub_after_compute
        sub_after_compute -> fused_after_compute
-       fused_after_compute -> BEFORE_POST [lhead=cluster_post_update]
-       AFTER_POST -> sub_after_step [ltail=cluster_post_update]
+       fused_after_compute -> fused_before_post
+       fused_before_post -> BEFORE_POST [lhead=cluster_post_update]
+       AFTER_POST -> fused_after_post [ltail=cluster_post_update]
+       fused_after_post -> sub_after_step
        sub_after_step -> fused_after_step
        fused_after_step -> conv_check [lhead=cluster_converge]
    }

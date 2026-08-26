@@ -207,6 +207,7 @@ every call:
 
 .. code-block:: text
 
+   0.  ON_ADMISSION hooks (once after admission is reset)
    1.  BEFORE_STEP hooks
    2.  BEFORE_PRE_UPDATE hooks  →  pre_update()  →  AFTER_PRE_UPDATE hooks
    3.  BEFORE_COMPUTE hooks     →  compute()      →  AFTER_COMPUTE hooks
@@ -214,6 +215,10 @@ every call:
    5.  AFTER_STEP hooks
    6.  convergence check  →  ON_CONVERGE hooks (if any samples converged)
    7.  step_count += 1
+
+``ON_ADMISSION`` runs before the per-step sequence and before initial force
+priming. In a compiled :class:`~nvalchemi.dynamics.FusedStage`, it remains
+outside ``_step_impl`` so validation and shape-dependent setup are not captured.
 
 ``compute()`` handles the full model pipeline: forward pass →
 ``adapt_output()`` → ``_validate_model_outputs()`` → write
