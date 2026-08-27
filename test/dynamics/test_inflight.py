@@ -23,6 +23,8 @@ This module tests the full inflight batching workflow including:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 import torch
 
@@ -32,6 +34,7 @@ from nvalchemi.dynamics.base import (
     ConvergenceHook,
     FusedStage,
 )
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -243,6 +246,41 @@ class TestFusedStageInflight:
         assert result is not None
         # Remaining 1 + replacements 2 = 3 (all slots preserved)
         assert result.num_graphs == 3
+
+    def test_refill_allocates_and_primes_replacement_outputs(self) -> None:
+        """A fully replaced inflight batch is primed before its first update."""
+        dataset = MockDataset([(2, 0)] * 6)
+        sampler = SizeAwareSampler(
+            dataset,
+            max_atoms=6,
+            max_edges=0,
+            max_batch_size=3,
+        )
+        dynamics = DemoDynamics(
+            model=self.model,
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(
+                1e6,
+                source_status=0,
+                target_status=1,
+            ),
+        )
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            refill_frequency=1,
+        )
+
+        with patch.object(
+            fused, "_prime_forces", wraps=fused._prime_forces
+        ) as prime_forces:
+            result = fused.run(batch=None)
+
+        assert result is None
+        assert prime_forces.call_count == 2
+        replacement_batch = prime_forces.call_args_list[1].args[0]
+        assert replacement_batch.forces.shape == (6, 3)
+        assert replacement_batch.energy.shape == (3, 1)
 
     def test_refill_clears_stale_last_converged(self) -> None:
         """A graduation that shrinks the batch must drop stale ``_last_converged``.

@@ -1656,6 +1656,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._init_hooks(hooks)
 
         self._last_converged: torch.Tensor | None = None
+        self._forces_primed: bool = False
 
     @property
     def model_is_conservative(self) -> bool:
@@ -2024,7 +2025,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         1. Runs the model forward pass, which should enable gradients
         2. Adapts outputs to the standard format
         3. Validates outputs against dynamics requirements
-        4. Writes known keys back to the batch in-place via
+        4. Allocates missing output buffers and writes known keys back to the batch via
            :attr:`_OUTPUT_KEY_TO_BATCH_ATTR`
         5. Detaches all output tensors from the computation graph and
            exposes them as ``_last_outputs`` for custom dynamics subclasses
@@ -2094,8 +2095,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             value = detached.get(out_key)
             if value is not None:
                 target = getattr(batch, batch_attr, None)
-                if target is not None:
-                    target.copy_(value.view(target.shape))
+                if target is None:
+                    # Fresh or refilled batches may contain only model inputs, so
+                    # allocate storage for model outputs lazily.
+                    setattr(batch, batch_attr, torch.empty_like(value))
+                    target = getattr(batch, batch_attr)
+                target.copy_(value.view(target.shape))
 
         self._last_outputs = detached
 
@@ -2165,6 +2170,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     saved[field] = val[~node_mask].clone()
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
+
+        if not self._forces_primed:
+            self._prime_forces(batch, active_graph_mask)
+            self._forces_primed = True
 
         with self._stream_scope(batch.device):
             self._call_hooks(
@@ -2288,13 +2297,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._validate_n_steps(resolved)
         self._open_hooks()
         try:
-            status = getattr(batch, "status", None)
-            if status is None:
-                active_graph_mask = None
-            else:
-                status = status.squeeze(-1) if status.dim() == 2 else status
-                active_graph_mask = status[: batch.num_graphs] < self.exit_status
-            self._prime_forces(batch, active_graph_mask)
+            self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
                 # Early exit when every system has satisfied the convergence
@@ -2352,6 +2355,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         # Batch composition changes here; drop stale converged indices so the
         # next _build_context mask doesn't over-index the resized batch.
         self._last_converged = None
+        self._forces_primed = False
 
         remaining_indices = torch.where(~graduated_mask)[0]
 
@@ -3576,6 +3580,14 @@ class FusedStage(BaseDynamics):
         self._ensure_bookkeeping_fields(batch)
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
+        status = batch.status
+        if status.dim() == 2:
+            status = status.squeeze(-1)
+        active_graph_mask = status[: batch.num_graphs] < self.exit_status
+        if not self._forces_primed:
+            if self.__needs_keys__:
+                self._prime_forces(batch, active_graph_mask)
+            self._forces_primed = True
         if self._compiled_step is not None:
             self._mark_cudagraph_static_inputs(batch)
         step_fn = (
@@ -3749,16 +3761,7 @@ class FusedStage(BaseDynamics):
 
         self._open_hooks()
         try:
-            # Prime forces before the first step so that pre_update can use
-            # them.  _step_impl now runs pre_update BEFORE compute, so without
-            # this initial forward pass the first step would integrate with
-            # zero (uninitialised) forces.
-            status = batch.status
-            if status.dim() == 2:
-                status = status.squeeze(-1)
-            active_graph_mask = status[: batch.num_graphs] < self.exit_status
-            self._prime_forces(batch, active_graph_mask)
-
+            self._forces_primed = False
             step_num = 0
             while True:
                 batch, _converged = self.step(batch)

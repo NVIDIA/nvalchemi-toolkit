@@ -107,7 +107,6 @@ class DomainParallel(BaseDynamics):
 
         # Runtime state.
         self._n_owned: int = 0
-        self._forces_primed: bool = False
 
         # Pipeline-stage state (2D pipeline x domain). A DomainParallel used as a
         # DistributedPipeline stage spans a domain sub-mesh; the group lead does
@@ -776,15 +775,10 @@ class DomainParallel(BaseDynamics):
                 "No step count provided. Either pass `n_steps` to run() "
                 "or set it at construction time."
             )
+        self._validate_n_steps(resolved)
         self._open_hooks()
         try:
-            if not self._forces_primed:
-                self._prime_forces(
-                    batch,
-                    self._active_graph_mask(batch),
-                )
-                self._forces_primed = True
-
+            self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
                 if (

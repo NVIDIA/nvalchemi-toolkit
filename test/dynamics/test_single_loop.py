@@ -550,9 +550,7 @@ class TestFusedStage:
         fused.run(batch)
 
         assert fused.step_count == 1
-        # FusedStage.run() does one initial force-priming forward before the loop,
-        # plus one during the actual step → total 2 forwards.
-        assert model.forward_count == 2
+        assert model.forward_count == 1
 
     def test_run_stops_early_on_exit_status(self) -> None:
         """run() should stop early when all reach exit status."""
