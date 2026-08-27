@@ -97,17 +97,14 @@ class AlignCellHook:
                 periodic_mask = pbc.unsqueeze(0).any(dim=-1)
         else:
             periodic_mask = pbc.any(dim=-1)
-        active_graph_mask = ctx.active_graph_mask
-        if active_graph_mask is not None:
-            periodic_mask = periodic_mask & active_graph_mask
+        if ctx.active_graph_mask is not None:
+            periodic_mask = periodic_mask & ctx.active_graph_mask
+        # This can cause a torch.compile graph break
         if not periodic_mask.any():
             return
 
-        positions = batch.positions.contiguous()
-        cell = batch.cell.contiguous()
-        if active_graph_mask is not None:
-            positions = positions.clone()
-            cell = cell.clone()
+        positions = batch.positions.contiguous().clone()
+        cell = batch.cell.contiguous().clone()
         if positions.dtype not in (torch.float32, torch.float64):
             raise TypeError(
                 "Cell alignment only supports float32/float64 positions, got "
@@ -119,13 +116,8 @@ class AlignCellHook:
         batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
         align_cell(positions, cell, batch_idx)
 
-        if active_graph_mask is None:
-            batch.positions = positions
-            batch.cell = cell
-            return
-
-        # Update results only for active graphs, leaving inactive graphs unchanged
-        active_atoms = active_graph_mask[batch.batch_idx].unsqueeze(-1)
-        active_cells = active_graph_mask[:, None, None]
-        batch.positions.copy_(torch.where(active_atoms, positions, batch.positions))
-        batch.cell.copy_(torch.where(active_cells, cell, batch.cell))
+        # Update only active periodic graphs, leaving all other graphs unchanged
+        aligned_atoms = periodic_mask[batch.batch_idx].unsqueeze(-1)
+        aligned_cells = periodic_mask[:, None, None]
+        batch.positions.copy_(torch.where(aligned_atoms, positions, batch.positions))
+        batch.cell.copy_(torch.where(aligned_cells, cell, batch.cell))
