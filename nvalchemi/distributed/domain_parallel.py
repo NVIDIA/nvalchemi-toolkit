@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.distributed as dist
+from jaxtyping import Bool
 
 from nvalchemi.distributed._core.gather_primitives import mesh_group
 from nvalchemi.distributed._dynamics_coordinator import (
@@ -671,7 +672,7 @@ class DomainParallel(BaseDynamics):
     # Hook overrides
     # ------------------------------------------------------------------
 
-    def _active_graph_mask(self, batch: Batch) -> torch.Tensor | None:
+    def _active_graph_mask(self, batch: Batch) -> Bool[torch.Tensor, "B"] | None:  # noqa: F722, F821
         """Return the active-graph snapshot for a domain-parallel step."""
         status = getattr(batch, "status", None)
         if status is None:
