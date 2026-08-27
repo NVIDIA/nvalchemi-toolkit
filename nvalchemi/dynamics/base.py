@@ -214,7 +214,8 @@ class DynamicsStage(Enum):
     Attributes
     ----------
     BEFORE_STEP : int
-        Fired at the very beginning of a step, before any operations.
+        Fired at the beginning of a step, after any one-time model-output
+        priming.
     BEFORE_PRE_UPDATE : int
         Fired before the pre_update (first half of integrator) is called.
     AFTER_PRE_UPDATE : int
@@ -1573,13 +1574,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     @staticmethod
     def _validate_n_steps(n_steps: int | None) -> None:
-        """Validate that a step count is a non-negative integer or None."""
+        """Validate that a step count is a positive integer or None."""
         if n_steps is not None and (
             not isinstance(n_steps, int) or isinstance(n_steps, bool)
         ):
             raise TypeError("n_steps must be an integer or None.")
-        if n_steps is not None and n_steps < 0:
-            raise ValueError("n_steps must be non-negative.")
+        if n_steps is not None and n_steps < 1:
+            raise ValueError("n_steps must be positive.")
 
     @classmethod
     def register_bookkeeping_key(
@@ -2111,13 +2112,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Execute a single dynamics step with the full hook-wrapped sequence.
 
         The step proceeds as follows:
-        1. BEFORE_STEP hooks
-        2. BEFORE_PRE_UPDATE hooks -> pre_update() -> AFTER_PRE_UPDATE hooks
-        3. BEFORE_COMPUTE hooks -> compute() -> AFTER_COMPUTE hooks
-        4. BEFORE_POST_UPDATE hooks -> post_update() -> AFTER_POST_UPDATE hooks
-        5. AFTER_STEP hooks
-        6. Check convergence and fire ON_CONVERGE hooks if any samples converged
-        7. Increment step_count
+        1. Prime required model outputs once, before the first integration step
+        2. BEFORE_STEP hooks
+        3. BEFORE_PRE_UPDATE hooks -> pre_update() -> AFTER_PRE_UPDATE hooks
+        4. BEFORE_COMPUTE hooks -> compute() -> AFTER_COMPUTE hooks
+        5. BEFORE_POST_UPDATE hooks -> post_update() -> AFTER_POST_UPDATE hooks
+        6. AFTER_STEP hooks
+        7. Check convergence and fire ON_CONVERGE hooks if any samples converged
+        8. Increment step_count
 
         Samples with ``status >= exit_status`` are treated as no-ops for the
         integrator (pre_update/post_update). Their positions and velocities
@@ -2146,12 +2148,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             status = status.squeeze(-1) if status.dim() == 2 else status
             active_graph_mask = status[: batch.num_graphs] < self.exit_status
 
-        self._call_hooks(
-            DynamicsStage.BEFORE_STEP,
-            batch,
-            active_graph_mask,
-        )
-
         saved: dict[str, torch.Tensor] = {}
         if status is not None:
             node_mask_occupied = torch.repeat_interleave(
@@ -2171,10 +2167,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
 
+        # Prime once before the hook-wrapped step so the optimizer's first
+        # pre_update sees the same valid forces/stress as subsequent steps.
         if not self._forces_primed:
             self._prime_forces(batch, active_graph_mask)
             self._forces_primed = True
 
+        self._call_hooks(DynamicsStage.BEFORE_STEP, batch, active_graph_mask)
+        
         with self._stream_scope(batch.device):
             self._call_hooks(
                 DynamicsStage.BEFORE_PRE_UPDATE,
@@ -3585,8 +3585,7 @@ class FusedStage(BaseDynamics):
             status = status.squeeze(-1)
         active_graph_mask = status[: batch.num_graphs] < self.exit_status
         if not self._forces_primed:
-            if self.__needs_keys__:
-                self._prime_forces(batch, active_graph_mask)
+            self._prime_forces(batch, active_graph_mask)
             self._forces_primed = True
         if self._compiled_step is not None:
             self._mark_cudagraph_static_inputs(batch)
