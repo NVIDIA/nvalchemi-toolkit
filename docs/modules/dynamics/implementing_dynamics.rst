@@ -225,38 +225,31 @@ outside ``_step_impl`` so validation and shape-dependent setup are not captured.
 forces/energy to batch via ``copy_()``.
 
 
-``masked_update`` for ``FusedStage`` compatibility
---------------------------------------------------
+Split masked updates for ``FusedStage`` compatibility
+-----------------------------------------------------
 
 When your dynamics is composed via ``+`` into a
-:class:`~nvalchemi.dynamics.FusedStage`, the fused stage calls
-``masked_update(batch, mask)`` instead of ``pre_update`` / ``post_update``
-directly. The default implementation in ``BaseDynamics`` is:
+:class:`~nvalchemi.dynamics.FusedStage`, all sub-stages share one model
+evaluation. The fused step preserves the integrator split around that
+evaluation:
 
 .. code-block:: python
 
-   def masked_update(self, batch, mask):
-       # Expand graph-level mask → node-level via batch.batch_idx
-       node_mask = mask[batch.batch_idx]
+   for dynamics, mask in sub_stages:
+       dynamics._masked_pre_update(batch, mask)
 
-       # Snapshot unmasked state
-       original_positions = batch.positions.clone()
-       original_velocities = batch.velocities.clone() if ... else None
+   outputs = fused.compute(batch)  # one shared model forward pass
 
-       # Run full updates
-       self.pre_update(batch)
-       self.post_update(batch)
+   for dynamics, mask in sub_stages:
+       dynamics._masked_post_update(batch, mask)
 
-       # Restore unmasked nodes
-       with torch.no_grad():
-           batch.positions[~node_mask] = original_positions[~node_mask]
-           if original_velocities is not None:
-               batch.velocities[~node_mask] = original_velocities[~node_mask]
-
-This means your custom ``pre_update`` / ``post_update`` work correctly
-inside a ``FusedStage`` without any modifications. The mask
-selectively applies your updates only to samples at the corresponding
-status code.
+The inherited helpers snapshot mutable batch fields, call your
+``pre_update()`` or ``post_update()``, and restore values belonging to
+unmasked systems. Your custom integrator therefore works inside a
+``FusedStage`` without overriding these private helpers. If it mutates an
+additional batch field beyond ``positions``, ``velocities``, and ``cell``, add
+that field to the class's ``_mutable_fields`` tuple so inactive systems are
+restored correctly.
 
 
 Checklist for a new integrator

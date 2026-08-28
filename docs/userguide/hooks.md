@@ -120,8 +120,9 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 | `validation` | `dict[str, Any] \| None` | Latest validation summary |
 
 The engine builds this context object at each stage via an overridable
-`_build_context(batch)` method. Custom engines should return their own
-`HookContext` subclass when hooks need workflow-specific fields.
+`_build_context(batch, **context_fields)` method. Custom engines should
+override it with matching keyword parameters and return their own `HookContext`
+subclass when hooks need workflow-specific fields.
 
 ### Optional context manager support
 

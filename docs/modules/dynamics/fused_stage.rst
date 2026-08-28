@@ -70,23 +70,24 @@ from 0 when using ``+``). Every sample in the batch carries a
            fontsize=12
 
            batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#4a3315"]
-           compute [label="1. compute()\nsingle forward pass for ALL 8 samples"]
-           mask0   [label="2. sub_stage[0].masked_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
-           mask1   [label="3. sub_stage[1].masked_update\nstatus == 1  →  samples 3, 4, 6"]
+           pre0    [label="1a. sub_stage[0]._masked_pre_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
+           pre1    [label="1b. sub_stage[1]._masked_pre_update\nstatus == 1  →  samples 3, 4, 6"]
+           compute [label="2. compute()\nsingle shared forward pass for ALL 8 samples"]
+           post0   [label="3a. sub_stage[0]._masked_post_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
+           post1   [label="3b. sub_stage[1]._masked_post_update\nstatus == 1  →  samples 3, 4, 6"]
            conv    [label="4. convergence check\nper sub-stage"]
            migrate [label="sample 2 converges → status[2] = 1\n(migrated!)" shape=plaintext fillcolor=none style=""]
 
-           batch -> compute [style=bold]
-           compute -> mask0 [style=bold]
-           mask0 -> mask1 [style=bold]
-           mask1 -> conv [style=bold]
+           batch -> pre0 [style=bold]
+           pre0 -> pre1 -> compute -> post0 -> post1 -> conv [style=bold]
            conv -> migrate [style=dashed color="#999999"]
        }
    }
 
 The key insight is that **only one forward pass happens** regardless of
-how many sub-stages exist. The expensive model evaluation is amortized
-across all stages.
+how many sub-stages exist. Each sub-stage applies its masked ``pre_update()``
+before that shared evaluation and its masked ``post_update()`` afterward. The
+expensive model evaluation is amortized across all stages.
 
 
 Convergence-driven stage migration
@@ -136,10 +137,11 @@ This is separate from the initial batch-wide force prime.
 Running a ``FusedStage``
 -------------------------
 
-``FusedStage.run()`` loops until **all** samples reach ``exit_status``.
-Unlike ``BaseDynamics.run()``, the ``n_steps`` attribute (inherited
-from ``BaseDynamics``) and any ``n_steps`` argument to ``run()`` are
-**unused** — termination is purely convergence-driven.
+``FusedStage.run()`` loops until all samples reach ``exit_status``, the sampler
+is exhausted, or the maximum ``n_steps`` is reached. An ``n_steps`` argument
+overrides ``FusedStage.n_steps``. When both are ``None``, termination is
+convergence- or sampler-driven. A sub-stage's own ``n_steps`` limits how many
+steps each system remains in that sub-stage before moving to the next one.
 
 **Mode 1: external batch (the common case)**
 

@@ -258,14 +258,21 @@ FreezeAtomsHook
 ...............
 
 :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` keeps selected atoms fixed:
-it snapshots positions and clears frozen state at ``BEFORE_PRE_UPDATE``, restores
-the constrained geometry at ``AFTER_PRE_UPDATE``, clears model forces before the
-post-update, and restores positions with zeroed velocities at
-``AFTER_POST_UPDATE``.
+it fires at five stages. At ``BEFORE_PRE_UPDATE`` it snapshots positions and
+clears prior forces and velocities; at ``AFTER_PRE_UPDATE`` it restores the
+constrained geometry before compute preparation; at ``AFTER_COMPUTE`` it clears
+new model forces when ``zero_forces=True``; at ``BEFORE_POST_UPDATE`` it always
+clears frozen-atom forces; and at ``AFTER_POST_UPDATE`` it restores positions
+and zeroes velocities.
 
-``categories`` is a string or list of strings matching atom type categories in
-the batch (for example, ``"substrate"`` or ``["substrate", "boundary"]``). Only
-atoms in the listed categories are frozen; all others evolve freely.
+``freeze_category`` is the integer ``batch.atom_categories`` value that marks
+frozen atoms. It defaults to :attr:`~nvalchemi._typing.AtomCategory.SPECIAL`.
+Only atoms matching that value are frozen; all others evolve freely.
+
+Set ``zero_forces=False`` to expose raw frozen-atom model forces to
+``AFTER_COMPUTE`` observers. Those forces are still cleared at
+``BEFORE_POST_UPDATE``, before the second integrator update, so they cannot
+move the frozen atoms.
 
 Use this hook for partial-system relaxations (freeze the substrate, relax the
 adsorbate), slab calculations (freeze bottom layers), or any configuration

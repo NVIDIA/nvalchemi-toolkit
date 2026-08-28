@@ -1562,10 +1562,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     what outputs the dynamics requires from the model and what additional
     state it produces; requirements are checked in ``_validate_model_outputs()``
     after each forward pass.
-    ``masked_update(batch, mask)`` is used by ``FusedStage`` to apply
-    ``pre_update``/``post_update`` only to a subset of samples in a batched
-    setting. Models must be ``BaseModelMixin`` instances — plain
-    ``nn.Module`` is not accepted.
+    ``FusedStage`` applies masked ``pre_update`` calls before one shared
+    ``compute`` call and masked ``post_update`` calls afterward. Models must be
+    ``BaseModelMixin`` instances — plain ``nn.Module`` is not accepted.
 
     Examples
     --------
@@ -2966,9 +2965,10 @@ class FusedStage(BaseDynamics):
 
     Unlike ``BaseDynamics``, **``step(batch)``** is overridden. Instead of the
     standard ``pre_update → compute → post_update`` loop, ``FusedStage``
-    performs: (1) a single ``compute()`` call on the full batch, then (2)
-    iterates over sub-stages, applying ``masked_update(batch, mask)`` on each
-    sub-stage's dynamics for samples whose ``batch.status`` matches that
+    performs: (1) iterates over sub-stages, applying masked ``pre_update`` on
+    each sub-stage's dynamics, (2) a single ``compute()`` call on the full
+    batch, then (3) iterates over sub-stages, applying masked ``post_update``.
+    Each update applies only to samples whose ``batch.status`` matches that
     sub-stage's status code. Only ONE forward pass happens per step regardless
     of the number of sub-stages. **``run(batch)``** is also overridden —
     the ``n_steps`` attribute (inherited from ``BaseDynamics``) and any
@@ -2986,10 +2986,8 @@ class FusedStage(BaseDynamics):
 
     Developers generally do NOT subclass ``FusedStage``. Instead, create
     ``BaseDynamics`` subclasses (integrators) and compose them using ``+``.
-    ``FusedStage`` handles orchestration automatically. The key requirement is
-    that sub-stage dynamics must implement ``masked_update`` correctly
-    (inherited from ``BaseDynamics``) and that the batch must have a
-    ``status`` tensor.
+    ``FusedStage`` handles orchestration, including masking, automatically. The
+    batch must have a ``status`` tensor.
 
     Hook Firing Semantics
     ~~~~~~~~~~~~~~~~~~~~~
