@@ -1873,6 +1873,39 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     # Per-system integrator state management
     # ------------------------------------------------------------------
 
+    def _save_state_fields(self) -> dict[str, torch.Tensor]:
+        """Clone tensor-valued integrator state, preserving each field's shape."""
+        state = getattr(self, "_state", None)
+        if state is None:
+            return {}
+        return {key: value.clone() for key, value in state}
+
+    def _restore_unmasked_state(
+        self,
+        saved: dict[str, torch.Tensor],
+        graph_mask: Bool[torch.Tensor, "B"],
+    ) -> None:
+        """Restore inactive per-system state after a masked fused-stage update.
+
+        :class:`FusedStage` calls each sub-stage's ``pre_update`` or
+        ``post_update`` on the full batch to preserve static shapes. State
+        changes are retained for graphs selected by ``graph_mask``, while rows
+        belonging to other sub-stages are restored from ``saved``. Thus,
+        ``True`` retains updated state and ``False`` restores previous state.
+        """
+        if not saved:
+            return
+        if self._state.num_graphs != graph_mask.shape[0]:
+            raise RuntimeError(
+                "Integrator state cardinality does not match the graph mask: "
+                f"state={self._state.num_graphs}, "
+                f"graphs={graph_mask.shape[0]}."
+            )
+        for key, previous in saved.items():
+            value = getattr(self._state, key)
+            mask = graph_mask.view(graph_mask.shape[0], *([1] * (value.dim() - 1)))
+            torch.where(mask, value, previous, out=value)
+
     def _init_state(self, batch: Batch) -> None:
         """Allocate per-system integrator state from the first concrete batch.
 
@@ -2214,6 +2247,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._forces_primed = True
 
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch, active_graph_mask)
+
 
         with self._stream_scope(batch.device):
             self._call_hooks(
@@ -2598,27 +2632,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self.post_update(batch)
             self._restore_unmasked_fields(batch, saved, mask, node_mask)
             self._restore_unmasked_state(saved_state, mask)
-
-    def _save_state_fields(self) -> dict[str, torch.Tensor]:
-        """Clone per-graph integrator state before a masked update."""
-        if not hasattr(self, "_state"):
-            return {}
-        return {
-            key: value.clone()
-            for key, value in self._state
-            if isinstance(value, torch.Tensor)
-        }
-
-    def _restore_unmasked_state(
-        self,
-        saved: dict[str, torch.Tensor],
-        mask: torch.Tensor,
-    ) -> None:
-        """Restore integrator state for graphs excluded from an update."""
-        for key, previous in saved.items():
-            value = getattr(self._state, key)
-            expanded_mask = mask.view(mask.shape[0], *([1] * (value.dim() - 1)))
-            torch.where(expanded_mask, value, previous, out=value)
 
     def _save_mutable_fields(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Clone every mutable field in full (static shapes, no mask indexing)."""
