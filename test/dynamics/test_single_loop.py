@@ -416,6 +416,7 @@ class TestFusedStage:
         batch.status = torch.tensor([0, 0, 1, 1])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1, 0.1])
 
+        fused._forces_primed = True
         fused.step(batch)
 
         assert model.forward_count == 1
@@ -550,7 +551,7 @@ class TestFusedStage:
         fused.run(batch)
 
         assert fused.step_count == 1
-        assert model.forward_count == 1
+        assert model.forward_count == 2
 
     def test_run_stops_early_on_exit_status(self) -> None:
         """run() should stop early when all reach exit status."""
@@ -1728,6 +1729,7 @@ class TestFusedStageSubstageHooks:
         batch.status = torch.tensor([0, 0, 0])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1])
 
+        fused._forces_primed = True
         fused.step(batch)
 
         assert hook.call_count == 1
