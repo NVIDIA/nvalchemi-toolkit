@@ -36,7 +36,7 @@ potentials:
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
 | {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
-| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
+| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires `uma` with a CUDA extra; conflicts with `mace` (incompatible `e3nn` pins) |
 
 {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
 and {py:class}`~nvalchemi.models.uma.UMAWrapper`
@@ -44,29 +44,21 @@ are lazily imported --- they only load when accessed, so missing dependencies wi
 break other imports.
 
 ````{note}
-**UMA resolves to a different torch than the `cu12` / `cu13` GPU stack.**
-`fairchem-core` caps torch below 2.9 (`fairchem-core>=2.8` requires
-`torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
-`nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
-`uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
-and `mace`. Running `uv sync --extra uma --no-group build` forks a standalone
-resolution that installs a PyPI CUDA torch wheel (~2.8) instead of the
-NVIDIA-indexed `cuXX` build. Keep UMA in its own environment, e.g.:
+**Install UMA with the CUDA extra that matches the host.** Fairchem 2.22 uses
+torch 2.13.0, so `uma` can share the toolkit's `cu12` or `cu13` stack and select
+the matching cu126 or cu130 torch wheel. UMA still conflicts with MACE because
+their `e3nn` requirements differ, and it conflicts with the default `build`
+group because `torchtnt` requires an older setuptools. Keep UMA in its own
+CUDA-aligned environment, e.g.:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma \
-  uv sync --extra uma --no-group build  # UMA (fairchem's torch/setuptools)
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma --extra cu12 --no-group build  # UMA on CUDA 12
 uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
 ```
 
-The core `nvalchemi-toolkit-ops` package (and its Warp kernels) is still
-installed in the UMA environment --- only the `cuXX` GPU-acceleration
-extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
-none of which UMA uses, since it builds its neighbor graph inside
-fairchem. The toolkit-ops `torch-cuXX` extras pin `torch>=2.11`, but that
-tracks the `cuXX` wheel builds rather than a toolkit-ops API requirement
---- the base package already declares `torch>=2.8`, so the Warp path is
-expected to work against the ~2.8 torch in the UMA environment.
+Use `--extra cu13` instead on a CUDA 13 host. Do not combine `uma` and `mace`
+in one environment.
 ````
 
 ### MACE checkpoints in training
@@ -148,12 +140,13 @@ catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
 construction; `active_outputs` is `{energy, forces}` for molecular tasks and
 `{energy, forces, stress}` for periodic ones.
 
-**1. Install the optional dependency** (in its own environment, per the note
-above):
+**1. Install the optional dependency** with the CUDA extra for the host (in its
+own environment, per the note above):
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --no-group build
-# or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma --extra cu12 --no-group build
+# or, with pip:  pip install 'nvalchemi-toolkit[uma,cu12]'
 ```
 
 **2. Get HuggingFace access.** UMA checkpoints live in the **gated**
@@ -199,13 +192,14 @@ Registered checkpoint names (see
 | `uma-s-1p2` | small | Updated small release |
 | `uma-m-1p1` | medium | Higher accuracy, larger / slower |
 
-**`torch.compile` / turbo.** `UMAWrapper` does not add a `compile_model`
+**Inference settings.** `UMAWrapper` does not add a `compile_model`
 flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
 internally as a field on its `InferenceSettings`. Reach it through
-`from_checkpoint`'s `inference_settings` argument --- pass `"turbo"` for
-fairchem's compiled preset (`torch.compile` + TF32 + MoLE merge, for runs
-with fixed atomic composition), or an `InferenceSettings` instance for finer
-control:
+`from_checkpoint`'s `inference_settings` argument. In fairchem 2.22,
+`"default"` enables `torch.compile` and MoLE merging in FP32, `"batch"` keeps
+eager execution for changing batch composition, and `"turbo"` also enables
+TF32. Pass an `InferenceSettings` instance when a run needs explicit,
+reproducible controls:
 
 ```python
 fast = UMAWrapper.from_checkpoint(

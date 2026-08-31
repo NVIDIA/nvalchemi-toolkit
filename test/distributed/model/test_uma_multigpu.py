@@ -32,7 +32,7 @@ Requires:
 
 Run with::
 
-    pytest test/distributed/test_uma_multigpu.py -v
+    pytest test/distributed/model/test_uma_multigpu.py -v
 
 Override checkpoint / task via env:
     NVALCHEMI_UMA_CKPT=uma-s-1p2 NVALCHEMI_UMA_TASK=omat pytest ...
@@ -56,9 +56,6 @@ from nvalchemi.distributed.config import DomainConfig
 WORLD_SIZE = 2
 _CKPT = os.environ.get("NVALCHEMI_UMA_CKPT", "uma-s-1p1")
 _TASK = os.environ.get("NVALCHEMI_UMA_TASK", "omat")
-# fairchem inference preset: "default" (eager) or "turbo" (compile + tf32 +
-# merge_mole). Override to exercise the compiled DD path.
-_INFERENCE = os.environ.get("NVALCHEMI_UMA_INFERENCE", "default")
 # First-time UMA checkpoint download from HuggingFace can run multiple
 # minutes; the default 10-minute PG init timeout is enough for a warm
 # cache but not always for a cold one. Bumping to 30min is cheap insurance.
@@ -93,30 +90,91 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
         dist.destroy_process_group()
 
 
+# Reference values generated with fairchem-core==2.21.0 in eager/general mode.
+# They are kept here so later Fairchem upgrades cannot silently change predictions.
+_REFERENCE_FORCE_ROWS = (0, 1, 431, 432, 433, 863)
+_REFERENCE_ENERGY = -7139.705078125
+_REFERENCE_FORCE_L2_NORM = 2.308806805476699
+_REFERENCE_FORCE_MAX_ABS = 1.2710708379745483
+_REFERENCE_SELECTED_FORCES = (
+    (-1.2710708379745483, 0.6833414435386658, -0.48717576265335083),
+    (0.11172015219926834, 0.09676739573478699, 0.10676532983779907),
+    (-0.030572697520256042, -0.006757380440831184, -0.020882971584796906),
+    (0.8775665163993835, -1.072834849357605, 0.3883421719074249),
+    (-0.022328056395053864, 0.0036295573227107525, -0.017870236188173294),
+    (0.09056300669908524, 0.06264057755470276, 0.07942171394824982),
+)
+
+
 # ======================================================================
-# System — bcc Fe 2x2x2 (16 atoms, OMat task)
+# System — elongated bcc Fe (864 atoms, OMat task)
 # ======================================================================
 
 
 def _build_bcc_fe(dtype: torch.dtype = torch.float32):
-    # 9x9x9 cubic bcc cell -> box 25.83 Ang, 1458 atoms. This size is
-    # deliberate, not arbitrary: a 2-rank split partitions along a single
-    # axis, and that axis only develops *remote* atoms (ones a rank neither
-    # owns nor ghosts) once its per-rank domain exceeds two ghost widths,
-    # i.e. box / 2 > 2 * ghost_width. With UMA's ~6 Ang cutoff that needs
-    # box > 24 Ang. Smaller cells (e.g. 2x2x2 / box 5.74, or even 8x8x8 /
-    # box 22.96) are DEGENERATE: every rank ghosts its neighbour's entire
-    # domain (remote == 0), so a passing equivalence check would prove
-    # nothing about the halo's remote-atom handling (at the non-degenerate
-    # size: owned=495 / halo / remote=190, with 0 missing / 0 extra neighbour
-    # coverage).
-    atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * (9, 9, 9)
+    # The 12-cell x axis leaves remote atoms after a deterministic two-rank
+    # x split. The shorter y/z axes reduce the cost without changing the halo
+    # geometry under test.
+    atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * (12, 6, 6)
     positions = torch.as_tensor(atoms.positions, dtype=dtype)
+    positions[0] += torch.tensor([0.13, -0.07, 0.05], dtype=dtype)
+    positions[len(atoms) // 2] += torch.tensor([-0.09, 0.11, -0.04], dtype=dtype)
     atomic_numbers = torch.as_tensor(atoms.get_atomic_numbers(), dtype=torch.long)
-    masses = torch.full((len(atoms),), 55.845, dtype=dtype)
+    masses = torch.as_tensor(atoms.get_masses(), dtype=dtype)
     cell = torch.as_tensor(atoms.cell.array, dtype=dtype)
+    positions = positions.remainder(torch.diag(cell))
     pbc = torch.ones(3, dtype=torch.bool)
     return positions, atomic_numbers, masses, cell, pbc
+
+
+def _assert_reference(energy: torch.Tensor, forces: torch.Tensor) -> None:
+    """Check the fixed Fairchem 2.21 eager/general UMA reference."""
+    expected_rows = torch.tensor(
+        _REFERENCE_SELECTED_FORCES, dtype=forces.dtype, device=forces.device
+    )
+    actual_rows = forces[list(_REFERENCE_FORCE_ROWS)]
+    torch.testing.assert_close(
+        energy,
+        energy.new_tensor(_REFERENCE_ENERGY),
+        rtol=1e-4,
+        atol=1e-4,
+    )
+    torch.testing.assert_close(
+        torch.linalg.vector_norm(forces.double()),
+        forces.new_tensor(_REFERENCE_FORCE_L2_NORM, dtype=torch.float64),
+        rtol=1e-4,
+        atol=1e-5,
+    )
+    torch.testing.assert_close(
+        forces.abs().max(),
+        forces.new_tensor(_REFERENCE_FORCE_MAX_ABS),
+        rtol=1e-4,
+        atol=1e-5,
+    )
+    torch.testing.assert_close(actual_rows, expected_rows, rtol=1e-4, atol=1e-5)
+
+
+def _inference_settings(mode: str) -> Any:
+    """Return explicit, reproducible Fairchem inference settings."""
+    from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
+
+    if mode == "eager":
+        return InferenceSettings(
+            compile=False,
+            merge_mole=False,
+            tf32=False,
+            activation_checkpointing=False,
+            execution_mode="general",
+        )
+    if mode == "compiled":
+        return InferenceSettings(
+            compile=True,
+            merge_mole=True,
+            tf32=False,
+            activation_checkpointing=False,
+            execution_mode=None,
+        )
+    raise ValueError(f"unknown UMA inference mode: {mode}")
 
 
 # ======================================================================
@@ -124,7 +182,7 @@ def _build_bcc_fe(dtype: torch.dtype = torch.float32):
 # ======================================================================
 
 
-def _uma_equivalence_worker(rank: int, world_size: int) -> None:
+def _uma_equivalence_worker(rank: int, world_size: int, mode: str) -> None:
     """Single-GPU UMA reference on rank 0 → broadcast → each rank asserts
     its owned slice of forces matches and the total energy matches.
     """
@@ -152,18 +210,9 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     # ``_setup_device`` asserts on. A ``"cuda:N"`` string bypasses that
     # coercion and trips the assert; relying on the per-process
     # ``torch.cuda.set_device(rank)`` call above is the correct idiom.
-    # "compile" = turbo MINUS tf32 (compile + merge_mole, no tf32), to isolate
-    # the compiled-DD halo path from turbo's tf32 precision loss. merge_mole is
-    # kept on because fairchem's MoLE layer asserts under compile without it.
-    # "turbo"/"default" are the stock fairchem presets.
-    if _INFERENCE == "compile":
-        from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
-
-        _inf: Any = InferenceSettings(
-            compile=True, merge_mole=True, activation_checkpointing=False
-        )
-    else:
-        _inf = _INFERENCE
+    # Do not rely on Fairchem preset names here: their meaning changed in 2.22.
+    # The compiled mode keeps tf32 off so numerical drift does not hide a DD bug.
+    _inf = _inference_settings(mode)
     wrapper = UMAWrapper.from_checkpoint(
         _CKPT, task_name=_TASK, device=device, inference_settings=_inf
     )
@@ -174,7 +223,7 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     # would capture those hooks OUTSIDE the DD scope (stock, caps-unaware), so the
     # later DD forward's check trips on the caps dead-atoms. Give the reference its
     # own wrapper; the DD wrapper then merges cleanly inside the DD scope.
-    if _INFERENCE in ("compile", "turbo"):
+    if mode == "compiled":
         ref_wrapper = UMAWrapper.from_checkpoint(
             _CKPT, task_name=_TASK, device=device, inference_settings=_inf
         )
@@ -189,11 +238,7 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     # caches desync the in-graph halo collectives. Run the reference on every
     # rank so compilation is symmetric (the production/MD case); rank 0's values
     # stay authoritative via the broadcast below.
-    _ref_here = (
-        rank == 0
-        or _INFERENCE != "default"
-        or bool(os.environ.get("NVALCHEMI_UMA_REF_ALL_RANKS"))
-    )
+    _ref_here = rank == 0 or mode == "compiled"
     if _ref_here:
         ref_data = AtomicData(
             atomic_numbers=atomic_numbers.to(device),
@@ -206,6 +251,8 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
         ref_out = ref_wrapper(ref_batch)
         e_ref_host = ref_out["energy"].sum().detach().cpu().view(1)
         f_ref_host = ref_out["forces"].detach().cpu()
+        if rank == 0 and mode == "eager":
+            _assert_reference(e_ref_host.squeeze(0), f_ref_host)
         del ref_batch, ref_out
 
     e_ref = e_ref_host.to(device=device, dtype=dtype)
@@ -217,7 +264,13 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
 
     cutoff = float(wrapper.cutoff)
-    domain_config = DomainConfig(cutoff=cutoff, skin=0.0, mesh=mesh)
+    domain_config = DomainConfig(
+        cutoff=cutoff,
+        skin=0.0,
+        mesh=mesh,
+        grid_dims=(2, 1, 1),
+        require_nondegenerate=True,
+    )
 
     if rank == 0:
         full_batch = Batch.from_data_list(
@@ -241,6 +294,18 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
 
     with DistributedModel(wrapper, domain_config) as dist_model:
         out = dist_model(sharded)
+
+    halo_meta = sharded.halo_meta
+    assert halo_meta is not None, f"rank {rank}: halo metadata was not populated"
+    n_halo = int(halo_meta.n_padded) - int(halo_meta.n_owned)
+    n_remote = n_global - int(halo_meta.n_padded)
+    assert n_halo > 0, f"rank {rank}: partition has no halo atoms"
+    assert n_remote > 0, f"rank {rank}: partition has no remote atoms"
+    print(
+        f"[uma-halo rank {rank}] mode={mode} owned={halo_meta.n_owned} "
+        f"halo={n_halo} remote={n_remote}",
+        flush=True,
+    )
 
     e_local = out["energy"].sum().detach()
     f_owned = out["forces"].detach()
@@ -279,32 +344,25 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
     )
     _fd = (f_owned - f_ref_owned).abs()
     print(
-        f"[uma-fdiff rank {rank}] inference={_INFERENCE} "
+        f"[uma-fdiff rank {rank}] mode={mode} "
         f"max|Δf|={_fd.max().item():.3e} mean|Δf|={_fd.mean().item():.3e} "
         f"max|f_ref|={f_ref_owned.abs().max().item():.3e}",
         flush=True,
     )
-    # "turbo" enables tf32, whose ~1e-3 relative round-off is uncorrelated
-    # between the single-process reference graph and the per-rank distributed
-    # graphs -- on this near-equilibrium system (forces ~1e-4 eV/A) that noise
-    # is the whole signal, so the strict force equivalence is only meaningful
-    # without tf32. The "compile" preset (compile + merge_mole, no tf32) is the
-    # tight compiled-DD correctness gate (forces match to ~1e-6); turbo gets a
-    # tf32-aware tolerance and serves as a runs-clean + energy-exact smoke test.
-    f_rtol, f_atol = (3e-3, 1e-3) if _INFERENCE == "turbo" else (1e-3, 1e-4)
     torch.testing.assert_close(
         f_owned,
         f_ref_owned,
-        rtol=f_rtol,
-        atol=f_atol,
+        rtol=1e-3,
+        atol=1e-4,
         msg=(
             f"rank {rank}: per-atom forces disagree with single-process UMA reference"
         ),
     )
 
 
+@pytest.mark.parametrize(("mode", "port"), (("eager", "29704"), ("compiled", "29705")))
 @pytest.mark.multigpu
-def test_uma_dist_model_equivalence_2ranks():
+def test_uma_dist_model_equivalence_2ranks(mode: str, port: str) -> None:
     """Regression: ``DistributedModel(UMAWrapper)`` matches a single-GPU
     UMA reference on force + total energy under halo storage.
 
@@ -319,6 +377,6 @@ def test_uma_dist_model_equivalence_2ranks():
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, "29704", _uma_equivalence_worker),
+        args=(WORLD_SIZE, port, _uma_equivalence_worker, mode),
         nprocs=WORLD_SIZE,
     )

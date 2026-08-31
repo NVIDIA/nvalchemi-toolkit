@@ -84,14 +84,19 @@
   OMat, OC20, ODAC, OMC). Input conversion is tensor-native (no ASE
   round trip); energy is the differentiable primitive with forces and
   (for periodic tasks) stress from autograd. Install via the new `uma`
-  optional extra (`pip install 'nvalchemi-toolkit[uma]'`), which is
-  declared conflicting with the `mace` and `cu12`/`cu13` extras
-  (incompatible `e3nn` / `torch` pins) and resolves into its own
-  environment. `from_checkpoint` forwards fairchem's `inference_settings`
-  (including `"turbo"` for `torch.compile`). See the
+  optional extra (`pip install 'nvalchemi-toolkit[uma,cu12]'`), which supports
+  both CUDA variants but remains incompatible with `mace` because of their
+  `e3nn` pins. `from_checkpoint` forwards fairchem's `inference_settings`,
+  including the compiled `"default"` and `"turbo"` presets and the eager
+  `"batch"` preset. See the
   `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
 
 ### Fixed
+
+- **UMA CUDA dependency resolution** — allow the `uma` extra to resolve with
+  either `cu12` or `cu13`. The CUDA extras no longer force a cuML floor that
+  conflicts with Fairchem 2.22's `numba` requirement; PhysicsNeMo selects a
+  compatible transitive cuML release instead.
 
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
   ever differentiated with respect to positions and charges, so a non-hybrid

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import math
 import os
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -53,7 +54,12 @@ from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph  # noqa: E402
 from nvalchemi.dynamics.integrators.nve import NVE  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
-from nvalchemi.models.uma import _UMA_TASKS, UMAWrapper  # noqa: E402
+from nvalchemi.models.uma import (  # noqa: E402
+    _UMA_TASKS,
+    UMAWrapper,
+    _distributed_edgewise_gather,
+    _distributed_partition_graph,
+)
 
 _CKPT = os.environ.get("NVALCHEMI_UMA_CKPT", "uma-s-1p1")
 _DEVICE = os.environ.get(
@@ -214,6 +220,24 @@ class TestConstruction:
         w = UMAWrapper(mock_pu, task_name="omol", train=True)
         assert any(p.requires_grad for p in w.predict_unit.model.parameters())
         assert w.training is True
+
+    def test_from_checkpoint_forwards_default_preset_unchanged(self, mock_pu):
+        from fairchem.core.calculate import pretrained_mlip
+
+        with (
+            patch.object(pretrained_mlip, "available_models", ["uma-test"]),
+            patch.object(
+                pretrained_mlip, "get_predict_unit", return_value=mock_pu
+            ) as get_predict_unit,
+        ):
+            UMAWrapper.from_checkpoint("uma-test")
+
+        get_predict_unit.assert_called_once_with(
+            "uma-test",
+            inference_settings="default",
+            overrides=None,
+            device="cpu",
+        )
 
 
 class TestModelConfig:
@@ -418,6 +442,109 @@ class TestForward:
 # ===========================================================================
 
 
+class TestGraphPartitionAdapters:
+    @pytest.mark.parametrize(
+        ("rank", "edge_index", "expected_scatter_target"),
+        [
+            (0, torch.tensor([[4, 2], [0, 1]]), torch.tensor([0, 1])),
+            (1, torch.tensor([[0, 1, 3], [2, 4, 3]]), torch.tensor([0, 2, 1])),
+        ],
+    )
+    def test_partition_maps_global_receivers_to_owned_rows(
+        self, rank, edge_index, expected_scatter_target
+    ):
+        ctx = Mock(rank=rank, world_size=2)
+        ctx.gather_meta.owner_rank = torch.tensor([0, 0, 1, 1, 1])
+        original = Mock(return_value={"edge_index": edge_index})
+        backbone = Mock(otf_graph=True)
+        data_dict = {
+            "atomic_numbers": torch.arange(5),
+            "batch": torch.zeros(5, dtype=torch.long),
+        }
+
+        graph = _distributed_partition_graph.__wrapped__.__wrapped__(
+            ctx, original, backbone, data_dict
+        )
+
+        assert graph["edge_index"] is edge_index
+        torch.testing.assert_close(data_dict["scatter_target"], expected_scatter_target)
+        assert data_dict["scatter_target"].min().item() >= 0
+        assert data_dict["scatter_target"].max().item() < len(
+            data_dict["atomic_numbers"]
+        )
+        assert "gp_node_offset" not in data_dict
+        assert backbone.otf_graph is True
+
+    def test_partition_rejects_non_owned_receiver(self):
+        ctx = Mock(rank=1, world_size=2)
+        ctx.gather_meta.owner_rank = torch.tensor([0, 0, 1, 1, 1])
+        original = Mock(return_value={"edge_index": torch.tensor([[0, 3], [1, 3]])})
+        backbone = Mock(otf_graph=True)
+        data_dict = {
+            "atomic_numbers": torch.arange(5),
+            "batch": torch.zeros(5, dtype=torch.long),
+        }
+
+        with pytest.raises(RuntimeError, match="outside this rank's owned atom block"):
+            _distributed_partition_graph.__wrapped__.__wrapped__(
+                ctx, original, backbone, data_dict
+            )
+
+    def test_edgewise_passes_scatter_target_to_forward_chunk(self):
+        edgewise = Mock()
+        expected = torch.randn(2, 4)
+        edgewise.forward_chunk.return_value = expected
+        x = torch.randn(2, 3, 4)
+        x_full = torch.randn(5, 3, 4)
+        x_edge = torch.randn(3, 8)
+        edge_index = torch.tensor([[4, 0, 3], [2, 4, 3]])
+        wigner = torch.randn(3, 2)
+        wigner_inv_envelope = torch.randn(3, 2)
+        scatter_target = torch.tensor([0, 2, 1])
+
+        with patch(
+            "nvalchemi.models.uma.refresh_neighbors", return_value=x_full
+        ) as refresh:
+            result = _distributed_edgewise_gather.__wrapped__(
+                Mock(),
+                Mock(),
+                edgewise,
+                x,
+                x_edge,
+                edge_index,
+                wigner,
+                wigner_inv_envelope,
+                5,
+                scatter_target,
+            )
+
+        assert result is expected
+        refresh.assert_called_once_with(x)
+        edgewise.forward_chunk.assert_called_once_with(
+            x_full,
+            2,
+            x_edge,
+            edge_index,
+            wigner,
+            wigner_inv_envelope,
+            scatter_target,
+        )
+
+    def test_edgewise_requires_scatter_target(self):
+        with pytest.raises(RuntimeError, match="did not provide scatter_target"):
+            _distributed_edgewise_gather.__wrapped__(
+                Mock(),
+                Mock(),
+                Mock(),
+                torch.randn(2, 3, 4),
+                torch.randn(3, 8),
+                torch.tensor([[4, 0, 3], [2, 4, 3]]),
+                torch.randn(3, 2),
+                torch.randn(3, 2),
+                5,
+            )
+
+
 class TestMLIPSpec:
     def test_inherits_uma_storage_modes(self, mock_omol):
         """Spec carries the halo storage policy (default modes).
@@ -484,6 +611,22 @@ class TestMLIPSpec:
             "eSCNMDMoeBackbone",
             "_get_merged_mole_consistency_info",
         ) in methods
+
+    def test_graph_partition_registers_partition_adapters(self, mock_omol):
+        from nvalchemi.distributed.config import StrategyKind
+
+        spec = mock_omol.distribution_spec(StrategyKind.GRAPH_PARTITION)
+        helpers = spec.distribution.third_party_helpers
+        replacements = {
+            (helper.class_name, helper.method_name): helper.replacement
+            for helper in helpers
+            if hasattr(helper, "method_name")
+        }
+
+        assert replacements[("eSCNMDBackbone", "_generate_graph")] is (
+            _distributed_partition_graph
+        )
+        assert replacements[("Edgewise", "forward")] is _distributed_edgewise_gather
 
 
 # ===========================================================================
@@ -826,9 +969,9 @@ class TestTurboCompile:
 
     Reproduces the original failing scenario — a GPU-resident first
     forward under turbo, which used to crash with a CPU/CUDA device
-    mismatch (fairchem's lazy MoLE merge mis-placed the charge/spin
-    embeddings). ``UMAWrapper.forward`` routes the one-time lazy-init
-    call through CPU input, so the compiled model lands on the GPU.
+    mismatch (fairchem's lazy MoLE merge ran before its normal device move).
+    ``UMAWrapper.forward`` moves the model and first input to CUDA before
+    Fairchem performs the merge.
     """
 
     @pytest.fixture(scope="class")
@@ -856,8 +999,7 @@ class TestTurboCompile:
         assert out["forces"].device.type == "cuda"
 
     def test_second_forward_after_init(self, wrapper_turbo: UMAWrapper) -> None:
-        """After lazy init, a fresh GPU batch still runs on-device (CPU
-        routing applies only to the first forward)."""
+        """After lazy init, a fresh GPU batch still runs on-device."""
         out = wrapper_turbo(_bcc_fe_batch("cuda"))
         assert torch.isfinite(out["energy"]).all()
         assert out["forces"].device.type == "cuda"
