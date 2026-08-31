@@ -302,12 +302,16 @@ class TestConvergenceHook:
         assert (batch.status == 1).all()
 
     def test_no_forces_raises_key_error(self) -> None:
-        """Hook should raise KeyError if batch has no forces attribute."""
+        """Hook should raise KeyError if batch has no forces attribute.
+
+        Migration statuses are set so the hook evaluates its criteria;
+        without them ``__call__`` is a no-op and never touches the batch.
+        """
         batch = create_batch_with_status(n_graphs=3)
         batch.status = torch.tensor([0, 0, 0])
         batch.forces = None  # Clear forces
 
-        hook = ConvergenceHook()
+        hook = ConvergenceHook(source_status=0, target_status=1)
         ctx = DynamicsContext(batch=batch, step_count=0)
 
         with pytest.raises(KeyError, match="forces"):
@@ -1604,11 +1608,13 @@ class _TrackingHook:
         self.frequency = frequency
         self.call_count = 0
         self.call_step_counts: list[int] = []
+        self.converged_masks: list[torch.Tensor | None] = []
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
-        """Record the call and current step count."""
+        """Record the call, step count, and converged mask."""
         self.call_count += 1
         self.call_step_counts.append(ctx.step_count)
+        self.converged_masks.append(ctx.converged_mask)
 
 
 # -----------------------------------------------------------------------------
@@ -1757,11 +1763,14 @@ class TestFusedStageSubstageHooks:
 
         assert hook.call_count == 1
 
-    def test_substage_on_converge_does_not_fire_when_not_converged(self) -> None:
-        """ON_CONVERGE hooks should NOT fire when samples are not converged.
+    def test_substage_on_converge_mask_all_false_when_not_converged(self) -> None:
+        """ON_CONVERGE hooks fire unconditionally but see an all-False mask.
 
-        Uses threshold of 0 so DemoModel forces never satisfy convergence,
-        and verifies the ON_CONVERGE hook did not fire.
+        Gating the dispatch on ``converged.any()`` would be a per-step host
+        sync inside the compiled step, so registered ON_CONVERGE hooks are
+        always called and must consult ``ctx.converged_mask``. With a
+        threshold of 0 the DemoModel forces never converge, so the mask
+        must be all-False.
         """
         dynamics0 = BaseDynamics(
             model=self.model,
@@ -1778,7 +1787,9 @@ class TestFusedStageSubstageHooks:
 
         fused.step(batch)
 
-        assert hook.call_count == 0
+        assert hook.call_count == 1
+        assert hook.converged_masks[-1] is not None
+        assert not hook.converged_masks[-1].any()
 
     def test_on_converge_only_fires_for_active_samples(self) -> None:
         """ON_CONVERGE converged_mask should only include samples active in that stage.

@@ -1674,13 +1674,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     def _build_context(self, batch: Batch) -> DynamicsContext:
         """Build a dynamics-specific hook context."""
-        if self._last_converged is not None:
+        if self._last_converged is None:
+            _mask = None
+        elif self._last_converged.dtype == torch.bool:
+            # Fused path stores a mask: index extraction breaks the graph.
+            _mask = self._last_converged
+        else:
             _mask = torch.zeros(
                 batch.num_graphs, dtype=torch.bool, device=batch.positions.device
             )
             _mask[self._last_converged] = True
-        else:
-            _mask = None
         return DynamicsContext(
             batch=batch,
             step_count=self.step_count,
@@ -2706,6 +2709,30 @@ class ConvergenceHook:
             1-D integer tensor of converged sample indices, or ``None``
             if no samples satisfy all criteria.
         """
+        converged_mask = self.evaluate_mask(batch)
+
+        if not converged_mask.any():
+            return None
+        return torch.where(converged_mask)[0]
+
+    def evaluate_mask(self, batch: Batch) -> torch.Tensor:
+        """Evaluate all criteria and return a boolean converged mask.
+
+        Branchless, static-shape core of :meth:`evaluate`: no host sync and
+        no data-dependent index extraction, so it can run inside a compiled
+        step (:meth:`FusedStage._step_impl`) without breaking the graph.
+
+        Parameters
+        ----------
+        batch : Batch
+            The current batch of atomic data.
+
+        Returns
+        -------
+        torch.Tensor
+            Boolean tensor of shape ``(B,)``; ``True`` where every
+            criterion is satisfied.
+        """
         n_criteria = len(self.criteria)
         n_graphs = batch.num_graphs
 
@@ -2719,11 +2746,7 @@ class ConvergenceHook:
         for i, criterion in enumerate(self.criteria):
             results[i] = criterion(batch)
 
-        converged_mask = torch.all(results, dim=0)
-
-        if not converged_mask.any():
-            return None
-        return torch.where(converged_mask)[0]
+        return torch.all(results, dim=0)
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Evaluate convergence and optionally migrate sample status.
@@ -2743,31 +2766,30 @@ class ConvergenceHook:
             The stage being dispatched.
         """
         batch = ctx.batch
-        converged = self.evaluate(batch)
-        if converged is None:
-            return
 
         if self.source_status is not None and self.target_status is not None:
             if not hasattr(batch, "status") or batch.status is None:
                 return
 
+            # Blend via torch.where: mask indexing and .any() gating would
+            # host-sync and break the compiled graph.
+            converged_mask = self.evaluate_mask(batch)
+
             status = batch.status
             if status.dim() == 2:
                 status = status.squeeze(-1)
+            migrate = converged_mask & (status == self.source_status)
 
-            converged_mask = torch.zeros(
-                batch.num_graphs, dtype=torch.bool, device=status.device
+            flat_status = (
+                batch.status.view(-1) if batch.status.dim() == 2 else batch.status
             )
-            converged_mask[converged] = True
-
-            status_mask = status == self.source_status
-            migrate = converged_mask & status_mask
-
-            if migrate.any():
-                flat_status = (
-                    batch.status.view(-1) if batch.status.dim() == 2 else batch.status
+            flat_status.copy_(
+                torch.where(
+                    migrate,
+                    torch.full_like(flat_status, self.target_status),
+                    flat_status,
                 )
-                flat_status[migrate] = self.target_status
+            )
 
 
 class FusedStage(BaseDynamics):
@@ -3342,23 +3364,18 @@ class FusedStage(BaseDynamics):
         for active_mask, (_, dynamics) in zip(
             stage_active_masks, self.sub_stages, strict=True
         ):
-            converged = dynamics._check_convergence(batch)
-            if converged is None:
+            hook = dynamics.convergence_hook
+            if hook is None:
                 dynamics._last_converged = None
                 continue
 
-            stage_converged = torch.zeros(
-                batch.num_graphs, dtype=torch.bool, device=batch.device
-            )
-            stage_converged[converged] = True
-            stage_converged &= active_mask
-
-            if not stage_converged.any():
-                dynamics._last_converged = None
-                continue
-
-            dynamics._last_converged = torch.where(stage_converged)[0]
-            dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+            # Gating on `stage_converged.any()` would host-sync every step,
+            # so registered ON_CONVERGE hooks always fire and must consult
+            # ctx.converged_mask themselves.
+            stage_converged = hook.evaluate_mask(batch) & active_mask
+            dynamics._last_converged = stage_converged
+            if dynamics._has_hooks_for_stage(DynamicsStage.ON_CONVERGE):
+                dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
 
         self.step_count += 1
         for _, dynamics in self.sub_stages:
