@@ -67,8 +67,9 @@ example: <code>pip install 'nvalchemi-toolkit[cu13,mace]'</code>.
 </noscript>
 
 ```{note}
-The CUDA extras are mutually exclusive. The `uma` extra is also mutually
-exclusive with `cu12`, `cu13`, and `mace`; keep UMA in a separate environment.
+The CUDA extras are mutually exclusive. The `uma` extra supports either CUDA
+extra but remains mutually exclusive with `mace`. For source installs, UMA also
+conflicts with the default `build` dependency group.
 ```
 
 ```{note}
@@ -125,6 +126,22 @@ $ uv pip install \
     'nvalchemi-toolkit[cu12,mace]'
 ```
 
+UMA also follows the selected CUDA variant:
+
+```bash
+# CUDA 12 UMA stack
+$ uv pip install \
+    --torch-backend cu126 \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu12,uma]'
+
+# CUDA 13 UMA stack
+$ uv pip install \
+    --torch-backend cu130 \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13,uma]'
+```
+
 ```{tip}
 The `--torch-backend` option routes `uv` to install the correct
 set of extra libraries more explicitly. For machines without accelerators,
@@ -162,11 +179,17 @@ $ uv sync --extra cu12
 # MACE support follows the same split
 $ uv sync --extra cu13 --extra mace
 $ uv sync --extra cu12 --extra mace
+
+# UMA uses a separate environment because it conflicts with MACE and build
+$ UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+    uv sync --extra cu12 --extra uma --no-group build
+$ UV_PROJECT_ENVIRONMENT=.venv-uma-cu13 \
+    uv sync --extra cu13 --extra uma --no-group build
 ```
 
 The CUDA extras are intentionally mutually exclusive. Do not use
-`uv sync --all-extras`, because it requests both `cu12` and `cu13` in the same
-environment.
+`uv sync --all-extras`, because it requests both `cu12` and `cu13`, as well as
+the mutually exclusive MACE and UMA extras, in one environment.
 
 Use the same CUDA extra when running commands through `uv run`. By default,
 `uv run` checks and syncs the project environment before executing the command;

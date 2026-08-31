@@ -69,7 +69,7 @@ ase = [
 cu12 = [
     "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
     "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
-    "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
+    # Let PhysicsNeMo select a cuML release compatible with Fairchem's numba.
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
@@ -77,7 +77,7 @@ cu12 = [
 cu13 = [
     "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
     "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
-    "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
+    # Let PhysicsNeMo select a cuML release compatible with Fairchem's numba.
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
@@ -119,17 +119,8 @@ conflicts = [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
-  # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
-  # (via toolkit-ops), so UMA forks a separate env
-  # (`uv sync --extra uma --no-group build`).
-  [
-    { extra = "cu12" },
-    { extra = "uma" },
-  ],
-  [
-    { extra = "cu13" },
-    { extra = "uma" },
-  ],
+  # UMA intentionally has no conflict with cu12 or cu13: Fairchem 2.22 uses
+  # torch 2.13.0, including the CUDA wheels selected by those extras.
   # MACE 0.3.15 pins e3nn==0.4.4; fairchem-core (UMA) needs e3nn>=0.5 —
   # mutually exclusive, so install one extra per environment.
   [

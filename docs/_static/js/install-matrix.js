@@ -8,10 +8,6 @@
   const extraInputs = [...matrix.querySelectorAll('input[name="extra"]')];
   const maceInput = matrix.querySelector("#extra-mace");
   const umaInput = matrix.querySelector("#extra-uma");
-  const cudaInputs = [
-    matrix.querySelector("#accelerator-cu12"),
-    matrix.querySelector("#accelerator-cu13"),
-  ];
   const torchBackends = { none: "cpu", cu12: "cu126", cu13: "cu130" };
   const pipTorchIndexes = {
     cu12: "https://download.pytorch.org/whl/cu126",
@@ -30,16 +26,13 @@
     const hasMace = extras.includes("mace");
     const hasUma = extras.includes("uma");
 
-    cudaInputs.forEach((input) => {
-      input.disabled = hasUma;
-    });
     maceInput.disabled = hasUma;
-    umaInput.disabled = accelerator !== "none" || hasMace;
+    umaInput.disabled = hasMace;
 
     if (hasUma) {
-      note.textContent = "UMA uses a separate environment and cannot be combined with CUDA or MACE.";
+      note.textContent = "UMA supports the selected CUDA stack but cannot be combined with MACE.";
     } else if (umaInput.disabled) {
-      note.textContent = "Clear CUDA and MACE to make UMA available.";
+      note.textContent = "Clear MACE to make UMA available.";
     } else {
       note.textContent = "Choose any combination of compatible optional extras.";
     }

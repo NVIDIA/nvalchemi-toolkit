@@ -64,11 +64,13 @@ uv sync --extra cu13 --group docs
 ```
 
 Optional extras include `aimnet`, `ase`, `cu12`, `cu13`, `mace`, `pymatgen`,
-`tensorboard`, and `uma`. `uma` conflicts with the CUDA/MACE stack and should be
-resolved in its own environment, as CI does with:
+`tensorboard`, and `uma`. UMA supports both CUDA extras but conflicts with MACE
+and the default `build` group. Resolve it in its own CUDA-aligned environment,
+as CI does with:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma --extra ase --extra cu12 --no-group build
 ```
 
 ## Build, Lint, Test
