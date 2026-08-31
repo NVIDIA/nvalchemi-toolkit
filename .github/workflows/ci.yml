@@ -26,9 +26,9 @@
 # 1. changed-files: Detects which files have changed compared to main branch
 # 2. lint: Runs static code checks and linting via pre-commit
 # 3. get-pr-labels: Retrieves PR labels for conditional job execution
-# 4. test: Runs pytest unit tests with coverage (on 1-GPU runner). UMA, whose
-#    deps conflict with the cu13/mace stack, is tested from a separate
-#    .venv-uma environment (gated on UMA changes or full runs).
+# 4. test: Runs pytest unit tests with coverage (on 1-GPU runner). UMA is
+#    tested from a separate CUDA 12 environment because it conflicts with MACE
+#    and the build group (gated on UMA changes or full runs).
 # 5. test-multigpu: Runs the `@pytest.mark.multigpu` tests on a 2-GPU runner.
 #    They auto-skip in job 4, so this is the only tier that executes them.
 #    Gated on DD-relevant changes, the nightly run, or the `ci:multigpu` label.
@@ -95,8 +95,8 @@ jobs:
             !.gitignore
             .github/workflows/ci.yml
 
-      # UMA lives in its own (conflicting) environment, so its tests run in a
-      # separate CI step. Detect UMA-specific changes to gate that step on PRs.
+      # UMA lives in its own environment, so its tests run in a separate CI
+      # step. Detect UMA-specific changes to gate that step on PRs.
       - uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46
         id: uma-changed
         with:
@@ -106,7 +106,12 @@ jobs:
             nvalchemi/models/__init__.py
             nvalchemi/_optional.py
             test/models/test_uma.py
+            test/distributed/model/test_uma_multigpu.py
+            test/distributed/model/test_uma_gp_partition_multigpu.py
             examples/advanced/09_uma_nve.py
+            pyproject.toml
+            uv.lock
+            .github/workflows/ci.yml
 
       # The 2-GPU runner is scarcer and its tests slower, so gate that job on
       # the paths those tests cover rather than on any change.
@@ -171,6 +176,13 @@ jobs:
         run: |
           uv sync ${CI_UV_EXTRAS}
           make lint
+
+      - name: Verify UMA CUDA resolutions
+        run: |
+          uv export --quiet --frozen --extra uma --extra ase --extra cu12 --no-group build \
+            --output-file /tmp/uma-cu12-requirements.txt
+          uv export --quiet --frozen --extra uma --extra ase --extra cu13 --no-group build \
+            --output-file /tmp/uma-cu13-requirements.txt
 
   # ============================================================================
   # GET PR LABELS (for copy-pr-bot integration)
@@ -264,14 +276,32 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv sync ${CI_UV_EXTRAS}
 
-      # UMA's fairchem-core torch pin conflicts with the cu13 / mace stack
-      # (see pyproject [tool.uv].conflicts), so it is resolved into a dedicated
-      # environment. ``ase`` is required by the UMA test module.
-      - name: Install UMA environment (.venv-uma)
+      # UMA conflicts with MACE and the build group, so it uses a dedicated
+      # CUDA 12 environment. ``ase`` is required by the UMA test module.
+      - name: Install UMA CUDA 12 environment (.venv-uma-cu12)
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen \
+            --extra uma --extra ase --extra cu12 --no-group build
+
+      - name: Verify UMA CUDA 12 environment
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv run --no-sync python -c "
+          import importlib.metadata as md, sys, torch
+          fairchem = md.version('fairchem-core')
+          print(f'fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda}')
+          if not fairchem.startswith('2.22.'):
+              sys.exit(f'expected fairchem-core 2.22.x, found {fairchem}')
+          if not torch.__version__.startswith('2.13.0+cu126'):
+              sys.exit(f'expected torch 2.13.0+cu126, found {torch.__version__}')
+          if not str(torch.version.cuda).startswith('12.'):
+              sys.exit(f'expected a CUDA 12 torch build, found {torch.version.cuda}')
+          if not torch.cuda.is_available():
+              sys.exit('expected a visible CUDA device')
+          "
 
       # ========================================================================
       # TESTMON + COVERAGE CACHING (PR runs only)
@@ -345,13 +375,14 @@ jobs:
       # ========================================================================
       # UMA TESTS (isolated environment)
       # ========================================================================
-      # UMA can't share the cu13/mace env, so its tests run from .venv-uma and
-      # append coverage to the active run's data file. Structural tests always
+      # UMA can't share the cu13/mace env, so its tests run from
+      # .venv-uma-cu12 and append coverage to the active run's data file.
+      # Structural tests always
       # run; the checkpoint-based tests skip without HF access to facebook/UMA
       # (set the HF_TOKEN secret to exercise them). The ``@slow`` NVE / turbo
       # tests are not selected (no --slow), matching the main suite.
 
-      - name: Run UMA tests (.venv-uma)
+      - name: Run UMA tests (.venv-uma-cu12)
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -362,7 +393,7 @@ jobs:
           else
             export COVERAGE_FILE=coverage_pr.dat
           fi
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase --no-group build \
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv run --no-sync \
             pytest --cov=nvalchemi --cov-append --cov-report= --cov-fail-under=0 \
             test/models/test_uma.py
 
@@ -543,21 +574,43 @@ jobs:
       # ========================================================================
       # UMA MULTI-GPU TESTS (isolated environment)
       # ========================================================================
-      # Same split as the 1-GPU job; without HF access these skip cleanly.
+      # Same CUDA 12 split as the 1-GPU job. These checkpoint tests must fail,
+      # rather than skip, when gated CI cannot load UMA.
 
-      - name: Install UMA environment (.venv-uma)
+      - name: Install UMA CUDA 12 environment (.venv-uma-cu12)
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase --no-group build
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen \
+            --extra uma --extra ase --extra cu12 --no-group build
 
-      - name: Run UMA multi-GPU tests (.venv-uma)
+      - name: Verify UMA CUDA 12 environment and 2 GPUs
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv run --no-sync python -c "
+          import importlib.metadata as md, sys, torch
+          fairchem = md.version('fairchem-core')
+          devices = torch.cuda.device_count()
+          print(f'fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda} devices={devices}')
+          if not fairchem.startswith('2.22.'):
+              sys.exit(f'expected fairchem-core 2.22.x, found {fairchem}')
+          if not torch.__version__.startswith('2.13.0+cu126'):
+              sys.exit(f'expected torch 2.13.0+cu126, found {torch.__version__}')
+          if not str(torch.version.cuda).startswith('12.'):
+              sys.exit(f'expected a CUDA 12 torch build, found {torch.version.cuda}')
+          if devices < 2:
+              sys.exit(f'expected >=2 GPUs on this runner, found {devices}')
+          "
+
+      - name: Run UMA multi-GPU tests (.venv-uma-cu12)
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase --no-group build \
+          NVALCHEMI_FORCE_MULTIGPU=1 \
+            UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv run --no-sync \
             pytest -m multigpu \
             test/distributed/model/test_uma_multigpu.py \
             test/distributed/model/test_uma_gp_partition_multigpu.py
