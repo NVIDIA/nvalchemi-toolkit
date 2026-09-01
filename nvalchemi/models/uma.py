@@ -61,13 +61,13 @@ internally: it is a field on ``fairchem.core.units.mlip_unit.api.inference.Infer
 (``compile: bool``), not a ``torch.compile(model)`` call. Reach it
 through :meth:`from_checkpoint`'s ``inference_settings`` argument:
 
-* ``inference_settings="turbo"`` — fairchem's optimized preset, which
-  sets ``compile=True`` **and** ``tf32=True`` / ``merge_mole=True`` /
-  ``activation_checkpointing=False``. Best for long simulations with
-  fixed atomic composition; it changes numerics relative to ``"default"``.
-* For a pure compile toggle, pass an ``InferenceSettings`` instance with
-  ``compile=True`` and the other fields left at their ``"default"``
-  values::
+* ``inference_settings="default"`` — fairchem 2.22's compiled, merged-MoLE
+  FP32 preset for fixed-composition inference.
+* ``inference_settings="batch"`` — eager, unmerged inference for changing
+  batch composition.
+* ``inference_settings="turbo"`` — the compiled, merged preset with TF32
+  enabled for more speed at slightly lower precision.
+* For reproducible controls, pass an ``InferenceSettings`` instance::
 
       from fairchem.core.units.mlip_unit.api.inference import (
           InferenceSettings,
@@ -77,7 +77,13 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
           "uma-s-1p1",
           task_name="omat",
           device="cuda",
-          inference_settings=InferenceSettings(compile=True),
+          inference_settings=InferenceSettings(
+              compile=False,
+              merge_mole=False,
+              tf32=False,
+              activation_checkpointing=False,
+              execution_mode="general",
+          ),
       )
 """
 
@@ -190,7 +196,7 @@ def _pad_capped_graph(
     # graph above spans all atoms — keep only the edges whose receiver this rank
     # owns (the contiguous ``[nlo : nlo+n_owned)`` block), matching the node-wise
     # work the backbone runs on the owned slice. ``nlo`` also anchors the dead
-    # edge below so it lands on an owned row after the ``gp_node_offset`` shift.
+    # edge below so its receiver maps to row zero in the local scatter target.
     nlo = 0
     if not cap_atoms:
         from nvalchemi.distributed._core.context import (  # noqa: PLC0415
@@ -266,8 +272,8 @@ def _pad_capped_graph(
     # With dead atoms (halo): hang the edge off the two dead anchors at indices
     # [n_real, n_real+1], whose 2*cutoff separation gives a zero envelope.
     # Without dead atoms (node partition): self-loop on this rank's first owned
-    # atom ``nlo`` (so it stays an owned receiver after the ``gp_node_offset``
-    # shift) with a large cell offset so the image sits well beyond the cutoff.
+    # atom ``nlo`` (so it stays an owned receiver and maps to local row zero)
+    # with a large cell offset so the image sits well beyond the cutoff.
     if e_dead > 0:
         if n_dead >= 2:
             a, b = n_real, n_real + 1
@@ -511,8 +517,8 @@ def _distributed_partition_graph(
     rank's owned receivers (``otf_graph=False``), so ``original`` here just derives
     the per-edge distances for it. This adapter then slices the per-node inputs
     (atomic numbers, system index) to the owned ``[nlo : nlo+n_owned)`` block and
-    sets ``gp_node_offset`` so the per-layer edge→node scatter lands on the owned
-    rows. The node slice runs *after* fairchem's ``forward`` stashes
+    maps each global edge receiver to its owned-local row in ``scatter_target``.
+    The node slice runs *after* fairchem's ``forward`` stashes
     ``atomic_numbers_full`` (from the full ``atomic_numbers`` at entry), so the edge
     source/target embeddings still index global senders; the per-layer sender
     all-gather is injected at ``Edgewise`` (:func:`_distributed_edgewise_gather`).
@@ -533,7 +539,15 @@ def _distributed_partition_graph(
     nlo, n_owned = _node_partition_bounds(ctx)
     data_dict["atomic_numbers"] = data_dict["atomic_numbers"][nlo : nlo + n_owned]
     data_dict["batch"] = data_dict["batch"][nlo : nlo + n_owned]
-    data_dict["gp_node_offset"] = nlo
+    scatter_target = gd["edge_index"][1] - nlo
+    if scatter_target.numel() and (
+        (scatter_target < 0).any() or (scatter_target >= n_owned).any()
+    ):
+        raise RuntimeError(
+            "UMA graph partition contains an edge whose receiver is outside "
+            "this rank's owned atom block."
+        )
+    data_dict["scatter_target"] = scatter_target
     return gd
 
 
@@ -547,8 +561,9 @@ def _distributed_edgewise_gather(
     edge_index: "torch.Tensor",
     wigner: "torch.Tensor",
     wigner_inv_envelope: "torch.Tensor",
-    *args: Any,
-    **kwargs: Any,
+    total_atoms_across_gp_ranks: int,
+    scatter_target: "torch.Tensor | None" = None,
+    gp_ctx: Any = None,
 ) -> Any:
     """All-gather owned node features to the full set for the conv (node-partition).
 
@@ -556,15 +571,18 @@ def _distributed_edgewise_gather(
     convolution reads source features for globally-indexed edges, so all-gather
     the owned rows to the full replicated tensor (``refresh_neighbors`` → the
     policy's owned→full all-gather, reduce-scatter on the backward) and run
-    ``Edgewise.forward_chunk`` with the *owned* row count as the scatter target
-    and ``node_offset`` shifting global receivers into the owned-local range.
+    ``Edgewise.forward_chunk`` with the *owned* row count and Fairchem's
+    precomputed owned-local ``scatter_target``.
     Replaces — not wraps — ``Edgewise.forward``, bypassing the stock ``gp_utils``
     gather branch and activation-checkpoint chunking (graph parallel disables AC).
 
     ``@distributed_method`` falls back to the stock forward off any distributed
     path (single process).
     """
-    node_offset = kwargs.get("node_offset", 0)
+    if scatter_target is None:
+        raise RuntimeError(
+            "Fairchem did not provide scatter_target for UMA graph partitioning."
+        )
     n_owned = x.shape[0]
     x_full = refresh_neighbors(x)
     return edgewise_self.forward_chunk(
@@ -574,7 +592,7 @@ def _distributed_edgewise_gather(
         edge_index,
         wigner,
         wigner_inv_envelope,
-        node_offset,
+        scatter_target,
     )
 
 
@@ -793,20 +811,18 @@ def _distributed_set_mole_coefficients(
 ) -> Any:
     """Caps-aware replacement for ``eSCNMDMoeBackbone.set_MOLE_coefficients``.
 
-    The MoLE expert-mixing coefficients depend on a per-system mean of the
-    composition embedding. Under domain decomposition the input carries this rank's
-    ``owned + ghost`` atoms plus inert dead atoms (``Z=0``) from the caps padder
-    (see :func:`_pad_capped_graph`); both pollute the stock mean (dead rows add a
-    ``Z=0`` embedding, and a per-rank mean differs from the global one), shifting
-    every MoLE-linear weight by a small per-system amount.
+    Fairchem chooses the merged MoLE weights from the average atom composition.
+    In a distributed run, each rank also holds ghost atoms and ``Z=0`` padding.
+    Including those rows changes the average and can give each rank different
+    merged weights.
 
-    The fix mirrors the energy reduction: average the composition embedding over
-    this rank's **owned** real atoms only (``Scope.OWNED`` drops ghost and dead
-    rows) and all-reduce across the mesh, yielding the global per-system mean the
-    single-process model computes. The remaining routing (``routing_mlp`` +
-    coefficient norm) is unchanged. ``@distributed_method`` falls back to stock off
-    the halo path. The merged path (compiled / ``merge_mole``) runs on CPU where
-    the mesh collective is unavailable and is already exact, so it too uses stock.
+    Instead, this adapter keeps only the real atoms owned by each rank, sums their
+    composition embeddings across all ranks, and divides by the global atom count.
+    The result matches the composition average from a single-GPU run. The wrapper
+    moves Fairchem's one-time lazy merge to CUDA before this method runs, so the
+    reduction uses the existing NCCL process group without copying data to CPU.
+    Outside distributed inference, ``@distributed_method`` calls Fairchem's method
+    unchanged.
 
     Parameters
     ----------
@@ -829,31 +845,28 @@ def _distributed_set_mole_coefficients(
         ``None`` — the coefficients are written onto
         ``backbone_self.global_mole_tensors`` in place, matching fairchem.
     """
-    import numpy as _np  # noqa: PLC0415
-
-    # No experts, no composition gating, or the CPU merge prep where the mesh
-    # collective can't run (and the merged path is already exact): use stock.
-    if (
-        backbone_self.num_experts == 0
-        or not getattr(backbone_self, "use_composition_embedding", False)
-        or not atomic_numbers_full.is_cuda
+    # With no composition-dependent experts there is nothing distribution-specific.
+    if backbone_self.num_experts == 0 or not getattr(
+        backbone_self, "use_composition_embedding", False
     ):
         return original(backbone_self, atomic_numbers_full, batch_full, csd_mixed_emb)
 
     nsys = int(csd_mixed_emb.shape[0])
+    # Distributed CUDA inference is the only path that needs this override. A CPU
+    # call cannot use the NCCL mesh, so leave it to Fairchem's local implementation.
+    if not atomic_numbers_full.is_cuda:
+        return original(backbone_self, atomic_numbers_full, batch_full, csd_mixed_emb)
+
     with torch.autocast(device_type=atomic_numbers_full.device.type, enabled=False):
-        # ``system_sum`` slices this rank's owned rows (offset-aware), dropping
-        # ghost and dead rows, so the full rows are passed here.
+        # system_sum selects owned rows before the all-reduce. Ghost atoms and the
+        # Z=0 rows used to hold compiled shapes therefore contribute nothing.
         comp_by_atom = backbone_self.composition_embedding(atomic_numbers_full)
-        # Global per-system sum + owned count, both all-reduced across the mesh.
         comp_sum = system_sum(comp_by_atom, batch_full, nsys, scope=Scope.OWNED)
         ones = comp_by_atom.new_ones(comp_by_atom.shape[0], 1)
         count = system_sum(ones, batch_full, nsys, scope=Scope.OWNED)
-        # fairchem's index_reduce(mean, include_self) seeds an extra zero row on
-        # model_version 1.0; match it so the denominator is identical.
-        include_self = (
-            1.0 if _np.isclose(backbone_self.model_version, 1.0).item() else 0.0
-        )
+
+        # UMA-S-1.2 intentionally retains Fairchem's historical zero-seeded mean.
+        include_self = 1.0 if backbone_self.model_id == "UMA-S-1.2" else 0.0
         composition = comp_sum / (count + include_self).clamp_min(1.0)
 
         embeddings = [composition.unsqueeze(0), csd_mixed_emb[None]]
@@ -1002,7 +1015,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             Target device for inference. Defaults to ``"cpu"``.
         inference_settings : InferenceSettings | str
             fairchem inference configuration. Either a preset name
-            (``"default"`` or ``"turbo"``) or a
+            (``"default"``, ``"batch"``, or ``"turbo"``) or a
             ``fairchem.core.units.mlip_unit.api.inference.InferenceSettings``
             instance. ``torch.compile`` is reached through this argument
             — see the module docstring's *torch.compile* section.
@@ -1521,8 +1534,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         The single distribution touchpoint is ``ctx.maybe_pad_graph``, which under
         compiled domain decomposition pads the fairchem graph to stable per-rank
         shapes (a no-op single-process). The two blocks below handle fairchem's own
-        compile requirements: CPU routing for the first-call MoLE merge, and
-        forcing static shapes.
+        compile requirements: moving the first-call MoLE merge to the requested
+        device, and forcing static shapes.
 
         Parameters
         ----------
@@ -1545,7 +1558,11 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             and settings is not None
             and (getattr(settings, "merge_mole", False) or compiling)
         ):
-            fc_data = fc_data.to(torch.device("cpu"))
+            # Fairchem prepares MoLE before its normal device move. Move both the
+            # model and first input now so routing and distributed reductions run
+            # on the requested device instead of mixing CPU and CUDA tensors.
+            self.predict_unit.move_to_device()
+            fc_data = fc_data.to(self.predict_unit.device)
         static_cm = (
             force_compile_static()
             if (first_call and compiling)

@@ -90,8 +90,9 @@ and the NVT runner reports `world=0`. Omit `--sizes` to use the config's
 
 - **MACE + cueq on multiple ranks** needs
   `CUEQUIVARIANCE_OPS_PARALLEL_COMPILE=0` to avoid a cross-rank JIT race.
-- **UMA** ships in its own extras group (`uv sync --extra uma`) because
-  `fairchem-core` pins a newer `e3nn` than the MACE ecosystem; it also
-  needs `HF_TOKEN` for the gated checkpoints. Keep UMA and MACE in
+- **UMA** ships in its own extras group because `fairchem-core` pins a newer
+  `e3nn` than the MACE ecosystem. Install it in a dedicated environment with
+  `UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma-cu12 --extra ase --no-group build`;
+  it also needs `HF_TOKEN` for the gated checkpoints. Keep UMA and MACE in
   separate environments.
 - cueq (MACE) and the AIMNet2 warp kernels are float32-only.

@@ -58,8 +58,8 @@ To run this example end-to-end:
 1. Install the optional dependency (its torch pin conflicts with the
    ``mace`` / ``cuXX`` extras, so use a dedicated environment)::
 
-       uv venv .venv-uma && uv sync --extra uma
-       # or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+       UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma-cu12 --no-group build
+       # or, with pip:  pip install 'nvalchemi-toolkit[uma-cu12]'
 
 2. Request access at https://huggingface.co/facebook/UMA (one-time
    approval).

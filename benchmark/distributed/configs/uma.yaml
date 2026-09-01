@@ -1,7 +1,7 @@
 # UMA (fairchem-core) — bcc iron supercell (2 atoms / cell), full PBC.
 #
 # UMA ships in its own extras group (fairchem-core pins a newer e3nn than the
-# MACE ecosystem); install with `uv sync --extra uma` and set HF_TOKEN. UMA
+# MACE ecosystem); install with `uv sync --extra uma-cu12` and set HF_TOKEN. UMA
 # runs fp32 and builds its own neighbour list via fairchem's predict_unit.
 # Select the fairchem inference mode with --set loader.inference=compile|turbo.
 model: UMA
