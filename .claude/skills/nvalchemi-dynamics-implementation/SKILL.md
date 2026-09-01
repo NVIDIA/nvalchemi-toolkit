@@ -24,9 +24,11 @@ from nvalchemi.data import Batch
 
 ## Step execution flow
 
-Each call to `step(batch)` executes:
+The first `step(batch)` after admission dispatches `ON_ADMISSION`, while subsequent
+steps skip it until admission is explicitly reset. The per-step sequence is:
 
 ```text
+0. ON_ADMISSION hooks (once after reset, before the compiled step)
 1. BEFORE_STEP hooks
 2. BEFORE_PRE_UPDATE hooks  →  pre_update(batch)  →  AFTER_PRE_UPDATE hooks
 3. BEFORE_COMPUTE hooks     →  compute(batch)      →  AFTER_COMPUTE hooks

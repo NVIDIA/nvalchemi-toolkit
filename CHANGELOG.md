@@ -4,6 +4,31 @@
 
 ### Added
 
+- `FusedStage(reprime_on_entry=...)` — status codes whose newly entering
+  graphs skip one integrator update so the shared compute and target-stage
+  `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
+  before it advances them.
+
+### Fixed
+
+- **Dynamics hook lifecycle** — add `ON_ADMISSION` for one-time batch setup
+  before force priming and outside compiled fused steps. Fused stages now fire
+  shared step and compute hooks at both fused and sub-stage levels with
+  consistent nesting.
+- **`FusedStage` force priming** — a dynamics instance's own adaptive
+  optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
+  `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+
+### Deprecated
+
+- `FusedStage.register_fused_hook()`. Use the inherited `register_hook()`
+  method instead; hooks on a `FusedStage` already observe the complete fused
+  batch.
+
+## 0.2.0 — 2026-08-07
+
+### Added
+
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,

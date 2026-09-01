@@ -228,8 +228,9 @@ class TestDynamicsStage:
     """Test suite for DynamicsStage enumeration."""
 
     def test_all_stages_exist(self) -> None:
-        """Verify all 9 enum members exist."""
+        """Verify all 10 enum members exist."""
         expected_stages = [
+            "ON_ADMISSION",
             "BEFORE_STEP",
             "BEFORE_PRE_UPDATE",
             "AFTER_PRE_UPDATE",
@@ -242,7 +243,7 @@ class TestDynamicsStage:
         ]
 
         actual_stages = [member.name for member in DynamicsStage]
-        assert len(actual_stages) == 9
+        assert len(actual_stages) == 10
         assert set(actual_stages) == set(expected_stages)
 
     def test_enum_values_are_integers(self) -> None:
@@ -257,6 +258,7 @@ class TestDynamicsStage:
 
     def test_enum_ordering(self) -> None:
         """Verify the logical ordering of stages."""
+        assert DynamicsStage.ON_ADMISSION.value < DynamicsStage.BEFORE_STEP.value
         assert DynamicsStage.BEFORE_STEP.value < DynamicsStage.BEFORE_PRE_UPDATE.value
         assert (
             DynamicsStage.BEFORE_PRE_UPDATE.value < DynamicsStage.AFTER_PRE_UPDATE.value
@@ -434,6 +436,20 @@ class TestBaseDynamics:
         assert ctx.workflow is dynamics
         assert ctx.converged_mask is not None
         assert ctx.converged_mask.tolist() == [True, False]
+
+    def test_on_admission_hooks_fire_once_until_invalidated(self) -> None:
+        """Verify ON_ADMISSION fires once until admission is invalidated."""
+        record_list: list[str] = []
+        hook = RecordingHook(DynamicsStage.ON_ADMISSION, record_list)
+        dynamics = BaseDynamics(self.model, hooks=[hook])
+        batch = create_simple_batch()
+
+        dynamics.step(batch)
+        dynamics.step(batch)
+        dynamics._admission_initialized = False
+        dynamics.step(batch)
+
+        assert record_list == ["ON_ADMISSION", "ON_ADMISSION"]
 
     def test_on_converge_hooks_fire(self) -> None:
         """Verify ON_CONVERGE hooks fire when convergence is detected."""

@@ -22,11 +22,12 @@ For the general hook protocol, context, and registry see
 DynamicsStage
 --------------
 
-:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates the nine
-hook-firing points within a single dynamics step:
+:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates ten lifecycle
+hook-firing points: ``ON_ADMISSION`` for batch setup, followed by nine stages
+within each dynamics step:
 
 .. graphviz::
-   :caption: DynamicsStage hook firing points within a single step.
+   :caption: DynamicsStage lifecycle hook firing points.
 
    digraph dynamics_stages {
        rankdir=TB
@@ -34,6 +35,7 @@ hook-firing points within a single dynamics step:
        node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
        edge [fontsize=10 style=bold]
 
+       ON_ADMISSION [label="ON_ADMISSION\n(once per admission)" fillcolor="#4a3315"]
        BEFORE_STEP [label="BEFORE_STEP" fillcolor="#4a3315"]
 
        subgraph cluster_step {
@@ -65,6 +67,7 @@ hook-firing points within a single dynamics step:
        AFTER_STEP  [label="AFTER_STEP" fillcolor="#4a3315"]
        ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#4a3315"]
 
+       ON_ADMISSION -> BEFORE_STEP
        BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
        AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
        AFTER_STEP -> ON_CONVERGE [style=dashed]
@@ -77,6 +80,9 @@ hook-firing points within a single dynamics step:
    * - Stage
      - Value
      - When it fires
+   * - ``ON_ADMISSION``
+     - -1
+     - Once when a batch enters the engine, before force priming and the first step.
    * - ``BEFORE_STEP``
      - 0
      - Very start of each step, before any operations.
@@ -104,6 +110,10 @@ hook-firing points within a single dynamics step:
    * - ``ON_CONVERGE``
      - 8
      - Only when the convergence hook detects converged samples.
+
+``ON_ADMISSION`` fires once per run or managed batch replacement, before force
+priming. In :class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
+``_step_impl``, making it suitable for validation and shape-dependent setup.
 
 
 Built-in dynamics hooks
@@ -240,21 +250,29 @@ Constraint hooks
 ~~~~~~~~~~~~~~~~
 
 Constraint hooks enforce geometric constraints across integration steps. They
-fire at both ``BEFORE_PRE_UPDATE`` (to snapshot positions) and
-``AFTER_POST_UPDATE`` (to restore them).
+can span the pre-update, compute, and post-update boundaries to prevent frozen
+state from influencing either half of the integrator while still presenting a
+constrained geometry to the model.
 
 FreezeAtomsHook
 ...............
 
 :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` keeps selected atoms fixed:
-it snapshots their positions at ``BEFORE_PRE_UPDATE`` and restores them —
-with zeroed velocities — at ``AFTER_POST_UPDATE``. The integrator runs
-normally and the positions are overwritten afterward, so no integrator
-modification is required.
+it fires at five stages. At ``BEFORE_PRE_UPDATE`` it snapshots positions and
+clears prior forces and velocities; at ``AFTER_PRE_UPDATE`` it restores the
+constrained geometry before compute preparation; at ``AFTER_COMPUTE`` it clears
+new model forces when ``zero_forces=True``; at ``BEFORE_POST_UPDATE`` it always
+clears frozen-atom forces; and at ``AFTER_POST_UPDATE`` it restores positions
+and zeroes velocities.
 
-``categories`` is a string or list of strings matching atom type categories in
-the batch (for example, ``"substrate"`` or ``["substrate", "boundary"]``). Only
-atoms in the listed categories are frozen; all others evolve freely.
+``freeze_category`` is the integer ``batch.atom_categories`` value that marks
+frozen atoms. It defaults to :attr:`~nvalchemi._typing.AtomCategory.SPECIAL`.
+Only atoms matching that value are frozen; all others evolve freely.
+
+Set ``zero_forces=False`` to expose raw frozen-atom model forces to
+``AFTER_COMPUTE`` observers. Those forces are still cleared at
+``BEFORE_POST_UPDATE``, before the second integrator update, so they cannot
+move the frozen atoms.
 
 Use this hook for partial-system relaxations (freeze the substrate, relax the
 adsorbate), slab calculations (freeze bottom layers), or any configuration
@@ -312,23 +330,33 @@ checking so the detector sees the corrected forces:
 Hooks inside ``FusedStage``
 ---------------------------
 
-When hooks are registered on sub-stage dynamics inside a
-:class:`~nvalchemi.dynamics.FusedStage`, their firing semantics differ
-slightly from standalone execution:
+Hooks may be registered directly on a
+:class:`~nvalchemi.dynamics.FusedStage` or on any of its sub-stages. Step,
+compute, and integrator update boundaries all fire at both levels. Fused-stage
+hooks receive the full batch with the overall active mask (all systems whose
+status is below ``exit_status``), while each sub-stage hook receives the same
+batch with its status-specific mask. At admission,
+the fused-stage ``ON_ADMISSION`` hooks fire first, followed by each sub-stage's
+admission hooks in sub-stage order.
 
-**Fired on each sub-stage:**
+At every ``BEFORE_*`` boundary, the fused-stage hooks fire before the sub-stage
+hooks. At every ``AFTER_*`` boundary, the sub-stage hooks fire before the
+fused-stage hooks. Only ``ON_CONVERGE`` remains sub-stage-only because
+convergence is evaluated independently for each sub-stage.
 
-- ``BEFORE_STEP``, ``AFTER_COMPUTE``, ``BEFORE_PRE_UPDATE``,
-  ``AFTER_POST_UPDATE``, ``AFTER_STEP``, ``ON_CONVERGE``
+Register a cross-stage constraint once on the fused stage when it should apply
+to every active system, regardless of its current sub-stage:
 
-**Not fired on sub-stages** (because the forward pass is shared):
+.. code-block:: python
 
-- ``BEFORE_COMPUTE``, ``AFTER_PRE_UPDATE``, ``BEFORE_POST_UPDATE``
+   from nvalchemi.dynamics.hooks import FreezeAtomsHook
 
-This means safety hooks (``NaNDetectorHook``, ``MaxForceClampHook``)
-and observer hooks (``LoggingHook``, ``SnapshotHook``) work as expected
-inside fused stages, since they fire at ``AFTER_COMPUTE`` or
-``AFTER_STEP``.
+   fused = optimizer + md
+   fused.register_hook(FreezeAtomsHook())
+   fused.run(batch)
+
+Register the hook on an individual sub-stage instead when the constraint should
+apply only during that phase.
 
 Hook ordering inside a fused step:
 
@@ -337,50 +365,52 @@ Hook ordering inside a fused step:
 
    digraph fused_hook_order {
        rankdir=TB
+       ranksep=0.3
        compound=true
        node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
        edge [fontsize=10 style=bold]
 
-       subgraph cluster_before {
-           label="for each sub-stage"
-           style=dashed
-           color="#76b900"
-           fontcolor="#76b900"
-           fontsize=10
-           BEFORE_STEP [label="BEFORE_STEP hooks"]
-       }
+       fused_on_admission [label="FusedStage ON_ADMISSION hooks\n(outside compiled step)" fillcolor="#4a3315"]
+       sub_on_admission [label="each sub-stage ON_ADMISSION hooks\n(in sub-stage order)"]
+       fused_before_step [label="FusedStage BEFORE_STEP hooks" fillcolor="#4a3315"]
+       fused_before_pre [label="FusedStage BEFORE_PRE_UPDATE hooks" fillcolor="#4a3315"]
+       fused_after_pre [label="FusedStage AFTER_PRE_UPDATE hooks" fillcolor="#4a3315"]
+       sub_before_step [label="each sub-stage BEFORE_STEP hooks\n(in sub-stage order)"]
 
-       compute [label="single compute()" fillcolor="#4a3315"]
-
-       subgraph cluster_after_compute {
-           label="for each sub-stage"
-           style=dashed
-           color="#76b900"
-           fontcolor="#76b900"
-           fontsize=10
-           AFTER_COMPUTE [label="AFTER_COMPUTE hooks"]
-       }
-
-       subgraph cluster_update {
+       subgraph cluster_pre_update {
            label="for each sub-stage"
            style=dashed
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
            BEFORE_PRE [label="BEFORE_PRE_UPDATE hooks"]
-           masked     [label="masked_update()\n(if samples match status)" fillcolor="#1a1a1a"]
-           AFTER_POST [label="AFTER_POST_UPDATE hooks"]
-           BEFORE_PRE -> masked -> AFTER_POST
+           pre_update [label="masked_pre_update()" fillcolor="#1a1a1a"]
+           AFTER_PRE [label="AFTER_PRE_UPDATE hooks"]
+           BEFORE_PRE -> pre_update -> AFTER_PRE
        }
 
-       subgraph cluster_after_step {
+       fused_before_compute [label="FusedStage BEFORE_COMPUTE hooks" fillcolor="#4a3315"]
+       sub_before_compute [label="each sub-stage BEFORE_COMPUTE hooks\n(in sub-stage order)"]
+       compute [label="single shared compute()" fillcolor="#4a3315"]
+       sub_after_compute [label="each sub-stage AFTER_COMPUTE hooks\n(in sub-stage order)"]
+       fused_before_post [label="FusedStage BEFORE_POST_UPDATE hooks" fillcolor="#4a3315"]
+       fused_after_post [label="FusedStage AFTER_POST_UPDATE hooks" fillcolor="#4a3315"]
+       fused_after_compute [label="FusedStage AFTER_COMPUTE hooks" fillcolor="#4a3315"]
+
+       subgraph cluster_post_update {
            label="for each sub-stage"
            style=dashed
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
-           AFTER_STEP [label="AFTER_STEP hooks"]
+           BEFORE_POST [label="BEFORE_POST_UPDATE hooks"]
+           post_update [label="masked_post_update()" fillcolor="#1a1a1a"]
+           AFTER_POST [label="AFTER_POST_UPDATE hooks"]
+           BEFORE_POST -> post_update -> AFTER_POST
        }
+
+       sub_after_step [label="each sub-stage AFTER_STEP hooks\n(in sub-stage order)"]
+       fused_after_step [label="FusedStage AFTER_STEP hooks" fillcolor="#4a3315"]
 
        subgraph cluster_converge {
            label="for each sub-stage"
@@ -388,18 +418,35 @@ Hook ordering inside a fused step:
            color="#76b900"
            fontcolor="#76b900"
            fontsize=10
-           conv_check  [label="convergence check" fillcolor="#1a1a1a"]
-           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#4a3315"]
-           conv_check -> ON_CONVERGE [style=dashed label="if converged"]
+           conv_check  [label="convergence evaluation" fillcolor="#1a1a1a"]
+           ON_CONVERGE [label="ON_CONVERGE hooks\n(with convergence mask)"]
+           conv_check -> ON_CONVERGE [style=dashed]
        }
 
-       BEFORE_STEP -> compute
-       compute -> AFTER_COMPUTE
-       AFTER_COMPUTE -> BEFORE_PRE
-       AFTER_POST -> AFTER_STEP
-       AFTER_STEP -> conv_check
+       fused_on_admission -> sub_on_admission
+       sub_on_admission -> fused_before_step
+       fused_before_step -> sub_before_step
+       sub_before_step -> fused_before_pre
+       fused_before_pre -> BEFORE_PRE [lhead=cluster_pre_update]
+       AFTER_PRE -> fused_after_pre [ltail=cluster_pre_update]
+       fused_after_pre -> fused_before_compute
+       fused_before_compute -> sub_before_compute
+       sub_before_compute -> compute
+       compute -> sub_after_compute
+       sub_after_compute -> fused_after_compute
+       fused_after_compute -> fused_before_post
+       fused_before_post -> BEFORE_POST [lhead=cluster_post_update]
+       AFTER_POST -> fused_after_post [ltail=cluster_post_update]
+       fused_after_post -> sub_after_step
+       sub_after_step -> fused_after_step
+       fused_after_step -> conv_check [lhead=cluster_converge]
    }
 
+Initial force priming follows the same nested ``BEFORE_COMPUTE`` and
+``AFTER_COMPUTE`` ordering. Safety hooks (``NaNDetectorHook``,
+``MaxForceClampHook``) and observer hooks (``LoggingHook``, ``SnapshotHook``)
+therefore behave consistently whether they are registered on the fused stage
+or on a specific sub-stage.
 
 API reference
 -------------

@@ -180,6 +180,65 @@ class TestBiasedPotentialHook:
         assert torch.allclose(batch.forces, forces_before)
         assert torch.allclose(batch.energy, energies_before)
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_only_active_graphs_receive_bias(self, device: str, inplace: bool) -> None:
+        """Apply full-batch bias outputs only to an active fused substage."""
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2, device=device)
+        forces_before = batch.forces.clone()
+        energies_before = batch.energy.clone()
+        callback_graph_counts: list[int] = []
+
+        def full_batch_bias(b: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+            callback_graph_counts.append(b.num_graphs)
+            return torch.ones_like(b.energy), torch.ones_like(b.forces)
+
+        hook = BiasedPotentialHook(
+            bias_fn=full_batch_bias,
+            stage=DynamicsStage.AFTER_COMPUTE,
+            inplace=inplace,
+        )
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False], device=device)
+
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert callback_graph_counts == [2]
+        assert torch.allclose(batch.energy[0], energies_before[0] + 1.0)
+        assert torch.allclose(batch.forces[:2], forces_before[:2] + 1.0)
+        assert torch.allclose(batch.energy[1], energies_before[1])
+        assert torch.allclose(batch.forces[2:], forces_before[2:])
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_inactive_nan_bias_values_do_not_contaminate_batch(
+        self, device: str, inplace: bool
+    ) -> None:
+        """Mask inactive NaN bias values before adding them to the batch."""
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2, device=device)
+        forces_before = batch.forces.clone()
+        energies_before = batch.energy.clone()
+
+        def inactive_nan_bias(b: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+            bias_energy = torch.ones_like(b.energy)
+            bias_forces = torch.ones_like(b.forces)
+            bias_energy[1] = float("nan")
+            bias_forces[2:] = float("nan")
+            return bias_energy, bias_forces
+
+        hook = BiasedPotentialHook(
+            bias_fn=inactive_nan_bias,
+            stage=DynamicsStage.AFTER_COMPUTE,
+            inplace=inplace,
+        )
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False], device=device)
+
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert torch.allclose(batch.energy[0], energies_before[0] + 1.0)
+        assert torch.allclose(batch.forces[:2], forces_before[:2] + 1.0)
+        assert torch.allclose(batch.energy[1], energies_before[1])
+        assert torch.allclose(batch.forces[2:], forces_before[2:])
+
     def test_stage_is_after_compute(self) -> None:
         hook = BiasedPotentialHook(
             bias_fn=lambda b: (b.energy, b.forces), stage=DynamicsStage.AFTER_COMPUTE

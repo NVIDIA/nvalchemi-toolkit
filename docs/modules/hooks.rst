@@ -145,8 +145,8 @@ Stage enums and multi-stage hooks
 Each workflow engine fires hooks at named lifecycle points defined by a stage
 enum. The two built-in enums are:
 
-- :class:`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
-  ``BEFORE_STEP`` through ``ON_CONVERGE``. See :ref:`dynamics-hooks`.
+- :class:`~nvalchemi.dynamics.base.DynamicsStage` — 10 lifecycle stages
+  from ``ON_ADMISSION`` through ``ON_CONVERGE``. See :ref:`dynamics-hooks`.
 - :class:`~nvalchemi.training.TrainingStage` — stages from ``SETUP``
   through ``AFTER_TRAINING``. See :ref:`training-hooks-api`.
 

@@ -290,6 +290,49 @@ class TestAlignCellHook:
 
         assert _upper_triangular(batch.cell, atol=1e-8)
 
+    def test_aligns_only_active_graphs(self, device: str) -> None:
+        """Leave cells and atoms in inactive substages unchanged."""
+        dtype = torch.float64
+        batch = _make_periodic_batch(n_graphs=2, dtype=dtype, device=device)
+        rotated = _make_rotated_cell(dtype=dtype, device=device)
+        batch["cell"] = rotated.expand(2, -1, -1).clone()
+        positions_before = batch.positions.clone()
+        cell_before = batch.cell.clone()
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False], device=device)
+
+        AlignCellHook()(ctx, DynamicsStage.BEFORE_STEP)
+
+        assert _upper_triangular(batch.cell[:1], atol=1e-8)
+        assert torch.allclose(batch.cell[1], cell_before[1])
+        assert torch.allclose(
+            batch.positions[batch.batch_idx == 1],
+            positions_before[batch.batch_idx == 1],
+        )
+
+    def test_aligns_only_periodic_graphs(self, device: str) -> None:
+        """Leave active non-periodic cells and atoms unchanged."""
+        dtype = torch.float64
+        batch = _make_periodic_batch(n_graphs=2, dtype=dtype, device=device)
+        rotated = _make_rotated_cell(dtype=dtype, device=device)
+        batch["cell"] = rotated.expand(2, -1, -1).clone()
+        batch["pbc"] = torch.tensor(
+            [[True, True, True], [False, False, False]], device=device
+        )
+        positions_before = batch.positions.clone()
+        cell_before = batch.cell.clone()
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, True], device=device)
+
+        AlignCellHook()(ctx, DynamicsStage.BEFORE_STEP)
+
+        assert _upper_triangular(batch.cell[:1], atol=1e-8)
+        assert torch.allclose(batch.cell[1], cell_before[1])
+        assert torch.allclose(
+            batch.positions[batch.batch_idx == 1],
+            positions_before[batch.batch_idx == 1],
+        )
+
     def test_noop_without_cell(self, device: str) -> None:
         """Hook is a no-op when batch has no cell attribute."""
         # Build a batch with no cell
