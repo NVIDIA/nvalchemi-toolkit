@@ -2174,7 +2174,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._forces_primed = True
 
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch, active_graph_mask)
-        
+
         with self._stream_scope(batch.device):
             self._call_hooks(
                 DynamicsStage.BEFORE_PRE_UPDATE,
@@ -2528,8 +2528,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         with torch.no_grad():
             node_mask = mask[batch.batch_idx]
             saved = self._save_mutable_fields(batch)
+            saved_state = self._save_state_fields()
             self.pre_update(batch)
             self._restore_unmasked_fields(batch, saved, mask, node_mask)
+            self._restore_unmasked_state(saved_state, mask)
 
     def _masked_post_update(
         self,
@@ -2548,8 +2550,31 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         with torch.no_grad():
             node_mask = mask[batch.batch_idx]
             saved = self._save_mutable_fields(batch)
+            saved_state = self._save_state_fields()
             self.post_update(batch)
             self._restore_unmasked_fields(batch, saved, mask, node_mask)
+            self._restore_unmasked_state(saved_state, mask)
+
+    def _save_state_fields(self) -> dict[str, torch.Tensor]:
+        """Clone per-graph integrator state before a masked update."""
+        if not hasattr(self, "_state"):
+            return {}
+        return {
+            key: value.clone()
+            for key, value in self._state
+            if isinstance(value, torch.Tensor)
+        }
+
+    def _restore_unmasked_state(
+        self,
+        saved: dict[str, torch.Tensor],
+        mask: torch.Tensor,
+    ) -> None:
+        """Restore integrator state for graphs excluded from an update."""
+        for key, previous in saved.items():
+            value = getattr(self._state, key)
+            expanded_mask = mask.view(mask.shape[0], *([1] * (value.dim() - 1)))
+            torch.where(expanded_mask, value, previous, out=value)
 
     def _save_mutable_fields(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Clone every mutable field in full (static shapes, no mask indexing)."""
@@ -2870,6 +2895,9 @@ class ConvergenceHook:
             if status.dim() == 2:
                 status = status.squeeze(-1)
             migrate = converged_mask & (status == self.source_status)
+            if getattr(batch, "reprime_pending", None) is not None:
+                # Prevent same-step migration through a stage that requires fresh model outputs
+                migrate &= ~batch.reprime_pending.view(-1)[: batch.num_graphs]
 
             flat_status = (
                 batch.status.view(-1) if batch.status.dim() == 2 else batch.status
@@ -2964,6 +2992,9 @@ class FusedStage(BaseDynamics):
         ``torch.compile(self.step, **compile_kwargs)``.
     compile_kwargs : dict
         Keyword arguments forwarded to ``torch.compile``.
+    reprime_on_entry : set[int] | None
+        Status codes whose newly entering samples skip one update while the
+        shared model compute and target-stage compute hooks refresh forces.
     **kwargs
         Additional keyword arguments forwarded to ``BaseDynamics``.
 
@@ -2979,6 +3010,8 @@ class FusedStage(BaseDynamics):
         Whether the step method is compiled.
     compile_kwargs : dict
         Arguments passed to ``torch.compile``.
+    reprime_on_entry : frozenset[int]
+        Status codes requiring force reprime before their first update.
     __needs_keys__ : set[str]
         Union of all sub-stage ``__needs_keys__`` sets.  Populated
         automatically during ``__init__``.
@@ -2996,6 +3029,13 @@ class FusedStage(BaseDynamics):
     2
     """
 
+    _bookkeeping_keys = {
+        **BaseDynamics._bookkeeping_keys,
+        "reprime_pending": lambda n, dev: torch.zeros(
+            n, 1, dtype=torch.bool, device=dev
+        ),
+    }
+
     def __init__(
         self,
         sub_stages: list[tuple[int, BaseDynamics]],
@@ -3005,6 +3045,7 @@ class FusedStage(BaseDynamics):
         compile_step: bool = False,
         compile_kwargs: dict[str, Any] | None = None,
         init_fn: Callable[[Batch], None] | None = None,
+        reprime_on_entry: set[int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the fused stage.
@@ -3029,6 +3070,12 @@ class FusedStage(BaseDynamics):
             Use this to populate fields that the sampler does not set, such
             as ``velocities`` or ``forces``.  Only called in Mode 2 (inflight
             batching with ``batch=None``).  Default ``None``.
+        reprime_on_entry : set[int] | None, optional
+            Sub-stage status codes that require force reprime on transition.
+            Newly entering samples skip both integrator updates for one fused
+            iteration. They still participate in the shared model compute and
+            target-stage compute hooks, then begin updating on the following
+            iteration. Initial force priming is unchanged. Default ``None``.
         **kwargs : Any
             Additional keyword arguments forwarded to ``BaseDynamics``.
 
@@ -3052,6 +3099,24 @@ class FusedStage(BaseDynamics):
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
+
+        known_status_codes = {code for code, _ in sub_stages}
+        requested_reprime = set() if reprime_on_entry is None else reprime_on_entry
+        if not isinstance(requested_reprime, set):
+            raise TypeError("reprime_on_entry must be a set of status codes or None.")
+        if any(
+            not isinstance(code, int) or isinstance(code, bool)
+            for code in requested_reprime
+        ):
+            raise TypeError("reprime_on_entry status codes must be integers.")
+        unknown_status_codes = requested_reprime - known_status_codes
+        if unknown_status_codes:
+            unknown = ", ".join(str(code) for code in sorted(unknown_status_codes))
+            raise ValueError(
+                "reprime_on_entry contains unknown sub-stage status code(s): "
+                f"{unknown}."
+            )
+        self.reprime_on_entry = frozenset(requested_reprime)
 
         self.__needs_keys__ = set().union(
             *(dyn.__needs_keys__ for _, dyn in sub_stages)
@@ -3137,6 +3202,7 @@ class FusedStage(BaseDynamics):
             f"sub_stages=[{stages_repr}], "
             f"entry_status={self.entry_status}, "
             f"exit_status={self.exit_status}, "
+            f"reprime_on_entry={set(self.reprime_on_entry)}, "
             f"compiled={compiled}, "
             f"step_count={self.step_count})"
         )
@@ -3320,7 +3386,10 @@ class FusedStage(BaseDynamics):
         batch : Batch
             The current full batch.
         """
-        ctx = self._build_context(batch, active_graph_mask=active_graph_mask)
+        ctx = self._build_context(
+            batch,
+            active_graph_mask=active_graph_mask,
+        )
         for hook in self.fused_hooks:
             runs_on_stage = getattr(hook, "_runs_on_stage", None)
             if runs_on_stage is not None:
@@ -3330,6 +3399,21 @@ class FusedStage(BaseDynamics):
                 continue
             if self.step_count % hook.frequency == 0:
                 hook(ctx, stage)
+
+    def _mark_reprime_entries(
+        self,
+        batch: Batch,
+        previous_status: torch.Tensor,
+    ) -> torch.Tensor:
+        """Mark graphs newly entering a sub-stage requiring force repriming."""
+        current_status = batch.status.view(-1)[: batch.num_graphs]
+        entered = torch.zeros_like(current_status, dtype=torch.bool)
+        for status_code in self.reprime_on_entry:
+            entered.logical_or_(
+                (previous_status != status_code) & (current_status == status_code)
+            )
+        batch.reprime_pending.view(-1)[: batch.num_graphs].logical_or_(entered)
+        return current_status.clone()
 
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
@@ -3373,6 +3457,16 @@ class FusedStage(BaseDynamics):
         stage_active_masks: list[torch.Tensor] = [
             status == status_code for status_code, _ in self.sub_stages
         ]
+        # Reprime-pending graphs remain active for shared BEFORE_COMPUTE and
+        # AFTER_COMPUTE hooks and target-stage AFTER_COMPUTE hooks. They are
+        # masked out of the BEFORE/AFTER_PRE_UPDATE and BEFORE/AFTER_POST_UPDATE
+        # hook and integrator phases for this iteration.
+        reprime_pending = batch.reprime_pending.view(-1)[: batch.num_graphs]
+        overall_update_graph_mask = overall_active_graph_mask & ~reprime_pending
+        stage_update_masks: list[torch.Tensor] = [
+            active_mask & overall_update_graph_mask
+            for active_mask in stage_active_masks
+        ]
 
         # Phase 0 - before step
         self._call_fused_hooks(
@@ -3397,22 +3491,22 @@ class FusedStage(BaseDynamics):
         # Phase 1 — pre_update for each sub-stage.
         # This moves positions to r(t+dt) so that the shared compute can
         # evaluate forces at the correct (updated) positions.
-        for (_, dynamics), active_graph_mask in zip(
-            self.sub_stages, stage_active_masks, strict=True
+        for (_, dynamics), update_graph_mask in zip(
+            self.sub_stages, stage_update_masks, strict=True
         ):
             dynamics._call_hooks(
                 DynamicsStage.BEFORE_PRE_UPDATE,
                 batch,
-                active_graph_mask,
+                update_graph_mask,
             )
             # Unconditional: `if active_graph_mask.any():` would be a
             # graph-breaking host sync, and the masked update is a no-op for
             # all-False masks.
-            dynamics._masked_pre_update(batch, active_graph_mask)
+            dynamics._masked_pre_update(batch, update_graph_mask)
             dynamics._call_hooks(
                 DynamicsStage.AFTER_PRE_UPDATE,
                 batch,
-                active_graph_mask,
+                update_graph_mask,
             )
 
         # Phase 2 — shared forward pass at the updated positions.
@@ -3442,21 +3536,22 @@ class FusedStage(BaseDynamics):
                 batch,
                 active_graph_mask,
             )
+        batch.reprime_pending.zero_()
 
         # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
-        for (_, dynamics), active_graph_mask in zip(
-            self.sub_stages, stage_active_masks, strict=True
+        for (_, dynamics), update_graph_mask in zip(
+            self.sub_stages, stage_update_masks, strict=True
         ):
             dynamics._call_hooks(
                 DynamicsStage.BEFORE_POST_UPDATE,
                 batch,
-                active_graph_mask,
+                update_graph_mask,
             )
-            dynamics._masked_post_update(batch, active_graph_mask)
+            dynamics._masked_post_update(batch, update_graph_mask)
             dynamics._call_hooks(
                 DynamicsStage.AFTER_POST_UPDATE,
                 batch,
-                active_graph_mask,
+                update_graph_mask,
             )
 
         # Snapshot before hook and counter migration so both are reported
@@ -3465,6 +3560,7 @@ class FusedStage(BaseDynamics):
         if pre_migration_status.dim() == 2:
             pre_migration_status = pre_migration_status.squeeze(-1)
 
+        migration_status = pre_migration_status.clone()
         for (_, dynamics), active_graph_mask in zip(
             self.sub_stages, stage_active_masks, strict=True
         ):
@@ -3473,6 +3569,8 @@ class FusedStage(BaseDynamics):
                 batch,
                 active_graph_mask,
             )
+            # Mark reprime entries before the next sub-stage's convergence hook runs.
+            migration_status = self._mark_reprime_entries(batch, migration_status)
 
         self._call_hooks(
             DynamicsStage.AFTER_STEP,
@@ -3497,10 +3595,14 @@ class FusedStage(BaseDynamics):
                 )
 
             counter = getattr(batch, counter_key)
-            cur_status = (
-                batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            # Advance a stage counter only when the graph was eligible for a dynamics
+            # update at the start of this iteration. Force priming clears
+            # reprime_pending after compute, but must not count as a stage update.
+            active = (
+                overall_update_graph_mask
+                & ~batch.reprime_pending.view(-1)[: batch.num_graphs]
+                & (migration_status == status_code)
             )
-            active = cur_status == status_code
 
             # Branchless: mask-indexed writes and `migrate.any()` break capture.
             counter.add_(active.to(counter.dtype).unsqueeze(-1))
@@ -3520,6 +3622,8 @@ class FusedStage(BaseDynamics):
                     status_flat,
                 )
             )
+            # Track counter-driven status transitions and mark entries requiring force reprime.
+            migration_status = self._mark_reprime_entries(batch, migration_status)
             counter.copy_(
                 torch.where(migrate.unsqueeze(-1), torch.zeros_like(counter), counter)
             )
@@ -3691,6 +3795,13 @@ class FusedStage(BaseDynamics):
                 batch,
                 status == status_code,
             )
+        
+        # Clear reprime flags for graphs whose forces were just primed.
+        pending = batch.reprime_pending.view(-1)[: batch.num_graphs]
+        if active_graph_mask is None:
+            pending.zero_()
+        else:
+            pending.logical_and_(~active_graph_mask)
 
     def run(
         self, batch: Batch | None = None, n_steps: int | None = None
@@ -3858,6 +3969,7 @@ class FusedStage(BaseDynamics):
             entry_status=self.entry_status,
             compile_step=False,
             compile_kwargs=self.compile_kwargs,
+            reprime_on_entry=set(self.reprime_on_entry),
         )
         # Defer compilation to __enter__ or an explicit .compile() call.
         new_fused.compile_step = self.compile_step
@@ -4489,6 +4601,8 @@ class DistributedPipeline:
                     if stage.active_batch is not None:
                         if stage.active_batch.device != stage.device:
                             stage.active_batch = stage.active_batch.to(stage.device)
+                        # Request force priming for the new batch on its first step.
+                        stage._forces_primed = False
                     else:
                         if self.debug_mode:
                             logger.debug(
