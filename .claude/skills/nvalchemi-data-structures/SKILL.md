@@ -5,7 +5,9 @@ description: >-
   representing atomic systems and batching them for GPU computation. Use when
   building systems from positions, cells, and atomic numbers, converting from
   ASE Atoms, batching or unbatching structures, reading per-atom vs per-graph
-  tensors, or debugging shape, dtype, or device errors in model inputs.
+  tensors, grouping graphs within a batch (e.g. NEB path images or ensemble
+  members) via group_idx/GroupLayout, or debugging shape, dtype, or device
+  errors in model inputs.
 ---
 
 # nvalchemi Data Structures
@@ -237,6 +239,20 @@ batch.add_key("node_feat", new_values, level="node", overwrite=True)
 batch.append(other_batch)
 batch.append_data([more_atomic_data])
 ```
+
+### Group layout
+
+A batch can tag contiguous runs of graphs as **groups** — a single logical
+unit distinct from the node/edge/system storage groups above (e.g. the images
+of one NEB path). Assign with `batch.set_group_layout(group_idx)` (integer
+labels per graph, normalized to dense zero-based IDs); read the derived
+`batch.group_layout` (a cached `GroupLayout` with `graph_rank`, `node_to_group`,
+`group_ptr`, `num_graphs_per_group`, and mask/broadcast helpers `reduce_all`,
+`reduce_any`, `broadcast`, `graph_mask`, `selected_group_idx`). The cache
+invalidates automatically whenever `group_idx` changes or graph membership
+mutates (`zero`, `put`, `defrag`, etc.). `append()` requires both batches
+grouped or both ungrouped and rebases labels; `append_data()` is rejected on a
+grouped batch.
 
 ### Pre-allocated buffer operations
 
