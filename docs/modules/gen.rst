@@ -59,3 +59,16 @@ Model-side API
 
    GenerativeModelConfig
    GenerativeModelMixin
+
+Specs (opt-in import from ``nvalchemi.gen.spec``)
+-------------------------------------------------
+
+.. currentmodule:: nvalchemi.gen.spec
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   AtomGeneratorSpec
+   GenerationPipelineSpec

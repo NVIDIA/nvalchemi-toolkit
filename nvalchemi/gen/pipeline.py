@@ -58,13 +58,16 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi.data import Batch
 from nvalchemi.gen.generator import AtomGenerator
+
+if TYPE_CHECKING:
+    from nvalchemi.gen.spec import GenerationPipelineSpec
 
 __all__ = ["GenerationPipeline"]
 
@@ -184,6 +187,33 @@ class GenerationPipeline(BaseModel):
             if isinstance(stage, AtomGenerator):
                 stage.compile(**kwargs)
         return self
+
+    def to_spec(self) -> GenerationPipelineSpec:
+        """Capture this pipeline's construction surface as a spec.
+
+        The reverse of
+        :meth:`~nvalchemi.gen.spec.GenerationPipelineSpec.build` —
+        :class:`AtomGenerator` stages are captured via their own
+        :meth:`~nvalchemi.gen.generator.AtomGenerator.to_spec`; other
+        stages (plain ``Batch -> Batch`` callables) by dotted import path.
+        Callable *instances* (e.g. dynamics engines) carry no import path
+        and raise ``TypeError``. The spec module stays an opt-in import;
+        this method imports it lazily.
+
+        Returns
+        -------
+        GenerationPipelineSpec
+            The construction spec.
+        """
+        from nvalchemi.gen.spec import GenerationPipelineSpec, _spec_from_callable
+
+        stage_specs: list[Any] = []
+        for stage in self.stages:
+            if isinstance(stage, AtomGenerator):
+                stage_specs.append(stage.to_spec())
+            else:
+                stage_specs.append(_spec_from_callable(stage, name="pipeline stage"))
+        return GenerationPipelineSpec(stages=stage_specs)
 
     def _infer_device(self) -> torch.device | None:
         """Infer the session device from the first AtomGenerator stage's model.

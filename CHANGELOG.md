@@ -11,12 +11,16 @@
   `GenerationContext`, `stream()`, and session context managers (dedicated
   CUDA stream, session RNG, lazy `torch.compile`). Generating functions
   return `TensorDict` samples. Sequential composition via `gen_a | gen_b`
-  (`GenerationPipeline`, with construction-time field-contract validation).
+  (`GenerationPipeline`, with construction-time field-contract validation)
+  and JSON spec construction (`AtomGeneratorSpec`, `GenerationPipelineSpec`),
+  with `to_spec()` on both classes for the reverse direction (capturing a
+  live generator/pipeline back to a spec for serialization and
+  reproducibility).
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
   `DemoDiffusionModel` — minimal `GenerativeModelMixin` placeholders for
   testing and debugging (the generative counterpart to
   `DemoModel`/`DemoModelWrapper`) — plus `demo_nonparametric_generation`, a
-  synthetic-structure source for tests and debugging.
+  synthetic-structure source usable standalone or as a pipeline stage.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,

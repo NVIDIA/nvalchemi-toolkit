@@ -111,6 +111,7 @@ from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
 
 if TYPE_CHECKING:
     from nvalchemi.gen.pipeline import GenerationPipeline
+    from nvalchemi.gen.spec import AtomGeneratorSpec
 
 __all__ = ["GeneratingFunction", "AtomGenerator", "default_condition"]
 
@@ -225,7 +226,8 @@ class AtomGenerator(BaseModel, HookRegistryMixin):
         Non-serializable (weights live in the checkpoint machinery).
     generator_func
         User-supplied :class:`GeneratingFunction`; takes precedence over
-        ``model.generate``. Non-serializable.
+        ``model.generate``. Non-serializable (see
+        :class:`~nvalchemi.gen.spec.AtomGeneratorSpec` for the spec path).
     output_to_batch_func
         Optional callable ``output_to_batch_func(sample, batch) -> Batch``
         overriding ``model.to_batch`` for mapping a sample
@@ -523,6 +525,63 @@ class AtomGenerator(BaseModel, HookRegistryMixin):
         )
         self._compiled_generate = torch.compile(target, **merged)
         return self
+
+    def to_spec(self) -> AtomGeneratorSpec:
+        """Capture this generator's construction surface as a spec.
+
+        The reverse of
+        :meth:`~nvalchemi.gen.spec.AtomGeneratorSpec.build` — the result
+        round-trips through ``model_dump_json`` and rebuilds an equivalent
+        generator with ``build(model=...)``. The model is never captured
+        (weights come from the checkpoint machinery). ``generator_func`` and
+        ``output_to_batch_func`` are captured by dotted import path and must
+        be module-level importable callables; each hook's class must store
+        its ``__init__`` parameters as same-named attributes. Lambdas,
+        closures, and partials raise ``TypeError``.
+
+        The spec module stays an opt-in import; this method imports it
+        lazily.
+
+        Returns
+        -------
+        AtomGeneratorSpec
+            The construction spec.
+        """
+        from nvalchemi.gen.spec import (
+            AtomGeneratorSpec,
+            _spec_from_callable,
+            _spec_from_hook,
+        )
+
+        return AtomGeneratorSpec(
+            generator_func=(
+                _spec_from_callable(self.generator_func, name="generator_func")
+                if self.generator_func is not None
+                else None
+            ),
+            output_to_batch_func=(
+                _spec_from_callable(
+                    self.output_to_batch_func, name="output_to_batch_func"
+                )
+                if self.output_to_batch_func is not None
+                else None
+            ),
+            hooks=[_spec_from_hook(hook) for hook in self.hooks],
+            consumes_fields=(
+                sorted(self.consumes_fields)
+                if self.consumes_fields is not None
+                else None
+            ),
+            produces_fields=(
+                sorted(self.produces_fields)
+                if self.produces_fields is not None
+                else None
+            ),
+            num_samples_per_batch=self.num_samples_per_batch,
+            seed=self.seed,
+            compile_generate=self.compile_generate,
+            compile_kwargs=dict(self.compile_kwargs),
+        )
 
     def _infer_device(self) -> torch.device | None:
         """Best-effort device inference from the model (parameters first).

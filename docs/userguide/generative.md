@@ -31,6 +31,7 @@ all below; this table is the map.
 | {class}`~nvalchemi.models.gen.base.GenerativeModelMixin` / {class}`~nvalchemi.models.gen.base.GenerativeModelConfig` | The model side: what a generative model provides, and what it declares |
 | {class}`~nvalchemi.gen.enums.Modality` / {class}`~nvalchemi.gen.enums.GenerativeIntent` | The vocabulary for what a model ingests or emits, and how it is used |
 | {class}`~nvalchemi.gen.pipeline.GenerationPipeline` | Sequential composition of generators and other batch stages (`\|` sugar) |
+| {class}`~nvalchemi.gen.spec.AtomGeneratorSpec` / {class}`~nvalchemi.gen.spec.GenerationPipelineSpec` | JSON-serializable construction for config-driven workflows |
 
 ## The two steps: condition and generate
 
@@ -237,6 +238,45 @@ declares a field that the immediately upstream generator does not produce,
 pipeline construction fails fast — the same contract pattern as
 `ModelConfig.required_inputs` elsewhere in the toolkit.
 
+(generative-specs)=
+
+## Spec-based construction
+
+Generators and pipelines can be built from JSON specs, mirroring the
+training {mod}`nvalchemi.training` spec machinery (dotted import paths +
+JSON-safe kwargs, no pickle). The unit of spec-ability is the importable
+factory: bind family config in a module-level function, spec it with
+{func}`~nvalchemi.training._spec.create_model_spec`, and compose the pieces
+into {class}`~nvalchemi.gen.spec.AtomGeneratorSpec` /
+{class}`~nvalchemi.gen.spec.GenerationPipelineSpec`:
+
+```python
+from nvalchemi.gen.spec import AtomGeneratorSpec
+from nvalchemi.training._spec import create_model_spec
+
+func_spec = create_model_spec(make_gan_generate, latent_dim=256)
+spec = AtomGeneratorSpec(generator_func=func_spec, num_samples_per_batch=4)
+blob = spec.model_dump_json()                     # plain JSON; safe to store
+
+restored = AtomGeneratorSpec.model_validate_json(blob)
+gen = restored.build(model=model)                 # weights come from checkpoints
+```
+
+Weights are never part of a spec — models are injected at `build` time from
+the checkpoint machinery. The spec module is an opt-in import
+(`from nvalchemi.gen.spec import ...`) so that importing
+{mod}`nvalchemi.gen` stays light.
+
+The reverse direction works too:
+{meth}`~nvalchemi.gen.generator.AtomGenerator.to_spec` (and
+{meth}`~nvalchemi.gen.pipeline.GenerationPipeline.to_spec`) capture a live
+generator or pipeline back to a spec — handy for logging the exact
+construction alongside a checkpoint. Callables are captured by dotted import
+path (module-level only — lambdas, closures, and partials raise
+`TypeError`), and hooks by attribute-faithful class construction: each
+`__init__` parameter must be stored as a same-named attribute
+(`self.factor = factor`), which spec-able hooks already do.
+
 ## Building your own model
 
 Putting the pieces together: a small learned decoder that generates a
@@ -343,6 +383,9 @@ with gen.compile(backend="eager"):                    # session: stream + RNG + 
 
 pipe = gen | other_generator                          # composed; links validated
 ```
+
+(If `toy_generate` lives in an importable module, the same workflow is
+spec-able: `create_model_spec(my_module.make_toy_generate, ...)`.)
 
 ## Examples
 
@@ -528,3 +571,5 @@ def vae_generate(model, *, num_samples=1, rng=None, cond=None, **kwargs):
 - {class}`~nvalchemi.hooks.GenerationContext`
 - {class}`~nvalchemi.gen.pipeline.GenerationPipeline`
 - {func}`~nvalchemi.gen.default_condition`
+- {class}`~nvalchemi.gen.spec.AtomGeneratorSpec`
+- {class}`~nvalchemi.gen.spec.GenerationPipelineSpec`

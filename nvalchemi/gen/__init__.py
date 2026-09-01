@@ -20,6 +20,10 @@ condition → generate pipeline with lifecycle hooks
 (:class:`~nvalchemi.gen.stages.GenerationStage`,
 :class:`~nvalchemi.hooks.GenerationContext`) — plus sequential
 composition via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
+
+Spec-based construction lives in :mod:`nvalchemi.gen.spec`, which is
+deliberately not re-exported here: importing it pulls in the training spec
+machinery, so it stays an opt-in concrete-module import.
 """
 
 from __future__ import annotations
