@@ -108,6 +108,10 @@ only for one workflow category.
 
 .. dataclass-table:: nvalchemi.hooks.TrainContext
 
+**GenerationContext** (generation workflows)
+
+.. dataclass-table:: nvalchemi.hooks.GenerationContext
+
 
 Registration and dispatch
 -------------------------
@@ -238,6 +242,7 @@ Protocol
    CheckpointableHook
    HookContext
    DynamicsContext
+   GenerationContext
    TrainContext
    HookRegistryMixin
 

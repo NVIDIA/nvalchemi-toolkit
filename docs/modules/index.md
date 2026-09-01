@@ -12,6 +12,7 @@ data
 hooks
 dynamics/index
 models
+gen
 training/index
 distributed
 distributed_runtime
