@@ -52,7 +52,6 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
    TrainableParameterHook
    FineTuningSummaryHook
    BaseFingerprintHook
-   LoRAHook
 
 **ModulePatchHook**
 
@@ -72,7 +71,15 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
 
 **LoRAHook**
 
-.. dataclass-table:: nvalchemi.training.hooks.LoRAHook
+.. currentmodule:: nvalchemi.training.peft.lora_hook
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   LoRAHook
+
+.. dataclass-table:: nvalchemi.training.peft.lora_hook.LoRAHook
 
 
 PEFT helpers
@@ -90,9 +97,16 @@ checkpoint into a compatible base model.
    :toctree: generated
    :nosignatures:
 
-   LoRAConfig
-   load_peft_checkpoint_into_model
    PeftMethodRegistration
    register_peft_method
    available_peft_methods
+   load_peft_checkpoint_into_model
+
+.. currentmodule:: nvalchemi.training.peft.lora
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   LoRAConfig
    available_lora_wrappers

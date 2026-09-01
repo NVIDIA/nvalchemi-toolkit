@@ -130,7 +130,7 @@ class FineTuningStrategy(TrainingStrategy):
       :class:`TrainableParameterHook`.
 
     PEFT methods are configured with ``peft_config``; for example,
-    :class:`nvalchemi.training.peft.LoRAConfig` injects LoRA adapters into
+    :class:`nvalchemi.training.peft.lora.LoRAConfig` injects LoRA adapters into
     matching linear modules. When ``peft_config`` is provided, ``freeze_patterns``
     must be empty since the base model is considered frozen by default and PEFT
     hooks register adapter parameters as trainable. Use ``trainable_patterns``

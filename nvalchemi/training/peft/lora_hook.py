@@ -92,7 +92,7 @@ class LoRAHook(BaseModel):
 
     This hook is automatically prepended when
     :class:`~nvalchemi.training.FineTuningStrategy` receives a
-    :class:`~nvalchemi.training.peft.LoRAConfig`.
+    :class:`~nvalchemi.training.peft.lora.LoRAConfig`.
 
     Parameters
     ----------

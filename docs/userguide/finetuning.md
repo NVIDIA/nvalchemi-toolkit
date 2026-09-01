@@ -671,7 +671,7 @@ sequence via `from_pretrained_checkpoint`.
 {py:class}`~nvalchemi.training.FineTuningStrategy` also supports
 parameter-efficient fine-tuning through `peft_config`; LoRA is the only
 supported PEFT method right now. Pass
-{py:class}`~nvalchemi.training.peft.LoRAConfig` to inject low-rank LoRA adapters
+{py:class}`~nvalchemi.training.peft.lora.LoRAConfig` to inject low-rank LoRA adapters
 into selected modules before optimizer construction. The pretrained base is
 frozen by default, and the optimizer sees only adapter parameters plus any
 module patches or explicit extra parameters you opt in with
@@ -697,7 +697,7 @@ from nvalchemi.training import (
     default_training_fn,
 )
 
-from nvalchemi.training.peft import LoRAConfig
+from nvalchemi.training.peft.lora import LoRAConfig
 
 pretrained_model = load_my_pretrained_model()
 train_loader = make_my_batch_loader()
@@ -763,7 +763,7 @@ hooks. When `compute_base_fingerprints=True`, the default, this starts with
 {py:class}`~nvalchemi.training.hooks.BaseFingerprintHook`, which records
 base-model fingerprints before adapters mutate the model. For LoRA, PEFT setup
 then includes
-{py:class}`~nvalchemi.training.hooks.LoRAHook`, which registers built-in and
+{py:class}`~nvalchemi.training.peft.lora_hook.LoRAHook`, which registers built-in and
 custom LoRA wrappers, then applies adapters to modules whose model-prefixed
 names match the target patterns. For each match, the LoRA registry selects the
 wrapper registered for that layer class.
@@ -775,32 +775,32 @@ LoRA parameters, module patches, and explicit `trainable_patterns`. Mergeable
 wrappers can later fold the learned update back into the base layer for inference
 or export.
 
-The public wrapper classes available through `nvalchemi.training.peft` are:
+The public wrapper classes are available from `nvalchemi.training.peft.lora`:
 
-- {py:class}`nvalchemi.training.peft.LoRALinear` for `torch.nn.Linear`
+- {py:class}`nvalchemi.training.peft.lora.LoRALinear` for `torch.nn.Linear`
   layers.
-- `nvalchemi.training.peft.TransformerEngineLoRALinear` for
+- `nvalchemi.training.peft.lora.TransformerEngineLoRALinear` for
   `transformer_engine.pytorch.Linear` layers when Transformer Engine is
   installed.
-- {py:class}`nvalchemi.training.peft.EquivariantLoRALinear` for
+- {py:class}`nvalchemi.training.peft.lora.EquivariantLoRALinear` for
   `e3nn.o3.Linear` layers.
-- {py:class}`nvalchemi.training.peft.CuEquivarianceLoRALinear` for
+- {py:class}`nvalchemi.training.peft.lora.CuEquivarianceLoRALinear` for
   `cuequivariance_torch.operations.linear.Linear` layers.
-- {py:class}`nvalchemi.training.peft.E3NNFullyConnectedLoRALayer` for
+- {py:class}`nvalchemi.training.peft.lora.E3NNFullyConnectedLoRALayer` for
   `e3nn.nn._fc._Layer` scalar fully connected layers.
 
 Inspect the active layer-to-wrapper pairs with
-{py:func}`~nvalchemi.training.peft.available_lora_wrappers`.
+{py:func}`~nvalchemi.training.peft.lora.available_lora_wrappers`.
 
 ```python
-from nvalchemi.training.peft import available_lora_wrappers
+from nvalchemi.training.peft.lora import available_lora_wrappers
 
 for layer_cls, wrapper_cls in available_lora_wrappers():
     print(layer_cls, "->", wrapper_cls)
 ```
 
 To support a custom layer type, write a wrapper module that implements the
-{py:class}`nvalchemi.training.peft.LoRALayer` interface, then register that
+{py:class}`nvalchemi.training.peft.lora.LoRALayer` interface, then register that
 wrapper for the base layer class through
 `LoRAConfig(wrapper_registrations=...)`. Each registration is a pair of
 `(LoRAWrappableLayer, LoRAWrapper)`: when LoRA finds an instance of the base class
@@ -818,7 +818,7 @@ configuration validation.
 import torch
 
 from nvalchemi.training import FineTuningStrategy, OptimizerConfig
-from nvalchemi.training.peft import LoRAConfig, LoRALayer, LoRAWrapperRegistrations
+from nvalchemi.training.peft.lora import LoRAConfig, LoRALayer, LoRAWrapperRegistrations
 
 
 class MyBlock(torch.nn.Module):
@@ -889,7 +889,7 @@ projection, and one explicitly selected base projection.
 
 ```python
 from nvalchemi.training import FineTuningStrategy, create_model_spec
-from nvalchemi.training.peft import LoRAConfig
+from nvalchemi.training.peft.lora import LoRAConfig
 
 strategy = FineTuningStrategy(
     models=pretrained_model,
@@ -1094,7 +1094,7 @@ training only a small fraction of parameters, use
 
 ```python
 from nvalchemi.training import CheckpointHook, FineTuningStrategy
-from nvalchemi.training.peft import LoRAConfig
+from nvalchemi.training.peft.lora import LoRAConfig
 
 strategy = FineTuningStrategy(
     models=pretrained_model,
@@ -1160,7 +1160,7 @@ One ordering detail is specific to fine-tuning: the strategy internally
 registers PEFT hooks first, including
 {py:class}`~nvalchemi.training.hooks.BaseFingerprintHook` when base
 fingerprinting is enabled and then PEFT method hooks such as
-{py:class}`~nvalchemi.training.hooks.LoRAHook`. It then registers
+{py:class}`~nvalchemi.training.peft.lora_hook.LoRAHook`. It then registers
 {py:class}`~nvalchemi.training.hooks.ModulePatchHook`, followed by
 {py:class}`~nvalchemi.training.hooks.TrainableParameterHook`. When parameter
 filtering is active, {py:class}`~nvalchemi.training.hooks.FineTuningSummaryHook`
@@ -1212,6 +1212,6 @@ See {ref}`training-finetuning-api` for the API reference for
 {py:class}`~nvalchemi.training.hooks.ModulePatchHook`,
 {py:class}`~nvalchemi.training.hooks.TrainableParameterHook`,
 {py:class}`~nvalchemi.training.hooks.FineTuningSummaryHook`,
-{py:class}`~nvalchemi.training.peft.LoRAConfig`,
+{py:class}`~nvalchemi.training.peft.lora.LoRAConfig`,
 {py:func}`~nvalchemi.training.peft.load_peft_checkpoint_into_model`,
 and {py:class}`~nvalchemi.training.hooks.BaseFingerprintHook`.

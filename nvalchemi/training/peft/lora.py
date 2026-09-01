@@ -27,18 +27,44 @@ from torch import nn
 from nvalchemi._serialization import _cls_path_of, _import_cls
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training.peft import _peft
+from nvalchemi.training.peft import lora_wrappers as _lora_wrappers
 from nvalchemi.training.peft.config import PeftConfig
-from nvalchemi.training.peft.lora_wrappers import LoRAWrapperRegistrations
+from nvalchemi.training.peft.lora_wrappers import (
+    CuEquivarianceLoRALinear,
+    E3NNFullyConnectedLoRALayer,
+    EquivariantLoRALinear,
+    LoRALayer,
+    LoRALinear,
+    LoRAWrappableLayer,
+    LoRAWrapper,
+    LoRAWrapperRegistrations,
+    available_lora_wrappers,
+)
 from nvalchemi.training.peft.registry import register_peft_method
 
 __all__ = [
+    "CuEquivarianceLoRALinear",
+    "E3NNFullyConnectedLoRALayer",
+    "EquivariantLoRALinear",
     "LORA_PEFT_METHOD",
     "LoRAConfig",
+    "LoRALayer",
+    "LoRALinear",
+    "LoRAWrappableLayer",
+    "LoRAWrapper",
+    "LoRAWrapperRegistrations",
+    "available_lora_wrappers",
+    "is_lora_layer",
     "merge_lora_into_model",
     "register_lora_method",
 ]
 
+if "TransformerEngineLoRALinear" in _lora_wrappers.__all__:
+    TransformerEngineLoRALinear = _lora_wrappers.TransformerEngineLoRALinear
+    __all__.append("TransformerEngineLoRALinear")
+
 LORA_PEFT_METHOD: Final = "lora"
+is_lora_layer = _peft.is_lora_layer
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +77,7 @@ class LoRAConfig(PeftConfig):
 
     This configuration is passed to
     :class:`~nvalchemi.training.FineTuningStrategy` to enable LoRA PEFT. The
-    strategy prepends a :class:`~nvalchemi.training.LoRAHook` that applies the
+    strategy prepends a :class:`~nvalchemi.training.peft.lora_hook.LoRAHook` that applies the
     adapters during workflow registration.
 
     Parameters

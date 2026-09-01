@@ -18,7 +18,7 @@ LoRA Fine-Tuning MACE on LPSC dataset
 
 This example illustrates how to fine-tune a model with LoRA adapters using
 :class:`~nvalchemi.training.FineTuningStrategy` with
-:class:`~nvalchemi.training.peft.LoRAConfig`. It fine-tunes the MACE ``medium-mpa-0``
+:class:`~nvalchemi.training.peft.lora.LoRAConfig`. It fine-tunes the MACE ``medium-mpa-0``
 foundation model on the ``li/data/LPSC_600.extxyz`` subset from the public
 ``ev-tlt/MACE_finetuning_supplementary`` Hugging Face dataset.
 Dataset attribution: ``li/data/LPSC_600.extxyz`` comes from
@@ -90,11 +90,11 @@ from nvalchemi.training import (
     ValidationConfig,
     default_training_fn,
 )
-from nvalchemi.training.peft import (
+from nvalchemi.training.peft import load_peft_checkpoint_into_model
+from nvalchemi.training.peft.lora import (
     LoRAConfig,
     available_lora_wrappers,
     is_lora_layer,
-    load_peft_checkpoint_into_model,
 )
 from nvalchemi.training.reference_energies import fit_atomic_reference_energies
 
@@ -462,7 +462,7 @@ for layer_cls, wrapper_cls in wrappers:
 # Similar to :class:`~nvalchemi.training.TrainingStrategy` and
 # :class:`~nvalchemi.training.FineTuningStrategy`, this workflow combines the
 # training objective, validation reporter, neighbor-list hook, optimizer setup,
-# and a :class:`~nvalchemi.training.peft.LoRAConfig`. The LoRA target patterns select
+# and a :class:`~nvalchemi.training.peft.lora.LoRAConfig`. The LoRA target patterns select
 # the MACE layers that receive adapters, while the trainable patterns keep a
 # small set of base-model parameters trainable. Module patches can also be
 # provided to customize model components, but they are not needed in this

@@ -36,13 +36,12 @@ from nvalchemi.training.hooks import (
     ModulePatchHook,
     TrainableParameterHook,
 )
-from nvalchemi.training.peft import (
+from nvalchemi.training.peft import load_peft_checkpoint_into_model, lora_wrappers
+from nvalchemi.training.peft.lora import (
     LoRAConfig,
     is_lora_layer,
-    load_peft_checkpoint_into_model,
-    lora_wrappers,
+    merge_lora_into_model,
 )
-from nvalchemi.training.peft.lora import merge_lora_into_model
 from nvalchemi.training.peft.lora_hook import LoRAHook
 from nvalchemi.training.peft.lora_wrappers import (
     CuEquivarianceLoRALinear,

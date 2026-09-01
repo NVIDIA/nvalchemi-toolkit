@@ -30,13 +30,13 @@ from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
+from nvalchemi.training.peft.fingerprints import BaseFingerprintHook
 
 __all__ = [
     "CheckpointHook",
     "BaseFingerprintHook",
     "DDPHook",
     "EMAHook",
-    "LoRAHook",
     "MixedPrecisionHook",
     "TorchProfilerHook",
     "FineTuningSummaryHook",
@@ -45,16 +45,3 @@ __all__ = [
     "TrainingUpdateHook",
     "TrainingUpdateOrchestrator",
 ]
-
-
-def __getattr__(name: str) -> object:
-    """Lazily expose PEFT hooks."""
-    if name == "BaseFingerprintHook":
-        from nvalchemi.training.peft.fingerprints import BaseFingerprintHook
-
-        return BaseFingerprintHook
-    if name == "LoRAHook":
-        from nvalchemi.training.peft.lora_hook import LoRAHook
-
-        return LoRAHook
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

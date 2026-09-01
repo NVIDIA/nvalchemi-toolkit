@@ -32,7 +32,6 @@ from nvalchemi.training._checkpoint import (
 )
 from nvalchemi.training._spec import create_model_spec_from_json
 from nvalchemi.training.hooks.finetune import ModulePatchHook
-from nvalchemi.training.peft import _peft
 from nvalchemi.training.peft.registry import get_peft_registration_by_method
 
 __all__ = ["load_peft_checkpoint_into_model"]
@@ -299,6 +298,8 @@ def _validate_checkpoint_base_fingerprint(
         raise ValueError(
             f"PEFT checkpoint is missing a base fingerprint for model {model_name!r}."
         )
+    from nvalchemi.training.peft import _peft
+
     current_fingerprint = _peft.compute_base_fingerprint(model)
     if current_fingerprint == saved_fingerprint:
         return

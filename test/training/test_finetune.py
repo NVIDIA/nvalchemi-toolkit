@@ -44,7 +44,7 @@ from nvalchemi.training.strategy import TrainingStrategy
 
 
 def test_finetuning_import_does_not_load_experimental_peft() -> None:
-    """Importing the core training API must not initialize experimental PEFT."""
+    """Importing the fine-tuning API must not initialize a PEFT backend."""
     code = """
 import sys
 import warnings
@@ -52,6 +52,7 @@ import warnings
 with warnings.catch_warnings(record=True) as caught:
     warnings.simplefilter("always")
     import nvalchemi.training as training
+    import nvalchemi.training.peft as peft
     from nvalchemi.training import FineTuningStrategy
 
 assert not any(
@@ -62,6 +63,7 @@ assert not any(
     )
 )
 
+assert "__getattr__" not in vars(peft)
 assert "physicsnemo.experimental.peft" not in sys.modules
 assert not any(
     "physicsnemo.experimental" in str(warning.message)
