@@ -692,6 +692,24 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             keys.add("stress")
         return keys
 
+    def direct_derivative_keys(self) -> set[str]:
+        """Report which outputs are computed analytically by the kernel.
+
+        Returns
+        -------
+        set[str]
+            ``{"forces", "stress"}`` intersected with the declared outputs.  D3
+            evaluates forces and the virial directly in the Warp kernel and its
+            kernel energy carries no autograd graph, so a pipeline autograd group
+            keeps and sums them rather than recomputing them from the energy.
+        """
+        keys: set[str] = set()
+        if "forces" in self.model_config.outputs:
+            keys.add("forces")
+        if "stress" in self.model_config.outputs:
+            keys.add("stress")
+        return keys
+
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
