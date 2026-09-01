@@ -90,6 +90,33 @@ first = batch.get_data(0)
 again = batch.to_data_list()
 ```
 
+### Grouping graphs
+
+A batch can optionally tag contiguous runs of graphs as **groups** — a single
+logical unit such as the images of one NEB path — via
+{py:meth}`~nvalchemi.data.batch.Batch.set_group_layout`. This is unrelated to
+the internal atoms/edges/system **storage groups** described later in *How
+Batch stores data internally*.
+
+```python
+batch.set_group_layout(torch.tensor([4, 4, 1, 1, 1]))
+print(batch.group_idx)  # tensor([0, 0, 1, 1, 1]) - normalized to dense IDs
+```
+
+The derived {py:attr}`~nvalchemi.data.batch.Batch.group_layout` property
+lazily builds and caches a
+{py:class}`~nvalchemi.data.group_layout.GroupLayout`, mapping between graph,
+node, and group cardinalities (`graph_rank`, `node_to_group`, `group_ptr`,
+`num_graphs_per_group`), plus mask/broadcast helpers `reduce_all`,
+`reduce_any`, `broadcast`, `graph_mask`, and `selected_group_idx`. The cache
+invalidates automatically whenever `group_idx` changes or graph membership
+mutates (selection, `zero`, `put`, `defrag`, ...). A selection that leaves
+group numbering non-dense must be repaired with
+{py:meth}`~nvalchemi.data.batch.Batch.normalize_group_idx` before
+`group_layout` is accessed again. `append()` requires both batches grouped or
+both ungrouped and rebases labels, while `append_data()` is rejected on a
+grouped batch.
+
 ### Indexing and selection
 
 `Batch` supports bracket indexing that mirrors familiar Python and PyTorch
