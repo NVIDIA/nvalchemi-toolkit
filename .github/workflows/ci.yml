@@ -179,9 +179,9 @@ jobs:
 
       - name: Verify UMA CUDA resolutions
         run: |
-          uv export --quiet --frozen --extra uma --extra ase --extra cu12 --no-group build \
+          uv export --quiet --frozen --extra uma-cu12 --extra ase --no-group build \
             --output-file /tmp/uma-cu12-requirements.txt
-          uv export --quiet --frozen --extra uma --extra ase --extra cu13 --no-group build \
+          uv export --quiet --frozen --extra uma-cu13 --extra ase --no-group build \
             --output-file /tmp/uma-cu13-requirements.txt
 
   # ============================================================================
@@ -284,7 +284,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv python install 3.12
           UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen --python 3.12 \
-            --extra uma --extra ase --extra cu12 --no-group build
+            --extra uma-cu12 --extra ase --no-group build
 
       - name: Verify UMA CUDA 12 environment
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
@@ -586,7 +586,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv python install 3.12
           UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen --python 3.12 \
-            --extra uma --extra ase --extra cu12 --no-group build
+            --extra uma-cu12 --extra ase --no-group build
 
       - name: Verify UMA CUDA 12 environment and 2 GPUs
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'

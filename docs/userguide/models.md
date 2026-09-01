@@ -44,21 +44,21 @@ are lazily imported --- they only load when accessed, so missing dependencies wi
 break other imports.
 
 ````{note}
-**Install UMA with the CUDA extra that matches the host.** Fairchem 2.22 uses
-torch 2.13.0, so `uma` can share the toolkit's `cu12` or `cu13` stack and select
-the matching cu126 or cu130 torch wheel. UMA still conflicts with MACE because
-their `e3nn` requirements differ, and it conflicts with the default `build`
-group because `torchtnt` requires an older setuptools. Keep UMA in its own
-CUDA-aligned environment, e.g.:
+**Install the UMA CUDA variant that matches the host.** Fairchem 2.22 uses
+torch 2.13.0 and numba 0.62 or newer, while PhysicsNeMo's standard CUDA extras
+pull a RAPIDS stack that requires older numba. The standalone `uma-cu12` and
+`uma-cu13` extras select the matching torch wheel without that RAPIDS stack.
+UMA also conflicts with MACE and the default `build` group, so keep it in its
+own environment, e.g.:
 
 ```bash
 UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
-  uv sync --extra uma --extra cu12 --no-group build  # UMA on CUDA 12
+  uv sync --extra uma-cu12 --no-group build  # UMA on CUDA 12
 uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
 ```
 
-Use `--extra cu13` instead on a CUDA 13 host. Do not combine `uma` and `mace`
-in one environment.
+Use `--extra uma-cu13` instead on a CUDA 13 host. Do not combine an UMA extra
+with `cu12`, `cu13`, or `mace` in one environment.
 ````
 
 ### MACE checkpoints in training
@@ -145,8 +145,8 @@ own environment, per the note above):
 
 ```bash
 UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
-  uv sync --extra uma --extra cu12 --no-group build
-# or, with pip:  pip install 'nvalchemi-toolkit[uma,cu12]'
+  uv sync --extra uma-cu12 --no-group build
+# or, with pip:  pip install 'nvalchemi-toolkit[uma-cu12]'
 ```
 
 **2. Get HuggingFace access.** UMA checkpoints live in the **gated**

@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add support for PEFT fine-tuning within `FineTuningStrategy`, including
+  LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
+  and base-model fingerprint checks for PEFT checkpoint loading.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
@@ -84,19 +87,19 @@
   OMat, OC20, ODAC, OMC). Input conversion is tensor-native (no ASE
   round trip); energy is the differentiable primitive with forces and
   (for periodic tasks) stress from autograd. Install via the new `uma`
-  optional extra (`pip install 'nvalchemi-toolkit[uma,cu12]'`), which supports
-  both CUDA variants but remains incompatible with `mace` because of their
-  `e3nn` pins. `from_checkpoint` forwards fairchem's `inference_settings`,
+  optional CUDA variants (`pip install 'nvalchemi-toolkit[uma-cu12]'` or
+  `nvalchemi-toolkit[uma-cu13]`), which remain incompatible with `mace` because
+  of their `e3nn` pins. `from_checkpoint` forwards fairchem's `inference_settings`,
   including the compiled `"default"` and `"turbo"` presets and the eager
   `"batch"` preset. See the
   `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
 
 ### Fixed
 
-- **UMA CUDA dependency resolution** — allow the `uma` extra to resolve with
-  either `cu12` or `cu13`. The CUDA extras no longer force a cuML floor that
-  conflicts with Fairchem 2.22's `numba` requirement; PhysicsNeMo selects a
-  compatible transitive cuML release instead.
+- **UMA CUDA dependency resolution** — add standalone `uma-cu12` and
+  `uma-cu13` extras. They select the matching torch build without installing
+  PhysicsNeMo's RAPIDS extras, whose numba upper bound conflicts with Fairchem
+  2.22.
 
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
   ever differentiated with respect to positions and charges, so a non-hybrid

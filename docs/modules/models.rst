@@ -116,10 +116,10 @@ reflects what it supports.
 :meth:`~nvalchemi.models.uma.UMAWrapper.from_checkpoint` accepts registered
 names (``"uma-s-1p1"``, ``"uma-s-1p2"``, ``"uma-m-1p1"``) or a local ``.pt``.
 
-The ``uma`` (fairchem) stack supports both CUDA variants but conflicts with
+The ``uma`` (fairchem) stack has standalone CUDA variants and conflicts with
 MACE and the default build group. Install it in a CUDA-aligned environment::
 
-    UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --extra uma --extra ase --extra cu12 --no-group build
+    UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --extra uma-cu12 --extra ase --no-group build
 
 .. currentmodule:: nvalchemi.models.uma
 

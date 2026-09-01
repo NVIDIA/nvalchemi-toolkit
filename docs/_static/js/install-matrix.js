@@ -22,6 +22,13 @@
     return extraInputs.filter((input) => input.checked).map((input) => input.value);
   }
 
+  function packageExtras(accelerator, extras) {
+    if (accelerator !== "none" && extras.includes("uma")) {
+      return extras.map((extra) => (extra === "uma" ? `uma-${accelerator}` : extra));
+    }
+    return accelerator === "none" ? extras : [accelerator, ...extras];
+  }
+
   function updateConstraints(accelerator, extras) {
     const hasMace = extras.includes("mace");
     const hasUma = extras.includes("uma");
@@ -30,7 +37,9 @@
     umaInput.disabled = hasMace;
 
     if (hasUma) {
-      note.textContent = "UMA supports the selected CUDA stack but cannot be combined with MACE.";
+      note.textContent = accelerator === "none"
+        ? "UMA cannot be combined with MACE."
+        : `UMA uses its standalone uma-${accelerator} dependency stack and cannot be combined with MACE.`;
     } else if (umaInput.disabled) {
       note.textContent = "Clear MACE to make UMA available.";
     } else {
@@ -42,7 +51,7 @@
     const packageManager = selected("package-manager");
     const accelerator = selected("accelerator");
     const extras = selectedExtras();
-    const allExtras = accelerator === "none" ? extras : [accelerator, ...extras];
+    const allExtras = packageExtras(accelerator, extras);
     const packageSpec = allExtras.length
       ? `nvalchemi-toolkit[${allExtras.join(",")}]`
       : "nvalchemi-toolkit";

@@ -20,19 +20,26 @@ from nvalchemi.hooks import TorchProfilerHook
 from nvalchemi.training.hooks.checkpoint import CheckpointHook
 from nvalchemi.training.hooks.ddp import DDPHook
 from nvalchemi.training.hooks.ema import EMAHook
-from nvalchemi.training.hooks.finetune import ModulePatchHook, TrainableParameterHook
+from nvalchemi.training.hooks.finetune import (
+    FineTuningSummaryHook,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
+from nvalchemi.training.peft.fingerprints import BaseFingerprintHook
 
 __all__ = [
     "CheckpointHook",
+    "BaseFingerprintHook",
     "DDPHook",
     "EMAHook",
     "MixedPrecisionHook",
     "TorchProfilerHook",
+    "FineTuningSummaryHook",
     "ModulePatchHook",
     "TrainableParameterHook",
     "TrainingUpdateHook",

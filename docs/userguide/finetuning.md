@@ -282,7 +282,8 @@ strategy.run(train_loader)
 The loss and training function conventions here are the same as in regular
 training — see {ref}`losses_guide` and {ref}`training_guide` for details on
 operator-composed losses, `dtype_policy`, and how `default_training_fn` maps
-output keys.
+output keys. For regular fine-tuning, leave `peft_config=None`. Parameter-efficient
+fine-tuning will be discussed later in the LoRA section.
 
 ```{tip}
 If your pretrained model comes from an existing `nvalchemi-toolkit` checkpoint,
@@ -471,6 +472,10 @@ replacement declaratively — this keeps the patch serializable through
 stores the fully-qualified class path and constructor arguments, so custom
 architectures serialize exactly like built-in ones.
 
+Patched modules are trainable by default, so you do not need to repeat their
+parameter names in `trainable_patterns`. Use `trainable_patterns` only when you
+also want to opt in additional, non-patched parameters from the pretrained base.
+
 ```python
 import torch
 
@@ -486,7 +491,6 @@ strategy = FineTuningStrategy(
         ),
     },
     freeze_patterns=("main.model.*",),
-    trainable_patterns=("main.model.readout.*",),
     optimizer_configs=OptimizerConfig(
         optimizer_cls=torch.optim.AdamW,
         optimizer_kwargs={"lr": 1e-3},
@@ -529,8 +533,8 @@ strategy = FineTuningStrategy(
             out_features=1,
         ),
     },
-    # only have the newly added head trainable
-    trainable_patterns=("main.model.band_gap_head.*",),
+    # keep the pretrained base frozen; the patched head is trainable by default
+    freeze_patterns=("main.model.*",),
     training_fn=train_energy_and_band_gap,
     # add an MSE loss based on the band gap
     loss_fn=(
@@ -548,8 +552,9 @@ and readout heads to obtain the energy and band gap values. The loss function
 is then composed of the regular {py:class}`~nvalchemi.training.losses.terms.EnergyMSELoss`
 and a custom (fictitious) `YourMSELoss` to compute against the band gap and provide
 the key/value mapping out of the returned predictions dictionary from the training
-function. By specifying the `trainable_patterns`, only the new band gap head will
-receive weight updates from the optimizer.
+function. The pretrained base is frozen by `freeze_patterns`, while the new
+band gap head remains trainable because patched modules are trainable by
+default.
 
 ### Adding or replacing an embedding table
 
@@ -575,10 +580,7 @@ strategy = FineTuningStrategy(
         ),
     },
     freeze_patterns=("main.model.*",),
-    trainable_patterns=(
-        "main.model.atomic_embedding.*",
-        "main.model.readout.*",
-    ),
+    trainable_patterns=("main.model.readout.*",),
     optimizer_configs=OptimizerConfig(
         optimizer_cls=torch.optim.AdamW,
         optimizer_kwargs={"lr": 5e-4},
@@ -604,7 +606,7 @@ with torch.no_grad():
 strategy = FineTuningStrategy(
     models=pretrained_model,
     module_patches={"main.model.atomic_embedding": replacement},
-    trainable_patterns=("main.model.atomic_embedding.*",),
+    freeze_patterns=("main.model.*",),
     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
     training_fn=default_training_fn,
     loss_fn=EnergyMSELoss(),
@@ -663,6 +665,317 @@ teacher-student workflows where the student's backbone and head are trained at
 different rates: split the student's parameters across two optimizer groups using
 the {ref}`training_guide` parameter-group API, or run separate strategies in
 sequence via `from_pretrained_checkpoint`.
+
+### LoRA fine-tuning
+
+{py:class}`~nvalchemi.training.FineTuningStrategy` also supports
+parameter-efficient fine-tuning through `peft_config`; LoRA is the only
+supported PEFT method right now. Pass
+{py:class}`~nvalchemi.training.peft.lora.LoRAConfig` to inject low-rank LoRA adapters
+into selected modules before optimizer construction. The pretrained base is
+frozen by default, and the optimizer sees only adapter parameters plus any
+module patches or explicit extra parameters you opt in with
+`trainable_patterns`.
+
+This is useful when the pretrained model is large, the target dataset is
+relatively small, or you want to keep the base model reusable while shipping a
+small domain-specific adapter. Full-model fine-tuning gives the optimizer the
+most freedom; LoRA trades some of that flexibility for lower memory use, fewer
+trainable parameters, and smaller checkpoint or adapter artifacts.
+
+```python
+import torch
+
+from nvalchemi.hooks import NeighborListHook
+from nvalchemi.training import (
+    EnergyMSELoss,
+    FineTuningStrategy,
+    ForceMSELoss,
+    OptimizerConfig,
+    TrainingStage,
+    ValidationConfig,
+    default_training_fn,
+)
+
+from nvalchemi.training.peft.lora import LoRAConfig
+
+pretrained_model = load_my_pretrained_model()
+train_loader = make_my_batch_loader()
+validation_loader = make_my_validation_loader()
+
+loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True)
+loss_fn.dtype_policy = "prediction_to_target"
+
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": 3e-4, "weight_decay": 1e-6},
+    ),
+    training_fn=default_training_fn,
+    loss_fn=loss_fn,
+    num_steps=2_000,
+    devices=[torch.device("cuda")],
+    hooks=[
+        NeighborListHook(
+            pretrained_model.model_config.neighbor_config,
+            stage=TrainingStage.BEFORE_FORWARD,
+        ),
+    ],
+    validation_config=ValidationConfig(
+        validation_data=validation_loader,
+        validation_fn=default_training_fn,
+        loss_fn=loss_fn,
+        every_n_steps=250,
+    ),
+    peft_config=LoRAConfig(
+        lora_target_patterns=("main.model.interactions.*.linear*",),
+        rank=8,
+        alpha=1.0,
+        lora_dropout=0.0,
+    ),
+)
+
+strategy.run(train_loader)
+```
+
+LoRA target patterns match module names, not parameter names. They use the same
+shell-style glob syntax as `trainable_patterns`, but they are matched against
+`named_modules()` output with the model key prepended. A single model passed as
+`models=pretrained_model` is stored under `"main"`, so target names start with
+`main.`. For multi-model workflows, use the keys from your model dictionary.
+
+```python
+for name, module in pretrained_model.named_modules():
+    print(f"main.{name}", type(module).__name__)
+```
+
+Use the printed names to choose targets that the current model actually
+contains. Exact names such as `"main.model.projection"` are accepted, and globs
+such as `"main.model.*projection"` can select related modules. Patterns that
+match no modules raise an error before training begins.
+
+#### How LoRA is applied
+
+LoRA injection happens before optimizer construction. When `peft_config` is
+provided, `FineTuningStrategy` prepends PEFT registration hooks before user
+hooks. When `compute_base_fingerprints=True`, the default, this starts with
+{py:class}`~nvalchemi.training.hooks.BaseFingerprintHook`, which records
+base-model fingerprints before adapters mutate the model. For LoRA, PEFT setup
+then includes
+{py:class}`~nvalchemi.training.peft.lora_hook.LoRAHook`, which registers built-in and
+custom LoRA wrappers, then applies adapters to modules whose model-prefixed
+names match the target patterns. For each match, the LoRA registry selects the
+wrapper registered for that layer class.
+
+Each wrapper replaces the base layer with a module containing the frozen original
+layer and trainable low-rank adapter parameters. The net adapter weights start at zero,
+so the wrapped model initially matches the base model. Training optimizes only
+LoRA parameters, module patches, and explicit `trainable_patterns`. Mergeable
+wrappers can later fold the learned update back into the base layer for inference
+or export.
+
+The public wrapper classes are available from `nvalchemi.training.peft.lora`:
+
+- {py:class}`nvalchemi.training.peft.lora.LoRALinear` for `torch.nn.Linear`
+  layers.
+- `nvalchemi.training.peft.lora.TransformerEngineLoRALinear` for
+  `transformer_engine.pytorch.Linear` layers when Transformer Engine is
+  installed.
+- {py:class}`nvalchemi.training.peft.lora.EquivariantLoRALinear` for
+  `e3nn.o3.Linear` layers.
+- {py:class}`nvalchemi.training.peft.lora.CuEquivarianceLoRALinear` for
+  `cuequivariance_torch.operations.linear.Linear` layers.
+- {py:class}`nvalchemi.training.peft.lora.E3NNFullyConnectedLoRALayer` for
+  `e3nn.nn._fc._Layer` scalar fully connected layers.
+
+Inspect the active layer-to-wrapper pairs with
+{py:func}`~nvalchemi.training.peft.lora.available_lora_wrappers`.
+
+```python
+from nvalchemi.training.peft.lora import available_lora_wrappers
+
+for layer_cls, wrapper_cls in available_lora_wrappers():
+    print(layer_cls, "->", wrapper_cls)
+```
+
+To support a custom layer type, write a wrapper module that implements the
+{py:class}`nvalchemi.training.peft.lora.LoRALayer` interface, then register that
+wrapper for the base layer class through
+`LoRAConfig(wrapper_registrations=...)`. Each registration is a pair of
+`(LoRAWrappableLayer, LoRAWrapper)`: when LoRA finds an instance of the base class
+matching your target patterns, it replaces that layer with your wrapper. The
+strategy register these pairs immediately before adapter injection, so target
+patterns can select the custom layer in the same constructor call. Registrations
+are temporary: the process-wide registry is restored after injection.
+
+A custom wrapper may replace an existing or built-in wrapper for the duration
+of injection, with a `UserWarning`. Attempting to assign two different wrappers
+to the same layer class in `LoRAConfig` will raise `ValueError` during
+configuration validation.
+
+```python
+import torch
+
+from nvalchemi.training import FineTuningStrategy, OptimizerConfig
+from nvalchemi.training.peft.lora import LoRAConfig, LoRALayer, LoRAWrapperRegistrations
+
+
+class MyBlock(torch.nn.Module):
+    ...
+
+
+class MyBlockLoRA(torch.nn.Module, LoRALayer):
+    mergeable = True
+
+    def __init__(
+        self,
+        base_layer: MyBlock,
+        rank: int,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
+        init: str = "default",
+        **kwargs,
+    ) -> None:
+        super().__init__()
+        self.base_layer = base_layer
+        for param in self.base_layer.parameters():
+            param.requires_grad = False
+
+        self.scaling = alpha / rank
+        self.enabled = True
+        # Define trainable LoRA parameters or submodules here. Initialize the
+        # LoRA residual to zero.
+
+    def forward(self, *args, **kwargs):
+        # Return base_layer(...) plus the LoRA residual when enabled.
+        ...
+
+    def merge_into_base(self) -> None:
+        # Fold the LoRA delta into base_layer for merged inference.
+        ...
+
+
+custom_lora_wrappers: LoRAWrapperRegistrations = (
+    (MyBlock, MyBlockLoRA),
+)
+
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    peft_config=LoRAConfig(
+        lora_target_patterns=("main.model.custom_blocks.*",),
+        wrapper_registrations=custom_lora_wrappers,
+    ),
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=1_000,
+)
+```
+
+If the strategy must round-trip through `to_spec_dict()` or restart from a
+serialized checkpoint recipe, define custom layer and wrapper classes in
+importable modules rather than in a notebook cell or local function. The recipe
+stores class paths for `wrapper_registrations`, so those paths must be
+importable when the strategy is rebuilt.
+
+When `peft_config` is provided, LoRA freezes the pretrained base by default, so
+`freeze_patterns` must stay empty. LoRA adapters and `module_patches` are
+trainable automatically. As in regular fine-tuning, use `trainable_patterns`
+to select any additional existing model parameters you also want to update.
+
+For example, this strategy trains the LoRA adapters, the patched auxiliary
+projection, and one explicitly selected base projection.
+
+```python
+from nvalchemi.training import FineTuningStrategy, create_model_spec
+from nvalchemi.training.peft.lora import LoRAConfig
+
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    module_patches={
+        "main.model.aux_projection": create_model_spec(
+            torch.nn.Linear,
+            in_features=128,
+            out_features=1,
+        ),
+    },
+    trainable_patterns=("main.model.projection.*",),
+    peft_config=LoRAConfig(
+        lora_target_patterns=("main.model.interactions.*.linear*",),
+    ),
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=1_000,
+)
+```
+
+The complete intermediate example
+`examples/intermediate/08_lora_finetuning.py` shows a MACE workflow that
+downloads the LPSC dataset, fits reference energies, inspects LoRA target
+candidates, trains adapters, writes a trainable-state PEFT checkpoint, and
+loads the PEFT checkpoint back into a fresh base model.
+
+### Adding a PEFT method
+
+A PEFT provider must supply all five arguments required by
+{py:func}`~nvalchemi.training.peft.register_peft_method`. Together, these inputs
+are the complete registry contract for a method:
+
+- `method`: a unique, stable string stored in serialized strategy and checkpoint
+  metadata.
+- `config_cls`: a `PeftConfig` subclass whose frozen `peft_method` literal matches
+  `method`. Its `to_spec_dict()` result must be JSON-safe; add Pydantic serializers
+  or validators for class objects and other Python-only fields.
+- `build_peft_setup_hooks`: a callable that accepts the validated config and
+  strategy mapping, checks model-dependent restrictions, and returns hooks that
+  install the PEFT structure before optimizer construction.
+- `apply_peft_from_checkpoint_metadata`: a callable that accepts the base model,
+  serialized strategy metadata, model name, and optional import-path validator.
+  It must rebuild the saved config and recreate the PEFT module structure before
+  weights are loaded.
+- `merge_peft`: a callable that merges learned PEFT parameters into the model and
+  honors `strict` when the structure cannot be merged completely.
+
+The registration has this shape:
+
+```python
+from nvalchemi.training.peft import register_peft_method
+
+register_peft_method(
+    MY_PEFT_METHOD,
+    config_cls=MyPeftConfig,
+    build_peft_setup_hooks=build_my_peft_setup_hooks,
+    apply_peft_from_checkpoint_metadata=apply_my_peft_from_checkpoint_metadata,
+    merge_peft=merge_my_peft,
+)
+```
+
+A minimal discriminator field looks like this:
+
+```python
+from typing import Literal
+
+from pydantic import Field
+
+from nvalchemi.training.peft import PeftConfig
+
+MY_PEFT_METHOD = "my_peft"
+
+
+class MyPeftConfig(PeftConfig):
+    peft_method: Literal["my_peft"] = Field(
+        default=MY_PEFT_METHOD,
+        frozen=True,
+    )
+```
+
+Use `nvalchemi/training/peft/lora.py` as a reference implementation and
+`test/training/test_peft_lora.py` as its test example.
+
+Finally, add the method registration callback to `_register_builtin_peft_methods()`
+in `nvalchemi/training/peft/registry.py`.
 
 (checkpoint-workflows)=
 
@@ -766,6 +1079,77 @@ the next stage calls `from_pretrained_checkpoint` on that checkpoint with a
 broader set of `trainable_patterns`, gradually opening up more of the model
 without ever managing weights manually between stages.
 
+### LoRA checkpoints and PEFT loading
+
+LoRA workflows use the same `FineTuningStrategy` checkpoint APIs as regular
+fine-tuning. {py:meth}`~nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint`
+starts a fresh LoRA run from saved model weights when the new strategy includes
+`peft_config=LoRAConfig(...)`. {py:meth}`~nvalchemi.training.FineTuningStrategy.load_checkpoint`,
+{py:meth}`~nvalchemi.training.FineTuningStrategy.restore_checkpoint`,
+{py:meth}`~nvalchemi.training.FineTuningStrategy.save_checkpoint`, and
+{py:class}`~nvalchemi.training.hooks.CheckpointHook` handle restartable runs.
+For parameter-efficient saving, especially with large base models or when
+training only a small fraction of parameters, use
+`save_trainable_state_only=True` in `save_checkpoint` or `CheckpointHook`.
+
+```python
+from nvalchemi.training import CheckpointHook, FineTuningStrategy
+from nvalchemi.training.peft.lora import LoRAConfig
+
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    peft_config=LoRAConfig(
+        lora_target_patterns=("main.model.interactions.*.linear*",),
+    ),
+    hooks=[
+        CheckpointHook(
+            "runs/lora-ft/checkpoints",
+            step_interval=500,
+            save_trainable_state_only=True,
+        ),
+    ],
+    ...
+)
+```
+
+Pass `save_trainable_state_only=False` only when the checkpoint must carry
+the full model state instead of relying on the original base model being
+available. Trainable-only checkpoints are still training checkpoints; they are
+not meant to be standalone deployable model artifacts unless they are loaded
+with a compatible base model.
+
+Load a trainable-state PEFT checkpoint into a compatible pristine base model
+with {py:func}`~nvalchemi.training.peft.load_peft_checkpoint_into_model`. By
+default, `load_peft_checkpoint_into_model(..., merge=True)` folds mergeable
+adapter weights into the base layers, which is usually the right shape for
+inference and export.
+
+```python
+from nvalchemi.training.peft import load_peft_checkpoint_into_model
+
+checkpoint_index = strategy.save_checkpoint(
+    "runs/lora-ft/checkpoints",
+    save_trainable_state_only=True,
+)
+
+base_model = load_my_pretrained_model()
+finetuned_model = load_peft_checkpoint_into_model(
+    base_model,
+    "runs/lora-ft/checkpoints",
+    checkpoint_index=checkpoint_index,
+    model_name="main",
+    merge=True,
+)
+finetuned_model.eval()
+```
+
+LoRA checkpoints record base-model fingerprints when
+`compute_base_fingerprints=True`, the default. Loading raises when the saved
+checkpoint does not match the supplied base model. For loading,
+`strict=False` turns supported compatibility or merge failures into warnings,
+but the safest workflow is to load PEFT checkpoints onto the same base
+checkpoint and model configuration used during fine-tuning.
+
 ## Hooks in fine-tuning
 
 The hook system in `FineTuningStrategy` is the same as in
@@ -773,12 +1157,18 @@ The hook system in `FineTuningStrategy` is the same as in
 available stages, and how to write custom hooks.
 
 One ordering detail is specific to fine-tuning: the strategy internally
-registers a {py:class}`~nvalchemi.training.hooks.ModulePatchHook` and a
-{py:class}`~nvalchemi.training.hooks.TrainableParameterHook` before any hooks
-you supply via `hooks=`. This means your custom hooks always observe the
-already-patched module tree and the already-filtered optimizer parameter
-groups. If a hook inspects which parameters are in the optimizer, it will see
-the post-filter state.
+registers PEFT hooks first, including
+{py:class}`~nvalchemi.training.hooks.BaseFingerprintHook` when base
+fingerprinting is enabled and then PEFT method hooks such as
+{py:class}`~nvalchemi.training.peft.lora_hook.LoRAHook`. It then registers
+{py:class}`~nvalchemi.training.hooks.ModulePatchHook`, followed by
+{py:class}`~nvalchemi.training.hooks.TrainableParameterHook`. When parameter
+filtering is active, {py:class}`~nvalchemi.training.hooks.FineTuningSummaryHook`
+caches the trainable-parameter summary before any hooks you supply via
+`hooks=`. This means your custom hooks always observe the already-adapted
+module tree, the already-filtered optimizer parameter groups, and the cached
+fine-tuning summary. If a hook inspects which parameters are in the optimizer,
+it will see the post-filter state.
 
 For per-batch policies — mixed precision, gradient clipping, custom scheduler
 stepping — use {ref}`training-update-hooks` rather than registration-time
@@ -819,5 +1209,9 @@ nothing and the strategy will raise an error before the run begins.
 
 See {ref}`training-finetuning-api` for the API reference for
 {py:class}`~nvalchemi.training.FineTuningStrategy`,
-{py:class}`~nvalchemi.training.hooks.ModulePatchHook`, and
-{py:class}`~nvalchemi.training.hooks.TrainableParameterHook`.
+{py:class}`~nvalchemi.training.hooks.ModulePatchHook`,
+{py:class}`~nvalchemi.training.hooks.TrainableParameterHook`,
+{py:class}`~nvalchemi.training.hooks.FineTuningSummaryHook`,
+{py:class}`~nvalchemi.training.peft.lora.LoRAConfig`,
+{py:func}`~nvalchemi.training.peft.load_peft_checkpoint_into_model`,
+and {py:class}`~nvalchemi.training.hooks.BaseFingerprintHook`.
