@@ -75,6 +75,12 @@ repeated unconditional draws::
     for batch in gan.stream(conds=None, max_batches=10):
         ...
 
+**Composition** — sequential pipelines mirror the dynamics ``|`` sugar
+(:class:`~nvalchemi.gen.pipeline.GenerationPipeline`)::
+
+    pipe = gen_a | gen_b
+    out = pipe(cond)
+
 **Sessions: streams, RNG, and compile** — an ``AtomGenerator`` is a context
 manager. Entering a session (``with gen:``) creates a dedicated CUDA stream
 when the model is CUDA-resident, seeds a session-scoped
@@ -93,7 +99,7 @@ import inspect
 import itertools
 from collections.abc import Iterator
 from contextlib import nullcontext
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -102,6 +108,9 @@ from tensordict import TensorDict, TensorDictBase
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
+
+if TYPE_CHECKING:
+    from nvalchemi.gen.pipeline import GenerationPipeline
 
 __all__ = ["GeneratingFunction", "AtomGenerator", "default_condition"]
 
@@ -844,3 +853,27 @@ class AtomGenerator(BaseModel, HookRegistryMixin):
             ``self.stream()`` — an unbounded stream of unconditional draws.
         """
         return self.stream()
+
+    def __or__(self, other: Any) -> GenerationPipeline:
+        """Compose sequentially into a :class:`GenerationPipeline`.
+
+        Mirrors :meth:`nvalchemi.dynamics.base.BaseDynamics.__or__`. (``+``
+        stays reserved for concurrent/fused composition, as in dynamics.)
+
+        Parameters
+        ----------
+        other
+            A :class:`AtomGenerator`, a dynamics engine, a ``Batch -> Batch``
+            callable, or an existing pipeline.
+
+        Returns
+        -------
+        GenerationPipeline
+            ``self`` followed by ``other`` (prepended when ``other`` is
+            already a pipeline).
+        """
+        from nvalchemi.gen.pipeline import GenerationPipeline
+
+        if isinstance(other, GenerationPipeline):
+            return GenerationPipeline(stages=[self, *other.stages])
+        return GenerationPipeline(stages=[self, other])

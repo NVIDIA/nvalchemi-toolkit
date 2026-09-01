@@ -139,3 +139,10 @@ class TestDemoNonparametricGeneration:
         )
         assert torch.equal(a["positions"], b["positions"])
         assert torch.equal(a["atomic_numbers"], b["atomic_numbers"])
+
+    def test_pipeline_source_stage(self) -> None:
+        """The function folds into a pipeline as a plain Batch -> Batch stage."""
+        pipe = AtomGenerator(model=DemoGANModel()) | demo_nonparametric_generation
+        out = pipe(None)
+        assert isinstance(out, Batch)
+        assert out.num_graphs == 1

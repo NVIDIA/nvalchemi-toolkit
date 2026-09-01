@@ -18,7 +18,8 @@ This package provides the abstract
 :class:`~nvalchemi.gen.generator.AtomGenerator` inference driver — a fixed
 condition → generate pipeline with lifecycle hooks
 (:class:`~nvalchemi.gen.stages.GenerationStage`,
-:class:`~nvalchemi.hooks.GenerationContext`).
+:class:`~nvalchemi.hooks.GenerationContext`) — plus sequential
+composition via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
 """
 
 from __future__ import annotations
@@ -29,12 +30,14 @@ from nvalchemi.gen.generator import (
     GeneratingFunction,
     default_condition,
 )
+from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext
 
 __all__ = [
     "AtomGenerator",
     "GenerationContext",
+    "GenerationPipeline",
     "GenerationStage",
     "GenerativeIntent",
     "GeneratingFunction",

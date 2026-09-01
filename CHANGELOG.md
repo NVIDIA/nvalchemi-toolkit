@@ -10,7 +10,8 @@
   before `AFTER_GENERATE` hooks fire — lifecycle hooks sharing a per-call
   `GenerationContext`, `stream()`, and session context managers (dedicated
   CUDA stream, session RNG, lazy `torch.compile`). Generating functions
-  return `TensorDict` samples.
+  return `TensorDict` samples. Sequential composition via `gen_a | gen_b`
+  (`GenerationPipeline`, with construction-time field-contract validation).
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
   `DemoDiffusionModel` — minimal `GenerativeModelMixin` placeholders for
   testing and debugging (the generative counterpart to
