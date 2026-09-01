@@ -14,6 +14,11 @@
   `GenerationContext`, `stream()`, and session context managers (dedicated
   CUDA stream, session RNG, lazy `torch.compile`). Generating functions
   return `TensorDict` samples.
+- Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
+  `DemoDiffusionModel` — minimal `GenerativeModelMixin` placeholders for
+  testing and debugging (the generative counterpart to
+  `DemoModel`/`DemoModelWrapper`) — plus `demo_nonparametric_generation`, a
+  synthetic-structure source for tests and debugging.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
