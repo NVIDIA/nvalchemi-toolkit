@@ -7,6 +7,13 @@
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
+- Toolkit-level generative API (`nvalchemi.gen`): an abstract
+  `AtomGenerator` interface for generation with a fixed condition →
+  generate pipeline — the raw sample is materialized into a `Batch` inline,
+  before `AFTER_GENERATE` hooks fire — lifecycle hooks sharing a per-call
+  `GenerationContext`, `stream()`, and session context managers (dedicated
+  CUDA stream, session RNG, lazy `torch.compile`). Generating functions
+  return `TensorDict` samples.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,

@@ -24,6 +24,8 @@ from torch.nn import ModuleDict
 from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
+    from tensordict import TensorDictBase
+
     from nvalchemi.data.batch import Batch
     from nvalchemi.models.base import BaseModelMixin
 
@@ -137,3 +139,46 @@ class TrainContext(HookContext):
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None
     validation: dict[str, Any] | None = None
+
+
+@dataclass(kw_only=True)
+class GenerationContext(HookContext):
+    """Context object passed to generation hooks.
+
+    One context instance spans a single
+    :meth:`~nvalchemi.gen.generator.AtomGenerator.sample` call: the same
+    object is dispatched at every
+    :class:`~nvalchemi.gen.stages.GenerationStage` and the
+    :class:`~nvalchemi.gen.generator.AtomGenerator` re-reads it after each
+    dispatch, so hooks mutate generation state by *replacing* context fields
+    (``ctx.batch = ctx.batch[keep]``), not by editing in place.
+
+    Attributes
+    ----------
+    batch : Batch | TensorDict | None
+        The single canonical batch for this call. Built by conditioning
+        (tiled by ``num_samples_per_batch``), read by the generating
+        function, and materialized into the generated
+        :class:`~nvalchemi.data.Batch` before ``AFTER_GENERATE`` hooks fire.
+        There is deliberately no separate ``cond_batch`` — conditioning
+        writes the same field that materialization replaces. Widened from
+        :attr:`~nvalchemi.hooks.HookContext.batch` to admit
+        :class:`~tensordict.TensorDict` conditioning for non-graph-native
+        families; from ``AFTER_GENERATE`` on it always holds a ``Batch``.
+    cond : Any
+        The conditioning input for the current call — a tensor container
+        (``Batch``, ``TensorDict``, ...) with text or other raw modalities
+        already encoded. Editable at ``BEFORE_CONDITION``.
+    intermediates : dict[str, Any]
+        Scratch space for hook-to-hook state within one call (e.g. a
+        conditioning embedding computed at ``AFTER_CONDITION`` and consumed
+        at ``AFTER_GENERATE``).
+    step_count : int
+        Which generation call this is within a stream; ``0`` for a one-shot
+        call. Drives hook frequency gating.
+    """
+
+    batch: Batch | TensorDictBase | None = None
+    cond: Any = None
+    intermediates: dict[str, Any] = field(default_factory=dict)
+    step_count: int = 0
