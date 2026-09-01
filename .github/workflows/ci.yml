@@ -282,7 +282,8 @@ jobs:
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen \
+          uv python install 3.12
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen --python 3.12 \
             --extra uma --extra ase --extra cu12 --no-group build
 
       - name: Verify UMA CUDA 12 environment
@@ -292,7 +293,9 @@ jobs:
           UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv run --no-sync python -c "
           import importlib.metadata as md, sys, torch
           fairchem = md.version('fairchem-core')
-          print(f'fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda}')
+          print(f'python={sys.version.split()[0]} fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda}')
+          if sys.version_info[:2] != (3, 12):
+              sys.exit(f'expected Python 3.12, found {sys.version.split()[0]}')
           if not fairchem.startswith('2.22.'):
               sys.exit(f'expected fairchem-core 2.22.x, found {fairchem}')
           if not torch.__version__.startswith('2.13.0+cu126'):
@@ -581,7 +584,8 @@ jobs:
         if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen \
+          uv python install 3.12
+          UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --frozen --python 3.12 \
             --extra uma --extra ase --extra cu12 --no-group build
 
       - name: Verify UMA CUDA 12 environment and 2 GPUs
@@ -592,7 +596,9 @@ jobs:
           import importlib.metadata as md, sys, torch
           fairchem = md.version('fairchem-core')
           devices = torch.cuda.device_count()
-          print(f'fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda} devices={devices}')
+          print(f'python={sys.version.split()[0]} fairchem-core={fairchem} torch={torch.__version__} cuda={torch.version.cuda} devices={devices}')
+          if sys.version_info[:2] != (3, 12):
+              sys.exit(f'expected Python 3.12, found {sys.version.split()[0]}')
           if not fairchem.startswith('2.22.'):
               sys.exit(f'expected fairchem-core 2.22.x, found {fairchem}')
           if not torch.__version__.startswith('2.13.0+cu126'):
