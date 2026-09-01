@@ -31,11 +31,19 @@ from nvalchemi.models.gen.base import (
     GenerativeModelConfig,
     GenerativeModelMixin,
 )
+from nvalchemi.models.gen.demo import (
+    DemoDiffusionModel,
+    DemoGANModel,
+    demo_nonparametric_generation,
+)
 
 __all__ = [
     "ArtifactT",
+    "DemoDiffusionModel",
+    "DemoGANModel",
     "GenerativeIntent",
     "GenerativeModelConfig",
     "GenerativeModelMixin",
     "Modality",
+    "demo_nonparametric_generation",
 ]
