@@ -23,7 +23,7 @@ Tests for BaseDynamics per-system _state batch lifecycle:
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -673,6 +673,32 @@ class TestFusedStageStateInit:
         assert fire._state.num_graphs == M
         assert lang._state.num_graphs == M
 
+    def test_masked_updates_preserve_inactive_sub_stage_state(self):
+        """Each sub-stage advances state only for graphs owned by that stage."""
+        from nvalchemi.dynamics._ops._bridge import _make_state_batch
+        from nvalchemi.dynamics.base import BaseDynamics, FusedStage
+
+        class StatefulDynamics(BaseDynamics):
+            def _init_state(self, batch: Batch) -> None:
+                self._state = _make_state_batch(
+                    {"counter": torch.zeros(batch.num_graphs, device=batch.device)},
+                    batch.device,
+                )
+
+            def pre_update(self, batch: Batch) -> None:
+                self._state.counter.add_(1)
+
+        first = StatefulDynamics(model=_make_model())
+        second = StatefulDynamics(model=_make_model())
+        fused = FusedStage(sub_stages=[(0, first), (1, second)])
+        batch = self._make_status_batch(2)
+        batch.status.copy_(torch.tensor([[0], [1]]))
+
+        fused.step(batch)
+
+        assert first._state.counter.tolist() == [1.0, 0.0]
+        assert second._state.counter.tolist() == [0.0, 1.0]
+
 
 # ---------------------------------------------------------------------------
 # TestStateSyncInflight
@@ -820,6 +846,23 @@ class TestStateSyncInflight:
         # And alpha reset to alpha_start.
         expected_alpha = dyn.alpha_start
         assert abs(float(dyn._state.alpha[-1]) - expected_alpha) < 1e-6
+
+    def test_refill_resets_force_priming_for_optimizer(self):
+        """A BaseDynamics optimizer fully primes its reconstructed batch."""
+        replacement = _make_atomic_data(4, seed=66)
+        dyn, _ = self._make_dynamics_with_sampler(replacements=[replacement])
+        batch = self._make_status_batch(2)
+        dyn.step(batch)
+
+        self._graduate_first(batch)
+        result = dyn.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert getattr(result, "reprime_pending", None) is None
+        assert dyn._forces_primed is False
+        with patch.object(dyn, "_prime_forces", wraps=dyn._prime_forces) as prime:
+            dyn.step(result)
+        assert prime.call_count == 1
 
     def test_full_graduation_clears_state(self):
         """When all systems graduate and no replacements, _state is deleted."""

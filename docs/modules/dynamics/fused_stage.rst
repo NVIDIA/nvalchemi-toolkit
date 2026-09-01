@@ -112,6 +112,26 @@ When a sample in sub-stage 0 (optimizer) converges:
 4. It is graduated (either written to sinks or replaced via inflight
    batching)
 
+Optional force reprime on sub-stage entry
+-----------------------------------------
+
+Some stages require model outputs to be refreshed under the target stage's
+context before their integrator or optimizer advances. This ensures that
+the entering graphs are processed correctly by the target-stage 
+``AFTER_COMPUTE`` hooks.
+
+.. code-block:: python
+
+   fused = FusedStage(
+       sub_stages=[(0, optimizer), (1, md)],
+       reprime_on_entry={1},
+   )
+
+Graphs entering status ``1`` skip its updates and counters until the next
+shared compute refreshes their outputs. They may then converge or update on
+the following iteration. Existing status ``1`` graphs continue normally.
+This is separate from the initial batch-wide force prime.
+
 
 Running a ``FusedStage``
 -------------------------

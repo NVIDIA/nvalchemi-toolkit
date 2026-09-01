@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import torch
+from jaxtyping import Bool
 from torch.nn import ModuleDict
 from torch.optim.lr_scheduler import LRScheduler
 
@@ -64,13 +65,19 @@ class DynamicsContext(HookContext):
     ----------
     step_count : int
         Current dynamics step number.
-    converged_mask : torch.Tensor | None
+    converged_mask : Bool[torch.Tensor, "B"] | None
         Boolean mask of samples that converged at the current hook stage.
         ``None`` when convergence has not fired for this dispatch.
+    active_graph_mask : Bool[torch.Tensor, "B"] | None
+        Boolean mask of shape ``(batch.num_graphs,)`` selecting graphs active in
+        the current dynamics dispatch. ``None`` when the dispatch has no status-based
+        filtering (typically standalone ``BaseDynamics``). In a ``FusedStage``
+        substage, it selects graphs whose status matches that substage.
     """
 
     step_count: int = 0
-    converged_mask: torch.Tensor | None = None
+    converged_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
+    active_graph_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
 
 
 @dataclass(kw_only=True)

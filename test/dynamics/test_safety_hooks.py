@@ -121,6 +121,61 @@ class TestNaNDetectorHook:
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
+    def test_only_active_graphs_are_checked(self) -> None:
+        """Ignore non-finite outputs owned by another fused substage."""
+        hook = NaNDetectorHook()
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2)
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False])
+
+        batch.forces[2, 0] = float("nan")
+        batch.energy[1, 0] = float("nan")
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        batch.forces[0, 0] = float("nan")
+        with pytest.raises(
+            RuntimeError, match="Non-finite values detected"
+        ) as exc_info:
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert "forces: 1 non-finite element(s) in graph(s) [0]" in str(exc_info.value)
+
+    def test_active_graph_mask_supports_graph_level_rank_three_tensor(self) -> None:
+        """Mask and diagnose graph-level tensors with multiple component axes."""
+        hook = NaNDetectorHook(extra_keys=["stress"])
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2)
+        batch.__dict__["stress"] = torch.zeros(batch.num_graphs, 3, 3)
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False])
+
+        batch.stress[1] = float("nan")
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        batch.stress[0, 1, 2] = float("nan")
+        with pytest.raises(RuntimeError) as exc_info:
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert "stress: 1 non-finite element(s) in graph(s) [0]" in str(exc_info.value)
+
+    def test_active_graph_mask_supports_node_level_rank_one_tensor(self) -> None:
+        """Mask and diagnose scalar values stored for every node."""
+        hook = NaNDetectorHook(extra_keys=["node_values"])
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2)
+        batch.__dict__["node_values"] = torch.zeros(batch.num_nodes)
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False])
+
+        batch.node_values[2] = float("nan")
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        batch.node_values[0] = float("nan")
+        with pytest.raises(RuntimeError) as exc_info:
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert "node_values: 1 non-finite element(s) in graph(s) [0]" in str(
+            exc_info.value
+        )
+
     def test_inf_in_forces_raises(self) -> None:
         """Verify RuntimeError when forces contain Inf."""
         hook = NaNDetectorHook()
@@ -292,6 +347,21 @@ class TestMaxForceClampHook:
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
+
+    def test_only_active_graphs_are_clamped(self) -> None:
+        """Clamp forces only for graphs selected by the substage mask."""
+        hook = MaxForceClampHook(max_force=1.0)
+        batch = _make_batch(n_graphs=2, atoms_per_graph=2)
+        batch.__dict__["forces"] = torch.tensor(
+            [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0], [20.0, 0.0, 0.0]]
+        )
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False])
+
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        assert torch.allclose(batch.forces[:2, 0], torch.ones(2))
+        assert torch.allclose(batch.forces[2:, 0], torch.full((2,), 20.0))
 
     def test_clamps_above_threshold(self) -> None:
         """Verify forces above threshold are clamped to max_force."""

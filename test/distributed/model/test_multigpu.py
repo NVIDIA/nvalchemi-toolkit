@@ -356,7 +356,7 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
     batch = Batch.from_data_list([data], device=device) if rank == 0 else None
     local_batch = dd.partition(batch)
 
-    dd._prime_forces(local_batch)
+    dd._prime_forces(local_batch, dd._active_graph_mask(local_batch))
 
     assert local_batch.forces is not None
     assert local_batch.forces.shape == (local_batch.num_nodes, 3)
