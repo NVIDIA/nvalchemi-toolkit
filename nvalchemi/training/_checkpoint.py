@@ -438,6 +438,119 @@ def _snapshot_components(
     }
 
 
+def _filter_ema_hook_states_to_trainable_state(
+    snapshot: dict[str, Any],
+    trainable_names_by_model: Mapping[str, set[str]],
+    buffer_names_by_model: Mapping[str, set[str]],
+) -> None:
+    """Filter EMA averaged model state to trainable parameters plus buffers if EMA is enabled."""
+    hook_states = snapshot.get("hook_states", {})
+    if not isinstance(hook_states, Mapping):
+        return
+
+    for key, state in hook_states.items():
+        if not str(key).startswith("nvalchemi.training.hooks.ema.EMAHook:"):
+            continue
+        if not isinstance(state, dict):
+            continue
+        model_key = state.get("model_key")
+        averaged_state = state.get("averaged_model_state")
+        if not isinstance(model_key, str) or not isinstance(averaged_state, Mapping):
+            continue
+        if model_key not in trainable_names_by_model:
+            continue
+
+        # AveragedModel stores the wrapped model's state under the "module." prefix
+        parameter_keys = {
+            f"module.{name}" for name in trainable_names_by_model[model_key]
+        }
+        missing = sorted(parameter_keys - set(averaged_state))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing EMA trainable parameter(s): {missing!r}."
+            )
+
+        # Preserve persistent buffers that are present in the averaged model state
+        buffer_keys = {
+            f"module.{name}"
+            for name in buffer_names_by_model.get(model_key, set())
+            if f"module.{name}" in averaged_state
+        }
+        keep_keys = parameter_keys | buffer_keys
+        state["averaged_model_state"] = _snapshot_state_dict(
+            {name: averaged_state[name] for name in sorted(keep_keys)}
+        )
+
+        # Partial EMA state must be restored non-strictly, like partial model state
+        state["averaged_model_state_load"] = "partial"
+
+
+def _filter_snapshot_to_trainable_state(
+    snapshot: dict[str, Any],
+    workflow: Any,
+    *,
+    error_prefix: str = "CheckpointHook",
+    warning_message: str | None = None,
+) -> None:
+    """Mutate a checkpoint snapshot to keep only optimizer-selected model state.
+
+    Models without selected parameters are kept with empty state so restore can
+    reconstruct them from spec while partial loading skips their weights.
+    """
+    trainable_names = set(getattr(workflow, "_optimizer_parameter_names", set()) or ())
+    if not trainable_names:
+        raise ValueError(
+            f"{error_prefix} selected no trainable parameters. Ensure trainable "
+            "parameter filters have been configured before checkpointing."
+        )
+    if warning_message is not None:
+        warnings.warn(warning_message, UserWarning, stacklevel=3)
+
+    filtered_models = {}
+    trainable_names_by_model: dict[str, set[str]] = {}
+    buffer_names_by_model: dict[str, set[str]] = {}
+    for model_name, (state_dict, spec) in snapshot["models"].items():
+        prefix = f"{model_name}."
+        model_trainable_names = {
+            name.removeprefix(prefix)
+            for name in trainable_names
+            if name.startswith(prefix)
+        }
+
+        # Persistent buffers are required alongside selected parameters for partial restore
+        live_model = _checkpoint_model(workflow.models[model_name])
+        buffers = {
+            name for name, _buffer in live_model.named_buffers() if name in state_dict
+        }
+        trainable_names_by_model[model_name] = model_trainable_names
+        buffer_names_by_model[model_name] = buffers
+
+        # Reject stale optimizer metadata
+        missing = sorted(model_trainable_names - set(state_dict))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing trainable parameter(s): {missing!r}."
+            )
+
+        # Collate trainable states
+        selected_state: dict[str, torch.Tensor] = {
+            name: state_dict[name] for name in sorted(model_trainable_names)
+        }
+        selected_state.update({name: state_dict[name] for name in sorted(buffers)})
+        filtered_models[model_name] = (
+            _snapshot_state_dict(selected_state),
+            spec,
+        )
+    snapshot["models"] = filtered_models
+    _filter_ema_hook_states_to_trainable_state(
+        snapshot,
+        trainable_names_by_model,
+        buffer_names_by_model,
+    )
+    # Mark model state as partial so model can be restored non-strictly in load_checkpoint.
+    snapshot["strategy_metadata"]["model_state_load"] = "partial"
+
+
 def _hook_state_key(hook: object, occurrence: int) -> str:
     """Return the stable class-occurrence key used for hook state matching."""
     return f"{type(hook).__module__}.{type(hook).__qualname__}:{occurrence}"
@@ -1129,6 +1242,28 @@ def _optimizer_scheduler_maps_from_strategy(
     return optimizers, schedulers
 
 
+def _load_partial_model_state(
+    model: nn.Module,
+    weights: Mapping[str, Any],
+    *,
+    model_name: str,
+) -> None:
+    """Load partial model state while rejecting unconsumed saved keys."""
+    result = model.load_state_dict(weights, strict=False)
+    if result.unexpected_keys:
+        raise RuntimeError(
+            "Partial model state contains unexpected tensor keys for model "
+            f"{model_name!r}: {sorted(result.unexpected_keys)}."
+        )
+    # Sanity-check that keys present in the partial state are not reported missing.
+    missing_saved_keys = set(weights) & set(result.missing_keys)
+    if missing_saved_keys:
+        raise RuntimeError(
+            "Partial model state tensor keys were not loaded for model "
+            f"{model_name!r}: {sorted(missing_saved_keys)}."
+        )
+
+
 def _restore_checkpoint_into_strategy(
     root: Path,
     manifest: CheckpointManifest,
@@ -1163,7 +1298,13 @@ def _restore_checkpoint_into_strategy(
             weights_only=True,
             map_location=map_location,
         )
-        model.load_state_dict(weights)
+        if (
+            strategy_metadata is not None
+            and strategy_metadata.get("model_state_load") == "partial"
+        ):
+            _load_partial_model_state(model, weights, model_name=name)
+        else:
+            model.load_state_dict(weights)
         spec_path = root / "models" / name / "spec.json"
         spec = _load_spec(spec_path) if spec_path.exists() else None
         loaded_models[name] = (model, spec)
@@ -1432,6 +1573,7 @@ def save_checkpoint(
     associations: _Associations | None = None,
     checkpoint_index: int = -1,
     strategy: Any | None = None,
+    save_trainable_state_only: bool = False,
 ) -> int:
     """Save a checkpoint with a manifest.
 
@@ -1463,6 +1605,10 @@ def save_checkpoint(
         from the manifest's last index, or starts at ``0``.
     strategy
         Optional training strategy to save as a restartable checkpoint.
+    save_trainable_state_only
+        If ``True``, save optimizer-selected model parameters plus buffers
+        and mark model state as partial for non-strict restore. Requires
+        ``strategy``.
 
     Returns
     -------
@@ -1491,12 +1637,33 @@ def save_checkpoint(
     if strategy is None and isinstance(models, TrainingStrategy):
         strategy = models
         models = None
+    if save_trainable_state_only and strategy is None:
+        raise ValueError(
+            "save_trainable_state_only=True requires strategy checkpointing."
+        )
     if strategy is not None:
         if not isinstance(strategy, TrainingStrategy):
             raise TypeError(
                 "strategy must be a TrainingStrategy instance; got "
                 f"{type(strategy).__name__}."
             )
+        if save_trainable_state_only:
+            snapshot = _create_checkpoint_snapshot(
+                root,
+                checkpoint_index=checkpoint_index,
+                strategy=strategy,
+            )
+            _filter_snapshot_to_trainable_state(
+                snapshot,
+                strategy,
+                warning_message=(
+                    "Saving a checkpoint with save_trainable_state_only=True "
+                    "stores only optimizer-selected parameters and buffers. "
+                    "Restoring this checkpoint requires the saved model spec "
+                    "to reconstruct the exact base model weights."
+                ),
+            )
+            return _write_checkpoint_snapshot(root, snapshot)
         (
             models,
             optimizers,

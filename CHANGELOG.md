@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add support for PEFT fine-tuning within `FineTuningStrategy`, including
+  LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
+  and base-model fingerprint checks for PEFT checkpoint loading.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
