@@ -73,7 +73,10 @@ def _rng_generate(model, *, num_samples=1, rng=None, cond=None, **kwargs):
     """
     del model, kwargs
     n = cond.num_graphs if isinstance(cond, Batch) else num_samples
-    return TensorDict({"x1": torch.randn(n, 1, 3, generator=rng)}, batch_size=[n])
+    return TensorDict(
+        {"x1": torch.randn(n, 1, 3, generator=rng, device=rng.device if rng else None)},
+        batch_size=[n],
+    )
 
 
 class _CaptureRecon:
