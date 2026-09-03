@@ -15,10 +15,10 @@
 """
 Logging hook for recording per-sample simulation observables.
 
-Provides :class:`LoggingHook`, which computes and logs per-graph scalar
-statistics (energy, temperatures, max forces, etc.) at a configurable
-frequency.  Each graph in the batch is written as an individual row,
-together with the current step and status (stage) information.
+Provides :class:`LoggingHook`, which computes and logs scalar statistics at a
+configurable frequency. By default, each graph in the batch is written as an
+individual row. With ``by_group=True``, logging instead writes one row per
+group and accepts custom scalars with one value per group.
 
 I/O is offloaded to a background thread via :class:`ThreadPoolExecutor`
 so that file writes do not block the simulation loop.  When the batch
@@ -70,11 +70,10 @@ LogBackend = Literal["csv", "tensorboard", "custom"]
 
 
 class LoggingHook:
-    """Log per-sample scalar observables from the simulation.
+    """Log scalar observables with one row per graph or group.
 
-    At each firing step, this hook computes per-graph scalars from the
-    :class:`~nvalchemi.data.Batch` and writes **one row per graph** to the
-    configured logging backend.  Each row includes:
+    At each firing step, this hook writes one row per graph by default. Graph
+    rows include:
 
     * **step** — the current ``dynamics.step_count``.
     * **graph_idx** — the graph's index within the batch.
@@ -87,10 +86,16 @@ class LoggingHook:
       (from ``batch.velocities`` and ``batch.atomic_masses`` via the
       equipartition theorem), if velocities are present.
 
-    Users can extend or replace this set by providing a ``custom_scalars``
-    mapping of ``{name: callable}`` pairs, where each callable has
-    signature ``(ctx) -> Tensor`` of shape ``(B,)`` (one
-    value per graph) or a plain ``float`` (broadcast to all graphs).
+    With ``by_group=True``, the batch must have a
+    :class:`~nvalchemi.data.GroupLayout`. Group rows contain ``step``,
+    ``group_idx``, and the status of the first graph in each group. Graph-level
+    energy, force, and temperature are not reduced automatically because their
+    group-level meanings are application dependent.
+
+    Users can extend or replace the logged scalars by providing a
+    ``custom_scalars`` mapping of ``{name: callable}`` pairs. Each callable has
+    signature ``(ctx) -> Tensor`` and returns one value per row, or returns a
+    plain ``float`` that is broadcast to every row.
 
     **Asynchronous I/O.** Scalar computation and the GPU-to-CPU transfer
     run on a dedicated CUDA side stream (set up in :meth:`__enter__`) so
@@ -123,14 +128,21 @@ class LoggingHook:
         File path for file-based backends (``"csv"``,
         ``"tensorboard"``).  Default ``None``.
     custom_scalars : dict[str, Callable] | None, optional
-        Additional named scalars to compute and log.  Each callable
-        receives ``(ctx,)`` — a :class:`DynamicsContext` — and returns
-        either a ``(B,)`` tensor (per-graph values) or a ``float``
-        (broadcast to all graphs).  Name collisions override defaults.
-        Default ``None``.
+        Additional named scalars to compute and log. Each callable receives
+        ``(ctx,)`` — a :class:`DynamicsContext` — and returns one tensor
+        value per selected row, shape ``(B,)`` for graph rows or ``(G,)`` for
+        group rows. A ``float`` is broadcast to every
+        row. Name collisions override defaults. Default ``None``.
     writer_fn : Callable[[int, list[dict[str, float]]], None] | None, optional
         Custom writer function, required when ``backend="custom"``.
         Receives ``(step_count, rows)``.  Default ``None``.
+    stage : enum.Enum, optional
+        Dynamics stage at which to log. Default
+        :attr:`~nvalchemi.dynamics.base.DynamicsStage.AFTER_STEP`.
+    by_group : bool, optional
+        Write one row per group instead of one row per graph. Group logging
+        requires the batch to have a group layout and expects tensor-valued
+        custom scalars with shape ``(num_groups,)``. Default ``False``.
 
     Examples
     --------
@@ -170,6 +182,8 @@ class LoggingHook:
         ) = None,
         writer_fn: (Callable[[int, list[dict[str, float]]], None] | None) = None,
         stage: Enum = DynamicsStage.AFTER_STEP,
+        *,
+        by_group: bool = False,
     ) -> None:
         self.frequency = frequency
         self.stage = stage
@@ -191,9 +205,9 @@ class LoggingHook:
                 f"LoggingHook only supports backends: "
                 f"{get_args(LogBackend)}, got {backend!r}."
             )
-
         self.backend = backend
         self.log_path = log_path
+        self.by_group = by_group
         self.custom_scalars = custom_scalars
         self.writer_fn = writer_fn
 
@@ -239,7 +253,7 @@ class LoggingHook:
         step_count: int,
         ctx: DynamicsContext,
     ) -> None:
-        """Compute per-graph scalars and dispatch to the logging backend.
+        """Compute one scalar value per output row and dispatch to the backend.
 
         Parameters
         ----------
@@ -249,6 +263,15 @@ class LoggingHook:
             The current step number.
         ctx : DynamicsContext
             The hook context (required for custom_scalars).
+
+        Raises
+        ------
+        ValueError
+            If group logging is requested without valid grouping metadata, or a
+            tensor-valued custom scalar does not have one value per output row.
+        TypeError
+            If group logging is requested and ``batch.group_idx`` does not have
+            an integer dtype.
         """
         device = batch.device
         use_stream = self._stream is not None and device.type == "cuda"
@@ -290,7 +313,7 @@ class LoggingHook:
         step_count: int,
         ctx: DynamicsContext,
     ) -> TensorDict:
-        """Build a ``TensorDict(batch_size=[B])`` of per-graph scalars.
+        """Build scalar columns with one tensor element per output row.
 
         Parameters
         ----------
@@ -300,14 +323,35 @@ class LoggingHook:
             The current step number.
         ctx : DynamicsContext
             The hook context (required for custom_scalars).
+
+        Raises
+        ------
+        ValueError
+            If group logging is requested without valid grouping metadata, or a
+            tensor-valued custom scalar does not have one value per output row.
+        TypeError
+            If group logging is requested and ``batch.group_idx`` does not have
+            an integer dtype.
         """
         dev = batch.device
-        num_graphs = batch.num_graphs
+        row_kind = "group" if self.by_group else "graph"
+        index_name = f"{row_kind}_idx"
+        if self.by_group:
+            layout = batch.group_layout
+            num_rows = layout.num_groups
+            status_index = layout.group_ptr[:-1]
+        else:
+            num_rows = batch.num_graphs
+            status_index = None
 
         td = TensorDict(
-            step=torch.full((num_graphs,), step_count, device=dev, dtype=torch.int64),
-            graph_idx=torch.arange(num_graphs, device=dev, dtype=torch.int64),
-            batch_size=[num_graphs],
+            {
+                "step": torch.full(
+                    (num_rows,), step_count, device=dev, dtype=torch.int64
+                ),
+                index_name: torch.arange(num_rows, device=dev, dtype=torch.int64),
+            },
+            batch_size=[num_rows],
         )
 
         # Status (stage code) — 0 if not present
@@ -315,34 +359,36 @@ class LoggingHook:
             status = (
                 batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
             )
+            if status_index is not None:
+                status = status[status_index]
             td.set("status", status.float())
         else:
-            td.set("status", torch.zeros(num_graphs, device=dev))
+            td.set("status", torch.zeros(num_rows, device=dev))
 
-        if batch.energy is not None:
+        if not self.by_group and batch.energy is not None:
             # ``reshape`` (not ``squeeze(-1)``): per-graph energy arrives as
             # ``[num_graphs, 1]`` single-process but ``[num_graphs]`` after the DD
             # forward consolidates it — squeezing the latter yields a 0-D scalar
             # that mismatches the per-graph TensorDict batch size.
-            td.set("energy", batch.energy.reshape(num_graphs))
+            td.set("energy", batch.energy.reshape(num_rows))
 
-        if batch.forces is not None:
+        if not self.by_group and batch.forces is not None:
             norms = torch.linalg.vector_norm(batch.forces, dim=-1)
             td.set(
                 "fmax",
                 scatter_reduce_per_graph(
-                    norms, batch.batch_idx, num_graphs, reduce="amax"
+                    norms, batch.batch_idx, num_rows, reduce="amax"
                 ),
             )
 
-        if getattr(batch, "velocities", None) is not None:
+        if not self.by_group and getattr(batch, "velocities", None) is not None:
             td.set(
                 "temperature",
                 temperature_per_graph(
                     batch.velocities,
                     batch.atomic_masses,
                     batch.batch_idx,
-                    num_graphs,
+                    num_rows,
                     batch.num_nodes_per_graph,
                 ),
             )
@@ -352,9 +398,15 @@ class LoggingHook:
                 # custom_scalars receive (ctx,) — a DynamicsContext
                 val = fn(ctx)
                 if isinstance(val, torch.Tensor):
+                    if val.shape != (num_rows,):
+                        raise ValueError(
+                            f"custom scalar {name!r} must return shape "
+                            f"({num_rows},) for {row_kind} rows, "
+                            f"got {tuple(val.shape)}"
+                        )
                     td.set(name, val)
                 else:
-                    td.set(name, torch.full((num_graphs,), val, device=dev))
+                    td.set(name, torch.full((num_rows,), val, device=dev))
 
         return td
 
@@ -396,12 +448,14 @@ class LoggingHook:
             from torch.utils.tensorboard import SummaryWriter
 
             self._tb_writer = SummaryWriter(log_dir=str(self.log_path))
+        row_kind = "group" if self.by_group else "graph"
+        index_name = f"{row_kind}_idx"
         for row in rows:
-            graph_idx = int(row.get("graph_idx", 0))
+            row_idx = int(row.get(index_name, 0))
             for key, value in row.items():
-                if key in ("step", "graph_idx"):
+                if key in ("step", index_name):
                     continue
-                tag = f"{key}/graph_{graph_idx}" if len(rows) > 1 else key
+                tag = f"{key}/{row_kind}_{row_idx}" if len(rows) > 1 else key
                 self._tb_writer.add_scalar(tag, value, step)
 
 
@@ -414,8 +468,9 @@ def _snapshot_tensordict(td: TensorDict) -> TensorDict:
 
 
 def _tensordict_to_rows(td: TensorDict) -> list[dict[str, float]]:
-    """Convert a ``TensorDict(batch_size=[B])`` into a list of dicts."""
+    """Convert a row-aligned ``TensorDict(batch_size=[B])`` or
+    ``TensorDict(batch_size=[G])`` into a list of dictionaries."""
     cols = {k: td[k].tolist() for k in td.keys()}
-    num_graphs = td.batch_size[0]
+    num_rows = td.batch_size[0]
     keys = list(cols.keys())
-    return [{k: float(cols[k][i]) for k in keys} for i in range(num_graphs)]
+    return [{k: float(cols[k][i]) for k in keys} for i in range(num_rows)]

@@ -41,10 +41,12 @@ hook that works across training, dynamics, and custom hook-enabled workflows.
 Workflow engines enter and close hook context managers automatically during
 `run()`, so user code should not wrap reporting hooks manually in normal cases.
 
-Use `nvalchemi.dynamics.hooks.LoggingHook` when the user wants a durable
-per-graph dynamics event stream. It computes dynamics observables such as
-energy, `fmax`, temperature, status, and graph index, then writes one row per
-system to CSV, TensorBoard, or a custom writer.
+Use `nvalchemi.dynamics.hooks.LoggingHook` when the user wants a
+durable dynamics event stream with one row per graph or group. By
+default, it computes dynamics observables such as energy, `fmax`, temperature, status, and graph
+index, then writes one row per system to CSV, TensorBoard, or a custom writer.
+With `by_group=True`, it writes one row per batch group from
+explicitly supplied custom scalars with one value per group.
 
 Do not reuse the dynamics `LoggingHook` as a training logger. For training,
 prefer reporters unless the task explicitly requires a raw training-event log;
@@ -232,8 +234,9 @@ reporting = ReportingOrchestrator(
 ```
 
 For dynamics `LoggingHook`, callbacks receive `DynamicsContext` and must return
-either a per-graph tensor with shape `(B,)` or a scalar that can be broadcast to
-all graphs:
+one value per output row or a scalar that can be broadcast to all rows. Tensor
+outputs have shape `(B,)` by default and `(G,)` when
+`by_group=True`:
 
 ```python
 logger = LoggingHook(
