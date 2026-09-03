@@ -103,7 +103,8 @@ class FIRE2(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Initial adaptive timestep ``[M]`` or scalar.
+        Initial adaptive timestep ``[M]`` or scalar. With ``by_group=True``,
+        ``M`` is the number of graph groups rather than the number of graphs.
     delaystep : int
         Minimum steps before adaptation.  Default 60.
     dtgrow : float
@@ -175,7 +176,7 @@ class FIRE2(BaseDynamics):
         self.maxstep = maxstep
 
     def _init_state(self, batch: Batch) -> None:
-        M = batch.num_graphs
+        M = self._num_update_units(batch)
         dev = batch.device
         dtype = batch.positions.dtype
         dt = _to_per_system(self._dt_init, M, dev, dtype)
@@ -208,7 +209,7 @@ class FIRE2(BaseDynamics):
             batch.positions.detach(),
             batch.velocities,
             batch.forces,
-            batch.batch_idx.int(),
+            self._update_idx(batch),
             self._state.alpha,
             self._state.dt,
             self._state.nsteps_inc,
@@ -313,6 +314,11 @@ class FIRE2VariableCell(BaseDynamics):
         self.maxstep = maxstep
 
     def _init_state(self, batch: Batch) -> None:
+        if self.by_group:
+            raise NotImplementedError(
+                "FIRE2VariableCell does not support by_group=True because cell "
+                "degrees of freedom remain graph-level."
+            )
         M = batch.num_graphs
         dev = batch.device
         dtype = batch.positions.dtype
