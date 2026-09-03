@@ -35,8 +35,10 @@ choose the right tool for each output.
 Logging captures a direct stream of events — per-batch rows, per-graph
 observables, gradient statistics — in a form you can replay or audit after
 the run. Each record corresponds to one event and contains whatever that event
-produced. The built-in `LoggingHook` for dynamics works this way: it writes one
-row per system per step with energy, `fmax`, temperature, and status counts.
+produced. The built-in `LoggingHook` for dynamics works this way: by default,
+it writes one row per system per step with energy, `fmax`, temperature, and
+status. It can also write one row per batch group for explicitly supplied
+scalars with one value per group using the `by_group=True` setting.
 
 Reporting produces curated summaries. A reporter receives the hook context at a
 chosen cadence, decides which scalars to extract, optionally reduces them across

@@ -246,6 +246,11 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 ```
 
 The hook implements the context manager protocol to manage its logger lifecycle.
+It writes one row per graph by default. For grouped workflows such as reaction
+paths, set `by_group=True` and return `(num_groups,)` tensors from
+`custom_scalars`. Group mode does not implicitly reduce graph-level energy,
+force, or temperature because those reductions are application dependent.
+
 It is the current built-in dynamics logger, not the full logging abstraction for
 all workflows.
 
