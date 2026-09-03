@@ -16,19 +16,21 @@
 Tests for BaseDynamics per-system _state batch lifecycle:
   - Lazy initialization via _ensure_state_initialized
   - Correct tensor shapes for every integrator
-  - _state.num_graphs == batch.num_graphs invariant
+  - State cardinality matches graphs or group-aware update units
   - State sync after inflight batch refills (refill_check)
   - FusedStage sub-stage initialization via masked_update
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from unittest.mock import Mock, patch
 
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics.base import BaseDynamics
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -125,6 +127,45 @@ def _make_model(needs_stress: bool = False):
     if needs_stress:
         return _make_stress_model()
     return DemoModelWrapper(DemoModel())
+
+
+class _TestState:
+    """Minimal iterable state container matching BaseDynamics' state contract."""
+
+    def __init__(self, value: torch.Tensor) -> None:
+        self.value = value
+
+    @property
+    def num_graphs(self) -> int:
+        """Return the number of state rows."""
+        return self.value.shape[0]
+
+    def __iter__(self) -> Iterator[tuple[str, torch.Tensor]]:
+        """Iterate over named state tensors."""
+        return iter((("value", self.value),))
+
+
+class _StatefulDynamics(BaseDynamics):
+    """Minimal dynamics implementation for generic state-management tests."""
+
+    __provides_keys__: set[str] = {"positions"}
+
+    def _init_state(self, batch: Batch) -> None:
+        self._state = _TestState(
+            torch.zeros(
+                self._num_update_units(batch),
+                dtype=batch.positions.dtype,
+                device=batch.device,
+            )
+        )
+
+    def pre_update(self, batch: Batch) -> None:
+        """Increment positions and every update unit's state."""
+        batch.positions.add_(1.0)
+        self._state.value.add_(1.0)
+
+    def post_update(self, batch: Batch) -> None:
+        """No-op after the model evaluation."""
 
 
 def _discover_dynamics_implementations() -> list[type]:
@@ -500,6 +541,51 @@ class TestStateShapes:
         assert dyn._state.dt.dtype == batch.positions.dtype
 
 
+class TestGroupedState:
+    """BaseDynamics manages state by graph group when requested."""
+
+    def _grouped_batch(self) -> Batch:
+        batch = _make_batch(4, n_atoms_each=2)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        return batch
+
+    def test_grouped_state_and_update_index(self):
+        batch = self._grouped_batch()
+        original_batch_idx = batch.batch_idx.clone()
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+        dyn._ensure_state_initialized(batch)
+
+        assert dyn._state.num_graphs == 2
+        assert dyn._state.value.shape == (2,)
+        assert dyn._num_update_units(batch) == 2
+        torch.testing.assert_close(
+            dyn._update_idx(batch),
+            torch.tensor([0, 0, 0, 0, 1, 1, 1, 1], dtype=torch.int32),
+        )
+        torch.testing.assert_close(batch.batch_idx, original_batch_idx)
+
+    def test_masked_pre_update_preserves_inactive_group_state(self):
+        batch = self._grouped_batch()
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+        dyn._ensure_state_initialized(batch)
+        original_positions = batch.positions.clone()
+
+        dyn._masked_pre_update(
+            batch,
+            torch.tensor([True, True, False, False]),
+        )
+
+        torch.testing.assert_close(batch.positions[:4], original_positions[:4] + 1.0)
+        torch.testing.assert_close(batch.positions[4:], original_positions[4:])
+        torch.testing.assert_close(dyn._state.value, torch.tensor([1.0, 0.0]))
+
+    def test_grouped_batch_requires_layout(self):
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+
+        with pytest.raises(ValueError, match="no group_idx"):
+            dyn._ensure_state_initialized(_make_batch(2))
+
+
 # ---------------------------------------------------------------------------
 # TestStateInvariant
 # ---------------------------------------------------------------------------
@@ -751,6 +837,29 @@ class TestFusedStageStateInit:
 
         assert hasattr(fire, "_state")
         assert hasattr(lang, "_state")
+
+    def test_grouped_stage_preserves_inactive_group_state(self):
+        model = _make_model()
+        grouped = _StatefulDynamics(model=model, by_group=True)
+        second = _StatefulDynamics(model=model, by_group=True)
+        fused = grouped + second
+
+        batch = self._make_status_batch(4, n_atoms=2)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        batch.status.copy_(torch.tensor([[0], [0], [1], [1]]))
+        fused.step(batch)
+
+        torch.testing.assert_close(grouped._state.value, torch.tensor([1.0, 0.0]))
+
+    def test_sub_stages_must_agree_on_group_mode(self):
+        from nvalchemi.dynamics.demo import DemoDynamics
+
+        model = _make_model()
+        grouped = _StatefulDynamics(model=model, by_group=True)
+        per_graph = DemoDynamics(model=model, n_steps=1)
+
+        with pytest.raises(ValueError, match="must agree"):
+            grouped + per_graph
 
     def test_sub_stage_state_shapes_match_full_batch(self):
         """Sub-stage _state.num_graphs == batch.num_graphs (not masked count)."""

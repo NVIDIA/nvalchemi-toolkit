@@ -868,6 +868,23 @@ class TestConvergenceHook:
         assert result is not None
         assert result.tolist() == [0]
 
+    def test_by_group_requires_all_graphs_to_converge(self) -> None:
+        """Grouped convergence should return either every group member or none."""
+        batch = create_simple_batch()
+        batch.set_group_layout(torch.tensor([0, 0]))
+        batch["fmax"] = torch.tensor([0.01, 0.10])
+        hook = self.ConvergenceHook(
+            criteria={"key": "fmax", "threshold": 0.05},
+            by_group=True,
+        )
+
+        assert hook.evaluate(batch) is None
+
+        batch["fmax"] = torch.tensor([0.01, 0.02])
+        converged = hook.evaluate(batch)
+        assert converged is not None
+        assert converged.tolist() == [0, 1]
+
     def test_multi_criteria_and_semantics(self) -> None:
         """Verify two criteria (fmax AND energy_change) require both to converge."""
         batch = create_simple_batch()
