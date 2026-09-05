@@ -40,14 +40,17 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Annotated, Any, get_args, get_origin
 
 import torch
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
+    PlainSerializer,
     SerializeAsAny,
     create_model,
 )
@@ -226,6 +229,36 @@ class BaseSpec(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _serialize_enum(value: Enum) -> dict[str, Any]:
+    """Serialize a concrete enum member with its importable enum type."""
+    enum_type = type(value)
+    return {
+        "__enum__": f"{enum_type.__module__}.{enum_type.__qualname__}",
+        "value": value.value,
+    }
+
+
+def _deserialize_enum(value: Any) -> Enum:
+    """Rebuild a concrete enum member from a tagged JSON payload."""
+    if isinstance(value, Enum):
+        return value
+    if not isinstance(value, dict) or set(value) != {"__enum__", "value"}:
+        raise TypeError("enum values must use a tagged constructor-spec payload")
+    enum_type = _import_cls(value["__enum__"])
+    if not issubclass(enum_type, Enum):
+        raise TypeError(f"{value['__enum__']!r} does not resolve to an Enum class")
+    return enum_type(value["value"])
+
+
+def _enum_annotation(enum_type: type[Enum]) -> Any:
+    """Return a Pydantic annotation preserving a concrete enum type in JSON."""
+    return Annotated[
+        enum_type,
+        BeforeValidator(_deserialize_enum),
+        PlainSerializer(_serialize_enum),
+    ]
+
+
 def _try_deserialize(name: str, value: Any, sig: inspect.Signature) -> Any:
     """Probe registered deserializers to rehydrate a raw JSON value.
 
@@ -235,13 +268,19 @@ def _try_deserialize(name: str, value: Any, sig: inspect.Signature) -> Any:
     parameters whose stored value is a serialized custom type (e.g.
     ``torch.dtype`` as a str for a ``dtype`` parameter).
 
-    Only tagged class dictionaries, unannotated ``dtype`` / ``device`` strings,
+    Only tagged class or enum dictionaries, unannotated ``dtype`` / ``device`` strings,
     and tensor-shaped dicts are probed. Broad string deserializers such as raw
     class dotted-path resolution are deliberately skipped here so ordinary
     string fields remain strings.
     """
     if not isinstance(value, (str, dict)):
         return value
+
+    if isinstance(value, dict) and set(value) == {"__enum__", "value"}:
+        try:
+            return _deserialize_enum(value)
+        except (AttributeError, ImportError, TypeError, ValueError):
+            return value
 
     param = sig.parameters.get(name)
     sig_ann = param.annotation if param is not None else inspect.Parameter.empty
@@ -379,6 +418,9 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
     if isinstance(sig_ann, str):
         sig_ann = inspect.Parameter.empty
     has_sig_ann = sig_ann is not inspect.Parameter.empty and sig_ann is not Any
+
+    if sig_ann is Enum and isinstance(value, Enum):
+        return _enum_annotation(type(value))
 
     if has_sig_ann:
         class_annotation = _maybe_class_annotation(sig_ann)
