@@ -14,8 +14,13 @@
 # limitations under the License.
 """Reaction-path dynamics."""
 
+from nvalchemi.dynamics.paths.idpp import IDPPModel, prepare_idpp_targets
+from nvalchemi.dynamics.paths.interpolate import interpolate_paths
 from nvalchemi.dynamics.paths.validate import validate_paths
 
 __all__ = [
+    "IDPPModel",
+    "interpolate_paths",
+    "prepare_idpp_targets",
     "validate_paths",
 ]
