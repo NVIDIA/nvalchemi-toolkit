@@ -37,6 +37,7 @@ from nvalchemi.dynamics.optimizers import (
 )
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import DataSink, GPUBuffer, HostMemory, ZarrData
+from nvalchemi.dynamics.strategy import DynamicsStrategy
 
 __all__ = [
     "BaseDynamics",
@@ -45,6 +46,7 @@ __all__ = [
     "DemoDynamics",
     "DistributedPipeline",
     "DynamicsStage",
+    "DynamicsStrategy",
     "FIRE",
     "FIRE2",
     "FIRE2VariableCell",
