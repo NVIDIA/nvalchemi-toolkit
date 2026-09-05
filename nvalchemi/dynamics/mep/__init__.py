@@ -21,9 +21,12 @@ from nvalchemi.dynamics.mep.neb_configs import (
     SpringContext,
     TorchNEBMethod,
 )
+from nvalchemi.dynamics.paths.neb.strategy import NEB, ClimbingImageConfig
 
 __all__ = [
+    "ClimbingImageConfig",
     "ConstantSpringConfig",
+    "NEB",
     "NEBMethod",
     "SpringConfig",
     "SpringContext",
