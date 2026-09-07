@@ -20,7 +20,7 @@ from nvalchemi.dynamics.paths.neb.configs import (
     SpringConfig,
     SpringContext,
 )
-from nvalchemi.dynamics.paths.neb.strategy import NEB, ClimbingImageConfig
+from nvalchemi.dynamics.paths.neb.neb import NEB, ClimbingImageConfig
 
 __all__ = [
     "ClimbingImageConfig",

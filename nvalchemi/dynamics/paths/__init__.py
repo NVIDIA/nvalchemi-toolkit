@@ -16,10 +16,24 @@
 
 from nvalchemi.dynamics.paths.idpp import IDPPModel, prepare_idpp_targets
 from nvalchemi.dynamics.paths.interpolate import interpolate_paths
+from nvalchemi.dynamics.paths.neb import (
+    NEB,
+    ClimbingImageConfig,
+    ConstantSpringConfig,
+    NEBMethod,
+    SpringConfig,
+    SpringContext,
+)
 from nvalchemi.dynamics.paths.validate import validate_paths
 
 __all__ = [
+    "ClimbingImageConfig",
+    "ConstantSpringConfig",
     "IDPPModel",
+    "NEB",
+    "NEBMethod",
+    "SpringConfig",
+    "SpringContext",
     "interpolate_paths",
     "prepare_idpp_targets",
     "validate_paths",
