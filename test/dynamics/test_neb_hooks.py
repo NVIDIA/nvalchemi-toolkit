@@ -514,6 +514,75 @@ class TestNEBForceHook:
             torch.tensor([[True, True, True], [True, False, False]]),
         )
 
+    def test_applies_distinct_fixed_atom_indices_per_path(self, device: str) -> None:
+        images = [
+            AtomicData(
+                atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+                positions=torch.zeros(num_atoms, 3),
+                energy=torch.tensor([[0.0]]),
+                forces=torch.ones(num_atoms, 3),
+            )
+            for num_atoms in (1, 3, 2)
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(images).to(device)
+        batch.set_group_layout(torch.tensor([0] * 3 + [1] * 3 + [2] * 3, device=device))
+        hook = _force_hook(
+            endpoint_mode="relaxed",
+            fixed_atom_indices={1: [0, 2], 2: [1]},
+        )
+
+        hook(
+            DynamicsContext(
+                batch=batch,
+                active_graph_mask=torch.ones(
+                    batch.num_graphs, dtype=torch.bool, device=device
+                ),
+            ),
+            DynamicsStage.ON_ADMISSION,
+        )
+
+        assert hook.fixed_atom_indices == {1: (0, 2), 2: (1,)}
+        assert hook._workspace is not None
+        assert torch.equal(
+            hook._workspace.fixed_node_mask,
+            torch.tensor(
+                [False] * 3 + [True, False, True] * 3 + [False, True] * 3,
+                device=device,
+            ),
+        )
+
+    @pytest.mark.parametrize(
+        ("indices", "message"),
+        [
+            ({"0": [0]}, "keys must be integer path indices"),
+            ({0: 0}, "values must be sequences of integers"),
+            ({0: [True]}, "values must contain only integers"),
+        ],
+    )
+    def test_rejects_invalid_fixed_atom_mapping(
+        self, indices: object, message: str
+    ) -> None:
+        with pytest.raises(TypeError, match=message):
+            _force_hook(fixed_atom_indices=indices)
+
+    def test_rejects_flat_fixed_atom_indices(self) -> None:
+        with pytest.raises(TypeError, match="must map path indices"):
+            _force_hook(fixed_atom_indices=[1])
+
+    def test_rejects_nonexistent_fixed_atom_path(self) -> None:
+        batch = _bands([0.0] * 6, [0, 0, 0, 1, 1, 1])
+        hook = _force_hook(fixed_atom_indices={2: [0]})
+
+        with pytest.raises(ValueError, match="existing paths; got 2"):
+            hook(
+                DynamicsContext(
+                    batch=batch,
+                    active_graph_mask=torch.ones(batch.num_graphs, dtype=torch.bool),
+                ),
+                DynamicsStage.ON_ADMISSION,
+            )
+
     @pytest.mark.parametrize(
         "stage",
         [
@@ -537,11 +606,11 @@ class TestNEBForceHook:
         batch.set_group_layout(torch.zeros(3, dtype=torch.long))
         batch.add_key(
             "velocities",
-            [torch.full((2, 3), float(image + 1)) for image in range(3)],
+            [torch.full((2, 3), float(image + 11)) for image in range(3)],
             level="node",
             overwrite=True,
         )
-        hook = _force_hook(fixed_atom_indices=[1])
+        hook = _force_hook(fixed_atom_indices={0: [1]})
         ctx = DynamicsContext(
             batch=batch,
             active_graph_mask=torch.tensor([False, True, True]),
@@ -563,16 +632,28 @@ class TestNEBForceHook:
                 ]
             ),
         )
-        assert torch.equal(batch.velocities, batch.forces)
+        assert torch.equal(
+            batch.velocities,
+            torch.tensor(
+                [
+                    [11.0, 11.0, 11.0],
+                    [11.0, 11.0, 11.0],
+                    [12.0, 12.0, 12.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                ]
+            ),
+        )
 
-    @pytest.mark.parametrize("indices", [[-1], [1]])
+    @pytest.mark.parametrize("indices", [{0: [-1]}, {0: [1]}])
     def test_rejects_indices_not_present_in_every_image(
-        self, indices: list[int]
+        self, indices: dict[int, list[int]]
     ) -> None:
         batch = _bands([0.0, 0.0, 0.0], [0, 0, 0])
         hook = _force_hook(fixed_atom_indices=indices)
 
-        with pytest.raises(ValueError, match="valid for every image"):
+        with pytest.raises(ValueError, match="valid image-local atom indices"):
             hook(
                 DynamicsContext(
                     batch=batch,

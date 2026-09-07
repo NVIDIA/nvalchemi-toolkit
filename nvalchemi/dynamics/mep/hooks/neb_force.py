@@ -17,9 +17,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal, Sequence
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -147,9 +148,11 @@ class NEBForceHook:
     endpoint_mode : {"fixed", "relaxed"}, optional
         Whether path endpoint images remain fixed or use their physical
         forces. Default is ``"fixed"``.
-    fixed_atom_indices : sequence of int, optional
-        Atom indices local to every image that must remain fixed. Atoms in
-        fixed endpoint images are added automatically.
+    fixed_atom_indices : mapping of int to sequence of int, optional
+        Image-local atom indices that must remain fixed in every image of each
+        keyed path. Keys are zero-based path indices; omitted paths have no
+        additional fixed atoms. Atoms in fixed
+        endpoint images are added automatically.
 
     Attributes
     ----------
@@ -169,6 +172,7 @@ class NEBForceHook:
             energy_stats_hook=energy_stats,
             spring=0.1,
             method="improved_tangent",
+            fixed_atom_indices={0: [0, 2], 1: [1]},
         )
 
     Pass a custom equation configuration directly::
@@ -191,31 +195,17 @@ class NEBForceHook:
         spring: float | SpringConfig = 0.1,
         method: str | NEBMethod = "improved_tangent",
         endpoint_mode: Literal["fixed", "relaxed"] = "fixed",
-        fixed_atom_indices: Sequence[int] | None = None,
+        fixed_atom_indices: Mapping[int, Sequence[int]] | None = None,
     ) -> None:
         """Initialize the NEB force hook.
 
-        Parameters
-        ----------
-        energy_stats_hook : PathEnergyStatsHook
-            Shared path-energy statistics hook registered before this hook.
-        spring : float or SpringConfig, optional
-            Positive constant spring value or a policy that resolves one
-            spring constant for every adjacent image pair.
-        method : str or NEBMethod, optional
-            Registered method name or a custom set of Warp equation functions.
-        endpoint_mode : {"fixed", "relaxed"}, optional
-            Whether path endpoint images are fixed or physically relaxed.
-        fixed_atom_indices : sequence of int, optional
-            Atom indices local to every image that must remain fixed. Default
-            is ``None``.
         Raises
         ------
         TypeError
-            If any argument has an unsupported type.
+            If an argument has an unsupported type.
         ValueError
-            If the spring is negative or the method name or endpoint mode is
-            unknown.
+            If the spring, spring refresh stage, method name, or endpoint mode
+            is invalid.
         """
         if not isinstance(energy_stats_hook, PathEnergyStatsHook):
             raise TypeError("energy_stats_hook must be a PathEnergyStatsHook")
@@ -247,14 +237,30 @@ class NEBForceHook:
         if endpoint_mode not in {"fixed", "relaxed"}:
             raise ValueError("endpoint_mode must be 'fixed' or 'relaxed'")
         if fixed_atom_indices is not None:
-            if isinstance(fixed_atom_indices, (str, bytes)):
-                raise TypeError("fixed_atom_indices must be a sequence of integers")
-            fixed_atom_indices = tuple(fixed_atom_indices)
+            if not isinstance(fixed_atom_indices, Mapping):
+                raise TypeError(
+                    "fixed_atom_indices must map path indices to atom-index sequences"
+                )
+            try:
+                fixed_atom_indices = {
+                    path_index: tuple(atom_indices)
+                    for path_index, atom_indices in fixed_atom_indices.items()
+                }
+            except TypeError as error:
+                raise TypeError(
+                    "fixed_atom_indices values must be sequences of integers"
+                ) from error
             if any(
-                isinstance(index, bool) or not isinstance(index, int)
-                for index in fixed_atom_indices
+                isinstance(path_index, bool) or not isinstance(path_index, int)
+                for path_index in fixed_atom_indices
             ):
-                raise TypeError("fixed_atom_indices must contain only integers")
+                raise TypeError("fixed_atom_indices keys must be integer path indices")
+            if any(
+                isinstance(atom_index, bool) or not isinstance(atom_index, int)
+                for atom_indices in fixed_atom_indices.values()
+                for atom_index in atom_indices
+            ):
+                raise TypeError("fixed_atom_indices values must contain only integers")
 
         self.energy_stats_hook = energy_stats_hook
         self.spring = spring
@@ -342,15 +348,26 @@ class NEBForceHook:
             dtype=torch.bool,
             device=device,
         )
-        if self.fixed_atom_indices:
+        if self.fixed_atom_indices is not None:
             num_nodes_per_image = batch.num_nodes_per_graph
-            for atom_index in self.fixed_atom_indices:
-                if atom_index < 0 or torch.any(num_nodes_per_image <= atom_index):
+            for path_index, atom_indices in self.fixed_atom_indices.items():
+                if path_index < 0 or path_index >= layout.num_groups:
                     raise ValueError(
-                        "fixed_atom_indices must be valid for every image; "
-                        f"got {atom_index}"
+                        "fixed_atom_indices keys must reference existing paths; "
+                        f"got {path_index}"
                     )
-                fixed_atoms[batch.batch_ptr[:-1].long() + atom_index] = True
+                path_start = layout.group_ptr[path_index].item()
+                path_end = layout.group_ptr[path_index + 1].item()
+                image_starts = batch.batch_ptr[path_start:path_end].long()
+                for atom_index in atom_indices:
+                    if atom_index < 0 or torch.any(
+                        num_nodes_per_image[path_start:path_end] <= atom_index
+                    ):
+                        raise ValueError(
+                            f"fixed_atom_indices[{path_index}] must contain valid "
+                            f"image-local atom indices; got {atom_index}"
+                        )
+                    fixed_atoms[image_starts + atom_index] = True
         if self.endpoint_mode == "fixed":
             fixed_atoms[is_endpoint[batch.batch_idx.long()]] = True
 
