@@ -43,6 +43,11 @@ class ClimbingImageSelectionHook:
     selection : {"fixed", "dynamic"}, optional
         Whether to retain the initial selection or refresh it after every model
         evaluation. Default is ``"fixed"``.
+    status_code : int or None, optional
+        When registered on a :class:`~nvalchemi.dynamics.FusedStage`, restrict
+        selection or reselection to paths whose graph status equals this value.
+        Existing climbing modes persist after a status change. ``None`` relies
+        only on the context's active mask. Default is ``None``.
     frequency : int, optional
         Apply the hook every ``frequency`` dynamics steps. Default is ``1``.
 
@@ -54,8 +59,8 @@ class ClimbingImageSelectionHook:
     Notes
     -----
     This hook requires dynamics configured with ``by_group=True``. Group-aware
-    status transitions keep ``active_graph_mask`` uniform within each NEB path,
-    so the graph-level mask can be applied directly.
+    status transitions keep both ``active_graph_mask`` and ``status`` uniform
+    within each NEB path, so their graph-level masks can be applied directly.
     """
 
     stage = DynamicsStage.AFTER_COMPUTE
@@ -65,19 +70,10 @@ class ClimbingImageSelectionHook:
         *,
         energy_stats_hook: PathEnergyStatsHook,
         selection: Literal["fixed", "dynamic"] = "fixed",
+        status_code: int | None = None,
         frequency: int = 1,
     ) -> None:
         """Initialize the climbing-image selection hook.
-
-        Parameters
-        ----------
-        energy_stats_hook : PathEnergyStatsHook
-            Shared path-energy statistics hook registered before this hook.
-        selection : {"fixed", "dynamic"}, optional
-            Whether to retain the initial selection or refresh it after every
-            model evaluation.
-        frequency : int, optional
-            Apply the hook every ``frequency`` dynamics steps.
 
         Raises
         ------
@@ -90,6 +86,11 @@ class ClimbingImageSelectionHook:
             raise TypeError("energy_stats_hook must be a PathEnergyStatsHook")
         if selection not in {"fixed", "dynamic"}:
             raise ValueError("selection must be 'fixed' or 'dynamic'")
+        if status_code is not None:
+            if isinstance(status_code, bool) or not isinstance(status_code, int):
+                raise TypeError("status_code must be an integer or None")
+            if status_code < 0:
+                raise ValueError("status_code must be non-negative")
         if isinstance(frequency, bool) or not isinstance(frequency, int):
             raise TypeError(
                 f"frequency must be an integer; got {type(frequency).__name__}"
@@ -99,6 +100,7 @@ class ClimbingImageSelectionHook:
 
         self.energy_stats_hook = energy_stats_hook
         self.selection = selection
+        self.status_code = status_code
         self.frequency = frequency
         self._initialized_graphs: torch.Tensor | None = None
         self._fixed_selection_complete = False
@@ -150,6 +152,7 @@ class ClimbingImageSelectionHook:
         if (
             self.selection == "fixed"
             and ctx.active_graph_mask is None
+            and self.status_code is None
             and self._fixed_selection_complete
         ):
             return
@@ -166,6 +169,17 @@ class ClimbingImageSelectionHook:
             if ctx.active_graph_mask is None
             else ctx.active_graph_mask
         )
+        if self.status_code is not None:
+            if "status" not in batch:
+                raise RuntimeError(
+                    "ClimbingImageSelectionHook requires batch.status when "
+                    "status_code is set"
+                )
+            status = batch.status
+            if status.dim() == 2:
+                status = status.squeeze(-1)
+            status = status[: batch.num_graphs]
+            active_mask = active_mask & (status == self.status_code)
 
         if self.selection == "fixed":
             if self._initialized_graphs is None:
@@ -193,5 +207,5 @@ class ClimbingImageSelectionHook:
 
         if self.selection == "fixed":
             self._initialized_graphs.logical_or_(active_mask)
-            if ctx.active_graph_mask is None:
+            if ctx.active_graph_mask is None and self.status_code is None:
                 self._fixed_selection_complete = True
