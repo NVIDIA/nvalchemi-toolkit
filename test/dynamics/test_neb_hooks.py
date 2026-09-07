@@ -212,6 +212,29 @@ class TestClimbingImageSelection:
 
         assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1, 5]
 
+    def test_status_code_restricts_fused_selection_to_one_stage(self) -> None:
+        """A fused selector only updates paths owned by its configured stage."""
+        batch = _bands(
+            [0.0, 2.0, 1.0, 0.0, 0.0, 1.0, 3.0, 0.0],
+            [0] * 4 + [1] * 4,
+        )
+        batch.status = torch.tensor([0] * 4 + [1] * 4)
+        energy_stats_hook = PathEnergyStatsHook()
+        hook = ClimbingImageSelectionHook(
+            energy_stats_hook=energy_stats_hook,
+            selection="dynamic",
+            status_code=1,
+        )
+        force_hook = NEBForceHook(energy_stats_hook=energy_stats_hook)
+        ctx = DynamicsContext(
+            batch=batch,
+            active_graph_mask=torch.ones(batch.num_graphs, dtype=torch.bool),
+        )
+
+        self._update_selection(hook, force_hook, ctx)
+
+        assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [6]
+
 
 class TestNEBForceHook:
     """Test field preparation and the existing tensor-op boundary."""
