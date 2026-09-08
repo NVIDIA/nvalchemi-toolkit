@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import (
@@ -33,6 +34,7 @@ from pydantic import (
 
 from nvalchemi._serialization import SerializableClass
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
+from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.paths.hooks import (
     PathDiagnosticsHook,
@@ -203,10 +205,12 @@ class NEB(DynamicsStrategy):
             "of that path."
         ),
     )
-    path_diagnostics: bool = Field(
-        default=False,
-        strict=True,
-        description="Compute and cache per-path diagnostics after force evaluation.",
+    diagnostics_log_path: Path | None = Field(
+        default=None,
+        description=(
+            "CSV output path for per-path diagnostics. None disables both path "
+            "diagnostics and their logging hook."
+        ),
     )
     compile: bool = Field(
         default=False,
@@ -230,12 +234,12 @@ class NEB(DynamicsStrategy):
             raise ValueError("fmax must be positive")
         return float(value)
 
-    @field_validator("compile", "path_diagnostics", mode="before")
+    @field_validator("compile", mode="before")
     @classmethod
     def _validate_boolean_options(cls, value: Any) -> bool:
-        """Reject integer coercion for boolean strategy options."""
+        """Reject integer coercion for the compile option."""
         if not isinstance(value, bool):
-            raise TypeError("compile and path_diagnostics must be boolean")
+            raise TypeError("compile must be boolean")
         return value
 
     @field_validator("optimizer_kwargs", mode="before")
@@ -410,8 +414,38 @@ class NEB(DynamicsStrategy):
                 fixed_atom_indices=self.fixed_atom_indices,
             )
         )
-        if self.path_diagnostics:
-            hooks.append(PathDiagnosticsHook(energy_stats_hook=energy_stats))
+        if self.diagnostics_log_path is not None:
+            diagnostics_hook = PathDiagnosticsHook(energy_stats_hook=energy_stats)
+            hooks.extend(
+                [
+                    diagnostics_hook,
+                    LoggingHook(
+                        backend="csv",
+                        log_path=self.diagnostics_log_path,
+                        custom_scalars={
+                            "fmax": (
+                                lambda _ctx: diagnostics_hook.get_diagnostics().fmax
+                            ),
+                            "energy_barrier": (
+                                lambda _ctx: (
+                                    diagnostics_hook.get_diagnostics().energy_barrier
+                                )
+                            ),
+                            "highest_interior_image_idx": (
+                                lambda _ctx: (
+                                    diagnostics_hook.get_diagnostics().highest_interior_image_idx
+                                )
+                            ),
+                            "path_length": (
+                                lambda _ctx: (
+                                    diagnostics_hook.get_diagnostics().path_length
+                                )
+                            ),
+                        },
+                        by_group=True,
+                    ),
+                ]
+            )
         return hooks
 
     def build_engine(self) -> FusedStage:
