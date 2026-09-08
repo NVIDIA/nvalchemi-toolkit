@@ -17,7 +17,9 @@
 
 from __future__ import annotations
 
+import csv
 import json
+from pathlib import Path
 
 import pytest
 import torch
@@ -28,6 +30,7 @@ from nvalchemi.dynamics import (
     DynamicsStage,
     FusedStage,
 )
+from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.paths import (
     NEB,
     ClimbingImageConfig,
@@ -140,7 +143,7 @@ class TestNEBConfiguration:
             ),
             n_steps=19,
             fixed_atom_indices={0: [0, 2], 1: [1]},
-            path_diagnostics=True,
+            diagnostics_log_path="neb.csv",
         )
 
         spec = json.loads(json.dumps(strategy.to_spec_dict()))
@@ -157,7 +160,7 @@ class TestNEBConfiguration:
             max_regular_steps=11,
         )
         assert restored.fixed_atom_indices == {0: (0, 2), 1: (1,)}
-        assert restored.path_diagnostics is True
+        assert restored.diagnostics_log_path == Path("neb.csv")
 
     @pytest.mark.parametrize(
         ("indices", "message"),
@@ -189,6 +192,39 @@ class TestNEBConfiguration:
         strategy = NEB(model=_model())
 
         assert strategy.optimizer_kwargs == {"dt": 0.01}
+
+    def test_diagnostics_log_path_builds_fresh_ordered_hooks(
+        self, tmp_path: Path
+    ) -> None:
+        log_path = tmp_path / "neb.csv"
+        strategy = NEB(model=_model(), diagnostics_log_path=log_path)
+
+        first_engine = strategy.build_engine()
+        second_engine = strategy.build_engine()
+        first_diagnostics = next(
+            hook for hook in first_engine.hooks if isinstance(hook, PathDiagnosticsHook)
+        )
+        first_logger = next(
+            hook for hook in first_engine.hooks if isinstance(hook, LoggingHook)
+        )
+        second_logger = next(
+            hook for hook in second_engine.hooks if isinstance(hook, LoggingHook)
+        )
+
+        assert first_logger is not second_logger
+        assert first_logger.backend == "csv"
+        assert first_logger.log_path == log_path
+        assert first_logger.by_group is True
+        assert first_logger.stage is DynamicsStage.AFTER_STEP
+        assert set(first_logger.custom_scalars or {}) == {
+            "fmax",
+            "energy_barrier",
+            "highest_interior_image_idx",
+            "path_length",
+        }
+        assert first_engine.hooks.index(first_diagnostics) < first_engine.hooks.index(
+            first_logger
+        )
 
     def test_convergence_hooks_round_trip_through_spec(self) -> None:
         strategy = NEB(
@@ -273,6 +309,7 @@ class TestNEBConfiguration:
             isinstance(hook, ClimbingImageSelectionHook) for hook in engine.hooks
         )
         assert not any(isinstance(hook, PathDiagnosticsHook) for hook in engine.hooks)
+        assert not any(isinstance(hook, LoggingHook) for hook in engine.hooks)
         assert _force_hook(engine).spring is spring
 
     def test_after_regular_builds_two_stage_strategy(self) -> None:
@@ -465,7 +502,6 @@ class TestNEBRun:
                 fmax=1.0e9,
                 n_steps=2,
                 climbing=ClimbingImageConfig(mode="immediate"),
-                path_diagnostics=True,
                 compile=True,
                 compile_kwargs={"backend": "eager"},
             ).run(_bands())
@@ -474,12 +510,15 @@ class TestNEBRun:
 
         assert torch.all(result.status == 1)
 
-    def test_path_diagnostics_execute_with_neb(self) -> None:
+    def test_diagnostics_log_path_executes_hooks_and_writes_csv(
+        self, tmp_path: Path
+    ) -> None:
+        log_path = tmp_path / "neb.csv"
         engine = NEB(
             model=_model(),
             fmax=1.0e9,
             n_steps=2,
-            path_diagnostics=True,
+            diagnostics_log_path=log_path,
         ).build_engine()
         diagnostics_hook = next(
             hook for hook in engine.hooks if isinstance(hook, PathDiagnosticsHook)
@@ -492,6 +531,26 @@ class TestNEBRun:
         assert torch.isfinite(diagnostics.energy_barrier).all()
         assert torch.isfinite(diagnostics.path_length).all()
         assert torch.all(diagnostics.highest_interior_image_idx >= 0)
+
+        with log_path.open(newline="") as csv_file:
+            rows = list(csv.DictReader(csv_file))
+        assert len(rows) == 1
+        assert set(rows[0]) == {
+            "step",
+            "group_idx",
+            "status",
+            "fmax",
+            "energy_barrier",
+            "highest_interior_image_idx",
+            "path_length",
+        }
+        assert float(rows[0]["step"]) == 0.0
+        assert float(rows[0]["status"]) == 1.0
+        assert float(rows[0]["highest_interior_image_idx"]) == 1.0
+        assert all(
+            torch.isfinite(torch.tensor(float(rows[0][name])))
+            for name in ("fmax", "energy_barrier", "path_length")
+        )
 
     @pytest.mark.parametrize(
         ("climbing", "exit_status"),
