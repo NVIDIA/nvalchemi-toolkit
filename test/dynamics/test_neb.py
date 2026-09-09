@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -47,8 +48,8 @@ from nvalchemi.dynamics.paths.neb.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
 )
-from nvalchemi.hooks import DynamicsContext
-from nvalchemi.models.base import BaseModelMixin, ModelConfig
+from nvalchemi.hooks import DynamicsContext, NeighborListHook
+from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -192,6 +193,71 @@ class TestNEBConfiguration:
         strategy = NEB(model=_model())
 
         assert strategy.optimizer_kwargs == {"dt": 0.01}
+
+    def test_default_neighbor_hooks_are_generated_by_model(self) -> None:
+        generated = _NoOpHook()
+        model = _model()
+
+        with patch.object(
+            DemoModelWrapper,
+            "make_neighbor_hooks",
+            return_value=[generated],
+        ) as make_neighbor_hooks:
+            engine = NEB(model=model).build_engine()
+
+        make_neighbor_hooks.assert_called_once_with()
+        assert engine.hooks[0] is generated
+
+    @pytest.mark.parametrize("neighbor_hooks", [[], [_NoOpHook()]])
+    def test_explicit_neighbor_hooks_replace_generated_hooks(
+        self, neighbor_hooks: list[_NoOpHook]
+    ) -> None:
+        model = _model()
+        with patch.object(
+            DemoModelWrapper,
+            "make_neighbor_hooks",
+            side_effect=AssertionError("generated hooks must not be used"),
+        ) as make_neighbor_hooks:
+            engine = NEB(model=model, neighbor_hooks=neighbor_hooks).build_engine()
+
+        make_neighbor_hooks.assert_not_called()
+        assert engine.hooks[: len(neighbor_hooks)] == neighbor_hooks
+
+    def test_rejects_invalid_neighbor_hooks(self) -> None:
+        with pytest.raises(TypeError, match="neighbor_hooks"):
+            NEB(model=_model(), neighbor_hooks=[object()])
+
+    def test_empty_neighbor_hooks_round_trip_preserves_disabled_mode(self) -> None:
+        strategy = NEB(model=_model(), neighbor_hooks=[])
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+
+        assert restored.neighbor_hooks == []
+
+    def test_rejects_invalid_neighbor_hook_specs(self) -> None:
+        spec = NEB(model=_model()).to_spec_dict()
+        spec["neighbor_hook_specs"] = {}
+
+        with pytest.raises(ValueError, match="neighbor_hook_specs"):
+            NEB.from_spec_dict(spec, model=_model())
+
+    def test_configured_neighbor_list_hook_round_trips(self) -> None:
+        hook = NeighborListHook(
+            NeighborConfig(cutoff=3.0),
+            skin=0.2,
+            method="batch_naive_tile",
+        )
+        strategy = NEB(model=_model(), neighbor_hooks=[hook])
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+
+        assert restored.neighbor_hooks is not None
+        restored_hook = restored.neighbor_hooks[0]
+        assert isinstance(restored_hook, NeighborListHook)
+        assert restored_hook.skin == 0.2
+        assert restored_hook.method == "batch_naive_tile"
 
     def test_diagnostics_log_path_builds_fresh_ordered_hooks(
         self, tmp_path: Path
@@ -445,6 +511,7 @@ class TestNEBRun:
                 method=strategy.method,
                 endpoint_mode=strategy.endpoint_mode,
                 fixed_atom_indices=strategy.fixed_atom_indices,
+                overall_exit_status=per_stage_engine.exit_status,
             )
         )
 
@@ -461,6 +528,7 @@ class TestNEBRun:
                 method=strategy.method,
                 endpoint_mode=strategy.endpoint_mode,
                 fixed_atom_indices=strategy.fixed_atom_indices,
+                overall_exit_status=per_stage_engine.exit_status,
             )
         )
 
