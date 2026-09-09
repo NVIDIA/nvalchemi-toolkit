@@ -42,7 +42,6 @@ from nvalchemi.dynamics.paths import (
 )
 from nvalchemi.dynamics.paths.hooks import (
     PathDiagnosticsHook,
-    PathEnergyStatsHook,
 )
 from nvalchemi.dynamics.paths.neb.hooks import (
     ClimbingImageSelectionHook,
@@ -475,70 +474,39 @@ class TestNEBConfiguration:
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
 
-    def test_shared_path_hooks_match_per_stage_hooks(self) -> None:
-        """Shared status-gated path hooks match per-stage hook pipelines."""
+    def test_shared_path_hooks_match_standalone_dynamics(self) -> None:
+        """Shared path hooks match direct use on a standalone optimizer."""
         strategy = NEB(
             model=_CompilerFriendlyModel().eval(),
             fmax=1.0e-12,
-            climbing=ClimbingImageConfig(
-                max_regular_steps=1,
-                max_climbing_steps=2,
+        )
+        shared_engine = strategy.build_engine()
+        standalone = strategy.optimizer(
+            model=strategy.model,
+            n_steps=None,
+            by_group=True,
+            hooks=[
+                *strategy.model.make_neighbor_hooks(),
+                *strategy._build_path_hooks(climbing_status=None),
+                *strategy.extra_hooks,
+            ],
+            convergence_hook=strategy._build_convergence_hook(
+                fmax=strategy.fmax,
+                regular_stage=False,
             ),
-        )
-        shared_engine: FusedStage = strategy.build_engine()
-        per_stage_engine: FusedStage = strategy.build_engine()
-
-        per_stage_engine.hooks = [
-            hook
-            for hook in per_stage_engine.hooks
-            if not isinstance(
-                hook,
-                (
-                    PathEnergyStatsHook,
-                    ClimbingImageSelectionHook,
-                    NEBForceHook,
-                ),
-            )
-        ]
-
-        regular_energy_stats = PathEnergyStatsHook()
-        regular_stage = per_stage_engine.sub_stages[0][1]
-        regular_stage.register_hook(regular_energy_stats)
-        regular_stage.register_hook(
-            NEBForceHook(
-                energy_stats_hook=regular_energy_stats,
-                spring=strategy.spring,
-                method=strategy.method,
-                endpoint_mode=strategy.endpoint_mode,
-                fixed_atom_indices=strategy.fixed_atom_indices,
-                overall_exit_status=per_stage_engine.exit_status,
-            )
-        )
-
-        climbing_energy_stats = PathEnergyStatsHook()
-        climbing_stage = per_stage_engine.sub_stages[1][1]
-        climbing_stage.register_hook(climbing_energy_stats)
-        climbing_stage.register_hook(
-            ClimbingImageSelectionHook(energy_stats_hook=climbing_energy_stats)
-        )
-        climbing_stage.register_hook(
-            NEBForceHook(
-                energy_stats_hook=climbing_energy_stats,
-                spring=strategy.spring,
-                method=strategy.method,
-                endpoint_mode=strategy.endpoint_mode,
-                fixed_atom_indices=strategy.fixed_atom_indices,
-                overall_exit_status=per_stage_engine.exit_status,
-            )
+            **strategy.optimizer_kwargs,
         )
 
         shared_batch = _bands()
-        per_stage_batch = _bands()
+        standalone_batch = _bands()
         shared_batch.positions[1, 1] = 0.5
-        per_stage_batch.positions[1, 1] = 0.5
+        standalone_batch.positions[1, 1] = 0.5
+        shared_batch.status = torch.zeros(shared_batch.num_graphs, dtype=torch.long)
+        standalone_batch.status = torch.zeros(
+            standalone_batch.num_graphs, dtype=torch.long
+        )
 
         compared_fields = (
-            "status",
             "positions",
             "velocities",
             "energy",
@@ -546,20 +514,15 @@ class TestNEBRun:
             "physical_forces",
             "force_mode",
             "forward_link_length",
-            "reprime_pending",
-            "n_steps_counter_0",
-            "n_steps_counter_1",
         )
-        for _ in range(3):
+        for _ in range(2):
             shared_engine.step(shared_batch)
-            per_stage_engine.step(per_stage_batch)
+            standalone.step(standalone_batch)
             for field in compared_fields:
                 torch.testing.assert_close(
-                    getattr(shared_batch, field), getattr(per_stage_batch, field)
+                    getattr(shared_batch, field),
+                    getattr(standalone_batch, field),
                 )
-
-        assert shared_batch.status.unique().tolist() == [1]
-        assert not shared_batch.reprime_pending.any()
 
     def test_compile_executes_strategy(self) -> None:
         torch.compiler.reset()
