@@ -556,15 +556,22 @@ class NEBForceHook:
             pending_nodes = active_nodes & pending_graphs[batch.batch_idx.long()]
             velocities.masked_fill_(pending_nodes.unsqueeze(-1), 0)
 
-    def _spring_context(self, ctx: DynamicsContext) -> SpringContext:
+    def _spring_context(
+        self,
+        ctx: DynamicsContext,
+        stage: DynamicsStage,
+    ) -> SpringContext:
         """Build the read-only spring-policy view of the current NEB stat
         instead of providing the full workspace that may contain irrelevant fields."""
         workspace = self._workspace
         batch = ctx.batch
+        model_outputs_available = stage == DynamicsStage.AFTER_COMPUTE
         return SpringContext(
-            energies=batch.energy.squeeze(-1),
+            energies=(batch.energy.squeeze(-1) if model_outputs_available else None),
             positions=batch.positions,
-            physical_forces=batch.physical_forces,
+            physical_forces=(
+                batch.physical_forces if model_outputs_available else None
+            ),
             image_ptr=workspace.image_ptr,
             layout=batch.group_layout,
             cell=workspace.cell,
@@ -583,7 +590,7 @@ class NEBForceHook:
         if self.spring.refresh is not stage:
             return
 
-        resolved = self.spring.resolve(self._spring_context(ctx))
+        resolved = self.spring.resolve(self._spring_context(ctx, stage))
         if not isinstance(resolved, Tensor):
             raise TypeError("SpringConfig.resolve must return a Tensor")
         if resolved.shape != workspace.spring_constants.shape:
