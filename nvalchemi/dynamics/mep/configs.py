@@ -49,12 +49,14 @@ class SpringContext:
 
     Parameters
     ----------
-    energies : Tensor
-        Flattened physical image energies, shape ``(num_images,)``.
+    energies : Tensor or None
+        Flattened physical image energies, shape ``(num_images,)``. ``None``
+        before the first model evaluation.
     positions : Tensor
         Packed atomic positions, shape ``(num_atoms, 3)``.
-    physical_forces : Tensor
-        Packed physical model forces, shape ``(num_atoms, 3)``.
+    physical_forces : Tensor or None
+        Packed physical model forces, shape ``(num_atoms, 3)``. ``None``
+        before the first model evaluation.
     image_ptr : Tensor
         Atom offsets delimiting packed images, shape ``(num_images + 1,)``.
     layout : GroupLayout
@@ -69,9 +71,9 @@ class SpringContext:
         Current dynamics step.
     """
 
-    energies: Tensor
+    energies: Tensor | None
     positions: Tensor
-    physical_forces: Tensor
+    physical_forces: Tensor | None
     image_ptr: Tensor
     layout: GroupLayout
     cell: Tensor
