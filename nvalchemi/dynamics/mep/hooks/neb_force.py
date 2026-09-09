@@ -542,14 +542,10 @@ class NEBForceHook:
             workspace.link_source_image_idx,
             workspace.link_lengths,
         )
-        # Populate `batch.forces` with newly computed NEB forces
-        torch.where(
-            active_nodes.unsqueeze(-1),
-            workspace.effective_forces,
-            batch.forces,
-            out=batch.forces,
-        )
-        batch.forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
+        # Restore NEB forces for inactive graphs too: the shared model forward
+        # overwrites their force rows even though the optimizer does not update them.
+        batch.forces.copy_(workspace.effective_forces)
+        batch.forces.masked_fill_(workspace.fixed_node_mask.unsqueeze(-1), 0)
 
         # Newly entered paths skip both optimizer updates while these NEB forces
         # are primed. Reset their carried velocity before the first real update.

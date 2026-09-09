@@ -245,18 +245,22 @@ class TestNEBForceHook:
         with pytest.raises(ValueError, match="requires dynamics.*by_group=True"):
             hook.on_register(Mock(by_group=False))
 
-    @pytest.mark.parametrize("active_graph_mask_is_none", [False, True])
+    @pytest.mark.parametrize(
+        "active_graph_mask",
+        [None, [True] * 4, [True, True, False, True]],
+    )
     def test_masks_physical_forces_and_publishes_effective_forces(
-        self, monkeypatch, active_graph_mask_is_none: bool
+        self, monkeypatch, active_graph_mask: list[bool] | None
     ) -> None:
         batch = _bands([0.0, 2.0, 1.0, 0.0], [0] * 4)
+        mask = (
+            None
+            if active_graph_mask is None
+            else torch.tensor(active_graph_mask, dtype=torch.bool, device=batch.device)
+        )
         ctx = DynamicsContext(
             batch=batch,
-            active_graph_mask=(
-                None
-                if active_graph_mask_is_none
-                else torch.ones(batch.num_graphs, dtype=torch.bool, device=batch.device)
-            ),
+            active_graph_mask=mask,
             step_count=0,
         )
         hook = _force_hook(spring=0.2)
@@ -286,8 +290,18 @@ class TestNEBForceHook:
         monkeypatch.setattr(module, "neb_forces", fake_neb_forces)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
-        expected_physical = model_forces.masked_fill(
-            workspace.fixed_node_mask[:, None], 0
+        active_nodes = (
+            torch.ones(batch.num_nodes, dtype=torch.bool, device=batch.device)
+            if mask is None
+            else mask[batch.batch_idx.long()]
+        )
+        expected_physical = torch.where(
+            active_nodes.unsqueeze(-1),
+            model_forces,
+            torch.zeros_like(model_forces),
+        )
+        expected_physical.masked_fill_(
+            (active_nodes & workspace.fixed_node_mask).unsqueeze(-1), 0
         )
         assert torch.equal(batch.physical_forces, expected_physical)
         assert torch.equal(seen["physical_forces"], expected_physical)
@@ -364,7 +378,6 @@ class TestNEBForceHook:
         hook = _force_hook()
         hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
         hook(ctx, DynamicsStage.ON_ADMISSION)
-        inactive_forces = batch.forces[4:].clone()
 
         def refresh() -> None:
             hook.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
@@ -375,7 +388,6 @@ class TestNEBForceHook:
             compiled()
             torch.cuda.synchronize()
             assert torch.isfinite(batch.forces).all()
-            assert torch.equal(batch.forces[4:], inactive_forces)
             assert torch.isfinite(batch.forward_link_length).all()
         finally:
             torch.compiler.reset()
