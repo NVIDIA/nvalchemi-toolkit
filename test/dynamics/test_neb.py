@@ -129,8 +129,7 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
     return next(
         hook
         for hook in engine.hooks
-        if isinstance(hook, FreezeAtomsHook)
-        and hook.mask_key == "neb_fixed_node_mask"
+        if isinstance(hook, FreezeAtomsHook) and hook.mask_key == "neb_fixed_node_mask"
     )
 
 
@@ -154,6 +153,7 @@ class TestNEBConfiguration:
             n_steps=19,
             fixed_atom_indices={0: [0, 2], 1: [1]},
             diagnostics_log_path="neb.csv",
+            diagnostics_frequency=7,
         )
 
         spec = json.loads(json.dumps(strategy.to_spec_dict()))
@@ -171,6 +171,7 @@ class TestNEBConfiguration:
         )
         assert restored.fixed_atom_indices == {0: (0, 2), 1: (1,)}
         assert restored.diagnostics_log_path == Path("neb.csv")
+        assert restored.diagnostics_frequency == 7
 
     @pytest.mark.parametrize(
         ("indices", "message"),
@@ -217,8 +218,7 @@ class TestNEBConfiguration:
         ).build_engine()
 
         assert not any(
-            isinstance(hook, FreezeAtomsHook)
-            and hook.mask_key == "neb_fixed_node_mask"
+            isinstance(hook, FreezeAtomsHook) and hook.mask_key == "neb_fixed_node_mask"
             for hook in engine.hooks
         )
 
@@ -296,7 +296,11 @@ class TestNEBConfiguration:
         self, tmp_path: Path
     ) -> None:
         log_path = tmp_path / "neb.csv"
-        strategy = NEB(model=_model(), diagnostics_log_path=log_path)
+        strategy = NEB(
+            model=_model(),
+            diagnostics_log_path=log_path,
+            diagnostics_frequency=5,
+        )
 
         first_engine = strategy.build_engine()
         second_engine = strategy.build_engine()
@@ -313,6 +317,8 @@ class TestNEBConfiguration:
         assert first_logger is not second_logger
         assert first_logger.backend == "csv"
         assert first_logger.log_path == log_path
+        assert first_diagnostics.frequency == 5
+        assert first_logger.frequency == first_diagnostics.frequency
         assert first_logger.by_group is True
         assert first_logger.stage is DynamicsStage.AFTER_STEP
         assert set(first_logger.custom_scalars or {}) == {
