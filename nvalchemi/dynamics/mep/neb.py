@@ -212,6 +212,10 @@ class NEB(DynamicsStrategy):
             "diagnostics and their logging hook."
         ),
     )
+    diagnostics_frequency: PositiveInt = Field(
+        default=1,
+        description="Step frequency for computing and logging per-path diagnostics.",
+    )
     compile: bool = Field(
         default=False,
         strict=True,
@@ -440,18 +444,20 @@ class NEB(DynamicsStrategy):
             hooks.append(
                 FreezeAtomsHook(
                     mask_key="neb_fixed_node_mask",
-                    zero_velocities=(
-                        "velocities" in self.optimizer.__provides_keys__
-                    ),
+                    zero_velocities=("velocities" in self.optimizer.__provides_keys__),
                 )
             )
         if self.diagnostics_log_path is not None:
-            diagnostics_hook = PathDiagnosticsHook(energy_stats_hook=energy_stats)
+            diagnostics_hook = PathDiagnosticsHook(
+                energy_stats_hook=energy_stats,
+                frequency=self.diagnostics_frequency,
+            )
             hooks.extend(
                 [
                     diagnostics_hook,
                     LoggingHook(
                         backend="csv",
+                        frequency=self.diagnostics_frequency,
                         log_path=self.diagnostics_log_path,
                         custom_scalars={
                             "fmax": (
