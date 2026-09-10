@@ -68,6 +68,8 @@ class PathDiagnosticsHook:
     ----------
     energy_stats_hook : PathEnergyStatsHook
         Shared path-energy statistics hook registered before this hook.
+    frequency : int, optional
+        Refresh diagnostics every ``frequency`` workflow steps. Default is ``1``.
 
     Required batch fields
     ---------------------
@@ -116,13 +118,18 @@ class PathDiagnosticsHook:
     """
 
     stage = None
-    frequency = 1
 
-    def __init__(self, *, energy_stats_hook: PathEnergyStatsHook) -> None:
+    def __init__(
+        self,
+        *,
+        energy_stats_hook: PathEnergyStatsHook,
+        frequency: int = 1,
+    ) -> None:
         """Initialize an unprepared path diagnostics hook."""
         if not isinstance(energy_stats_hook, PathEnergyStatsHook):
             raise TypeError("energy_stats_hook must be a PathEnergyStatsHook")
         self.energy_stats_hook = energy_stats_hook
+        self.frequency = frequency
         self._diagnostics: PathDiagnostics | None = None
 
     def on_register(self, workflow: object) -> None:
