@@ -34,7 +34,7 @@ from pydantic import (
 
 from nvalchemi._serialization import SerializableClass
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
-from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.paths.hooks import (
     PathDiagnosticsHook,
@@ -436,6 +436,15 @@ class NEB(DynamicsStrategy):
                 fixed_atom_indices=self.fixed_atom_indices,
             )
         )
+        if self.endpoint_mode == "fixed" or self.fixed_atom_indices:
+            hooks.append(
+                FreezeAtomsHook(
+                    mask_key="neb_fixed_node_mask",
+                    zero_velocities=(
+                        "velocities" in self.optimizer.__provides_keys__
+                    ),
+                )
+            )
         if self.diagnostics_log_path is not None:
             diagnostics_hook = PathDiagnosticsHook(energy_stats_hook=energy_stats)
             hooks.extend(
