@@ -265,5 +265,7 @@ updates:
   loop and multi-stage pipelines.
 - **Hooks**: The [Hooks guide](hooks_guide) covers convergence criteria,
   logging, and snapshots.
+- **Reaction paths**: [Reaction Paths and NEB](dynamics_paths_guide) runs batched
+  nudged elastic band calculations with a configurable optimizer.
 - **Examples**: ``basic/02_geometry_optimization.py`` demonstrates a complete relaxation
   workflow.
