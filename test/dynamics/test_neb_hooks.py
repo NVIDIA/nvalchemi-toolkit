@@ -25,6 +25,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
+from nvalchemi.dynamics.hooks import FreezeAtomsHook
 from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.neb import (
     ConstantSpringConfig,
@@ -415,9 +416,9 @@ class TestNEBForceHook:
         assert hook.stage == DynamicsStage.AFTER_COMPUTE
         assert hook.frequency == 1
         assert hook._runs_on_stage(DynamicsStage.ON_ADMISSION)
-        assert hook._runs_on_stage(DynamicsStage.BEFORE_PRE_UPDATE)
         assert hook._runs_on_stage(DynamicsStage.AFTER_COMPUTE)
-        assert hook._runs_on_stage(DynamicsStage.BEFORE_POST_UPDATE)
+        assert not hook._runs_on_stage(DynamicsStage.BEFORE_PRE_UPDATE)
+        assert not hook._runs_on_stage(DynamicsStage.BEFORE_POST_UPDATE)
         assert not hook._runs_on_stage(DynamicsStage.AFTER_STEP)
 
     def test_initializes_constant_springs_on_admission(self) -> None:
@@ -623,13 +624,14 @@ class TestNEBForceHook:
             overwrite=True,
         )
         hook = _force_hook(fixed_atom_indices={0: [1]})
+        freeze_hook = FreezeAtomsHook(mask_key="neb_fixed_node_mask")
         ctx = DynamicsContext(
             batch=batch,
             active_graph_mask=torch.tensor([False, True, True]),
         )
 
         hook(ctx, DynamicsStage.ON_ADMISSION)
-        hook(ctx, stage)
+        freeze_hook(ctx, stage)
 
         assert torch.equal(
             batch.forces,
