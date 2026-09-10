@@ -31,7 +31,7 @@ from nvalchemi.dynamics import (
     DynamicsStage,
     FusedStage,
 )
-from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.paths import (
     NEB,
     ClimbingImageConfig,
@@ -124,6 +124,16 @@ def _force_hook(engine: FusedStage) -> NEBForceHook:
     return next(hook for hook in engine.hooks if isinstance(hook, NEBForceHook))
 
 
+def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
+    """Return the NEB-owned fixed-node constraint hook."""
+    return next(
+        hook
+        for hook in engine.hooks
+        if isinstance(hook, FreezeAtomsHook)
+        and hook.mask_key == "neb_fixed_node_mask"
+    )
+
+
 # ---------------------------------------------------------------------------
 # NEB configuration
 # ---------------------------------------------------------------------------
@@ -187,6 +197,30 @@ class TestNEBConfiguration:
 
         assert strategy.fixed_atom_indices == {0: (0, 2), 1: (1,)}
         assert hook.fixed_atom_indices == strategy.fixed_atom_indices
+
+    def test_builds_mask_aware_freeze_hook_for_constraints(self) -> None:
+        """Use the NEB-owned node mask for endpoint and user constraints."""
+        engine = NEB(
+            model=_model(),
+            fixed_atom_indices={0: [0]},
+        ).build_engine()
+
+        freeze_hook = _freeze_hook(engine)
+        assert freeze_hook.mask_key == "neb_fixed_node_mask"
+        assert freeze_hook.zero_velocities
+
+    def test_relaxed_unconstrained_neb_omits_freeze_hook(self) -> None:
+        """Avoid constraint lifecycle overhead when no nodes are fixed."""
+        engine = NEB(
+            model=_model(),
+            endpoint_mode="relaxed",
+        ).build_engine()
+
+        assert not any(
+            isinstance(hook, FreezeAtomsHook)
+            and hook.mask_key == "neb_fixed_node_mask"
+            for hook in engine.hooks
+        )
 
     def test_fire2_default_kwargs_are_optimizer_specific(self) -> None:
         strategy = NEB(model=_model())
