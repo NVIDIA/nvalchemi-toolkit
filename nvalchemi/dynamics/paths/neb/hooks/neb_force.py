@@ -129,11 +129,11 @@ class NEBForceHook:
     """Configure optimizer-facing forces for nudged elastic band dynamics.
 
     The hook prepares structural state at :attr:`DynamicsStage.ON_ADMISSION`,
-    freezes constrained nodes in the currently active images before both
-    optimizer update phases, then updates spring constants before replacing
-    physical forces with the selected NEB force formulation at
-    :attr:`DynamicsStage.AFTER_COMPUTE`. Energy extrema and image force modes
-    are derived from hooks registered before this hook.
+    publishes the combined endpoint and user-fixed node mask for a
+    :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`, then updates spring
+    constants before replacing physical forces with the selected NEB force
+    formulation at :attr:`DynamicsStage.AFTER_COMPUTE`. Energy extrema and
+    image force modes are derived from hooks registered before this hook.
 
     Parameters
     ----------
@@ -302,9 +302,7 @@ class NEBForceHook:
         """
         return stage in {
             DynamicsStage.ON_ADMISSION,
-            DynamicsStage.BEFORE_PRE_UPDATE,
             DynamicsStage.AFTER_COMPUTE,
-            DynamicsStage.BEFORE_POST_UPDATE,
         }
 
     @torch.compiler.disable
@@ -429,6 +427,7 @@ class NEBForceHook:
             torch.zeros_like(batch.positions),
             "node",
         )
+        set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
         set_batch_field(
             "forward_link_length",
             torch.zeros(batch.num_graphs, dtype=dtype, device=device),
@@ -438,7 +437,7 @@ class NEBForceHook:
         # Keep kernel-only masks and buffers private on workspace.
         self._workspace = _NEBWorkspace(
             spring_constants=spring_constants,
-            fixed_node_mask=fixed_atoms,
+            fixed_node_mask=batch.neb_fixed_node_mask,
             cell=path_cell,
             inv_cell=torch.linalg.inv(path_cell).contiguous(),
             pbc=path_pbc,
@@ -454,17 +453,15 @@ class NEBForceHook:
         self._refresh_spring_constants(ctx, DynamicsStage.ON_ADMISSION)
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
-        """Prepare NEB state, constrain nodes, or construct NEB forces.
+        """Prepare NEB state or construct NEB forces.
 
         Parameters
         ----------
         ctx : DynamicsContext
             Context containing the current grouped path batch.
         stage : DynamicsStage
-            Current dynamics stage. Preparation occurs at ``ON_ADMISSION``,
-            fixed nodes are frozen at ``BEFORE_PRE_UPDATE`` and
-            ``BEFORE_POST_UPDATE``, and force construction occurs at
-            ``AFTER_COMPUTE``.
+            Current dynamics stage. Preparation occurs at ``ON_ADMISSION``
+            and force construction occurs at ``AFTER_COMPUTE``.
 
         Raises
         ------
@@ -473,25 +470,6 @@ class NEBForceHook:
         """
         if stage == DynamicsStage.ON_ADMISSION:
             self._prepare_batch(ctx)
-            return
-
-        if stage in {
-            DynamicsStage.BEFORE_PRE_UPDATE,
-            DynamicsStage.BEFORE_POST_UPDATE,
-        }:
-            # Handle fixed atoms/nodes by zeroing out velocities and forces at
-            # BEFORE_PRE_UPDATE and BEFORE_POST_UPDATE stages.
-            batch = ctx.batch
-            workspace = self._workspace
-            active_fixed_nodes = workspace.fixed_node_mask
-            if ctx.active_graph_mask is not None:
-                active_nodes = ctx.active_graph_mask[batch.batch_idx.long()]
-                active_fixed_nodes = active_fixed_nodes & active_nodes
-            with torch.no_grad():
-                batch.forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
-                velocities = getattr(batch, "velocities", None)
-                if velocities is not None:
-                    velocities.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
             return
 
         if stage != DynamicsStage.AFTER_COMPUTE:
@@ -545,7 +523,6 @@ class NEBForceHook:
         # Restore NEB forces for inactive graphs too: the shared model forward
         # overwrites their force rows even though the optimizer does not update them.
         batch.forces.copy_(workspace.effective_forces)
-        batch.forces.masked_fill_(workspace.fixed_node_mask.unsqueeze(-1), 0)
 
         # Newly entered paths skip both optimizer updates while these NEB forces
         # are primed. Reset their carried velocity before the first real update.

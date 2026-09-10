@@ -97,6 +97,76 @@ def _call_hook_two_stage(
 class TestFreezeAtomsHook:
     """Test suite for :class:`FreezeAtomsHook`."""
 
+    def test_uses_explicit_mask_key(self, device: str) -> None:
+        """Select frozen nodes from a workflow-owned boolean batch field."""
+        batch = _make_batch(n_atoms=6, n_frozen=2, device=device)
+        explicit_mask = torch.tensor(
+            [True, False, True, False, False, False],
+            device=device,
+        )
+        batch.add_key(
+            "constraint_mask",
+            [explicit_mask],
+            level="node",
+        )
+        hook = FreezeAtomsHook(mask_key="constraint_mask")
+        original_positions = batch.positions.clone()
+        ctx = _make_ctx(batch, _make_dynamics())
+
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
+        batch.positions.add_(1.0)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
+
+        assert torch.allclose(
+            batch.positions[explicit_mask],
+            original_positions[explicit_mask],
+        )
+        assert torch.allclose(
+            batch.positions[~explicit_mask],
+            original_positions[~explicit_mask] + 1.0,
+        )
+
+    def test_restores_positions_without_velocities(self, device: str) -> None:
+        """Support optimizers whose batch has no velocity field."""
+        batch = _make_batch(n_atoms=6, n_frozen=2, device=device)
+        hook = FreezeAtomsHook()
+        mask = batch.atom_categories == AtomCategory.SPECIAL.value
+        original_positions = batch.positions.clone()
+        ctx = _make_ctx(batch, _make_dynamics())
+        del batch.__dict__["velocities"]
+        del batch["velocities"]
+
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
+        batch.positions.add_(1.0)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
+
+        assert torch.allclose(batch.positions[mask], original_positions[mask])
+        assert getattr(batch, "velocities", None) is None
+
+    def test_can_preserve_velocities_for_velocity_free_optimizers(
+        self, device: str
+    ) -> None:
+        """Do not mutate incidental velocity data when explicitly disabled."""
+        batch = _make_batch(n_atoms=6, n_frozen=2, device=device)
+        hook = FreezeAtomsHook(zero_velocities=False)
+        original_velocities = batch.velocities.clone()
+        ctx = _make_ctx(batch, _make_dynamics())
+
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
+        hook(ctx, DynamicsStage.BEFORE_POST_UPDATE)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
+
+        torch.testing.assert_close(batch.velocities, original_velocities)
+
+    def test_rejects_empty_mask_key(self) -> None:
+        """Require a usable batch field name for explicit mask selection."""
+        try:
+            FreezeAtomsHook(mask_key="")
+        except ValueError as error:
+            assert "non-empty string" in str(error)
+        else:
+            raise AssertionError("Expected an empty mask key to be rejected")
+
     def test_positions_restored(self, device: str) -> None:
         """Verify frozen atom positions are restored after perturbation."""
         batch = _make_batch(n_atoms=6, n_frozen=2, device=device)
