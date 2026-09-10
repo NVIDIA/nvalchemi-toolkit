@@ -158,8 +158,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--energy-atol", type=float, default=1.0e-3)
     result.add_argument("--fmax", type=float, default=0.002)
     result.add_argument("--dt", type=float, default=0.1)
-    result.add_argument("--max-regular-steps", type=int, default=1000)
-    result.add_argument("--max-climbing-steps", type=int, default=1000)
+    result.add_argument("--max-regular-steps", type=int, default=5000)
+    result.add_argument("--max-climbing-steps", type=int, default=5000)
     result.add_argument(
         "--compile-workflow", action=argparse.BooleanOptionalAction, default=False
     )

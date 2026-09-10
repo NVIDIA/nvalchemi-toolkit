@@ -229,7 +229,8 @@ def _run_workflow(
             max_regular_steps=args.max_regular_steps,
             max_climbing_steps=args.max_climbing_steps,
         ),
-        n_steps=args.max_steps,
+        n_steps=(args.max_regular_steps + args.max_climbing_steps + 1),
+        # Accounting for one reprime-only iteration when entering climbing-image NEB
         optimizer_kwargs={"dt": args.dt},
         extra_hooks=[FreezeAtomsHook()],
         compile=args.compile_workflow,
@@ -343,7 +344,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         warmup_args.fmax = float("inf")
         warmup_args.max_regular_steps = 1
         warmup_args.max_climbing_steps = 1
-        warmup_args.max_steps = 4
         for fixtures in ((FIXTURES[0],), (FIXTURES[1],), FIXTURES):
             _run_workflow(fixtures, model, warmup_args, device, dtype)
 
@@ -412,11 +412,10 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--dtype", choices=("float32", "float64"), default="float32")
     result.add_argument("--dt", type=float, default=0.01)
-    result.add_argument("--fmax", type=float, default=2.0e-3)
+    result.add_argument("--fmax", type=float, default=0.002)
     result.add_argument("--spring", type=float, default=0.1)
-    result.add_argument("--max-regular-steps", type=int, default=10_000)
-    result.add_argument("--max-climbing-steps", type=int, default=10_000)
-    result.add_argument("--max-steps", type=int, default=20_002)
+    result.add_argument("--max-regular-steps", type=int, default=5000)
+    result.add_argument("--max-climbing-steps", type=int, default=5000)
     result.add_argument("--energy-atol", type=float, default=5.0e-5)
     result.add_argument("--position-atol", type=float, default=1.0e-5)
     result.add_argument(
