@@ -267,6 +267,8 @@ class LoggingHook:
                 self._stream.wait_stream(main_stream)
             cpu_td = td.to("cpu", non_blocking=True)
             if use_stream:
+                # Keep each CUDA snapshot's storage alive until its asynchronous
+                # copy on the logging stream has completed.
                 for value in td.values():
                     if value.is_cuda:
                         value.record_stream(self._stream)
