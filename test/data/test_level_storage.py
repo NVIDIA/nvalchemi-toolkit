@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from nvalchemi.data import LevelSchema as PublicLevelSchema
 from nvalchemi.data.level_storage import (
     DEFAULT_ATTRIBUTE_MAP,
     DEFAULT_SEGMENTED_GROUPS,
@@ -42,6 +43,13 @@ class TestLevelSchema:
         assert schema.attr_to_group["positions"] == "atoms"
         assert schema.group_to_attrs["atoms"] == DEFAULT_ATTRIBUTE_MAP["atoms"]
         assert schema.segmented_groups == DEFAULT_SEGMENTED_GROUPS
+        assert schema.level_names == ("atoms", "edges", "system")
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.level_kind("edges") == "segmented"
+        assert schema.level_kind("system") == "uniform"
+
+    def test_public_import(self):
+        assert PublicLevelSchema is LevelSchema
 
     def test_custom_group_to_attrs(self):
         schema = LevelSchema(group_to_attrs={"nodes": {"x"}, "global": {"e"}})
@@ -49,12 +57,182 @@ class TestLevelSchema:
         assert schema.attr_to_group["e"] == "global"
         assert schema.group("x") == "nodes"
 
+    def test_custom_level_order(self):
+        schema = LevelSchema(
+            group_to_attrs={
+                "custom_b": {"b"},
+                "system": {"e"},
+                "atoms": {"x"},
+                "custom_a": {"a"},
+                "edges": {"ij"},
+            },
+            segmented_groups={"atoms", "edges"},
+        )
+        assert schema.level_names == (
+            "atoms",
+            "edges",
+            "system",
+            "custom_b",
+            "custom_a",
+        )
+
+    def test_custom_constructor_does_not_add_builtin_levels(self):
+        schema = LevelSchema(
+            group_to_attrs={"samples": {"value"}}, segmented_groups={"samples"}
+        )
+        assert schema.level_names == ("samples",)
+        with pytest.raises(KeyError, match="atoms"):
+            schema.level_kind("atoms")
+
+    def test_marker_only_group_is_not_registered_until_set(self):
+        schema = LevelSchema(
+            group_to_attrs={"system": {"e"}},
+            segmented_groups={"pending"},
+        )
+        assert schema.level_names == ("system",)
+
+        schema.set("value", "pending")
+
+        assert schema.level_names == ("system", "pending")
+        assert schema.level_kind("pending") == "segmented"
+
+    def test_add_uniform_and_segmented_levels(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.add_level("samples", segmented=True)
+
+        assert schema.level_names[-2:] == ("metadata", "samples")
+        assert schema.level_kind("metadata") == "uniform"
+        assert schema.level_kind("samples") == "segmented"
+        assert not schema.is_segmented_group("metadata")
+        assert schema.is_segmented_group("samples")
+
+    def test_add_level_identical_definition_is_idempotent(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        expected_names = schema.level_names
+
+        schema.add_level("samples", segmented=True)
+
+        assert schema.level_names == expected_names
+
+    def test_add_level_rejects_conflicting_kind(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+
+        with pytest.raises(ValueError, match="already registered as segmented"):
+            schema.add_level("samples", segmented=False)
+
+    @pytest.mark.parametrize("name", ["", "   "])
+    def test_add_level_rejects_empty_name(self, name):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="must not be empty"):
+            schema.add_level(name, segmented=True)
+
+    def test_add_level_rejects_non_string_name(self):
+        schema = LevelSchema()
+        with pytest.raises(TypeError, match="name must be a string"):
+            schema.add_level(1, segmented=True)
+
+    def test_add_level_rejects_non_boolean_segmented(self):
+        schema = LevelSchema()
+        with pytest.raises(TypeError, match="segmented must be a bool"):
+            schema.add_level("samples", segmented=1)
+
+    def test_add_product_levels(self):
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_level("augmented", segmented=True)
+
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.add_product_level(
+            "augmented_square", left="augmented", right="augmented"
+        )
+
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.level_kind("left_right") == "product"
+        assert schema.product_parents == {
+            "atom_atom": ("atoms", "atoms"),
+            "left_right": ("left_items", "right_items"),
+            "augmented_square": ("augmented", "augmented"),
+        }
+        assert schema.is_segmented_group("atom_atom")
+
+    def test_add_product_level_identical_definition_is_idempotent(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        expected_names = schema.level_names
+
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        assert schema.level_names == expected_names
+
+    def test_add_product_level_rejects_conflicting_definition(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("product", left="atoms", right="atoms")
+
+        with pytest.raises(ValueError, match="already registered with parents"):
+            schema.add_product_level("product", left="atoms", right="samples")
+
+    def test_add_product_level_rejects_missing_parent(self):
+        schema = LevelSchema()
+        with pytest.raises(KeyError, match="missing"):
+            schema.add_product_level("product", left="missing", right="atoms")
+
+    def test_add_product_level_rejects_uniform_parent(self):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="system.*segmented base level"):
+            schema.add_product_level("product", left="atoms", right="system")
+
+    def test_add_product_level_rejects_product_parent(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        with pytest.raises(ValueError, match="atom_atom.*segmented base level"):
+            schema.add_product_level("nested", left="atom_atom", right="atoms")
+
+    def test_add_product_level_rejects_self_reference(self):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="cannot reference itself"):
+            schema.add_product_level("product", left="product", right="atoms")
+
+    @pytest.mark.parametrize(
+        ("keyword", "value", "error"),
+        [
+            ("name", " ", ValueError),
+            ("left", " ", ValueError),
+            ("right", 1, TypeError),
+        ],
+    )
+    def test_add_product_level_validates_names(self, keyword, value, error):
+        schema = LevelSchema()
+        arguments = {"name": "product", "left": "atoms", "right": "atoms"}
+        arguments[keyword] = value
+        with pytest.raises(error):
+            schema.add_product_level(**arguments)
+
+    def test_level_kind_raises_for_unknown_level(self):
+        schema = LevelSchema()
+        with pytest.raises(KeyError, match="not found"):
+            schema.level_kind("missing")
+
     def test_set_new_attr(self):
         schema = LevelSchema()
         schema.set("custom_attr", "atoms", dtype="float32", is_segmented=True)
         assert schema.attr_to_group["custom_attr"] == "atoms"
         assert schema.dtype("custom_attr") == "float32"
         assert schema.is_segmented_attr("custom_attr")
+
+    def test_set_unknown_group_defaults_to_uniform(self):
+        schema = LevelSchema()
+        schema.set("custom_attr", "custom")
+        schema.set("sample", "samples", is_segmented=True)
+
+        assert schema.level_names[-2:] == ("custom", "samples")
+        assert schema.level_kind("custom") == "uniform"
+        assert schema.level_kind("samples") == "segmented"
 
     def test_set_is_segmented_false_discards(self):
         """LevelSchema.set with is_segmented=False removes group from segmented_groups."""
@@ -122,10 +300,53 @@ class TestLevelSchema:
         assert not schema.is_segmented_group("g")
         schema.mark_group_segmented("g")
         assert schema.is_segmented_group("g")
+        assert schema.level_kind("g") == "segmented"
         schema.unmark_group_segmented("g")
         assert not schema.is_segmented_group("g")
+        assert schema.level_kind("g") == "uniform"
         with pytest.raises(KeyError):
             schema.unmark_group_segmented("g")
+
+    def test_unknown_segmented_marker_is_not_registered(self):
+        schema = LevelSchema(group_to_attrs={}, segmented_groups=set())
+        schema.mark_group_segmented("pending")
+        assert "pending" not in schema.level_names
+        with pytest.raises(KeyError, match="pending"):
+            schema.level_kind("pending")
+
+    def test_product_level_cannot_be_made_uniform(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.set("pair_features", "atoms")
+
+        with pytest.raises(ValueError, match="cannot be made uniform"):
+            schema.set("pair_features", "atom_atom", is_segmented=False)
+        assert schema.group("pair_features") == "atoms"
+        assert "pair_features" not in schema.group_to_attrs["atom_atom"]
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.is_segmented_group("atom_atom")
+
+        schema.set("pair_features", "atom_atom", is_segmented=True)
+        assert schema.group("pair_features") == "atom_atom"
+
+        with pytest.raises(ValueError, match="cannot be made uniform"):
+            schema.unmark_group_segmented("atom_atom")
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.is_segmented_group("atom_atom")
+
+    def test_product_parent_cannot_be_made_uniform(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        with pytest.raises(ValueError, match="parent of product level.*atom_atom"):
+            schema.set("positions", "atoms", is_segmented=False)
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.is_segmented_group("atoms")
+
+        with pytest.raises(ValueError, match="parent of product level.*atom_atom"):
+            schema.unmark_group_segmented("atoms")
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.is_segmented_group("atoms")
 
     def test_dtypes_must_match_attrs(self):
         with pytest.raises(ValueError, match="dtype keys must match"):
@@ -137,10 +358,24 @@ class TestLevelSchema:
     def test_clone_is_independent(self):
         schema = LevelSchema()
         schema.set("extra", "atoms")
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_samples", left="atoms", right="samples")
         cloned = schema.clone()
         cloned.set("another", "edges")
+        cloned.add_level("torsions", segmented=True)
+        cloned.add_product_level("torsion_square", left="torsions", right="torsions")
         assert "another" not in schema.attr_to_group
         assert "extra" in cloned.attr_to_group
+        assert cloned.level_kinds == schema.level_kinds | {
+            "torsions": "segmented",
+            "torsion_square": "product",
+        }
+        assert cloned.product_parents == schema.product_parents | {
+            "torsion_square": ("torsions", "torsions")
+        }
+        assert "torsions" not in schema.level_names
+        assert "torsion_square" not in schema.level_names
+        assert cloned.level_names[-2:] == ("torsions", "torsion_square")
 
 
 # -----------------------------------------------------------------------------

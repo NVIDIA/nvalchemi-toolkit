@@ -86,7 +86,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import torch
@@ -118,6 +118,7 @@ except RuntimeError as e:
 # ---------------------------------------------------------------------------
 IndexType = int | slice | Tensor | list
 DeviceType = torch.device | str
+LevelKind: TypeAlias = Literal["uniform", "segmented", "product"]
 # Segment/graph index dtype for SegmentedLevelStorage (matches segment_lengths).
 INDEX_DTYPE = torch.int32
 
@@ -217,13 +218,14 @@ DEFAULT_DTYPES: dict[str, str] = {
 }
 
 DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}
+_BUILTIN_LEVEL_ORDER = ("atoms", "edges", "system")
 
 
 # ---------------------------------------------------------------------------
 # LevelSchema
 # ---------------------------------------------------------------------------
 class LevelSchema:
-    """Registry mapping attribute names to groups, dtypes, and segmentation flags.
+    """Registry mapping attributes to levels, dtypes, and level kinds.
 
     Parameters
     ----------
@@ -277,7 +279,139 @@ class LevelSchema:
         else:
             self.dtypes = DEFAULT_DTYPES.copy()
 
+        self.level_kinds: dict[str, LevelKind] = {
+            group: "segmented" if group in self.segmented_groups else "uniform"
+            for group in self.group_to_attrs
+        }
+        self.product_parents: dict[str, tuple[str, str]] = {}
+        builtin_levels = [
+            group for group in _BUILTIN_LEVEL_ORDER if group in self.group_to_attrs
+        ]
+        custom_levels = [
+            group for group in self.group_to_attrs if group not in _BUILTIN_LEVEL_ORDER
+        ]
+        self._level_names = [*builtin_levels, *custom_levels]
+
     # -- Mutation -----------------------------------------------------------
+
+    @staticmethod
+    def _validate_level_name(name: str, parameter: str) -> None:
+        if not isinstance(name, str):
+            raise TypeError(f"{parameter} must be a string")
+        if not name.strip():
+            raise ValueError(f"{parameter} must not be empty or whitespace")
+
+    def _validate_can_make_uniform(self, name: str) -> None:
+        dependents = [
+            product
+            for product, parents in self.product_parents.items()
+            if name in parents
+        ]
+        if dependents:
+            raise ValueError(
+                f"Level '{name}' cannot be made uniform because it is a parent of "
+                f"product level(s): {', '.join(dependents)}"
+            )
+
+    def add_level(self, name: str, *, segmented: bool) -> None:
+        """Register an ordinary uniform or segmented level.
+
+        Repeating the same definition is an idempotent operation.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+        segmented : bool
+            Whether the level has variable per-system cardinality.
+
+        Raises
+        ------
+        TypeError
+            If *name* is not a string or *segmented* is not a Boolean.
+        ValueError
+            If *name* is empty or already has a different kind.
+        """
+        self._validate_level_name(name, "name")
+        if not isinstance(segmented, bool):
+            raise TypeError("segmented must be a bool")
+
+        kind: LevelKind = "segmented" if segmented else "uniform"
+        existing_kind = self.level_kinds.get(name)
+        if existing_kind is not None:
+            if existing_kind == kind:
+                return
+            raise ValueError(
+                f"Level '{name}' is already registered as {existing_kind}, not {kind}"
+            )
+
+        self.group_to_attrs.setdefault(name, set())
+        self.level_kinds[name] = kind
+        self._level_names.append(name)
+        if segmented:
+            self.segmented_groups.add(name)
+        else:
+            self.segmented_groups.discard(name)
+
+    def add_product_level(self, name: str, *, left: str, right: str) -> None:
+        """Register a segmented Cartesian product of two base levels.
+
+        Product levels preserve parent order and may use the same segmented
+        parent on both axes. Repeating an identical definition is idempotent.
+
+        Parameters
+        ----------
+        name : str
+            Name of the product level.
+        left : str
+            Registered segmented level for the left entity axis.
+        right : str
+            Registered segmented level for the right entity axis.
+
+        Raises
+        ------
+        TypeError
+            If any level name is not a string.
+        KeyError
+            If either parent is not registered.
+        ValueError
+            If a name is empty, a parent is not a segmented base level, or the
+            requested definition conflicts with an existing level.
+        """
+        self._validate_level_name(name, "name")
+        self._validate_level_name(left, "left")
+        self._validate_level_name(right, "right")
+
+        existing_kind = self.level_kinds.get(name)
+        if existing_kind == "product":
+            if self.product_parents[name] == (left, right):
+                return
+            raise ValueError(
+                f"Product level '{name}' is already registered with parents "
+                f"{self.product_parents[name]}, not {(left, right)}"
+            )
+        if existing_kind is not None:
+            raise ValueError(
+                f"Level '{name}' is already registered as {existing_kind}, not product"
+            )
+        if name == left or name == right:
+            raise ValueError(f"Product level '{name}' cannot reference itself")
+
+        for parent_name, axis in ((left, "left"), (right, "right")):
+            if parent_name not in self.level_kinds:
+                raise KeyError(f"{axis} parent level '{parent_name}' is not registered")
+            parent_kind = self.level_kinds[parent_name]
+            if parent_kind != "segmented":
+                raise ValueError(
+                    f"{axis} parent level '{parent_name}' must be a segmented "
+                    f"base level, not {parent_kind}"
+                )
+
+        self.group_to_attrs.setdefault(name, set())
+        self.level_kinds[name] = "product"
+        self.product_parents[name] = (left, right)
+        self._level_names.append(name)
+        self.segmented_groups.add(name)
 
     def set(
         self,
@@ -298,7 +432,18 @@ class LevelSchema:
             Data type for the attribute.
         is_segmented : bool, optional
             Whether *group_name* should be marked as segmented.
+
+        Raises
+        ------
+        ValueError
+            If the requested segmentation would invalidate a product level.
         """
+        level_kind = self.level_kinds.get(group_name)
+        if level_kind == "product" and is_segmented is False:
+            raise ValueError(f"Product level '{group_name}' cannot be made uniform")
+        if level_kind == "segmented" and is_segmented is False:
+            self._validate_can_make_uniform(group_name)
+
         existing_group = self.attr_to_group.get(attr_name)
         if existing_group is not None and existing_group != group_name:
             self.group_to_attrs[existing_group].discard(attr_name)
@@ -308,11 +453,22 @@ class LevelSchema:
             self.group_to_attrs[group_name] = set()
         self.group_to_attrs[group_name].add(attr_name)
 
-        if is_segmented is not None:
+        if level_kind is None:
+            if is_segmented is None:
+                is_segmented = group_name in self.segmented_groups
+            level_kind = "segmented" if is_segmented else "uniform"
+            self.level_kinds[group_name] = level_kind
+            self._level_names.append(group_name)
+
+        if level_kind == "product":
+            self.segmented_groups.add(group_name)
+        elif is_segmented is not None:
             if is_segmented:
                 self.segmented_groups.add(group_name)
+                self.level_kinds[group_name] = "segmented"
             else:
                 self.segmented_groups.discard(group_name)
+                self.level_kinds[group_name] = "uniform"
 
         if dtype is not None:
             self.dtypes[attr_name] = (
@@ -324,6 +480,8 @@ class LevelSchema:
     def mark_group_segmented(self, group_name: str) -> None:
         """Mark *group_name* as segmented."""
         self.segmented_groups.add(group_name)
+        if group_name in self.level_kinds and self.level_kinds[group_name] != "product":
+            self.level_kinds[group_name] = "segmented"
 
     def unmark_group_segmented(self, group_name: str) -> None:
         """Remove the segmented flag from *group_name*.
@@ -332,8 +490,15 @@ class LevelSchema:
         ------
         KeyError
             If *group_name* is not currently segmented.
+        ValueError
+            If *group_name* is a product or a parent of a product.
         """
+        if self.level_kinds.get(group_name) == "product":
+            raise ValueError(f"Product level '{group_name}' cannot be made uniform")
+        self._validate_can_make_uniform(group_name)
         self.segmented_groups.remove(group_name)
+        if group_name in self.level_kinds:
+            self.level_kinds[group_name] = "uniform"
 
     # -- Queries ------------------------------------------------------------
 
@@ -352,6 +517,33 @@ class LevelSchema:
         if attr_name not in self.attr_to_group:
             raise KeyError(f"Attribute '{attr_name}' not found")
         return self.attr_to_group[attr_name] in self.segmented_groups
+
+    @property
+    def level_names(self) -> tuple[str, ...]:
+        """Return registered level names in deterministic definition order."""
+        return tuple(self._level_names)
+
+    def level_kind(self, name: str) -> LevelKind:
+        """Return the kind of a registered level.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+
+        Returns
+        -------
+        LevelKind
+            ``"uniform"``, ``"segmented"``, or ``"product"``.
+
+        Raises
+        ------
+        KeyError
+            If *name* is not a registered level.
+        """
+        if name not in self.level_kinds:
+            raise KeyError(f"Level '{name}' not found")
+        return self.level_kinds[name]
 
     def group(self, attr_name: str) -> str:
         """Return the group name for *attr_name*.
@@ -386,6 +578,9 @@ class LevelSchema:
         cloned.attr_to_group = self.attr_to_group.copy()
         cloned.segmented_groups = self.segmented_groups.copy()
         cloned.dtypes = self.dtypes.copy()
+        cloned.level_kinds = self.level_kinds.copy()
+        cloned.product_parents = self.product_parents.copy()
+        cloned._level_names = self._level_names.copy()
         return cloned
 
 
