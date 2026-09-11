@@ -19,9 +19,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
+
+if TYPE_CHECKING:
+    from nvalchemi.data.level_storage import LevelSchema
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,18 @@ class Reader(ABC):
             Mapping of field name to level string.
         """
         return {}
+
+    @property
+    def level_schema(self) -> LevelSchema | None:
+        """Return the optional custom-level schema carried by this reader.
+
+        Returns
+        -------
+        LevelSchema | None
+            An independent level schema, or ``None`` when the reader has no
+            explicit level metadata.
+        """
+        return None
 
     def _get_field_names(self) -> list[str]:
         """Return field names by inspecting the first sample.

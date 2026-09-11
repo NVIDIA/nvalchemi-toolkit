@@ -368,6 +368,8 @@ class Dataset:
 
         self.skip_validation = skip_validation
         self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
+        schema = getattr(reader, "level_schema", None)
+        self._level_schema = schema.clone() if schema is not None else None
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
@@ -464,6 +466,9 @@ class Dataset:
                         self._sample_transform(data, metadata)
                         for data, metadata in samples
                     ]
+                if self._level_schema is not None:
+                    for data, _metadata in samples:
+                        data._level_schema = self._level_schema.clone()
             event = torch.cuda.Event()
             event.record(stream)
         else:
@@ -663,6 +668,7 @@ class Dataset:
                     Batch.from_raw_dicts(
                         batch_slice,
                         device=self.target_device,
+                        attr_map=self._level_schema,
                         field_levels=self._field_levels,
                     )
                 )
@@ -671,6 +677,7 @@ class Dataset:
                     Batch.from_data_list(
                         batch_slice,
                         skip_validation=True,
+                        attr_map=self._level_schema,
                         field_levels=self._field_levels,
                     )
                 )
@@ -877,6 +884,8 @@ class Dataset:
             data = data.to(self.target_device, non_blocking=True)
         if self._sample_transform is not None:
             data, metadata = self._sample_transform(data, metadata)
+        if self._level_schema is not None:
+            data._level_schema = self._level_schema.clone()
         return data, metadata
 
     def __len__(self) -> int:
