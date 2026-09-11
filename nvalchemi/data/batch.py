@@ -572,6 +572,24 @@ def _batch_graph_slot_capacity(batch: Batch) -> int:
     return capacity
 
 
+def _transport_payload_tag_span(
+    group: UniformLevelStorage | SegmentedLevelStorage | None,
+) -> int:
+    """Return the tag space reserved for one level payload."""
+    return len(list(group.keys())) + 1 if group is not None else 1
+
+
+def _custom_transport_groups(
+    batch: Batch,
+) -> list[tuple[str, UniformLevelStorage | SegmentedLevelStorage]]:
+    """Return materialized custom groups in schema definition order."""
+    return [
+        (name, batch._storage.groups[name])
+        for name in batch._storage.attr_map.level_names
+        if name not in _BUILTIN_LEVELS and name in batch._storage.groups
+    ]
+
+
 class Batch(DataMixin):
     """Graph-aware batch built on :class:`MultiLevelStorage`.
 
@@ -2476,9 +2494,9 @@ class Batch(DataMixin):
     ) -> _BatchSendHandle:
         """Non-blocking send of this batch to *dst*.
 
-        Transmits a 3-int metadata header (``num_graphs``, ``num_nodes``,
-        ``num_edges``), per-group segment lengths for segmented groups,
-        and the bulk tensor data via ``TensorDict.isend()``.
+        Transmits the fixed metadata header and built-in level data first.
+        Materialized custom level segment lengths and tensor payloads follow
+        in schema order. A zero-graph batch sends only the metadata header.
 
         Parameters
         ----------
@@ -2519,7 +2537,7 @@ class Batch(DataMixin):
         for name in ("atoms", "edges", "system"):
             grp = self._storage.groups.get(name)
             if grp is None:
-                tag_offset += 1
+                tag_offset += _transport_payload_tag_span(grp)
                 continue
             if isinstance(grp, SegmentedLevelStorage):
                 n = grp.num_elements()
@@ -2536,7 +2554,46 @@ class Batch(DataMixin):
                 handles.extend(result)
             else:
                 handles.append(result)
-            tag_offset += len(list(grp.keys())) + 1
+            tag_offset += _transport_payload_tag_span(grp)
+
+        custom_groups = _custom_transport_groups(self)
+        if custom_groups:
+            for _, custom_group in custom_groups:
+                if isinstance(custom_group, SegmentedLevelStorage):
+                    segment_lengths = custom_group.segment_lengths[
+                        : self.num_graphs
+                    ].contiguous()
+                    handles.append(
+                        dist.isend(
+                            segment_lengths,
+                            dst=dst,
+                            tag=tag + tag_offset,
+                            group=group,
+                        )
+                    )
+                    tag_offset += 1
+
+            for _, custom_group in custom_groups:
+                keys = list(custom_group.keys())
+                if not keys:
+                    tag_offset += _transport_payload_tag_span(custom_group)
+                    continue
+                n = (
+                    custom_group.num_elements()
+                    if isinstance(custom_group, SegmentedLevelStorage)
+                    else self.num_graphs
+                )
+                result = custom_group._data[:n].isend(
+                    dst=dst,
+                    init_tag=tag + tag_offset,
+                    group=group,
+                    return_early=True,
+                )
+                if isinstance(result, list):
+                    handles.extend(result)
+                else:
+                    handles.append(result)
+                tag_offset += _transport_payload_tag_span(custom_group)
 
         return _BatchSendHandle(handles)
 
@@ -2554,7 +2611,7 @@ class Batch(DataMixin):
 
         Posts non-blocking receives for the metadata header, then returns
         a :class:`_BatchRecvHandle` whose ``.wait()`` blocks until all
-        data arrives and reconstructs a :class:`Batch`.
+        data arrives and reconstructs a :class:`Batch` using *template*.
 
         Parameters
         ----------
@@ -2563,9 +2620,11 @@ class Batch(DataMixin):
         device : torch.device | str
             Device to receive tensors onto.
         template : Batch, optional
-            Template batch providing attribute keys, dtypes, and group
-            structure.  Required for the first receive; may be cached
-            by the caller for subsequent calls.
+            Template batch providing attribute keys, dtypes, group structure,
+            and custom level definitions. Required when receiving custom
+            levels and for the first structured receive. Its materialized
+            levels, field order, dtypes, and trailing shapes must match the
+            sender; callers may cache it for subsequent calls.
         tag : int
             Base message tag.
         group : ProcessGroup, optional
@@ -2634,7 +2693,9 @@ class Batch(DataMixin):
         device : torch.device | str
             Device to receive tensors onto.
         template : Batch, optional
-            Template batch.
+            Template batch providing attribute keys, dtypes, group structure,
+            and custom level definitions. Required when receiving custom
+            levels and must match the sender's materialized layout.
         tag : int
             Base message tag.
         group : ProcessGroup, optional
@@ -2643,6 +2704,7 @@ class Batch(DataMixin):
         Returns
         -------
         Batch
+
         """
         return cls.irecv(
             src=src,
@@ -2742,7 +2804,8 @@ class _BatchRecvHandle:
     device : torch.device
         Device to receive tensors onto.
     template : Batch | None
-        Template batch for attribute keys and dtypes.
+        Template batch for attribute keys, dtypes, group structure, and custom
+        level definitions.
     base_tag : int
         Base message tag (must match sender's *tag*).
     group : ProcessGroup | None
@@ -2776,6 +2839,7 @@ class _BatchRecvHandle:
         Batch
             The reconstructed batch.  If the sender sent a sentinel
             (0-graph batch), returns ``Batch.empty(...)`` with 0 capacity.
+
         """
         self._meta_handle.wait()
         num_graphs, num_nodes, num_edges = self._meta.tolist()
@@ -2793,6 +2857,14 @@ class _BatchRecvHandle:
                     num_edges=0,
                     template=self._template,
                     device=self._device,
+                    attr_map=self._template._storage.attr_map,
+                    level_capacities={
+                        name: 0
+                        for name, custom_group in _custom_transport_groups(
+                            self._template
+                        )
+                        if isinstance(custom_group, SegmentedLevelStorage)
+                    },
                 )
             return Batch(device=self._device)
 
@@ -2835,7 +2907,7 @@ class _BatchRecvHandle:
 
         groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
         attr_map = (
-            self._template._storage.attr_map
+            self._template._storage.attr_map.clone()
             if self._template is not None
             else LevelSchema()
         )
@@ -2851,16 +2923,12 @@ class _BatchRecvHandle:
                 else None
             )
             if template_grp is None:
-                tag_offset += (
-                    (len(list(template_grp.keys())) + 1)
-                    if template_grp is not None
-                    else 1
-                )
+                tag_offset += _transport_payload_tag_span(template_grp)
                 continue
 
             keys = list(template_grp.keys())
             if not keys:
-                tag_offset += 1
+                tag_offset += _transport_payload_tag_span(template_grp)
                 continue
 
             recv_data = {}
@@ -2884,7 +2952,7 @@ class _BatchRecvHandle:
                 handles.extend(td_handles)
             else:
                 handles.append(td_handles)
-            tag_offset += len(keys) + 1
+            tag_offset += _transport_payload_tag_span(template_grp)
 
             if name == "system":
                 storage = UniformLevelStorage(
@@ -2909,6 +2977,111 @@ class _BatchRecvHandle:
         for h in handles:
             if h is not None and hasattr(h, "wait"):
                 h.wait()
+
+        custom_groups = (
+            _custom_transport_groups(self._template)
+            if self._template is not None
+            else []
+        )
+        if custom_groups:
+            control_handles: list[Work | list[Work] | int | None] = []
+            custom_segment_lengths: dict[str, Tensor] = {}
+            for name, custom_group in custom_groups:
+                if isinstance(custom_group, SegmentedLevelStorage):
+                    segment_lengths = torch.empty(
+                        num_graphs, dtype=torch.int32, device=self._device
+                    )
+                    custom_segment_lengths[name] = segment_lengths
+                    control_handles.append(
+                        dist.irecv(
+                            segment_lengths,
+                            src=self._src,
+                            tag=self._base_tag + tag_offset,
+                            group=self._group,
+                        )
+                    )
+                    tag_offset += 1
+
+            for handle in control_handles:
+                if handle is not None and hasattr(handle, "wait"):
+                    handle.wait()
+
+            custom_payload_handles: list[Work | list[Work] | int | None] = []
+            for name, template_group in custom_groups:
+                keys = list(template_group.keys())
+                kind = attr_map.level_kind(name)
+                if isinstance(template_group, SegmentedLevelStorage):
+                    segment_lengths = custom_segment_lengths[name]
+                    capacity = int(segment_lengths.sum().item())
+                else:
+                    segment_lengths = None
+                    capacity = num_graphs
+
+                if not keys:
+                    tag_offset += _transport_payload_tag_span(template_group)
+                    if kind == "uniform":
+                        storage = UniformLevelStorage(
+                            data=None,
+                            device=self._device,
+                            validate=False,
+                            attr_map=attr_map,
+                        )
+                        storage._data = TensorDict(
+                            {}, batch_size=[capacity], device=self._device
+                        )
+                    else:
+                        storage = SegmentedLevelStorage(
+                            data=None,
+                            segment_lengths=segment_lengths,
+                            device=self._device,
+                            validate=False,
+                            attr_map=attr_map,
+                        )
+                    groups[name] = storage
+                    continue
+
+                recv_data = {
+                    key: torch.empty(
+                        (capacity,) + template_group[key].shape[1:],
+                        dtype=template_group[key].dtype,
+                        device=self._device,
+                    )
+                    for key in keys
+                }
+                recv_td = TensorDict(
+                    recv_data, batch_size=[capacity], device=self._device
+                )
+                payload_handles = recv_td.irecv(
+                    src=self._src,
+                    init_tag=self._base_tag + tag_offset,
+                    group=self._group,
+                    return_premature=True,
+                )
+                if isinstance(payload_handles, list):
+                    custom_payload_handles.extend(payload_handles)
+                else:
+                    custom_payload_handles.append(payload_handles)
+                tag_offset += _transport_payload_tag_span(template_group)
+
+                if kind == "uniform":
+                    groups[name] = UniformLevelStorage(
+                        data={key: recv_td[key] for key in keys},
+                        device=self._device,
+                        validate=False,
+                        attr_map=attr_map,
+                    )
+                else:
+                    groups[name] = SegmentedLevelStorage(
+                        data={key: recv_td[key] for key in keys},
+                        segment_lengths=segment_lengths,
+                        device=self._device,
+                        validate=False,
+                        attr_map=attr_map,
+                    )
+
+            for handle in custom_payload_handles:
+                if handle is not None and hasattr(handle, "wait"):
+                    handle.wait()
 
         mls = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
         return Batch._construct(

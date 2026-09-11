@@ -16,8 +16,13 @@
 
 from __future__ import annotations
 
+import socket
+from datetime import timedelta
+
 import pytest
 import torch
+from torch import distributed as dist
+from torch import multiprocessing as mp
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch, set_transient
@@ -103,6 +108,135 @@ def _custom_uniform_schema() -> LevelSchema:
     schema.add_level("metadata", segmented=False)
     schema.set("metadata_values", "metadata")
     return schema
+
+
+def _custom_transport_schema() -> LevelSchema:
+    """Build the mixed custom schema used by transport tests."""
+    schema = LevelSchema()
+    schema.add_level("metadata", segmented=False)
+    schema.add_level("molecules", segmented=True)
+    schema.add_level("fieldless", segmented=True)
+    schema.add_product_level("pairs", left="atoms", right="molecules")
+    schema.add_product_level("fieldless_pairs", left="atoms", right="fieldless")
+    schema.set("metadata_values", "metadata")
+    schema.set("molecule_values", "molecules")
+    schema.set("pair_values", "pairs")
+    schema.set("fieldless_pair_values", "fieldless_pairs")
+    return schema
+
+
+def _custom_transport_batch() -> Batch:
+    """Build a mixed custom batch with nonzero and zero custom segments."""
+    schema = _custom_transport_schema()
+    first = _minimal_atomic_data(2)
+    first.metadata_values = torch.tensor([[1.0]])
+    first.molecule_values = torch.tensor([[2.0], [3.0]])
+    first.pair_values = torch.arange(4, dtype=torch.float32).reshape(2, 2, 1)
+    first.fieldless_pair_values = torch.arange(6, dtype=torch.float32).reshape(2, 3, 1)
+
+    second = _minimal_atomic_data(3)
+    second.metadata_values = torch.tensor([[4.0]])
+    second.molecule_values = torch.empty(0, 1)
+    second.pair_values = torch.empty(3, 0, 1)
+    second.fieldless_pair_values = torch.empty(3, 0, 1)
+    return Batch.from_data_list([first, second], attr_map=schema)
+
+
+def _custom_transport_gloo_worker(
+    rank: int, world_size: int, port: int, sentinel: bool
+) -> None:
+    """Send or receive the custom transport fixture in a Gloo worker."""
+    dist.init_process_group(
+        backend="gloo",
+        init_method=f"tcp://127.0.0.1:{port}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=30),
+    )
+    try:
+        template = _custom_transport_batch()
+        if rank == 0:
+            outgoing = template
+            if sentinel:
+                outgoing = Batch.empty(
+                    num_systems=0,
+                    num_nodes=0,
+                    num_edges=0,
+                    template=template,
+                    attr_map=template._storage.attr_map,
+                    level_capacities={
+                        "molecules": 0,
+                        "fieldless": 0,
+                        "pairs": 0,
+                        "fieldless_pairs": 0,
+                    },
+                )
+            outgoing.send(dst=1, tag=37)
+        else:
+            received = Batch.recv(src=0, device="cpu", template=template, tag=37)
+            assert received._storage.attr_map is not template._storage.attr_map
+            assert (
+                received._storage.attr_map.level_names
+                == template._storage.attr_map.level_names
+            )
+            assert list(received._storage.groups) == list(template._storage.groups)
+            if sentinel:
+                assert received.num_graphs == 0
+                for name, group in template._storage.groups.items():
+                    received_group = received._storage.groups[name]
+                    assert type(received_group) is type(group)
+                    assert list(received_group.keys()) == list(group.keys())
+                    for key in group.keys():
+                        assert received_group[key].dtype == group[key].dtype
+                        assert received_group[key].shape[1:] == group[key].shape[1:]
+                    if isinstance(received_group, SegmentedLevelStorage):
+                        assert received_group.segment_lengths.numel() == 0
+                assert received._storage.attr_map.product_parents[
+                    "fieldless_pairs"
+                ] == (
+                    "atoms",
+                    "fieldless",
+                )
+            else:
+                assert received.level_keys == template.level_keys
+                assert received.keys == template.keys
+                torch.testing.assert_close(
+                    received.metadata_values, template.metadata_values
+                )
+                torch.testing.assert_close(
+                    received.molecule_values, template.molecule_values
+                )
+                torch.testing.assert_close(received.pair_values, template.pair_values)
+                torch.testing.assert_close(
+                    received.fieldless_pair_values, template.fieldless_pair_values
+                )
+                assert received._storage.groups[
+                    "molecules"
+                ].segment_lengths.tolist() == [2, 0]
+                assert received._storage.groups[
+                    "fieldless"
+                ].segment_lengths.tolist() == [3, 0]
+                for level in ("molecules", "fieldless", "pairs", "fieldless_pairs"):
+                    torch.testing.assert_close(
+                        received.level_ptr(level), template.level_ptr(level)
+                    )
+                first = received.get_data(0)
+                second = received.get_data(1)
+                assert first.fieldless_pair_values.shape == (2, 3, 1)
+                assert second.fieldless_pair_values.shape == (3, 0, 1)
+                torch.testing.assert_close(
+                    first.fieldless_pair_values,
+                    template.get_data(0).fieldless_pair_values,
+                )
+    finally:
+        dist.destroy_process_group()
+
+
+def _available_tcp_port() -> int:
+    """Reserve and return an available local TCP port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
 
 
 # -----------------------------------------------------------------------------
@@ -2013,6 +2147,176 @@ class TestBatchIsendIrecvTagAlignment:
         send_tags_after_meta = send_tags[1:]
         assert send_tags_after_meta == recv_tags, (
             f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
+        )
+
+
+class TestCustomBatchTransport:
+    def test_legacy_transport_tags_have_no_custom_extension(self):
+        from unittest.mock import MagicMock, patch
+
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        send_tags: list[int] = []
+        td_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            td_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=11)
+
+        assert send_tags == [11, 12]
+        assert td_tags == list(
+            range(14, 14 + len(list(batch._storage.groups["atoms"].keys())))
+        )
+
+    def test_custom_extension_starts_after_legacy_and_reserves_fieldless_slot(self):
+        from unittest.mock import MagicMock, patch
+
+        batch = _custom_transport_batch()
+        send_tags: list[int] = []
+        td_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            td_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=11)
+
+        legacy_end = 3
+        for name in ("atoms", "edges", "system"):
+            group = batch._storage.groups.get(name)
+            legacy_end += len(list(group.keys())) + 1 if group is not None else 1
+        custom_start = 11 + legacy_end
+
+        assert send_tags[:2] == [11, 12]
+        assert send_tags[2:] == [
+            custom_start,
+            custom_start + 1,
+            custom_start + 2,
+            custom_start + 3,
+        ]
+        assert custom_start + 8 not in td_tags
+        assert custom_start + 9 in td_tags
+        assert custom_start + 11 in td_tags
+
+    def test_custom_send_and_receive_tags_align_in_schema_order(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        batch = _custom_transport_batch()
+        send_tags: list[int] = []
+        recv_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            send_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=23)
+
+        def capture_irecv(tensor, *args, **kwargs):
+            recv_tags.append(kwargs["tag"])
+            if tensor.dtype == torch.int32:
+                tensor.zero_()
+            return MagicMock()
+
+        def capture_td_irecv(
+            self, src=None, init_tag=None, group=None, return_premature=False
+        ):
+            recv_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor(
+                [batch.num_graphs, batch.num_nodes, batch.num_edges], dtype=torch.int64
+            ),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=batch,
+            base_tag=23,
+            group=None,
+        )
+        with (
+            patch("torch.distributed.irecv", side_effect=capture_irecv),
+            patch("tensordict.TensorDict.irecv", capture_td_irecv),
+        ):
+            handle.wait()
+
+        assert send_tags[1:] == recv_tags
+
+    def test_custom_sentinel_preserves_schema_without_receives(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _custom_transport_batch()
+        handle = _BatchRecvHandle(
+            meta=torch.zeros(3, dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=0,
+            group=None,
+        )
+        with patch("torch.distributed.irecv") as mock_irecv:
+            received = handle.wait()
+
+        mock_irecv.assert_not_called()
+        assert received._storage.attr_map is not template._storage.attr_map
+        assert (
+            received._storage.attr_map.level_names
+            == template._storage.attr_map.level_names
+        )
+        assert list(received._storage.groups) == list(template._storage.groups)
+        assert received._storage.groups["fieldless"].segment_lengths.numel() == 0
+        assert received._storage.attr_map.product_parents["fieldless_pairs"] == (
+            "atoms",
+            "fieldless",
+        )
+
+    @pytest.mark.skipif(
+        not dist.is_available() or not dist.is_gloo_available(),
+        reason="gloo backend is required",
+    )
+    @pytest.mark.parametrize("sentinel", [False, True])
+    def test_custom_transport_round_trip_over_gloo(self, sentinel):
+        mp.spawn(
+            _custom_transport_gloo_worker,
+            args=(2, _available_tcp_port(), sentinel),
+            nprocs=2,
+            join=True,
         )
 
 
