@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Constructor specification utilities exposed through training."""
+
 from __future__ import annotations
 
 from nvalchemi.specs import (

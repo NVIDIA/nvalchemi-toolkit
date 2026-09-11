@@ -175,4 +175,3 @@ class TestInterpolatePaths:
 
         with pytest.raises(ValueError, match="same cell"):
             interpolate_paths(initial, final, 3)
-
