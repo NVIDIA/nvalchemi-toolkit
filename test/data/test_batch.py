@@ -24,6 +24,7 @@ from nvalchemi.data.batch import Batch, set_transient
 from nvalchemi.data.level_storage import (
     LevelSchema,
     MultiLevelStorage,
+    SegmentedLevelStorage,
     UniformLevelStorage,
 )
 
@@ -67,6 +68,41 @@ def _atomic_data_with_edges_and_system(
         neighbor_list=torch.zeros(num_edges, 2, dtype=torch.long, device=device),
         energy=torch.tensor([[0.0]], device=device),
     )
+
+
+def _custom_buffer_schema(*, fieldless_parent: bool = False) -> LevelSchema:
+    """Build a schema used by the custom buffer lifecycle tests."""
+    schema = LevelSchema()
+    schema.add_level("molecules", segmented=True)
+    schema.add_product_level("pairs", left="atoms", right="molecules")
+    if not fieldless_parent:
+        schema.set("molecule_values", "molecules")
+    schema.set("pair_values", "pairs")
+    return schema
+
+
+def _custom_buffer_data(
+    num_nodes: int,
+    num_molecules: int,
+    *,
+    fieldless_parent: bool = False,
+) -> AtomicData:
+    """Build one graph with custom segmented and product values."""
+    data = _minimal_atomic_data(num_nodes)
+    if not fieldless_parent:
+        data.molecule_values = torch.arange(num_molecules, dtype=torch.float32).reshape(
+            -1, 1
+        )
+    data.pair_values = torch.zeros(num_nodes, num_molecules, 1)
+    return data
+
+
+def _custom_uniform_schema() -> LevelSchema:
+    """Build a schema with one custom uniform field."""
+    schema = LevelSchema()
+    schema.add_level("metadata", segmented=False)
+    schema.set("metadata_values", "metadata")
+    return schema
 
 
 # -----------------------------------------------------------------------------
@@ -1530,6 +1566,294 @@ class TestBatchPutDefrag:
         assert trimmed.num_nodes == 7  # 4 + 3
         # Tensors are tight
         assert trimmed.positions.shape[0] == 7
+
+    def test_empty_allocates_custom_segmented_and_product_capacities(self):
+        schema = _custom_buffer_schema()
+        template = _custom_buffer_data(2, 3)
+        source = Batch.from_data_list([template], attr_map=schema)
+
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 10, "pairs": 20},
+        )
+
+        assert buffer._storage.attr_map is not source._storage.attr_map
+        assert buffer._storage.groups["molecules"]._data.shape[0] == 10
+        assert buffer._storage.groups["pairs"]._data.shape[0] == 20
+        assert buffer._storage.groups["molecules"].batch_ptr.shape[0] == 6
+
+    def test_empty_allocates_custom_uniform_from_num_systems(self):
+        schema = _custom_uniform_schema()
+        template = _minimal_atomic_data(2)
+        template.metadata_values = torch.tensor([[3.0]])
+        source = Batch.from_data_list([template], attr_map=schema)
+
+        buffer = Batch.empty(
+            num_systems=5,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+        )
+
+        group = buffer._storage.groups["metadata"]
+        assert isinstance(group, UniformLevelStorage)
+        assert group._data["metadata_values"].shape == (5, 1)
+        assert len(group) == 0
+
+    @pytest.mark.parametrize(
+        "capacities, error",
+        [
+            ({}, "Missing capacity"),
+            ({"unknown": 1}, "Unknown level"),
+            ({"atoms": 1}, "built-in"),
+            ({"molecules": 1.5}, "integer"),
+            ({"molecules": True}, "integer"),
+            ({"molecules": -1}, "non-negative"),
+        ],
+    )
+    def test_empty_rejects_invalid_custom_capacities(self, capacities, error):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list([_custom_buffer_data(2, 3)], attr_map=schema)
+        with pytest.raises((ValueError, TypeError), match=error):
+            Batch.empty(
+                num_systems=2,
+                num_nodes=10,
+                num_edges=0,
+                template=source,
+                level_capacities=capacities,
+            )
+
+    def test_empty_like_preserves_custom_layout_and_no_system_graph_capacity(self):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3),
+                _custom_buffer_data(3, 1),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 10, "pairs": 20},
+        )
+
+        clone = Batch.empty_like(buffer)
+
+        assert clone._storage.attr_map is not buffer._storage.attr_map
+        assert tuple(clone._storage.groups) == tuple(buffer._storage.groups)
+        assert clone._storage.groups["molecules"]._data.shape[0] == 10
+        assert clone._storage.groups["pairs"]._data.shape[0] == 20
+        assert clone._storage.groups["atoms"]._data.shape[0] == 20
+        assert clone._storage.groups["atoms"]._batch_ptr.shape[0] == 6
+
+    def test_empty_keeps_product_capacity_independent_of_parent_capacity(self):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 3)],
+            attr_map=schema,
+        )
+
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=100,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 3, "pairs": 7},
+        )
+
+        assert buffer._storage.groups["molecules"]._data.shape[0] == 3
+        assert buffer._storage.groups["pairs"]._data.shape[0] == 7
+        with pytest.raises(ValueError, match="pairs"):
+            Batch.empty(
+                num_systems=2,
+                num_nodes=100,
+                num_edges=0,
+                template=source,
+                level_capacities={"molecules": 3},
+            )
+
+    def test_trim_preserves_custom_uniform_segmented_product_and_fieldless_parent(
+        self,
+    ):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.add_level("molecules", segmented=True)
+        schema.add_level("fieldless", segmented=True)
+        schema.add_product_level("pairs", left="atoms", right="fieldless")
+        schema.set("metadata_values", "metadata")
+        schema.set("molecule_values", "molecules")
+        schema.set("pair_values", "pairs")
+
+        data_list = []
+        for num_nodes, num_molecules, num_fieldless in (
+            (2, 3, 2),
+            (4, 1, 3),
+            (1, 2, 0),
+        ):
+            data = _minimal_atomic_data(num_nodes)
+            data.metadata_values = torch.tensor([[float(num_nodes)]])
+            data.molecule_values = torch.arange(
+                num_molecules, dtype=torch.float32
+            ).reshape(-1, 1)
+            data.pair_values = torch.arange(
+                num_nodes * num_fieldless, dtype=torch.float32
+            ).reshape(num_nodes, num_fieldless, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+        trimmed = batch.trim(torch.tensor([True, False, True]))
+
+        assert trimmed is not None
+        assert trimmed.num_graphs == 1
+        assert isinstance(trimmed._storage.groups["metadata"], UniformLevelStorage)
+        assert isinstance(trimmed._storage.groups["molecules"], SegmentedLevelStorage)
+        assert isinstance(trimmed._storage.groups["fieldless"], SegmentedLevelStorage)
+        assert isinstance(trimmed._storage.groups["pairs"], SegmentedLevelStorage)
+        assert trimmed.metadata_values.shape == (1, 1)
+        assert trimmed.molecule_values.shape == (1, 1)
+        assert trimmed.level_ptr("fieldless").tolist() == [0, 3]
+        assert trimmed.level_ptr("pairs").tolist() == [0, 12]
+        assert trimmed.get_data(0).pair_values.shape == (4, 3, 1)
+
+    def test_put_combines_custom_rejection_before_legacy_copy(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 3},
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False, False]
+        assert buffer.num_graphs == 0
+        assert buffer.positions.eq(0).all()
+
+    def test_put_uniform_groups_share_occupancy_snapshot(self):
+        schema = _custom_uniform_schema()
+        data_list = []
+        for energy, metadata in ((10.0, 20.0), (30.0, 40.0)):
+            data = _atomic_data_with_system(2)
+            data.energy = torch.tensor([[energy]])
+            data.metadata_values = torch.tensor([[metadata]])
+            data_list.append(data)
+        source = Batch.from_data_list(data_list, attr_map=schema)
+        buffer = Batch.empty(
+            num_systems=3,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+        dest_mask = torch.tensor([True, False, True])
+
+        buffer.put(
+            source,
+            torch.ones(2, dtype=torch.bool),
+            copied_mask=copied,
+            dest_mask=dest_mask,
+        )
+
+        assert copied.tolist() == [True, False]
+        assert dest_mask.tolist() == [True, True, True]
+        assert buffer.energy[1].item() == 10.0
+        assert buffer.metadata_values[1].item() == 20.0
+        assert buffer.energy[0].item() == 0.0
+        assert buffer.energy[2].item() == 0.0
+
+    def test_put_and_defrag_support_product_and_fieldless_parent(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+                _custom_buffer_data(3, 1, fieldless_parent=True),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=3,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 20},
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.tensor([True, False]), copied_mask=copied)
+
+        assert copied.tolist() == [True, False]
+        assert buffer.num_graphs == 1
+        assert buffer._storage.groups["molecules"].batch_ptr[:2].tolist() == [0, 3]
+        assert buffer.pair_values.shape == (20, 1)
+        assert buffer.level_ptr("pairs")[:2].tolist() == [0, 6]
+        source.defrag(copied)
+        assert source.num_graphs == 1
+        assert source.level_ptr("pairs")[:2].tolist() == [0, 3]
+
+    def test_zero_clears_segment_caches_and_reuses_custom_buffer(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 3, fieldless_parent=True)], attr_map=schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 10},
+        )
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+        source.defrag()
+        buffer.zero()
+
+        assert buffer.num_graphs == 0
+        assert buffer._storage.groups["pairs"].batch_ptr.shape[0] == 4
+        assert not hasattr(buffer._storage.groups["pairs"], "_num_segments")
+        buffer.put(
+            Batch.from_data_list(
+                [_custom_buffer_data(2, 3, fieldless_parent=True)], attr_map=schema
+            ),
+            torch.ones(1, dtype=torch.bool),
+        )
+        assert buffer.num_graphs == 1
+
+    def test_put_mismatched_custom_layout_is_atomic(self):
+        target_schema = _custom_buffer_schema()
+        source_schema = _custom_buffer_schema()
+        source_schema.set("molecule_values", "molecules", dtype="float64")
+        target_source = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=target_schema
+        )
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=source_schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=target_source,
+            level_capacities={"molecules": 5, "pairs": 5},
+        )
+        with pytest.raises(ValueError, match="Custom put"):
+            buffer.put(source, torch.ones(1, dtype=torch.bool))
+        assert buffer.num_graphs == 0
+        assert buffer.positions.eq(0).all()
 
 
 class TestBatchRecvHandleWait:

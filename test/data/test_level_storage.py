@@ -1163,6 +1163,59 @@ class TestSegmentedLevelStorage:
         assert dest["x"][11].item() == 2.0
         assert len(dest) == 2
 
+    def test_fieldless_fit_put_and_defrag_use_segment_metadata(self):
+        src = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2, 3],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        source_mask = torch.tensor([True, False])
+        fit_mask = torch.zeros(2, dtype=torch.bool)
+
+        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.put(src, fit_mask)
+
+        assert fit_mask.tolist() == [True, False]
+        assert dest.segment_lengths.tolist() == [2]
+        assert dest.batch_ptr[:2].tolist() == [0, 2]
+        src.defrag()
+        assert src.segment_lengths.tolist() == [3]
+        assert src.batch_ptr[:2].tolist() == [0, 3]
+        assert dest.batch_ptr.shape[0] == 4
+
+    def test_fieldless_put_rejects_exactly_one_fieldless_storage(self):
+        fieldless = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        payload = SegmentedLevelStorage(
+            data={"x": torch.zeros(2, 1)},
+            segment_lengths=[2],
+            device="cpu",
+            validate=False,
+        )
+        with pytest.raises(ValueError, match="both source and destination"):
+            fieldless.put(payload, torch.ones(1, dtype=torch.bool))
+        with pytest.raises(ValueError, match="both source and destination"):
+            payload.compute_put_per_system_fit_mask(
+                fieldless,
+                torch.ones(1, dtype=torch.bool),
+                None,
+                torch.zeros(1, dtype=torch.bool),
+            )
+
 
 # -----------------------------------------------------------------------------
 # MultiLevelStorage

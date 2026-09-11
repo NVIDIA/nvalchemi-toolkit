@@ -1096,14 +1096,14 @@ class UniformLevelStorage(BaseLevelStorage):
                     )
 
     def __len__(self) -> int:
+        n = getattr(self, "_num_kept", None)
+        if n is not None:
+            return n
         if self._data.is_empty():
             # batch_size is set to [N] when constructed from a sized TensorDict
             # (e.g. the empty system group created by from_data_list).
             bs = self._data.batch_size
             return int(bs[0]) if bs else 0
-        n = getattr(self, "_num_kept", None)
-        if n is not None:
-            return n
         return self._data.shape[0]
 
     def num_elements(self) -> int:
@@ -1521,9 +1521,11 @@ class SegmentedLevelStorage(BaseLevelStorage):
             if batch_idx is not None
             else None
         )
+        requested_batch_ptr_capacity: int | None = None
         if batch_ptr is not None:
             self._batch_ptr = batch_ptr.to(device=self.device, dtype=torch.int32)
-        elif batch_ptr_capacity is not None and not self._data.is_empty():
+            requested_batch_ptr_capacity = self._batch_ptr.shape[0]
+        elif batch_ptr_capacity is not None:
             n_seg = len(self.segment_lengths)
             cap = max(batch_ptr_capacity, n_seg + 1)
             self._batch_ptr = torch.empty(cap, device=self.device, dtype=torch.int32)
@@ -1532,12 +1534,14 @@ class SegmentedLevelStorage(BaseLevelStorage):
             self._batch_ptr[1 : n_seg + 1] = cum
             if cap > n_seg + 1:
                 self._batch_ptr[n_seg + 1 :].fill_(cum[-1].item() if n_seg else 0)
+            requested_batch_ptr_capacity = cap
         else:
             self._batch_ptr = None
+        self._batch_ptr_capacity = requested_batch_ptr_capacity
         self._batch_ptr_np: np.ndarray | None = None
         self._segment_indices: Tensor | None = None
 
-        if not self._data.is_empty() and validate:
+        if validate:
             self._validate_initialization()
 
     # -- Validation ---------------------------------------------------------
@@ -1549,6 +1553,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(
                 f"Segment lengths cannot be negative: {self.segment_lengths}"
             )
+        if self._data.is_empty():
+            return
 
         segment_sum = self.segment_lengths.sum().item()
         if segment_sum != total_elements:
@@ -1650,12 +1656,27 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
     def _lazy_init_batch_ptr(self) -> None:
         if self._batch_ptr is None:
-            self._batch_ptr = torch.cat(
-                [
-                    torch.zeros(1, device=self.device, dtype=torch.int32),
-                    torch.cumsum(self.segment_lengths, dim=0),
-                ]
-            )
+            cumulative = torch.cumsum(self.segment_lengths, dim=0)
+            capacity = self._batch_ptr_capacity
+            if capacity is None:
+                self._batch_ptr = torch.cat(
+                    [
+                        torch.zeros(1, device=self.device, dtype=torch.int32),
+                        cumulative,
+                    ]
+                )
+            else:
+                capacity = max(capacity, len(self.segment_lengths) + 1)
+                self._batch_ptr = torch.empty(
+                    capacity, device=self.device, dtype=torch.int32
+                )
+                self._batch_ptr[0] = 0
+                self._batch_ptr[1 : len(cumulative) + 1] = cumulative
+                if capacity > len(cumulative) + 1:
+                    self._batch_ptr[len(cumulative) + 1 :].fill_(
+                        cumulative[-1].item() if len(cumulative) else 0
+                    )
+                self._batch_ptr_capacity = capacity
 
     def _lazy_init_segment_indices(self) -> None:
         if self._segment_indices is None:
@@ -1864,6 +1885,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             batch_ptr=cloned_bptr,
             validate=False,
         )
+        if cloned_bptr is None:
+            object.__setattr__(out, "_batch_ptr_capacity", self._batch_ptr_capacity)
         if getattr(self, "_num_segments", None) is not None:
             object.__setattr__(out, "_num_segments", self._num_segments)
             object.__setattr__(out, "_num_elements_kept", self._num_elements_kept)
@@ -1961,6 +1984,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
             return self
         extra = torch.zeros(n, device=self.device, dtype=self.segment_lengths.dtype)
         self.segment_lengths = torch.cat([self.segment_lengths, extra])
+        if self._batch_ptr_capacity is not None:
+            self._batch_ptr_capacity = max(
+                self._batch_ptr_capacity, len(self.segment_lengths) + 2
+            )
         self._batch_idx = None
         self._batch_ptr = None
         self._batch_ptr_np = None
@@ -1994,7 +2021,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         -----
         No data is copied. If this storage's batch_ptr has insufficient capacity for
         new segment boundaries, fit_mask is zeroed. Use with put after combining
-        (e.g. logical_and) with other levels' fit masks.
+        (e.g. logical_and) with other levels' fit masks. Fieldless source and
+        destination groups check pointer capacity only.
         """
         n_seg = len(source)
         if source_mask.shape[0] != n_seg:
@@ -2005,9 +2033,25 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(f"fit_mask shape {fit_mask.shape[0]} != {n_seg}")
         source_mask = source_mask.to(device=self.device, dtype=torch.bool)
         fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
+        source_fieldless = source._data.is_empty()
+        dest_fieldless = self._data.is_empty()
+        num_dest_segments = len(self)
+        if source_fieldless != dest_fieldless:
+            raise ValueError(
+                "Segmented put requires both source and destination to be "
+                "fieldless or both to contain payload data"
+            )
+        if source_fieldless:
+            source._lazy_init_batch_ptr()
+            self._lazy_init_batch_ptr()
+            min_batch_ptr_size = num_dest_segments + n_seg + 2
+            if self._batch_ptr.shape[0] < min_batch_ptr_size:
+                fit_mask.zero_()
+            else:
+                fit_mask.copy_(source_mask)
+            return
         source._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
-        num_dest_segments = len(self)
         min_batch_ptr_size = num_dest_segments + n_seg + 2
         if self._batch_ptr.shape[0] < min_batch_ptr_size:
             fit_mask.zero_()
@@ -2031,11 +2075,11 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put segments where mask[i] is True from src into this storage (buffer).
 
-        New segment boundaries are appended to this storage's batch_ptr. Only
-        float32 attributes are copied. Uses Warp buffer kernels; one host sync
-        after all attributes to update this storage's segment count. If
-        copied_mask is provided, it is updated in place with True for each
-        segment that was copied.
+        New segment boundaries are appended to this storage's batch_ptr.
+        Fieldless source and destination groups copy segment metadata only;
+        payload-bearing groups retain the existing float32 copy limitation.
+        If *copied_mask* is provided, it is updated in place for each copied
+        segment.
 
         Parameters
         ----------
@@ -2048,6 +2092,55 @@ class SegmentedLevelStorage(BaseLevelStorage):
             segments were actually copied. If None, stored on *src* as
             ``_copied_mask`` for use by :meth:`defrag`.
         """
+        source_fieldless = src._data.is_empty()
+        dest_fieldless = self._data.is_empty()
+        if source_fieldless != dest_fieldless:
+            raise ValueError(
+                "Segmented put requires both source and destination to be "
+                "fieldless or both to contain payload data"
+            )
+        if source_fieldless:
+            n_seg = len(src)
+            if mask.shape[0] != n_seg:
+                raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
+            mask = mask.to(device=self.device, dtype=torch.bool)
+            if copied_mask is not None:
+                if copied_mask.shape[0] != n_seg:
+                    raise ValueError(
+                        f"copied_mask shape {copied_mask.shape[0]} != {n_seg}"
+                    )
+                out_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+            else:
+                out_mask = torch.zeros(n_seg, device=self.device, dtype=torch.bool)
+                object.__setattr__(src, "_copied_mask", out_mask)
+            src._lazy_init_batch_ptr()
+            self._lazy_init_batch_ptr()
+            num_dest_segments = len(self)
+            min_batch_ptr_size = num_dest_segments + n_seg + 2
+            if self._batch_ptr.shape[0] < min_batch_ptr_size:
+                out_mask.zero_()
+                return
+            source_lengths = src.segment_lengths[:n_seg].to(self.device)
+            selected_lengths = source_lengths[mask]
+            old_lengths = self.segment_lengths[:num_dest_segments]
+            self.segment_lengths = torch.cat([old_lengths, selected_lengths])
+            n_new = len(self.segment_lengths)
+            self._batch_ptr[0] = 0
+            cumulative = torch.cumsum(self.segment_lengths, dim=0)
+            self._batch_ptr[1 : n_new + 1] = cumulative
+            if self._batch_ptr.shape[0] > n_new + 1:
+                self._batch_ptr[n_new + 1 :].fill_(
+                    cumulative[-1].item() if n_new else 0
+                )
+            out_mask.copy_(mask)
+            self._batch_idx = None
+            self._batch_ptr_np = None
+            self._segment_indices = None
+            if hasattr(self, "_num_segments"):
+                object.__delattr__(self, "_num_segments")
+            if hasattr(self, "_num_elements_kept"):
+                object.__delattr__(self, "_num_elements_kept")
+            return
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
         common = set(self._data.keys()) & set(src._data.keys())
@@ -2104,9 +2197,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ) -> SegmentedLevelStorage:
         """Defrag in-place: remove segments where copied_mask[i] is True.
 
-        Kept segments move to the front; batch_ptr is updated in place (tail
-        filled so batch_ptr[-1] == total_kept_elems); segment_lengths derived
-        from it; no trim. All attributes must be float32 (uses Warp kernels).
+        Kept segments move to the front and pointer metadata is updated in
+        place without trimming allocated capacity. Fieldless groups compact
+        only segment metadata; payload-bearing groups retain the existing
+        storage-kernel dtype limitations.
 
         Parameters
         ----------
@@ -2120,6 +2214,36 @@ class SegmentedLevelStorage(BaseLevelStorage):
             For method chaining.
         """
         if self._data.is_empty():
+            n_seg = len(self)
+            if copied_mask is None:
+                copied_mask = getattr(self, "_copied_mask", None)
+                if copied_mask is None:
+                    raise ValueError("defrag requires copied_mask or a prior put")
+            else:
+                copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+            if copied_mask.shape[0] != n_seg:
+                raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
+            kept_lengths = self.segment_lengths[:n_seg][~copied_mask]
+            self.segment_lengths = kept_lengths
+            self._lazy_init_batch_ptr()
+            self._batch_ptr[0] = 0
+            cumulative = torch.cumsum(kept_lengths, dim=0)
+            self._batch_ptr[1 : len(cumulative) + 1] = cumulative
+            if self._batch_ptr.shape[0] > len(cumulative) + 1:
+                self._batch_ptr[len(cumulative) + 1 :].fill_(
+                    cumulative[-1].item() if len(cumulative) else 0
+                )
+            object.__setattr__(self, "_num_segments", len(kept_lengths))
+            object.__setattr__(
+                self,
+                "_num_elements_kept",
+                int(cumulative[-1].item()) if len(cumulative) else 0,
+            )
+            self._batch_idx = None
+            self._batch_ptr_np = None
+            self._segment_indices = None
+            if hasattr(self, "_copied_mask"):
+                object.__delattr__(self, "_copied_mask")
             return self
         n_seg = len(self)
         if copied_mask is None:
@@ -2133,12 +2257,16 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._lazy_init_batch_ptr()
         keys = list(self._data.keys())
         original_bp = self._batch_ptr.clone()
-        num_kept_t = defrag_segmented(self._data[keys[0]], self._batch_ptr, copied_mask)
+        num_kept_t = defrag_segmented(
+            self._data[keys[0]], self._batch_ptr, copied_mask.clone()
+        )
         for key in keys[1:]:
-            defrag_segmented(self._data[key], original_bp.clone(), copied_mask)
+            defrag_segmented(self._data[key], original_bp.clone(), copied_mask.clone())
 
-        self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
         n_kept = int(num_kept_t.item())
+        self.segment_lengths = (
+            self._batch_ptr[1 : n_kept + 1] - self._batch_ptr[:n_kept]
+        )
         object.__setattr__(self, "_num_segments", n_kept)
         object.__setattr__(
             self, "_num_elements_kept", int(self._batch_ptr[n_kept].item())
