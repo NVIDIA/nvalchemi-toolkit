@@ -21,7 +21,11 @@ import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch, set_transient
-from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
+from nvalchemi.data.level_storage import (
+    LevelSchema,
+    MultiLevelStorage,
+    UniformLevelStorage,
+)
 
 
 def _minimal_atomic_data(
@@ -116,6 +120,62 @@ class TestBatchConstruction:
         assert batch.num_nodes == 0
         assert batch.num_edges == 0
 
+    def test_level_ptr_rejects_unknown_and_unresolved_levels(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(KeyError, match="missing"):
+            batch.level_ptr("missing")
+        with pytest.raises(KeyError, match="samples"):
+            batch.level_ptr("samples")
+        assert "samples" not in batch.level_keys
+
+    def test_level_ptr_resolves_fieldless_uniform_and_builtin_levels(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        assert batch.level_keys["metadata"] == set()
+        assert batch.level_ptr("metadata").tolist() == [0, 1, 2]
+        assert batch.level_keys["edges"] == set()
+        assert batch.level_ptr("edges").tolist() == [0, 0, 0]
+
+    def test_level_ptr_resolves_fieldless_builtin_atoms(self):
+        system = UniformLevelStorage(
+            data={"energy": torch.zeros(2, 1)}, device="cpu", validate=False
+        )
+        storage = MultiLevelStorage(
+            groups={"system": system}, attr_map=None, validate=False
+        )
+        batch = Batch._construct(
+            device=torch.device("cpu"), keys={"system": {"energy"}}, storage=storage
+        )
+
+        assert batch.level_keys["atoms"] == set()
+        assert batch.level_ptr("atoms").tolist() == [0, 0, 0]
+
+    def test_level_ptr_derives_fieldless_product_from_resolved_parents(self):
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.set("left_values", "left_items")
+        schema.set("right_values", "right_items")
+        data_list = []
+        for num_left, num_right in ((2, 3), (1, 2)):
+            data = _minimal_atomic_data(2)
+            data.left_values = torch.zeros(num_left, 1)
+            data.right_values = torch.zeros(num_right, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_keys["left_right"] == set()
+        assert batch.level_ptr("left_right").tolist() == [0, 6, 8]
+
     def test_batch_with_system_only_storage(self):
         """Batch built with only system group: batch, ptr, num_nodes_list, etc. hit None branches."""
         system = UniformLevelStorage(
@@ -144,6 +204,267 @@ class TestBatchConstruction:
         assert batch.num_edges_per_graph.shape == (0,)
         assert batch.max_num_nodes == 0
         assert batch.batch_size == 2
+
+    def test_custom_levels_pack_in_schema_order_and_round_trip(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("molecule_features", "molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        data_list = []
+        for num_nodes, num_molecules in ((2, 3), (4, 1)):
+            data = _minimal_atomic_data(num_nodes)
+            data.molecule_features = torch.arange(num_molecules).reshape(-1, 1)
+            data.pair_features = torch.arange(num_nodes * num_molecules).reshape(
+                num_nodes, num_molecules, 1
+            )
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert list(batch._storage.groups) == ["atoms", "molecules", "atom_molecule"]
+        assert list(batch.level_keys) == [
+            "atoms",
+            "edges",
+            "system",
+            "molecules",
+            "atom_molecule",
+        ]
+        assert batch.level_keys["molecules"] == {"molecule_features"}
+        assert batch.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert batch.level_ptr("atom_molecule").tolist() == [0, 6, 10]
+
+        output = batch.get_data(1)
+        assert output.molecule_features.shape == (1, 1)
+        assert output.pair_features.shape == (4, 1, 1)
+        assert output._level_schema.level_kind("atom_molecule") == "product"
+        cloned_output = output.clone()
+        assert cloned_output._level_schema is not output._level_schema
+        moved_output = output.to("cpu")
+        assert moved_output._level_schema is not output._level_schema
+        rebatch = Batch.from_data_list([output])
+        assert rebatch.level_keys == batch.level_keys
+
+        selected = batch[[1, 0]]
+        assert selected.level_ptr("atom_molecule").tolist() == [0, 4, 10]
+        assert selected.get_data(0).pair_features.shape == (4, 1, 1)
+
+    def test_product_with_fieldless_parent_round_trips_logical_shape(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        data_list = []
+        for num_nodes, num_molecules in ((2, 3), (4, 1)):
+            data = _minimal_atomic_data(num_nodes)
+            data.pair_features = torch.zeros(num_nodes, num_molecules, 2)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_keys["molecules"] == set()
+        assert batch.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert batch.pair_features.shape == (10, 2)
+        assert batch.get_data(0).pair_features.shape == (2, 3, 2)
+        assert batch.get_data(1).pair_features.shape == (4, 1, 2)
+        assert Batch.from_data_list(batch.to_data_list()).level_keys == batch.level_keys
+
+    def test_self_product_uses_equal_logical_axes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.set("pair_features", "atom_atom")
+        data_list = []
+        for num_nodes in (2, 3):
+            data = _minimal_atomic_data(num_nodes)
+            data.pair_features = torch.zeros(num_nodes, num_nodes, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_ptr("atom_atom").tolist() == [0, 4, 13]
+        assert batch.get_data(0).pair_features.shape == (2, 2, 1)
+        assert batch.get_data(1).pair_features.shape == (3, 3, 1)
+
+    def test_custom_levels_complete_three_system_lifecycle(self):
+        schema = LevelSchema()
+        schema.add_level("empty", segmented=True)
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.add_level("A", segmented=True)
+        schema.add_product_level("A_A", left="A", right="A")
+        for field, level in (
+            ("empty_values", "empty"),
+            ("left_values", "left_items"),
+            ("right_values", "right_items"),
+            ("atom_pairs", "atom_atom"),
+            ("cross_values", "left_right"),
+            ("A_values", "A"),
+            ("A_pairs", "A_A"),
+        ):
+            schema.set(field, level)
+
+        atom_counts = [2, 4, 1]
+        left_counts = [2, 4, 1]
+        right_counts = [3, 1, 2]
+        data_list = []
+        for index, (num_atoms, num_left, num_right) in enumerate(
+            zip(atom_counts, left_counts, right_counts, strict=True)
+        ):
+            data = _minimal_atomic_data(num_atoms)
+            a_count = num_atoms + 1
+            data.empty_values = torch.empty(0, 2)
+            data.left_values = torch.arange(index * 10, index * 10 + num_left).reshape(
+                -1, 1
+            )
+            data.right_values = torch.arange(
+                index * 10, index * 10 + num_right
+            ).reshape(-1, 1)
+            data.atom_pairs = torch.arange(num_atoms * num_atoms).reshape(
+                num_atoms, num_atoms, 1
+            )
+            data.cross_values = torch.arange(num_left * num_right).reshape(
+                num_left, num_right, 1
+            )
+            data.A_values = torch.arange(a_count).reshape(-1, 1)
+            data.A_pairs = torch.arange(a_count * a_count).reshape(a_count, a_count, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+        expected_ptrs = {
+            "atoms": [0, 2, 6, 7],
+            "empty": [0, 0, 0, 0],
+            "left_items": [0, 2, 6, 7],
+            "right_items": [0, 3, 4, 6],
+            "atom_atom": [0, 4, 20, 21],
+            "left_right": [0, 6, 10, 12],
+            "A": [0, 3, 8, 10],
+            "A_A": [0, 9, 34, 38],
+        }
+        for level, expected in expected_ptrs.items():
+            assert batch.level_ptr(level).tolist() == expected
+        assert batch.level_ptr("system").tolist() == [0, 1, 2, 3]
+        assert batch.level_keys["empty"] == {"empty_values"}
+        assert batch.empty_values.shape == (0, 2)
+        assert batch.left_values.shape == (7, 1)
+        assert batch.left_values[:, 0].tolist() == [0, 1, 10, 11, 12, 13, 20]
+        assert batch.right_values.shape == (6, 1)
+        assert batch.atom_pairs.shape == (21, 1)
+        assert batch.cross_values.shape == (12, 1)
+        assert batch.A_pairs.shape == (38, 1)
+
+        expected_shapes = [
+            ((2, 2, 1), (2, 3, 1), (3, 3, 1)),
+            ((4, 4, 1), (4, 1, 1), (5, 5, 1)),
+            ((1, 1, 1), (1, 2, 1), (2, 2, 1)),
+        ]
+        for index, (atom_pair_shape, cross_shape, a_pair_shape) in enumerate(
+            expected_shapes
+        ):
+            data = batch.get_data(index)
+            assert data.empty_values.shape == (0, 2)
+            assert data.atom_pairs.shape == atom_pair_shape
+            assert data.cross_values.shape == cross_shape
+            assert data.A_pairs.shape == a_pair_shape
+
+        rebatch = Batch.from_data_list(batch.to_data_list())
+        assert rebatch.level_keys == batch.level_keys
+        for level, expected in expected_ptrs.items():
+            assert rebatch.level_ptr(level).tolist() == expected
+
+        selected = batch.index_select([2, 0, 2])
+        selected_ptrs = {
+            "atoms": [0, 1, 3, 4],
+            "empty": [0, 0, 0, 0],
+            "left_items": [0, 1, 3, 4],
+            "right_items": [0, 2, 5, 7],
+            "atom_atom": [0, 1, 5, 6],
+            "left_right": [0, 2, 8, 10],
+            "A": [0, 2, 5, 7],
+            "A_A": [0, 4, 13, 17],
+        }
+        for level, expected in selected_ptrs.items():
+            assert selected.level_ptr(level).tolist() == expected
+        assert selected.get_data(0).atom_pairs.shape == (1, 1, 1)
+        assert selected.get_data(1).cross_values.shape == (2, 3, 1)
+        assert selected.get_data(2).A_pairs.shape == (2, 2, 1)
+
+        cloned = batch.clone()
+        assert cloned._storage.attr_map is not batch._storage.attr_map
+        cloned.add_key(
+            "clone_values",
+            [
+                torch.zeros(2, 1),
+                torch.zeros(4, 1),
+                torch.zeros(1, 1),
+            ],
+            level="left_items",
+        )
+        assert "clone_values" in cloned.level_keys["left_items"]
+        assert "clone_values" not in batch.level_keys["left_items"]
+
+        cpu = batch.cpu()
+        assert cpu.device == torch.device("cpu")
+        assert cpu.contiguous() is cpu
+        assert all(value.is_contiguous() for _, value in cpu)
+
+    def test_product_rank_and_cardinality_rejections(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        rank_error = _minimal_atomic_data(2)
+        rank_error.pair_features = torch.zeros(6)
+        with pytest.raises(ValueError, match="rank >= 2"):
+            Batch.from_data_list([rank_error], attr_map=schema)
+
+        cardinality_error = _minimal_atomic_data(2)
+        cardinality_error.pair_features = torch.zeros(3, 2, 1)
+        with pytest.raises(ValueError, match="left axis cardinalities"):
+            Batch.from_data_list([cardinality_error], attr_map=schema)
+
+    def test_product_rejects_inconsistent_axes_and_payload_shapes(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(2)
+        first.pair_features = torch.zeros(2, 3, 1)
+        second.pair_features = torch.zeros(2, 3, 2)
+        with pytest.raises(ValueError, match="trailing shape"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_cardinality_mismatch_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        schema.set("other_features", "samples")
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(3)
+        first.sample_features = torch.zeros(2, 1)
+        second.sample_features = torch.zeros(3, 1)
+        first.other_features = torch.zeros(2, 1)
+        second.other_features = torch.zeros(4, 1)
+
+        with pytest.raises(ValueError, match="cardinalities"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_edge_cardinality_inference_stays_local_to_batch(self):
+        data = _minimal_atomic_data(2)
+        data.add_edge_property("edge_weights", torch.zeros(3, 1))
+
+        assert data.num_edges == 0
+        batch = Batch.from_data_list([data])
+
+        assert batch.num_edges_list == [3]
+        assert batch.get_data(0).edge_weights.shape == (3, 1)
+        assert batch.get_data(0).num_edges == 0
 
 
 # -----------------------------------------------------------------------------
@@ -517,6 +838,185 @@ class TestBatchMutation:
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
         with pytest.raises(ValueError, match="Group 'edges' not found"):
             batch.add_key("edge_attr", [torch.randn(1, 4)], level="edge")
+
+    def test_add_key_registered_custom_level(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+        schema.set("sample_features", "samples")
+
+        batch.add_key(
+            "sample_features",
+            [torch.zeros(4, 2), torch.ones(1, 2)],
+            level="samples",
+        )
+
+        assert batch.level_keys["samples"] == {"sample_features"}
+        assert batch.level_ptr("samples").tolist() == [0, 4, 5]
+        assert batch.sample_features.shape == (5, 2)
+
+    def test_add_key_registered_product_level_uses_logical_axes(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        batch.add_key(
+            "pair_features",
+            [torch.zeros(2, 4, 1), torch.ones(3, 1, 1)],
+            level="atom_sample",
+        )
+
+        assert batch.level_keys["samples"] == set()
+        assert batch.level_ptr("samples").tolist() == [0, 4, 5]
+        assert batch.level_ptr("atom_sample").tolist() == [0, 8, 11]
+        assert batch.get_data(0).pair_features.shape == (2, 4, 1)
+        assert batch.get_data(1).pair_features.shape == (3, 1, 1)
+
+    def test_add_key_custom_overwrite_and_unknown_level_fallback(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        batch.add_key(
+            "sample_values",
+            [torch.zeros(2, 1), torch.ones(3, 1)],
+            level="samples",
+        )
+        batch.add_key(
+            "sample_values",
+            [torch.full((2, 1), 2), torch.full((3, 1), 3)],
+            level="samples",
+            overwrite=True,
+        )
+        assert batch.sample_values[:, 0].tolist() == [2, 2, 3, 3, 3]
+        assert batch.level_ptr("samples").tolist() == [0, 2, 5]
+
+        batch.add_key(
+            "legacy_values",
+            [torch.zeros(2, 1), torch.ones(3, 1)],
+            level="unregistered-level",
+        )
+        assert "legacy_values" in batch.level_keys["atoms"]
+        assert batch.legacy_values.shape == (5, 1)
+
+    def test_append_custom_product_with_fieldless_parent(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        schema.set("pair_values", "atom_sample")
+
+        def make_batch(num_atoms: int, num_samples: int, value: int) -> Batch:
+            data = _minimal_atomic_data(num_atoms)
+            data.pair_values = torch.full((num_atoms, num_samples, 1), value)
+            return Batch.from_data_list([data], attr_map=schema)
+
+        left = make_batch(2, 3, 1)
+        right = make_batch(1, 2, 2)
+        right_samples_ptr = right.level_ptr("samples").clone()
+
+        left.append(right)
+
+        assert left.level_keys["samples"] == set()
+        assert left.level_ptr("samples").tolist() == [0, 3, 5]
+        assert left.level_ptr("atom_sample").tolist() == [0, 6, 8]
+        assert left.get_data(1).pair_values.shape == (1, 2, 1)
+        assert right.level_ptr("samples").tolist() == right_samples_ptr.tolist()
+
+    @pytest.mark.parametrize(
+        "other_parents,other_counts",
+        [
+            (("right", "left"), {"left": 3, "right": 2, "other": 4}),
+            (("left", "other"), {"left": 2, "right": 4, "other": 3}),
+        ],
+        ids=["reversed-parents", "different-parents"],
+    )
+    def test_append_rejects_same_product_name_with_different_parents(
+        self, other_parents, other_counts
+    ):
+        def make_schema(parents: tuple[str, str]) -> LevelSchema:
+            schema = LevelSchema()
+            for name in ("left", "right", "other"):
+                schema.add_level(name, segmented=True)
+            schema.add_product_level("pairs", left=parents[0], right=parents[1])
+            for field, level in (
+                ("left_values", "left"),
+                ("right_values", "right"),
+                ("other_values", "other"),
+                ("pair_values", "pairs"),
+            ):
+                schema.set(field, level)
+            return schema
+
+        def make_batch(schema: LevelSchema, counts: dict[str, int]) -> Batch:
+            data = _minimal_atomic_data(2)
+            data.left_values = torch.zeros(counts["left"], 1)
+            data.right_values = torch.zeros(counts["right"], 1)
+            data.other_values = torch.zeros(counts["other"], 1)
+            data.pair_values = torch.zeros(2, 3, 1)
+            return Batch.from_data_list([data], attr_map=schema)
+
+        receiver = make_batch(
+            make_schema(("left", "right")), {"left": 2, "right": 3, "other": 4}
+        )
+        other = make_batch(make_schema(other_parents), other_counts)
+        receiver_before = receiver.pair_values.clone()
+        other_before = other.pair_values.clone()
+        receiver_ptr_before = receiver.level_ptr("pairs").clone()
+
+        with pytest.raises(ValueError, match="definitions"):
+            receiver.append(other)
+
+        torch.testing.assert_close(receiver.pair_values, receiver_before)
+        torch.testing.assert_close(other.pair_values, other_before)
+        assert receiver.level_ptr("pairs").tolist() == receiver_ptr_before.tolist()
+
+    def test_append_rejects_incompatible_custom_fields_before_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        first = _minimal_atomic_data(2)
+        first.sample_features = torch.zeros(2, 1)
+        second = _minimal_atomic_data(2)
+        second.sample_features = torch.zeros(3, 1)
+        left = Batch.from_data_list([first], attr_map=schema)
+
+        other_schema = schema.clone()
+        other_schema.set("other_features", "samples")
+        second.other_features = torch.zeros(3, 1)
+        right = Batch.from_data_list([second], attr_map=other_schema)
+        left_before = left.sample_features.clone()
+        right_before = right.other_features.clone()
+
+        with pytest.raises(ValueError, match="field sets"):
+            left.append(right)
+        assert left.num_graphs == 1
+        torch.testing.assert_close(left.sample_features, left_before)
+        torch.testing.assert_close(right.other_features, right_before)
+
+    def test_append_rejects_custom_trailing_shape_before_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        left_data = _minimal_atomic_data(2)
+        left_data.sample_features = torch.zeros(2, 1)
+        right_data = _minimal_atomic_data(3)
+        right_data.sample_features = torch.zeros(3, 2)
+        left = Batch.from_data_list([left_data], attr_map=schema)
+        right = Batch.from_data_list([right_data], attr_map=schema)
+        left_before = left.sample_features.clone()
+        right_before = right.sample_features.clone()
+
+        with pytest.raises(ValueError, match="trailing shapes"):
+            left.append(right)
+        torch.testing.assert_close(left.sample_features, left_before)
+        torch.testing.assert_close(right.sample_features, right_before)
 
     def test_append_preserves_other_edge_index(self):
         """append() must not mutate the other batch's neighbor_list."""
@@ -1340,6 +1840,70 @@ class TestBatchFromRawDicts:
         # field_levels is provided but doesn't mention unknown_scalar
         batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
         assert "unknown_scalar" in batch.keys["system"]
+
+    def test_schema_routes_custom_raw_levels_and_field_levels_override(self) -> None:
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "sample_values": torch.zeros(3, 1),
+                "system_value": torch.zeros(1, 1),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "sample_values": torch.ones(1, 1),
+                "system_value": torch.ones(1, 1),
+            },
+        ]
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+        assert batch.level_ptr("samples").tolist() == [0, 3, 4]
+
+        override_schema = schema.clone()
+        override_schema.set("system_value", "samples")
+        overridden = Batch.from_raw_dicts(
+            raw,
+            attr_map=override_schema,
+            field_levels={"system_value": "system"},
+        )
+        assert "system_value" in overridden.level_keys["system"]
+        assert (
+            "system_value"
+            in Batch.from_data_list([overridden.get_data(0)]).level_keys["system"]
+        )
+
+    def test_raw_product_uses_logical_axes_and_round_trips(self) -> None:
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.set("pair_values", "left_right")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "pair_values": torch.zeros(2, 3, 4),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "pair_values": torch.ones(1, 2, 4),
+            },
+        ]
+
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+
+        assert batch.level_ptr("left_items").tolist() == [0, 2, 3]
+        assert batch.level_ptr("right_items").tolist() == [0, 3, 5]
+        assert batch.level_ptr("left_right").tolist() == [0, 6, 8]
+        assert batch.get_data(0).pair_values.shape == (2, 3, 4)
+        assert batch.get_data(1).pair_values.shape == (1, 2, 4)
+        rebatch = Batch.from_data_list(batch.to_data_list())
+        assert rebatch.level_keys["left_right"] == {"pair_values"}
+        assert rebatch.level_ptr("left_right").tolist() == [0, 6, 8]
 
 
 class TestSetTransient:
