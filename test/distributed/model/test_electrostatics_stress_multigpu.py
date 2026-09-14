@@ -38,11 +38,6 @@ WORLD_SIZE = 2
 N_SIDE = 10
 BOX = 28.0
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _build_wrapper(kind: str, cutoff: float):
     """Wrapper of the requested flavour on the supported (non-analytic) path."""
@@ -149,7 +144,7 @@ def _stress_equivalence_worker(rank: int, world_size: int, kind: str) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 @pytest.mark.parametrize("kind", ["ewald", "pme"])
 def test_stress_equivalence_2ranks(kind):
     """Halo-DD stress matches single-GPU for Ewald and PME."""

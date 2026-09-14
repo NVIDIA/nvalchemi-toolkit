@@ -21,6 +21,7 @@ from __future__ import annotations
 import csv
 from enum import Enum
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -465,6 +466,24 @@ class TestLoggingHook:
     # ------------------------------------------------------------------
     # Snapshot decoupling (regression: CUDA stream race → -inf fmax)
     # ------------------------------------------------------------------
+
+    def test_cuda_snapshot_records_logging_stream(self, gpu_device: str) -> None:
+        """CUDA snapshot storage must be recorded on the D2H copy stream."""
+        hook, _ = self._capture_hook(
+            custom_scalars={"cpu_value": lambda _ctx: torch.ones(2)}
+        )
+        batch = _make_batch(n_graphs=2, device=gpu_device)
+        dynamics = _make_dynamics(device=gpu_device)
+        ctx = _make_ctx(batch, dynamics)
+
+        with patch.object(torch.Tensor, "record_stream", autospec=True) as record:
+            with hook:
+                stream = hook._stream
+                assert stream is not None
+                hook(ctx, DynamicsStage.AFTER_STEP)
+
+        assert record.call_count == 6
+        assert all(call.args == (stream,) for call in record.call_args_list)
 
     def test_snapshot_decouples_energy_from_batch(self, device: str) -> None:
         """Snapshot must break view-aliasing between td["energy"] and batch.energy.

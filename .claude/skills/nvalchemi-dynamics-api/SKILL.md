@@ -164,6 +164,20 @@ with fused:  # lazy compilation on context entry
     result = fused.run(batch)
 ```
 
+### CUDA streams: `with` vs bare `run()`
+
+Prefer to use context manager:
+
+```python
+with dynamics:
+    dynamics.run(batch)
+```
+
+As best pattern, even without explicit CUDA stream usage, as it in turn
+supports `compile(mode="reduce-overhead")`
+
+Calling `dynamics.run(batch)` without context manager will reuse the current stream.
+
 ### How it works
 
 1. Each sample has a `status` field (integer)

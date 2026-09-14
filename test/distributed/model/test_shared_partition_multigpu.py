@@ -47,11 +47,6 @@ WORLD_SIZE = 2
 _A1, _A2, _S8 = 0.4289, 4.4407, 0.7875
 _CN_SKIN = 4.0  # CN-depth halo margin (DFTD3 ghost CN completeness)
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _build_lattice(dtype: torch.dtype = torch.float32, seed: int = 0):
     # Non-degenerate: max cutoff 5 Å + CN-skin 4 Å -> ghost 9 Å, so a 2-rank
@@ -207,7 +202,7 @@ def _shared_partition_worker(rank: int, world_size: int) -> None:
         )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_shared_partition_per_model_halo_2ranks():
     """One owned partition drives two different-cutoff models, each exact."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")

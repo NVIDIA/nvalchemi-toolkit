@@ -64,11 +64,14 @@ uv sync --extra cu13 --group docs
 ```
 
 Optional extras include `aimnet`, `ase`, `cu12`, `cu13`, `mace`, `pymatgen`,
-`tensorboard`, and `uma`. `uma` conflicts with the CUDA/MACE stack and should be
-resolved in its own environment, as CI does with:
+`tensorboard`, `uma`, `uma-cu12`, and `uma-cu13`. Use a standalone UMA CUDA
+variant rather than combining `uma` with `cu12` or `cu13`; UMA also conflicts
+with MACE and the default `build` group. Resolve it in its own environment, as
+CI does with:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma-cu12 --extra ase --no-group build
 ```
 
 ## Build, Lint, Test
@@ -168,6 +171,8 @@ be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
 - CUDA-dependent tests guard with `torch.cuda.is_available()` (see
   `test/conftest.py`) and skip cleanly on CPU-only machines; the rest of the
   suite runs on CPU.
+- Tests needing 2 GPUs must be marked with `@pytest.mark.multigpu`; the 2-GPU
+  CI job selects on it. Gloo/CPU multi-rank tests are not `multigpu`.
 - Add or update regression tests for behavior changes, especially model adapters,
   dynamics hooks, data serialization, training specs, and optional-dependency
   paths.

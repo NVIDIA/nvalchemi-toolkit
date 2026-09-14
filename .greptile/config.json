@@ -1,0 +1,245 @@
+{
+  "fixWithAI": false,
+  "commentTypes": [
+    "logic",
+    "syntax",
+    "style"
+  ],
+  "ignorePatterns": ".greptile/**\n",
+  "excludeAuthors": [
+    "dependabot[bot]"
+  ],
+  "summarySection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": false
+  },
+  "confidenceScoreSection": {
+    "included": false,
+    "defaultOpen": false,
+    "collapsible": false
+  },
+  "sequenceDiagramSection": {
+    "included": false,
+    "defaultOpen": false,
+    "collapsible": false
+  },
+  "instructions": "In addition to the regular code review, run every applicable custom rule. For agent-skill alignment rules, compare the scoped skill with the implementation and public documentation as they exist after the PR. Only report concrete mismatches introduced or left in place by the PR; do not require a skill edit for an internal change that preserves the documented API and workflow. For each mismatch, identify the outdated claim, import, signature, example, or behavior and request that the skill be refreshed in the same PR.",
+  "rules": [
+    {
+      "id": "prefer-composition-syntactic-sugar",
+      "rule": "Prefer the toolkit's established composition operators at call sites when they exactly match the intended semantics instead of manually constructing an equivalent wrapper or orchestrator. Examples include `fused = fire2 + nve` for same-device `BaseDynamics` stages, `pipeline = stage_a | stage_b` for a `DistributedPipeline`, `model_a + model_b` for additive model pipelines, arithmetic composition for weighted losses, and `hook_a + hook_b` for training-update hooks. Do not recommend syntactic sugar when explicit construction is needed for non-default status codes, rank mappings, synchronization, configuration, or when the changed code implements or demonstrates the lower-level constructor itself.",
+      "scope": [
+        "nvalchemi/**",
+        "examples/**",
+        "docs/userguide/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "prefer-lifecycle-context-managers",
+      "rule": "Prefer `with` at call sites for lifecycle-aware toolkit objects when their context manager owns meaningful setup or teardown, such as CUDA streams, lazy compilation, distributed initialization and cleanup, hooks, reporters, readers, datasets, or other resources. For example, use `with fused:` or `with pipeline:` around dynamics execution when that lifecycle behavior is needed. Do not suggest redundant nesting when `run()` already manages the relevant resource, when explicit lifecycle calls are intentional, or when the changed code implements or tests the context-manager protocol; any manual lifecycle must remain exception-safe.",
+      "scope": [
+        "nvalchemi/**",
+        "examples/**",
+        "docs/userguide/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "avoid-over-private-user-apis",
+      "rule": "Review newly added or substantially changed private functions and methods for behavior that should be part of the public API. Recommend a documented public function, method, protocol, or extension point only when there is a concrete user need to call, override, configure, or compose that behavior and exposing it is consistent with nearby public APIs. Do not recommend exposing internal invariants, low-level kernels, lifecycle plumbing, compatibility shims, or implementation details that would unnecessarily freeze the design; do not flag a helper merely because its name starts with an underscore.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "avoid-one-off-private-helpers",
+      "rule": "Review newly introduced private helpers that are short, perform one obvious operation, and have exactly one call site in the PR with no other direct or indirect repository usage. Suggest inlining the helper into its caller when that improves locality and consolidation without duplicating logic. Before commenting, check for decorators, callbacks, dispatch registration, overrides, compile boundaries, tests, or likely reuse. Do not suggest inlining when the helper names a meaningful domain concept, isolates non-trivial validation, error handling, cleanup, or performance-sensitive code, or creates a useful testing or extension seam.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "keep-inline-comments-concise",
+      "rule": "Review inline comments in newly added or substantially changed function and method bodies. Prefer comments that explain intent in one or two concise lines. Flag long comment blocks that can be shortened, moved to a docstring or design document, or replaced by clearer names and structure, and flag dense stretches where comments narrate nearly every small operation (for example, comments on roughly every other line) instead of documenting a few important decisions. Ask the author to consolidate or rewrite the comments while preserving essential rationale. Do not enforce a rigid line or density limit when a precise mathematical derivation, distributed invariant, safety constraint, or non-obvious workaround genuinely needs more explanation. Ignore SPDX/license headers, section headings, tool directives such as `noqa` and `type: ignore`, generated code, and vendored or upstream code.",
+      "scope": [
+        "nvalchemi/**/*.py",
+        "test/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "explain-non-obvious-intent",
+      "rule": "Review newly added or substantially changed code and its immediate context for decisions whose intent cannot be inferred reliably from the code alone. Request a short inline comment explaining why when behavior depends on a non-obvious ordering, synchronization or collective constraint, shape/dtype/device workaround, cache invalidation rule, compatibility requirement, exception-safety concern, or performance tradeoff. The comment should normally be one or two lines and explain the reason, not restate what the next statement does. Sparse comments alone are not a defect: do not apply a comment quota, request narration of straightforward code, or use inline comments in place of public API docstrings or user documentation.",
+      "scope": [
+        "nvalchemi/**/*.py"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-data-structures-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-data-structures/SKILL.md` against the AtomicData and Batch implementation and data user guide. Verify its imports, fields, shapes, dtype/device behavior, serialization, batching, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-structures/SKILL.md",
+        "nvalchemi/_serialization.py",
+        "nvalchemi/_typing.py",
+        "nvalchemi/data/atomic_data.py",
+        "nvalchemi/data/batch.py",
+        "nvalchemi/data/data.py",
+        "docs/userguide/data.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-data-storage-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-data-storage/SKILL.md` against the Zarr-backed reader, writer, dataset, dataloader, sampler, and level-storage implementation. Verify its imports, constructor arguments, append/read semantics, composition, custom-reader contract, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-data-storage/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-zarr-performance-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-zarr-perf/SKILL.md` against the current Zarr storage, Dataset, DataLoader, sampler, and `nvalchemi-io-test` implementation. Verify tuning knobs, defaults, benchmark commands, read modes, and performance guidance remain supported and accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-zarr-perf/SKILL.md",
+        "nvalchemi/data/datapipes/**",
+        "nvalchemi/data/io_test.py",
+        "nvalchemi/data/level_storage.py",
+        "docs/userguide/datapipes.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-model-wrapping-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-model-wrapping/SKILL.md` against BaseModelMixin, ModelConfig, model adapters, and model documentation. Verify configuration fields, input/output adaptation, autograd behavior, embedding hooks, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-model-wrapping/SKILL.md",
+        "nvalchemi/models/**",
+        "docs/userguide/models.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-training-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-training-api/SKILL.md` against the training strategy, runtime, specs, hooks, checkpointing, optimizer, validation, CLI, and distributed-training implementation. Verify construction, lifecycle, extension points, resume behavior, DDP guidance, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-training-api/SKILL.md",
+        "nvalchemi/training/**",
+        "docs/userguide/training.md",
+        "docs/userguide/distributed_training.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-fine-tuning-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-fine-tuning/SKILL.md` against FineTuningStrategy, model specs, checkpoint loading, CLI, and fine-tuning hooks. Verify pretrained initialization, patch/freeze behavior, serialization, resume distinctions, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-fine-tuning/SKILL.md",
+        "nvalchemi/training/_checkpoint.py",
+        "nvalchemi/training/_spec.py",
+        "nvalchemi/training/_spec_utils.py",
+        "nvalchemi/training/cli.py",
+        "nvalchemi/training/finetune.py",
+        "nvalchemi/training/hooks/checkpoint.py",
+        "nvalchemi/training/hooks/finetune.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/finetuning.md",
+        "docs/userguide/training_finetuning.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-loss-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-loss-api/SKILL.md` against the loss base classes, composition, reductions, schedules, terms, and loss documentation. Verify loss names, template-method hooks, masking, weighting, dtype policy, layout dispatch, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-loss-api/SKILL.md",
+        "nvalchemi/training/losses/**",
+        "docs/userguide/losses.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-api-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-api/SKILL.md` against the public dynamics, pipeline, sampler, sink, and hook integration APIs. Verify available classes, configuration, composition operators, execution lifecycle, convergence, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-api/SKILL.md",
+        "nvalchemi/dynamics/**",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md",
+        "docs/userguide/dynamics_sinks.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-hooks-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-hooks/SKILL.md` against the shared hook protocol, registry, contexts, stages, and dynamics hook implementations. Verify registration, ordering, frequency, lifecycle, callback signatures, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-hooks/SKILL.md",
+        "nvalchemi/hooks/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/**",
+        "docs/userguide/hooks.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-dynamics-implementation-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-dynamics-implementation/SKILL.md` against BaseDynamics, integrators, optimizers, low-level dynamics operations, and samplers. Verify subclass contracts, step ordering, required state, composition, distributed behavior, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-dynamics-implementation/SKILL.md",
+        "nvalchemi/dynamics/_ops/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/integrators/**",
+        "nvalchemi/dynamics/optimizers/**",
+        "nvalchemi/dynamics/sampler.py",
+        "docs/userguide/dynamics.md",
+        "docs/userguide/dynamics_simulations.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-reporting-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-reporting/SKILL.md` against reporting protocols, orchestrator, Rich and TensorBoard reporters, layouts, scalars, and dynamics logging. Verify stages, lifecycle ownership, distributed behavior, callback contracts, imports, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-reporting/SKILL.md",
+        "nvalchemi/hooks/reporting/**",
+        "nvalchemi/dynamics/base.py",
+        "nvalchemi/dynamics/hooks/logging.py",
+        "nvalchemi/training/strategy.py",
+        "docs/userguide/reporting.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-distributed-alignment",
+      "rule": "Check `.claude/skills/nvalchemi-distributed/SKILL.md` against domain decomposition, ShardTensor, distribution specs, adapters, compilation, validation, distributed dynamics, and runtime utilities. Verify supported strategies, storage policies, hook scopes, global reductions, imports, launch guidance, and examples are accurate.",
+      "scope": [
+        ".claude/skills/nvalchemi-distributed/SKILL.md",
+        "nvalchemi/distributed/**",
+        "examples/distributed/**",
+        "docs/userguide/distributed.md",
+        "docs/userguide/distributed_byo.md",
+        "docs/userguide/distributed_design.md",
+        "docs/userguide/distributed_shardtensor.md"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "skill-catalog-alignment",
+      "rule": "When a skill is added, removed, renamed, or its routing description changes, check that `.claude/skills/README.md`, the Agent Skills table in `AGENTS.md`, and `docs/userguide/agent_skills.md` expose the same skill names and routing guidance. Do not require catalog edits for content-only changes that leave routing unchanged.",
+      "scope": [
+        ".claude/skills/**",
+        "AGENTS.md",
+        "docs/userguide/agent_skills.md"
+      ],
+      "severity": "medium"
+    }
+  ]
+}

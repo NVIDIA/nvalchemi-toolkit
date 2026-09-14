@@ -203,6 +203,40 @@ class _RecordingHook:
         self._callback(ctx, stage)
 
 
+class _RegisterCountingHook:
+    """Registration-time hook that records side-effect calls."""
+
+    frequency = 1
+    stage = None
+
+    def __init__(self) -> None:
+        self.register_calls = 0
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
+        return
+
+    def on_register(self, workflow: Any) -> None:  # noqa: ARG002
+        self.register_calls += 1
+
+
+class _NoOpTrainingUpdateHook(TrainingUpdateHook):
+    """Update hook used to exercise orchestrator folding during registration."""
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor | None]:
+        return True, ctx.loss
+
+
 class _EveryOtherOptimizerStepHook(TrainingUpdateHook):
     """Veto optimizer steps on alternating batches."""
 
@@ -981,6 +1015,25 @@ def _snapshot_ctx(ctx: HookContext) -> _LossSnapshot:
 
 
 class TestTrainingStrategyHookOrder:
+    def test_update_hook_folding_does_not_reregister_existing_hooks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """Folding update hooks must not replay registration side effects."""
+        hook = _RegisterCountingHook()
+
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [hook, _NoOpTrainingUpdateHook()],
+            }
+        )
+
+        assert hook.register_calls == 1
+        assert [type(registered).__name__ for registered in strategy.hooks] == [
+            "_RegisterCountingHook",
+            "TrainingUpdateOrchestrator",
+        ]
+
     def test_strategy_context_manager_nests_without_reentry(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:

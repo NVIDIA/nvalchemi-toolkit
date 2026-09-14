@@ -21,17 +21,18 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 import torch.nn as nn
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import EnergyMSELoss, FineTuningStrategy, TrainingStage
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
+from nvalchemi.training import EMAHook, EnergyMSELoss, FineTuningStrategy, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
+    _filter_snapshot_to_trainable_state,
     load_checkpoint,
     save_checkpoint,
 )
@@ -122,6 +123,41 @@ class NotModule:
 
     arg_a: int
     arg_b: str
+
+
+class PartialStateModel(nn.Module, BaseModelMixin):
+    """Small model with selected, non-selected, frozen, and buffer state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+        self.selected = nn.Linear(2, 1, bias=False)
+        self.non_selected = nn.Linear(2, 1, bias=False)
+        self.frozen = nn.Linear(2, 1, bias=False)
+        self.register_buffer("running_scale", torch.ones(1))
+        self.frozen.weight.requires_grad_(False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return a scalar output for generic training smoke tests."""
+        return (
+            self.selected(x) + self.non_selected(x) + self.frozen(x)
+        ) * self.running_scale
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding outputs for checkpoint filtering tests."""
+        return {}
+
+    def compute_embeddings(
+        self, data: AtomicData | Batch, **kwargs: Any
+    ) -> AtomicData | Batch:
+        """Embedding computation is unused by these checkpoint tests."""
+        raise NotImplementedError
 
 
 def checkpoint_training_fn(
@@ -1658,3 +1694,160 @@ class TestStrategyCheckpoint:
         assert kwargs["enable_cueq"] is False
         assert kwargs["compile_model"] is False
         assert kwargs["dtype"] is torch.float32
+
+    def test_trainable_only_checkpoint_saves_selected_parameters_and_buffers(
+        self, tmp_path: Path
+    ) -> None:
+        """Partial model state keeps optimizer-selected parameters plus buffers."""
+        model = PartialStateModel()
+        strategy = TrainingStrategy(
+            models=model,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            num_steps=1,
+            training_fn=checkpoint_training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        strategy.set_optimizer_parameter_filter({"main.selected.weight"})
+
+        with pytest.warns(
+            UserWarning,
+            match="save_trainable_state_only=True stores only optimizer-selected "
+            "parameters and buffers",
+        ):
+            save_checkpoint(
+                tmp_path,
+                strategy=strategy,
+                save_trainable_state_only=True,
+            )
+
+        state = torch.load(
+            tmp_path / "models" / "main" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
+        )
+
+        assert set(state) == {"running_scale", "selected.weight"}
+        torch.testing.assert_close(state["selected.weight"], model.selected.weight)
+        torch.testing.assert_close(state["running_scale"], model.running_scale)
+        assert "non_selected.weight" not in state
+        assert "frozen.weight" not in state
+        assert metadata["model_state_load"] == "partial"
+
+    def test_trainable_only_checkpoint_filters_ema_hook_state(self) -> None:
+        """EMA hook state follows partial model-state filtering semantics."""
+        model = PartialStateModel()
+        ema = EMAHook(model_key="main", decay=0.5)
+        ema(
+            Mock(
+                models={"main": model},
+                step_count=0,
+                optimizers=[],
+                loss=None,
+                workflow=object(),
+            ),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        state = ema.state_dict()
+        snapshot = {
+            "models": {"main": (model.state_dict(), None)},
+            "hook_states": {
+                f"{type(ema).__module__}.{type(ema).__qualname__}:0": state,
+            },
+            "strategy_metadata": {},
+        }
+        _filter_snapshot_to_trainable_state(
+            snapshot,
+            Mock(
+                models={"main": model},
+                _optimizer_parameter_names={"main.selected.weight"},
+            ),
+        )
+        averaged_state = state["averaged_model_state"]
+
+        assert set(averaged_state) == {
+            "module.running_scale",
+            "module.selected.weight",
+        }
+        assert "module.non_selected.weight" not in averaged_state
+        assert "module.frozen.weight" not in averaged_state
+        assert state["averaged_model_state_load"] == "partial"
+
+    def test_trainable_only_checkpoint_allows_frozen_teacher_model(
+        self, tmp_path: Path
+    ) -> None:
+        """A frozen named model can be restored from spec with empty partial state."""
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        def training_fn(
+            models: dict[str, BaseModelMixin],
+            batch: Batch,
+        ) -> dict[str, torch.Tensor]:
+            return default_training_fn(models["student"], batch)
+
+        student = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        teacher = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        strategy = TrainingStrategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [
+                    OptimizerConfig(
+                        optimizer_cls=torch.optim.Adam,
+                        optimizer_kwargs={"lr": 1e-3},
+                    ),
+                ],
+            },
+            num_steps=1,
+            training_fn=training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        student_parameter_names = {
+            f"student.{name}" for name, _parameter in student.named_parameters()
+        }
+        strategy.set_optimizer_parameter_filter(student_parameter_names)
+
+        with pytest.warns(
+            UserWarning,
+            match="save_trainable_state_only=True stores only optimizer-selected parameters and buffers",
+        ):
+            idx = save_checkpoint(
+                tmp_path,
+                strategy=strategy,
+                save_trainable_state_only=True,
+            )
+
+        assert idx == 0
+        metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
+        )
+        student_state = torch.load(
+            tmp_path / "models" / "student" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        teacher_state = torch.load(
+            tmp_path / "models" / "teacher" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        saved_student_state = {
+            name: value.detach().clone() for name, value in student.state_dict().items()
+        }
+
+        assert metadata["model_state_load"] == "partial"
+        assert set(student_state) == set(saved_student_state)
+        assert not teacher_state
+
+        loaded = load_checkpoint(tmp_path, training_fn=training_fn)
+        restored = loaded["strategy"]
+        assert set(restored.models) == {"student", "teacher"}
+        assert isinstance(restored.models["student"], DemoModelWrapper)
+        assert isinstance(restored.models["teacher"], DemoModelWrapper)

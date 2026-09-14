@@ -48,11 +48,6 @@ from nvalchemi.distributed.config import DomainConfig
 WORLD_SIZE = 2
 _A1, _A2, _S8 = 0.4289, 4.4407, 0.7875
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 # ====================================================================
 # C1 — DFT-D3 + Ewald (direct-force composition)
@@ -213,7 +208,7 @@ def _de_pipeline_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_dftd3_ewald_2ranks():
     """``DistributedPipelineModel(DFTD3 + Ewald)`` == summed single-models."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -398,7 +393,7 @@ def _md_autograd_pipeline_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_mace_dftd3_2ranks():
     """``DistributedPipelineModel(MACE[use_autograd] + DFTD3)`` == single-GPU pipeline."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -595,7 +590,7 @@ def _ap_wired_pipeline_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_aimnet2_pme_2ranks():
     """``DistributedPipelineModel(AIMNet2 charges -> PME)`` == single-GPU pipeline."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
@@ -670,7 +665,7 @@ def _ap_force_path_worker(rank: int, world_size: int, consumer: str) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 @pytest.mark.parametrize("consumer", ["pme", "ewald"])
 def test_distributed_pipeline_wired_force_paths_agree_2ranks(consumer):
     """Wired-group forces are identical with and without stress requested.
@@ -873,7 +868,7 @@ def _mdc_compile_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_distributed_pipeline_compile_mace_dftd3_2ranks():
     """Compiled ``DistributedPipelineModel(MACE + DFTD3)`` == single-GPU; no steady recompiles."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")

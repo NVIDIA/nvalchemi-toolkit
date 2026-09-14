@@ -62,11 +62,6 @@ WARMUP_STEPS = 8
 STEADY_STEPS = 8
 JITTER = 0.08  # Å per-step RMS displacement (well within cutoff+skin headroom)
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 def _build_pbc_argon(n_per_side: int = 4, dtype: torch.dtype = torch.float64):
     spacing = 2 ** (1.0 / 6.0) * 3.40 * 1.05  # ~4.007 Å
@@ -165,7 +160,7 @@ def _recompile_gate_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_compile_dd_zero_steady_state_recompiles_2ranks():
     """A compiled DD MACE forward run as a jittered MD loop must compile
     its graph during warmup and then hold it: zero new unique graphs across

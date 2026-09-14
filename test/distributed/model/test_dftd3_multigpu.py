@@ -56,10 +56,6 @@ from nvalchemi.distributed.config import DomainConfig
 
 WORLD_SIZE = 2
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
 
 # D3(BJ) parameters for PBE (Grimme 2010); a2 in Bohr.
 _A1, _A2, _S8 = 0.4289, 4.4407, 0.7875
@@ -228,7 +224,7 @@ def _dftd3_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_dftd3_dist_model_equivalence_2ranks():
     """``DistributedModel(DFTD3ModelWrapper)`` under halo matches single-GPU."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")

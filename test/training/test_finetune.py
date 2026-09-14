@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -33,8 +35,49 @@ from nvalchemi.training import (
     OptimizerConfig,
 )
 from nvalchemi.training._spec import create_model_spec
-from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
+from nvalchemi.training.hooks import (
+    FineTuningSummaryHook,
+    ModulePatchHook,
+    TrainableParameterHook,
+)
 from nvalchemi.training.strategy import TrainingStrategy
+
+
+def test_finetuning_import_does_not_load_experimental_peft() -> None:
+    """Importing the fine-tuning API must not initialize a PEFT backend."""
+    code = """
+import sys
+import warnings
+
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    import nvalchemi.training as training
+    import nvalchemi.training.peft as peft
+    from nvalchemi.training import FineTuningStrategy
+
+assert not any(
+    hasattr(training, name)
+    for name in (
+        "LoRAConfig", "PeftConfig", "available_lora_wrappers", "is_lora_layer",
+        "load_peft_checkpoint_into_model",
+    )
+)
+
+assert "__getattr__" not in vars(peft)
+assert "physicsnemo.experimental.peft" not in sys.modules
+assert not any(
+    "physicsnemo.experimental" in str(warning.message)
+    for warning in caught
+)
+"""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 class _OnRegisterRecorder:
@@ -55,6 +98,34 @@ class _OnRegisterRecorder:
             workflow.models["main"].model, "aux_projection"
         )
         self.saw_optimizer_filter = workflow._optimizer_parameter_names is not None
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
+        return
+
+
+class _ParameterRegistrationHook:
+    """Register trainable and managed parameter names during hook registration."""
+
+    frequency = 1
+    stage = None
+
+    def __init__(
+        self,
+        *,
+        trainable: dict[str, set[str]] | None = None,
+        managed: dict[str, set[str]] | None = None,
+    ) -> None:
+        self.trainable = trainable or {}
+        self.managed = managed or {}
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def on_register(self, workflow: Any) -> None:
+        for source, names in self.trainable.items():
+            workflow.register_trainable_parameter_names(tuple(names), source=source)
+        for source, names in self.managed.items():
+            workflow.register_managed_parameter_names(tuple(names), source=source)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
         return
@@ -84,7 +155,8 @@ class TestModulePatchHook:
                         patches={
                             "main.model.projection": replacement,
                             "main.model.aux_projection": aux_spec,
-                        }
+                        },
+                        register_parameters=False,
                     )
                 ],
             }
@@ -108,7 +180,8 @@ class TestModulePatchHook:
                             patches={
                                 "main.model.aux_a": shared,
                                 "main.model.aux_b": shared,
-                            }
+                            },
+                            register_parameters=False,
                         )
                     ],
                 }
@@ -123,7 +196,8 @@ class TestModulePatchHook:
                     **baseline_strategy_kwargs,
                     "hooks": [
                         ModulePatchHook(
-                            patches={"main.model.not_real.head": nn.Linear(8, 1)}
+                            patches={"main.model.not_real.head": nn.Linear(8, 1)},
+                            register_parameters=False,
                         )
                     ],
                 }
@@ -140,6 +214,26 @@ class TestModulePatchHook:
         with pytest.raises(RuntimeError, match="before optimizers are built"):
             strategy.register_hook(
                 ModulePatchHook(patches={"main.model.projection": nn.Linear(8, 1)})
+            )
+
+    def test_rejects_patch_overlapping_existing_managed_parameters(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        managed = {
+            "main.model.projection.weight",
+            "main.model.projection.bias",
+        }
+        with pytest.raises(RuntimeError, match="already managed by another source"):
+            FineTuningStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "hooks": [
+                        _ParameterRegistrationHook(managed={"lora": managed}),
+                        ModulePatchHook(
+                            patches={"main.model.projection": nn.Linear(8, 1)}
+                        ),
+                    ],
+                }
             )
 
 
@@ -335,6 +429,42 @@ class TestTrainableParameterHook:
                 TrainableParameterHook(freeze_patterns=("main.model.projection.*",))
             )
 
+    def test_trainable_patterns_do_not_enable_registered_managed_parameters(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        managed = {
+            "main.model.projection.weight",
+            "main.model.projection.bias",
+        }
+        trainable = {"main.model.projection.bias"}
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [
+                    _ParameterRegistrationHook(
+                        trainable={"adapter": trainable},
+                        managed={"adapter": managed},
+                    ),
+                    TrainableParameterHook(trainable_patterns=("main.model.*",)),
+                ],
+            }
+        )
+
+        assert "main.model.projection.bias" in strategy._optimizer_parameter_names
+        assert "main.model.projection.weight" not in strategy._optimizer_parameter_names
+        assert "main.model.joint_mlp.0.weight" in strategy._optimizer_parameter_names
+
+    def test_empty_hook_without_registered_trainable_parameters_raises(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        with pytest.raises(ValueError, match="selected no trainable parameters"):
+            FineTuningStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "hooks": [TrainableParameterHook()],
+                }
+            )
+
 
 class TestFineTuningStrategy:
     def test_generated_hooks_register_before_explicit_hooks(
@@ -353,7 +483,8 @@ class TestFineTuningStrategy:
 
         assert isinstance(strategy.hooks[0], ModulePatchHook)
         assert isinstance(strategy.hooks[1], TrainableParameterHook)
-        assert strategy.hooks[2] is recorder
+        assert isinstance(strategy.hooks[2], FineTuningSummaryHook)
+        assert strategy.hooks[3] is recorder
         assert recorder.saw_aux_projection is True
         assert recorder.saw_optimizer_filter is True
 
@@ -518,6 +649,7 @@ class TestFineTuningStrategy:
         assert set(restored.module_patches) == {"main.model.aux_projection"}
         assert isinstance(restored.hooks[0], ModulePatchHook)
         assert isinstance(restored.hooks[1], TrainableParameterHook)
+        assert isinstance(restored.hooks[2], FineTuningSummaryHook)
         assert restored._optimizer_parameter_names is not None
 
     def test_checkpoint_load_restores_filtered_optimizer_state(

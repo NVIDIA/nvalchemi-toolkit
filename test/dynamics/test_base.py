@@ -27,7 +27,12 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
+from nvalchemi.dynamics.base import (
+    BaseDynamics,
+    ConvergenceHook,
+    DynamicsStage,
+    requires_grad_ctx,
+)
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -160,6 +165,63 @@ class RecordingHook:
 # -----------------------------------------------------------------------------
 # Test Classes
 # -----------------------------------------------------------------------------
+
+
+class TestRequiresGradContext:
+    """Tests for temporary tensor autograd state management."""
+
+    def test_exported_from_dynamics_namespace(self) -> None:
+        """The context should be available from the public dynamics API."""
+        from nvalchemi.dynamics import requires_grad_ctx as exported
+
+        assert exported is requires_grad_ctx
+
+    def test_enables_and_restores_gradients(self) -> None:
+        """The context should restore an initially disabled tensor."""
+        tensor = torch.randn(3)
+
+        with requires_grad_ctx(tensor):
+            assert tensor.requires_grad
+
+        assert not tensor.requires_grad
+
+    def test_preserves_existing_gradient_state(self) -> None:
+        """The context should preserve an initially enabled tensor."""
+        tensor = torch.randn(3, requires_grad=True)
+
+        with requires_grad_ctx(tensor):
+            assert tensor.requires_grad
+
+        assert tensor.requires_grad
+
+    def test_temporarily_disables_gradients(self) -> None:
+        """The context should support the reciprocal disabled state."""
+        tensor = torch.randn(3, requires_grad=True)
+
+        with requires_grad_ctx(tensor, requires_grad=False):
+            assert not tensor.requires_grad
+
+        assert tensor.requires_grad
+
+    def test_restores_gradients_after_exception(self) -> None:
+        """The context should restore state when its body raises."""
+        tensor = torch.randn(3)
+
+        with pytest.raises(RuntimeError, match="expected"):
+            with requires_grad_ctx(tensor):
+                assert tensor.requires_grad
+                raise RuntimeError("expected")
+
+        assert not tensor.requires_grad
+
+    def test_handles_duplicate_tensors_once(self) -> None:
+        """Aliased arguments should preserve their original state."""
+        tensor = torch.randn(3)
+
+        with requires_grad_ctx(tensor, tensor):
+            assert tensor.requires_grad
+
+        assert not tensor.requires_grad
 
 
 class TestDynamicsStage:
@@ -439,8 +501,8 @@ class TestBaseDynamics:
         )
         assert dynamics.convergence_hook is hook
 
-    def test_compute_clears_requires_grad_on_autograd_inputs(self) -> None:
-        """Verify compute() clears requires_grad on positions after forward pass.
+    def test_compute_restores_requires_grad_on_autograd_inputs(self) -> None:
+        """Verify compute() restores requires_grad on positions after forwarding.
 
         Regression test: hooks running after compute() (e.g. WrapPeriodicHook)
         perform in-place operations on batch.positions.  If positions still has
@@ -450,11 +512,28 @@ class TestBaseDynamics:
         """
         dynamics = BaseDynamics(self.model)
         batch = create_simple_batch()
-        # Simulate what the model wrapper does: enable grad on positions
-        batch.positions.requires_grad_(True)
-        assert batch.positions.requires_grad
+        assert not batch.positions.requires_grad
 
         dynamics.compute(batch)
+
+        assert not batch.positions.requires_grad
+
+    def test_compute_preserves_caller_enabled_gradients(self) -> None:
+        """Verify compute() preserves a caller's enabled gradient state."""
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+        batch.positions.requires_grad_(True)
+
+        dynamics.compute(batch)
+
+        assert batch.positions.requires_grad
+
+    def test_step_restores_requires_grad_on_autograd_inputs(self) -> None:
+        """Verify an individual dynamics step restores autograd input state."""
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+
+        dynamics.step(batch)
 
         assert not batch.positions.requires_grad
 

@@ -61,11 +61,6 @@ from nvalchemi.distributed.config import DomainConfig
 
 WORLD_SIZE = 2
 
-_skip = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < WORLD_SIZE,
-    reason=f"Need {WORLD_SIZE}+ CUDA GPUs",
-)
-
 
 # ======================================================================
 # Process-group / test-harness setup
@@ -284,7 +279,7 @@ def _mace_cueq_equivalence_worker(rank: int, world_size: int) -> None:
     )
 
 
-@_skip
+@pytest.mark.multigpu
 def test_mace_cueq_COMPILE_dist_model_equivalence_2ranks():
     """Regression: compiled ``DistributedModel(MACEWrapper(enable_cueq=True),
     compile=True)`` matches a single-GPU cueq reference on force + total energy

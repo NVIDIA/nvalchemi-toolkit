@@ -17,10 +17,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    StringConstraints,
+)
 from torch import nn
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
@@ -222,6 +228,10 @@ class EMAHook(BaseModel, TrainingUpdateHook):
 
     _averaged_model: AveragedModel | None = PrivateAttr(default=None)
     _pending_averaged_state: dict[str, Any] | None = PrivateAttr(default=None)
+    # Preserve strict-vs-partial load intent until lazy EMA initialization runs.
+    _pending_averaged_state_load: Literal["full", "partial"] = PrivateAttr(
+        default="full"
+    )
 
     def _build_averaged_model(self, source: nn.Module) -> AveragedModel:
         """Build the :class:`AveragedModel` wrapping ``source``.
@@ -261,9 +271,13 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             modify_ema_methods()
         if self._pending_averaged_state is not None:
             source_tensors = _module_tensors(_unwrap_model(source))
-            self._averaged_model.load_state_dict(self._pending_averaged_state)
+            self._averaged_model.load_state_dict(
+                self._pending_averaged_state,
+                strict=self._pending_averaged_state_load != "partial",
+            )
             _align_to_source_tensors(self._averaged_model.module, source_tensors)
             self._pending_averaged_state = None
+            self._pending_averaged_state_load = "full"
 
     def _publish_averaged_model(self, ctx: TrainContext) -> None:
         """Publish averaged weights into the strategy inference-model slot."""
@@ -336,6 +350,8 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             out["averaged_model_state"] = self._averaged_model.state_dict()
         elif self._pending_averaged_state is not None:
             out["averaged_model_state"] = self._pending_averaged_state
+            if self._pending_averaged_state_load == "partial":
+                out["averaged_model_state_load"] = "partial"
         return out
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
@@ -379,13 +395,20 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         if "num_updates" in state:
             self.num_updates = int(state["num_updates"])
         if "averaged_model_state" in state:
+            averaged_state_load = state.get("averaged_model_state_load", "full")
             if self._averaged_model is None:
                 self._pending_averaged_state = state["averaged_model_state"]
+                self._pending_averaged_state_load = averaged_state_load
             else:
                 tensors = _module_tensors(self._averaged_model.module)
-                self._averaged_model.load_state_dict(state["averaged_model_state"])
+                self._averaged_model.load_state_dict(
+                    state["averaged_model_state"],
+                    strict=averaged_state_load != "partial",
+                )
                 _align_to_source_tensors(self._averaged_model.module, tensors)
                 self._pending_averaged_state = None
+                self._pending_averaged_state_load = "full"
         else:
             self._averaged_model = None
             self._pending_averaged_state = None
+            self._pending_averaged_state_load = "full"
