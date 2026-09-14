@@ -351,7 +351,7 @@ iterations, and returned.
        edge [fontsize=10]
 
        init [label="1. sampler.build_initial_batch()\nstatus=0, fmax=inf" fillcolor="#1a1a1a"]
-       step [label="2. compute() →\nper-sub-stage masked_update\nbased on batch.status"]
+       step [label="2. masked pre_updates → shared compute() →\nmasked post_updates based on batch.status"]
        conv [label="3. ConvergenceHook\nupdates batch.status\n(0 → 1 → 2 …)"]
        refill [label="4. _refill_check()\nevery refill_frequency steps" fillcolor="#4a3315"]
        refill_detail [label="identify graduated (status ≥ exit_status)\nwrite to sinks · extract remaining\nrequest replacements · rebuild tensors" shape=plaintext fillcolor=none style=""]

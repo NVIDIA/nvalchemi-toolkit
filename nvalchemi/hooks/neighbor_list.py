@@ -529,13 +529,16 @@ class NeighborListHook:
         pbc: torch.Tensor | None,
     ) -> None:
         """Refresh staging buffers from the current batch."""
-        self._buf_positions.copy_(positions)
-        self._buf_batch_ptr.copy_(batch_ptr)
-        self._buf_batch_idx.copy_(batch_idx)
-        if self._buf_cell is not None and cell is not None:
-            self._buf_cell.copy_(cell)
-        if self._buf_pbc is not None and pbc is not None:
-            self._buf_pbc.copy_(pbc)
+        # Neighbor topology is discrete, so staging buffers should not retain
+        # autograd history from gradient-enabled model inputs.
+        with torch.no_grad():
+            self._buf_positions.copy_(positions)
+            self._buf_batch_ptr.copy_(batch_ptr)
+            self._buf_batch_idx.copy_(batch_idx)
+            if self._buf_cell is not None and cell is not None:
+                self._buf_cell.copy_(cell)
+            if self._buf_pbc is not None and pbc is not None:
+                self._buf_pbc.copy_(pbc)
 
     # ------------------------------------------------------------------
     # Algorithm-specific pre-allocation

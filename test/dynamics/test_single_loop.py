@@ -21,6 +21,7 @@ model where multiple dynamics engines share a batch.
 
 from __future__ import annotations
 
+import secrets
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -142,6 +143,31 @@ class CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
         }
 
 
+class _CompileNoOpDynamics(BaseDynamics):
+    """Dynamics with compile-friendly no-op masked updates."""
+
+    def _masked_pre_update(self, batch: Batch, mask: torch.Tensor) -> None:
+        """Skip the pre-update while preserving the fused call boundary."""
+
+    def _masked_post_update(self, batch: Batch, mask: torch.Tensor) -> None:
+        """Skip the post-update while preserving the fused call boundary."""
+
+
+class _RandomSizeAllocationHook:
+    """Allocate a tensor whose shape uses non-traceable system randomness."""
+
+    frequency = 1
+
+    def __init__(self, stage: DynamicsStage) -> None:
+        self.stage = stage
+        self.allocations: list[torch.Tensor] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Allocate and retain a randomly sized tensor on the batch device."""
+        size = secrets.randbelow(8) + 1
+        self.allocations.append(torch.empty(size, device=ctx.batch.device))
+
+
 class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
     """Analytical test model declaring positions as an autograd input."""
 
@@ -174,6 +200,20 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     batch.forces = torch.zeros(batch.num_nodes, 3)
     batch.energy = torch.zeros(batch.num_graphs, 1)
     return batch
+
+
+def _make_compiled_fused(hook: _RandomSizeAllocationHook) -> FusedStage:
+    """Create a full-graph fused stage containing ``hook``."""
+    dynamics = _CompileNoOpDynamics(
+        model=CompilerFriendlyModel(),
+        hooks=[hook],
+    )
+    return FusedStage(
+        sub_stages=[(0, dynamics)],
+        compile_step=True,
+        compile_kwargs={"backend": "eager", "fullgraph": True},
+        device_type="cpu",
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -755,6 +795,23 @@ class TestFusedStage:
         # Verify that _compiled_step is set (compiled function)
         assert fused._compiled_step is not None
         assert callable(fused._compiled_step)
+
+    def test_random_size_allocation_on_admission_is_compile_safe(self) -> None:
+        """ON_ADMISSION allocation should run before the compiled step."""
+        torch.compiler.reset()
+        try:
+            # System randomness is deliberately not traceable. This hook
+            # would be unsafe at a per-step stage such as BEFORE_STEP.
+            hook = _RandomSizeAllocationHook(DynamicsStage.ON_ADMISSION)
+            fused = _make_compiled_fused(hook)
+
+            fused.step(create_batch_with_status(n_graphs=1))
+
+            assert len(hook.allocations) == 1
+            assert 1 <= hook.allocations[0].numel() <= 8
+            assert fused.step_count == 1
+        finally:
+            torch.compiler.reset()
 
     @pytest.mark.slow
     def test_compiled_step_executes_on_cuda(self, gpu_device: str) -> None:
@@ -1837,6 +1894,25 @@ class _TrackingHook:
         self.converged_masks.append(ctx.converged_mask)
 
 
+class _OrderedHook:
+    """Minimal hook that appends its label to a shared call sequence."""
+
+    def __init__(
+        self,
+        stage: DynamicsStage,
+        label: str,
+        calls: list[str],
+    ) -> None:
+        self.stage = stage
+        self.frequency = 1
+        self.label = label
+        self.calls = calls
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Record this hook's label."""
+        self.calls.append(self.label)
+
+
 # -----------------------------------------------------------------------------
 # TestFusedStageSubstageHooks
 # -----------------------------------------------------------------------------
@@ -1847,15 +1923,12 @@ class TestFusedStageSubstageHooks:
 
     Verifies that hooks registered on substages fire correctly during
     FusedStage.step(), including:
-    - BEFORE_STEP, BEFORE_PRE_UPDATE, AFTER_PRE_UPDATE, AFTER_COMPUTE
-    - BEFORE_POST_UPDATE, AFTER_POST_UPDATE, AFTER_STEP
+    - All nine non-convergence lifecycle stages on sub-stages
+    - All non-convergence lifecycle stages on FusedStage
     - ON_CONVERGE (when convergence is detected)
     - Hook frequency is respected
     - Correct firing order
     - Step counts are incremented on substages
-
-    Stages that are NOT fired on substages:
-    - BEFORE_COMPUTE (compute is shared, not per-substage)
     """
 
     def setup_method(self) -> None:
@@ -1866,6 +1939,83 @@ class TestFusedStageSubstageHooks:
         on positions, which then conflicts with masked_update's in-place ops).
         """
         self.model = NonConservativeDemoModel()
+
+    @pytest.mark.parametrize(
+        "stage",
+        [
+            DynamicsStage.BEFORE_STEP,
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            DynamicsStage.AFTER_PRE_UPDATE,
+            DynamicsStage.BEFORE_COMPUTE,
+            DynamicsStage.AFTER_COMPUTE,
+            DynamicsStage.BEFORE_POST_UPDATE,
+            DynamicsStage.AFTER_POST_UPDATE,
+            DynamicsStage.AFTER_STEP,
+        ],
+    )
+    def test_fused_hooks_bracket_substage_hooks(self, stage: DynamicsStage) -> None:
+        """Fused hooks should wrap sub-stage hooks at every shared boundary."""
+        events: list[str] = []
+
+        dynamics0 = BaseDynamics(model=self.model)
+        dynamics1 = BaseDynamics(model=self.model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        fused.register_hook(_OrderedHook(stage, "fused", events))
+        dynamics0.register_hook(_OrderedHook(stage, "substage0", events))
+        dynamics1.register_hook(_OrderedHook(stage, "substage1", events))
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 0, 1])
+        batch.fmax = torch.tensor([0.1, 0.1, 0.1])
+
+        fused._forces_primed = True
+        fused.step(batch)
+
+        if stage.name.startswith("BEFORE_"):
+            expected = ["fused", "substage0", "substage1"]
+        else:
+            expected = ["substage0", "substage1", "fused"]
+        assert events == expected
+
+    @pytest.mark.parametrize(
+        "stage",
+        [
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            DynamicsStage.AFTER_PRE_UPDATE,
+            DynamicsStage.BEFORE_POST_UPDATE,
+            DynamicsStage.AFTER_POST_UPDATE,
+        ],
+    )
+    def test_fused_update_hooks_receive_overall_active_mask(
+        self, stage: DynamicsStage
+    ) -> None:
+        """Fused update hooks receive one mask spanning all active substages."""
+
+        class _MaskCapture:
+            frequency = 1
+
+            def __init__(self) -> None:
+                self.stage = stage
+                self.masks: list[torch.Tensor] = []
+
+            def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+                self.masks.append(ctx.active_graph_mask.clone())
+
+        dynamics0 = BaseDynamics(model=self.model)
+        dynamics1 = BaseDynamics(model=self.model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+        hook = _MaskCapture()
+        fused.register_hook(hook)
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 1, fused.exit_status])
+        batch.fmax = torch.tensor([0.1, 0.1, 0.1])
+
+        fused.step(batch)
+
+        assert len(hook.masks) == 1
+        assert hook.masks[0].tolist() == [True, True, False]
 
     def test_substage_after_step_hooks_fire(self) -> None:
         """AFTER_STEP hooks on each substage should fire once per step.
@@ -2059,8 +2209,7 @@ class TestFusedStageSubstageHooks:
     def test_substage_split_update_hooks_fire(self) -> None:
         """Split-update hooks fire around the shared model computation.
 
-        BEFORE_COMPUTE remains shared rather than firing per substage.
-        AFTER_PRE_UPDATE and BEFORE_POST_UPDATE fire at the corresponding
+        All split lifecycle hooks fire at their corresponding
         substage boundaries.
         """
         dynamics0 = BaseDynamics(model=self.model)
@@ -2078,9 +2227,10 @@ class TestFusedStageSubstageHooks:
         batch.status = torch.tensor([0, 0, 0])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1])
 
+        fused._forces_primed = True
         fused.step(batch)
 
-        assert hook_before_compute.call_count == 0
+        assert hook_before_compute.call_count == 1
         assert hook_after_pre.call_count == 1
         assert hook_before_post.call_count == 1
 

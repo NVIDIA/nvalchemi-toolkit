@@ -124,8 +124,9 @@ own.
 
 The dynamics module provides integrators (NVE, NVT Langevin, NVT Nose--Hoover,
 NPT, NPH) and optimizers (FIRE, FIRE2) that share a common execution loop.
-Every step passes through a sequence of hook stages --- from `BEFORE_STEP`
-to `ON_CONVERGE` --- giving you full control via callbacks.
+Each admitted batch first passes through `ON_ADMISSION`; every subsequent
+step runs from `BEFORE_STEP` through `ON_CONVERGE`, giving you full control via
+callbacks.
 
 See the [dynamics guide](dynamics_guide) for the execution loop, multi-stage
 pipelines, and hook system.

@@ -127,6 +127,40 @@ def _make_model(needs_stress: bool = False):
     return DemoModelWrapper(DemoModel())
 
 
+def _discover_dynamics_implementations() -> list[type]:
+    """Return all dynamics classes from integrator and optimizer modules."""
+    from importlib import import_module
+    from inspect import getmembers, isabstract, isclass
+    from pkgutil import walk_packages
+
+    from nvalchemi.dynamics import integrators, optimizers
+    from nvalchemi.dynamics.base import BaseDynamics
+
+    discovered = []
+    for package in (integrators, optimizers):
+        for module_info in walk_packages(
+            package.__path__, prefix=f"{package.__name__}."
+        ):
+            module = import_module(module_info.name)
+            discovered.extend(
+                cls
+                for _, cls in getmembers(module, isclass)
+                if cls.__module__ == module.__name__
+                and issubclass(cls, BaseDynamics)
+                and not isabstract(cls)
+            )
+    return sorted(discovered, key=lambda cls: f"{cls.__module__}.{cls.__name__}")
+
+
+_STATE_INIT_ARGUMENTS = {
+    "dt": 0.1,
+    "temperature": 300.0,
+    "friction": 0.1,
+    "pressure": 0.0,
+    "barostat_time": 1.0,
+    "thermostat_time": 1.0,
+}
+
 # ---------------------------------------------------------------------------
 # TestStateLazyInit
 # ---------------------------------------------------------------------------
@@ -261,6 +295,68 @@ class TestStateShapes:
         dyn._init_state(batch)
         assert dyn._state.dt.shape == (M,)
         assert dyn._state.num_graphs == M
+
+    @pytest.mark.parametrize(
+        "dynamics_cls",
+        _discover_dynamics_implementations(),
+        ids=lambda cls: cls.__name__,
+    )
+    def test_all_state_fields_are_system_major(self, dynamics_cls):
+        """Require every state tensor to have one leading row per graph.
+
+        BaseDynamics._save_state_fields clones every state field, and
+        BaseDynamics._restore_unmasked_state expands a graph mask across
+        each field's trailing dimensions. Both methods therefore require
+        state tensors to have shape [num_graphs, *trailing_dimensions].
+
+        Implementations are discovered automatically so a newly added
+        integrator or optimizer cannot be silently omitted. A new required
+        constructor argument must be given a representative value in
+        _STATE_INIT_ARGUMENTS before this test can instantiate the class.
+        """
+        from inspect import Parameter, signature
+
+        needs_stress = "stress" in dynamics_cls.__needs_keys__
+        model = _make_model(needs_stress=needs_stress)
+        constructor_args = {"model": model}
+        missing_args = []
+        for name, parameter in signature(dynamics_cls).parameters.items():
+            if name == "model":
+                continue
+            if name in _STATE_INIT_ARGUMENTS:
+                constructor_args[name] = _STATE_INIT_ARGUMENTS[name]
+            elif parameter.default is Parameter.empty and parameter.kind not in {
+                Parameter.VAR_POSITIONAL,
+                Parameter.VAR_KEYWORD,
+            }:
+                missing_args.append(name)
+
+        assert not missing_args, (
+            f"{dynamics_cls.__name__} has required constructor arguments without "
+            f"representative test values: {missing_args}. Add them to "
+            "_STATE_INIT_ARGUMENTS."
+        )
+
+        num_graphs = 3
+        needs_cell = needs_stress or "cell" in dynamics_cls.__provides_keys__
+        batch = _make_batch(num_graphs, with_cell=needs_cell)
+        dynamics = dynamics_cls(**constructor_args)
+        dynamics._ensure_state_initialized(batch)
+
+        state = getattr(dynamics, "_state", None)
+        if state is None:
+            assert dynamics._save_state_fields() == {}
+            return
+
+        saved = dynamics._save_state_fields()
+        assert state.num_graphs == num_graphs
+        assert saved.keys() == {key for key, _ in state}
+        for key, value in state:
+            assert isinstance(value, torch.Tensor), key
+            assert value.ndim > 0, key
+            assert value.shape[0] == num_graphs, key
+            assert saved[key].shape == value.shape, key
+            assert saved[key].data_ptr() != value.data_ptr(), key
 
     @pytest.mark.parametrize("M", [1, 3])
     def test_nvt_langevin_shapes(self, M):

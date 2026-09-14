@@ -122,6 +122,16 @@ class TestInit:
         dp, inner = _make_dp()
         assert dp.model is inner.model
 
+    def test_exit_status_matches_inner_dynamics(self) -> None:
+        """The wrapper and inner dynamics use one completion threshold."""
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1, exit_status=3)
+        config = DomainConfig(cutoff=3.0, skin=0.5)
+
+        dp = DomainParallel(dynamics=inner, config=config, exit_status=99)
+
+        assert dp.exit_status == inner.exit_status == 3
+
 
 # ======================================================================
 # Property delegation — __needs_keys__ / __provides_keys__ read from
@@ -395,6 +405,22 @@ class TestRankResolution:
 
 
 class TestPrimeForces:
+    def test_distributed_step_initializes_admission_before_priming(self) -> None:
+        """Distributed stepping dispatches admission before force priming."""
+        dp, _ = _make_dp()
+        batch = _make_batch()
+        hook = _RecordingHook(stage=DynamicsStage.ON_ADMISSION)
+        dp.register_hook(hook)
+        dp._dist_model = MagicMock()
+
+        with (
+            patch.object(dp, "_prime_forces", side_effect=RuntimeError("stop")),
+            pytest.raises(RuntimeError, match="stop"),
+        ):
+            dp.step(batch)
+
+        assert len(hook.calls) == 1
+
     def test_prime_forces_not_called_in_single_process(self) -> None:
         """No ``_dist_model`` means step() short-circuits to inner
         dynamics; force priming is never triggered."""

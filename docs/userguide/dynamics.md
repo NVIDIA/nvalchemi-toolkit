@@ -31,6 +31,7 @@ loop is broken into discrete stages, enumerated by
 
 | Stage | When it fires |
 |-------|---------------|
+| `ON_ADMISSION` | Once when a batch enters the engine, before force priming and the first step |
 | `BEFORE_STEP` | At the very beginning of a step, before any operations |
 | `BEFORE_PRE_UPDATE` | Just before the integrator's first half-step |
 | `AFTER_PRE_UPDATE` | After the first half-step completes |
@@ -41,7 +42,12 @@ loop is broken into discrete stages, enumerated by
 | `AFTER_STEP` | At the very end of a step, after all operations |
 | `ON_CONVERGE` | When a convergence criterion is met |
 
-A single call to `step()` proceeds through these stages in order:
+When a batch is newly admitted, **ON_ADMISSION** hooks fire before force
+priming and before the first step. Admission is reset for every new `run()` and
+for managed membership changes such as inflight refill or pipeline communication.
+Repeated `step()` calls do not re-fire admission until it is reset.
+
+Each step then proceeds through these stages in order:
 
 1. **BEFORE_STEP** hooks fire.
 2. `pre_update(batch)` --- the integrator's first half-step (e.g. update velocities
@@ -132,10 +138,14 @@ Any keyword arguments accepted by `torch.compile` (e.g. `fullgraph`, `mode`,
 construction.
 
 ```{note}
-Not all hooks are graph-break-free under `fullgraph=True`. Hooks that perform
-Python-side control flow (e.g. logging, I/O) will introduce graph breaks. If you
-need an unbroken graph, ensure your hooks are written with torch-compatible
-operations only.
+Not all hooks are graph-break-free under `fullgraph=True`. Per-step hooks that
+perform Python-side control flow (e.g. logging, I/O) will introduce graph breaks.
+If you need an unbroken graph, ensure those hooks use torch-compatible operations.
+
+Use `DynamicsStage.ON_ADMISSION` for one-time validation, shape-dependent tensor
+allocation, and Python-side setup. `FusedStage` dispatches admission before force
+priming and outside compiled `_step_impl`, so this setup does not enter the
+steady-state graph.
 ```
 
 ## Distributed pipelines
