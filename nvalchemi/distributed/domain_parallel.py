@@ -742,7 +742,7 @@ class DomainParallel(BaseDynamics):
                 ctx_full = (
                     self._build_context(
                         full,
-                        active_graph_mask=active_graph_mask,
+                        active_graph_mask=self._active_graph_mask(full),
                     )
                     if full is not None
                     else ctx
@@ -754,7 +754,7 @@ class DomainParallel(BaseDynamics):
                 if self._domain_rank == 0 and full_batch is not None:
                     ctx_full = self._build_context(
                         full_batch,
-                        active_graph_mask=active_graph_mask,
+                        active_graph_mask=self._active_graph_mask(full_batch),
                     )
                     hook(ctx_full, stage)
 

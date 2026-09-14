@@ -1700,7 +1700,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self,
         stage: DynamicsStage,
         batch: Batch,
-        active_graph_mask: torch.Tensor | None,
+        active_graph_mask: torch.Tensor | None = None,
     ) -> None:
         """Execute hooks for the given stage with dynamics-specific tracking."""
         self.current_hook_stage = stage
@@ -2193,6 +2193,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         7. Check convergence and fire ON_CONVERGE hooks if any samples converged
         8. Increment step_count
 
+        Compute hooks run for every model evaluation. On the first call to
+        ``step()``, initial force priming evaluates the model before
+        ``step_count`` advances, and the normal step evaluates it again.
+        Consequently, both compute-hook dispatches receive ``step_count == 0``.
+
         Samples with ``status >= exit_status`` are treated as no-ops for the
         integrator (pre_update/post_update). Their positions and velocities
         are preserved through the step. This enables back-pressure handling
@@ -2247,7 +2252,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._forces_primed = True
 
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch, active_graph_mask)
-
 
         with self._stream_scope(batch.device):
             self._call_hooks(
@@ -3502,6 +3506,21 @@ class FusedStage(BaseDynamics):
 
         self._admission_initialized = True
 
+    def _mark_reprime_entries(
+        self,
+        batch: Batch,
+        previous_status: torch.Tensor,
+    ) -> torch.Tensor:
+        """Mark graphs newly entering a sub-stage requiring force repriming."""
+        current_status = batch.status.view(-1)[: batch.num_graphs]
+        entered = torch.zeros_like(current_status, dtype=torch.bool)
+        for status_code in self.reprime_on_entry:
+            entered.logical_or_(
+                (previous_status != status_code) & (current_status == status_code)
+            )
+        batch.reprime_pending.view(-1)[: batch.num_graphs].logical_or_(entered)
+        return current_status.clone()
+
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
 
@@ -3780,6 +3799,13 @@ class FusedStage(BaseDynamics):
 
         If ``compile_step=True`` was set, this delegates to the compiled
         step implementation.
+
+        As in :class:`BaseDynamics`, initial force priming causes two
+        compute-hook dispatches at ``step_count == 0``. Transition repriming
+        instead occurs within the normal shared compute, so hooks are
+        dispatched once and ``step_count`` advances at the end of that fused
+        iteration. Transitioning graphs skip their dynamics update, so their
+        per-system stage counters do not advance.
 
         Parameters
         ----------

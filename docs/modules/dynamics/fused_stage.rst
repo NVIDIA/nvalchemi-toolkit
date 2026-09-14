@@ -118,7 +118,7 @@ Optional force reprime on sub-stage entry
 
 Some stages require model outputs to be refreshed under the target stage's
 context before their integrator or optimizer advances. This ensures that
-the entering graphs are processed correctly by the target-stage 
+the entering graphs are processed correctly by the target-stage
 ``AFTER_COMPUTE`` hooks.
 
 .. code-block:: python
