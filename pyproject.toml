@@ -9,23 +9,24 @@ authors = [
 ]
 description = "High-performance open-source deep-learning framework for exploring, building and deploying AI atomic simulation workflows."
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = {file="LICENSE"}
 dependencies = [
     "nvalchemi-toolkit-ops>=0.4.1",
     "torch>=2.8",
     "click",
     "loguru",
-    "numpy<2.4",
+    "numpy>=2,<3",
     "jaxtyping>=0.3.2",
     "tensordict>=0.11.0",
     "pydantic>=2.11.7",
-    "dm-tree>=0.1.8",
     "plum-dispatch>=2.5.7",
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
-    "plotext",
+    # plotext 6 removed clf(), which hooks/reporting and training/cli call.
+    "plotext<6",
+
     "nvidia-physicsnemo>=2.2.0",
 ]
 keywords = [
@@ -68,16 +69,18 @@ ase = [
 ]
 cu12 = [
     "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu12]>=2.2.0; sys_platform != 'darwin'",
-    "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
+    # PhysicsNeMo core only: its [cuXX] extras pin cupy<14 (no cp314 wheels),
+    # and nothing in nvalchemi imports the RAPIDS stack (cuml/cupy/DALI).
+    # Users needing RAPIDS should install it directly.
+    "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
     "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu13]>=2.2.0; sys_platform != 'darwin'",
-    "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
+    # PhysicsNeMo core only — see the cu12 extra note.
+    "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
@@ -142,8 +145,10 @@ conflicts = [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
-  # PhysicsNeMo's CUDA extras pull RAPIDS with numba<0.62, while Fairchem 2.22
-  # requires numba>=0.62. Use the standalone UMA CUDA variants instead.
+  # Historical env isolation: keep UMA and the CUDA extras in separate
+  # environments (the standalone uma-cuXX variants combine them). The original
+  # RAPIDS/numba conflict no longer applies since the cuXX extras dropped the
+  # RAPIDS stack, but the env split is kept deliberately.
   [
     { extra = "uma" },
     { extra = "cu12" },
@@ -197,6 +202,13 @@ conflicts = [
 ]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'",
+  # fairchem-core pins lmdb<=1.7.3, which has no cp314 wheel. lmdb>=2.0.0
+  # ships cp314 wheels. Nothing in our fairchem usage touches lmdb, so from
+  # 3.14 on override the pin; below 3.14, re-state fairchem's original pin.
+  # (A marker-scoped override alone would DROP lmdb on older Pythons, since
+  # uv replaces the requirement outright — hence the explicit pair.)
+  "lmdb>=1.6.2,<=1.7.3; python_version < '3.14'",
+  "lmdb>=2.0.0; python_version >= '3.14'",
 ]
 dependency-metadata = [
   { name = "nvalchemi-toolkit-ops", version = "0.4.1", requires-dist = [
@@ -243,7 +255,9 @@ dev = [
     "interrogate==1.5.0",
     "ruff==0.15.4",
     "nvtx",
-    "rdkit>=2025.3.3",
+    # no cp315 x86_64 wheel yet (2026.3.6 ships cp315 only for aarch64/mac)
+    "rdkit>=2025.3.3; python_version < '3.15'",
+
 ]
 distribution = [
   "pyarmor==9.1.8",

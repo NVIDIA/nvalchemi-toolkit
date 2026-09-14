@@ -49,6 +49,11 @@
   step as before; metric-driven schedulers step only at validation
   checkpoints, where the validation summary supplies the metric.
 
+- Python 3.14 support across the core package and the cu12/cu13 CUDA extras,
+  including pure-`pip` installs: `requires-python` is now `>=3.11,<3.15`.
+  Python 3.15 is not publicly supported yet (upstream wheels missing).
+- numpy relaxed to `>=2,<3` — downstream users may use any numpy 2.x.
+
 ### Model Wrappers
 
 - **Pipeline neighbor-list adaptation policy** — `PipelineModelWrapper`
@@ -95,6 +100,10 @@
   `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
 
 ### Fixed
+
+- Cap `plotext<6`: plotext 6 removed `clf()`, which hooks/reporting and the
+  training CLI call; fresh resolves were silently installing 6.x and breaking
+  Rich dashboards and `nvalchemi-training` on all Python versions.
 
 - **UMA CUDA dependency resolution** — add standalone `uma-cu12` and
   `uma-cu13` extras. They select the matching torch build without installing
@@ -151,6 +160,14 @@
   will be removed in a future release.
 
 ### Breaking Changes
+
+- The `cu12`/`cu13` extras no longer install the RAPIDS stack (`cuml`, `cupy`,
+  `pylibraft`, NVIDIA DALI) or PhysicsNeMo's CUDA extras — they now provide the
+  CUDA torch build, `nvalchemi-toolkit-ops`, `cuequivariance-ops-torch`, and
+  PhysicsNeMo core. Nothing in `nvalchemi` imports the RAPIDS stack, and this
+  removes upstream pins that made `pip install nvalchemi-toolkit[cu12]`
+  unresolvable on Python 3.14. Users needing RAPIDS should install it
+  directly (`cuml-cuXX`, `cupy-cuda1Xx`).
 
 - `EwaldModelWrapper` and `PMEModelWrapper` now default to `hybrid_forces=False`.
   The analytic direct-output path (`hybrid_forces=True`) does not produce
