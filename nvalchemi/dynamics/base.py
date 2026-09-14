@@ -3011,8 +3011,11 @@ class FusedStage(BaseDynamics):
     Because ``FusedStage`` shares a single forward pass across all sub-stages,
     hooks can be registered both on the fused stage and on its sub-stages.
     All step, compute, and integrator update boundaries fire at both levels.
-    Fused-stage hooks receive the full batch and overall active mask; sub-stage
-    hooks receive the same batch with that sub-stage's status mask.
+    Fused-stage hooks receive the full batch and overall active mask. Sub-stage
+    hooks at step and compute boundaries receive that sub-stage's status mask.
+    This includes reprime-pending graphs so the shared compute can refresh their
+    forces. Hooks around ``pre_update`` and ``post_update`` instead exclude those
+    graphs from both updates until the next fused step.
 
     The fused stage acts as the outer lifecycle boundary:
 

@@ -120,9 +120,20 @@ and Python setup that per-step hooks cannot safely perform under `fullgraph=True
 In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
 fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
 `AFTER_*` hooks run after it. This includes the pre-update and post-update
-boundaries. Fused hooks receive the overall active mask, while hooks registered
-on a sub-stage receive only that sub-stage's status mask. `ON_CONVERGE` remains
-sub-stage-only because convergence is evaluated independently per sub-stage.
+boundaries. Fused hooks receive the overall active mask. The mask passed to a
+sub-stage hook depends on the boundary:
+
+- `BEFORE_STEP`, `BEFORE_COMPUTE`, `AFTER_COMPUTE`, and `AFTER_STEP` receive
+  the sub-stage's status mask captured at the start of the fused step. This
+  includes graphs with `reprime_pending` so compute-boundary hooks can prepare
+  and observe their refreshed model outputs.
+- `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
+  `AFTER_POST_UPDATE` receive the narrower update-eligibility mask: the
+  sub-stage status mask with `reprime_pending` graphs excluded. The same mask
+  brackets both integrator updates, even though force computation clears
+  `reprime_pending` before the post-update boundary.
+- `ON_CONVERGE` receives that sub-stage's convergence mask and remains
+  sub-stage-only because convergence is evaluated independently per sub-stage.
 
 ---
 
