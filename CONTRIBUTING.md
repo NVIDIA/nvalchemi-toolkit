@@ -138,3 +138,48 @@ The pipeline has following stages:
     Aim for more than 80% code coverage.
     To test coverage locally, run the `get_coverage.sh` script from the `test` folder and
     check the coverage of the module that you added/edited.
+
+## Stacking Pull Requests
+
+This repository supports PR stacking: splitting a large change into a series of
+small pull requests that build on each other, so every layer can be reviewed on
+its own.
+
+GitHub does not currently support dependent pull requests across forks, so all
+branches of a stack must be created on this repository rather than on a fork.
+This means stacking requires write access to the repository.
+
+Name the branches of a stack `<github handle>/<shared-stack-topic>/<layer>`,
+for example `octocat/batched-dynamics/01` and `octocat/batched-dynamics/02`.
+The shared topic shows which branches belong to one stack, and the layer is
+the position in it.
+
+There are two ways to build a stack, both documented by GitHub:
+
+- With the `gh stack` commands in GitHub CLI, provided by the
+  `github/gh-stack` extension (see the [quickstart][gh-stacked-quickstart]):
+
+  ```bash
+  gh extension install github/gh-stack  # if `gh stack` is not available
+  gh stack init  # first branch, e.g. octocat/batched-dynamics/01
+  gh stack add octocat/batched-dynamics/02
+  gh stack submit  # push branches and open the linked pull requests
+  gh stack sync --prune  # after the bottom pull request merges and is deleted
+  ```
+
+- On the GitHub website, without the CLI: open each pull request with its
+  base branch set to the layer below, then link the pull requests with the
+  **Create stack** option; after merges, the **Rebase stack** button in the
+  merge box rebases the remaining layers server-side (see
+  [creating stacked pull requests][gh-stacked-web]).
+
+Either way, the first pull request targets `main` and each later one targets
+the branch below it, so reviewers see only that layer's diff. When the bottom
+pull request merges and its branch is deleted, GitHub retargets the next layer
+onto the merged pull request's base branch.
+
+Commits in a stack follow the same rules as any other contribution: sign off
+with `git commit -s` and keep pre-commit green.
+
+[gh-stacked-quickstart]: https://docs.github.com/en/pull-requests/get-started/stacked-prs-quickstart
+[gh-stacked-web]: https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/creating-stacked-pull-requests
