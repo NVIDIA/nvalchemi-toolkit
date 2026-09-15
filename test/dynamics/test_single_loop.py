@@ -39,6 +39,7 @@ from nvalchemi.dynamics.base import (
     Hook,
     _CommunicationMixin,
 )
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext
@@ -180,11 +181,21 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
 # -----------------------------------------------------------------------------
 
 
+class _CompileNoOpDynamics(BaseDynamics):
+    """Dynamics with capture-safe masked no-op updates."""
+
+    def _masked_pre_update(self, batch: Batch, mask: torch.Tensor) -> None:
+        """Skip pre-update work."""
+
+    def _masked_post_update(self, batch: Batch, mask: torch.Tensor) -> None:
+        """Skip post-update work."""
+
+
 class TrackingDynamics(BaseDynamics):
     """Dynamics subclass that tracks which samples were updated."""
 
-    def __init__(self, model: BaseModelMixin) -> None:
-        super().__init__(model=model)
+    def __init__(self, model: BaseModelMixin, **kwargs: Any) -> None:
+        super().__init__(model=model, **kwargs)
         self.updated_masks: list[torch.Tensor] = []
 
     def _masked_pre_update(
@@ -356,6 +367,24 @@ class TestConvergenceHook:
         # Should have updated all to 1 (in-place on the original tensor)
         assert (batch.status.view(-1) == 1).all()
 
+    def test_reprime_pending_blocks_status_migration(self) -> None:
+        """Graphs awaiting fresh model outputs must not migrate on stale convergence data."""
+        batch = create_batch_with_status(n_graphs=2)
+        batch.forces = torch.tensor([[0.01, 0, 0], [0.01, 0, 0]])
+        batch.status = torch.tensor([0, 0])
+        batch.reprime_pending = torch.tensor([[True], [False]])
+
+        hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
+        ctx = DynamicsContext(batch=batch, step_count=0)
+        hook(ctx, DynamicsStage.AFTER_STEP)
+
+        assert batch.status.tolist() == [0, 1]
+
+        batch.reprime_pending.zero_()
+        hook(ctx, DynamicsStage.AFTER_STEP)
+
+        assert batch.status.tolist() == [1, 1]
+
 
 # -----------------------------------------------------------------------------
 # TestFusedStage
@@ -415,6 +444,7 @@ class TestFusedStage:
         batch.status = torch.tensor([0, 0, 1, 1])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1, 0.1])
 
+        fused._forces_primed = True
         fused.step(batch)
 
         assert model.forward_count == 1
@@ -441,6 +471,79 @@ class TestFusedStage:
         assert len(dynamics1.updated_masks) == 1
         expected_mask1 = torch.tensor([False, True, False, True])
         assert torch.equal(dynamics1.updated_masks[0], expected_mask1)
+
+    def test_reprime_on_entry_delays_only_transitioning_samples(self) -> None:
+        """New samples wait one iteration for force repriming while other samples continue."""
+
+        class _MaskHook:
+            frequency = 1
+
+            def __init__(self, stage: DynamicsStage) -> None:
+                self.stage = stage
+                self.active_masks: list[torch.Tensor] = []
+
+            def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+                self.active_masks.append(ctx.active_graph_mask.clone())
+
+        dynamics0 = TrackingDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook(
+                criteria={"key": "energy_change", "threshold": 0.5}
+            ),
+        )
+        target_pre_hook = _MaskHook(DynamicsStage.BEFORE_PRE_UPDATE)
+        target_compute_hook = _MaskHook(DynamicsStage.AFTER_COMPUTE)
+        dynamics1 = TrackingDynamics(
+            model=self.model,
+            n_steps=2,
+            hooks=[target_pre_hook, target_compute_hook],
+        )
+        fused = FusedStage(
+            sub_stages=[(0, dynamics0), (1, dynamics1)],
+            reprime_on_entry={1},
+        )
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 0, 1])
+        batch.energy_change = torch.tensor([0.0, 1.0, 1.0])
+        batch.velocities = torch.ones(batch.num_nodes, 3)
+
+        fused.step(batch)
+
+        assert batch.status.tolist() == [1, 0, 1]
+        assert batch.reprime_pending.view(-1).tolist() == [True, False, False]
+        assert torch.equal(batch.velocities, torch.ones_like(batch.velocities))
+        assert batch.n_steps_counter_1.view(-1).tolist() == [0, 0, 1]
+
+        fused.step(batch)
+
+        assert dynamics1.updated_masks[-1].tolist() == [False, False, True]
+        assert target_pre_hook.active_masks[-1].tolist() == [False, False, True]
+        assert target_compute_hook.active_masks[-1].tolist() == [True, False, True]
+        assert batch.reprime_pending.view(-1).tolist() == [False, False, False]
+        assert batch.n_steps_counter_1.view(-1).tolist() == [0, 0, 0]
+        assert batch.status.tolist() == [1, 0, fused.exit_status]
+
+        fused.step(batch)
+
+        assert dynamics1.updated_masks[-1].tolist() == [True, False, False]
+        assert batch.n_steps_counter_1.view(-1).tolist() == [1, 0, 0]
+        assert batch.status.tolist() == [1, 0, fused.exit_status]
+
+    def test_reprime_on_entry_is_validated(self) -> None:
+        """Reprime targets must be a set of known integer status codes."""
+        dynamics0 = BaseDynamics(model=self.model)
+        dynamics1 = BaseDynamics(model=self.model)
+        sub_stages = [(0, dynamics0), (1, dynamics1)]
+
+        with pytest.raises(TypeError, match="must be a set"):
+            FusedStage(sub_stages=sub_stages, reprime_on_entry=[1])
+
+        with pytest.raises(TypeError, match="must be integers"):
+            FusedStage(sub_stages=sub_stages, reprime_on_entry={True})
+
+        with pytest.raises(ValueError, match="unknown.*3"):
+            FusedStage(sub_stages=sub_stages, reprime_on_entry={3})
 
     def test_convergence_migration_auto_registered(self) -> None:
         """ConvergenceHook should be auto-registered between adjacent sub-stages."""
@@ -549,8 +652,6 @@ class TestFusedStage:
         fused.run(batch)
 
         assert fused.step_count == 1
-        # FusedStage.run() does one initial force-priming forward before the loop,
-        # plus one during the actual step → total 2 forwards.
         assert model.forward_count == 2
 
     def test_run_stops_early_on_exit_status(self) -> None:
@@ -572,6 +673,25 @@ class TestFusedStage:
         # Should stop after 1 step since all migrate to exit_status=1
         assert fused.step_count == 1
 
+    def test_run_matches_standalone_dynamics(self) -> None:
+        """Single-stage fused and standalone runs have identical trajectories."""
+        model = CompilerFriendlyModel()
+        standalone = DemoDynamics(model=model, n_steps=3, dt=0.1)
+        fused_dynamics = DemoDynamics(model=model, n_steps=3, dt=0.1)
+        fused = FusedStage(sub_stages=[(0, fused_dynamics)])
+
+        standalone_batch = create_batch_with_status(n_graphs=3)
+        standalone_batch.status = torch.zeros(3, dtype=torch.long)
+        standalone_batch.velocities = torch.arange(9, dtype=torch.float32).view(3, 3)
+        fused_batch = standalone_batch.clone()
+
+        standalone.run(standalone_batch)
+        fused.run(fused_batch)
+
+        torch.testing.assert_close(fused_batch.positions, standalone_batch.positions)
+        torch.testing.assert_close(fused_batch.velocities, standalone_batch.velocities)
+        torch.testing.assert_close(fused_batch.forces, standalone_batch.forces)
+
     def test_step_increments_count(self) -> None:
         """step() should increment step_count."""
         dynamics = BaseDynamics(model=self.model)
@@ -589,6 +709,42 @@ class TestFusedStage:
 
         fused.step(batch)
         assert fused.step_count == 2
+
+    def test_reprime_on_entry_is_fullgraph_compile_safe(self) -> None:
+        """Compiled fused steps support transition and delayed reprime masks."""
+        torch.compiler.reset()
+        try:
+            model = CompilerFriendlyModel()
+            dynamics0 = _CompileNoOpDynamics(
+                model=model,
+                convergence_hook=ConvergenceHook.from_fmax(1e6),
+                device_type="cpu",
+            )
+            dynamics1 = _CompileNoOpDynamics(
+                model=model,
+                convergence_hook=ConvergenceHook.from_fmax(1e6),
+                device_type="cpu",
+            )
+            fused = FusedStage(
+                sub_stages=[(0, dynamics0), (1, dynamics1)],
+                reprime_on_entry={1},
+                compile_step=True,
+                compile_kwargs={"backend": "eager", "fullgraph": True},
+                device_type="cpu",
+            )
+            batch = create_batch_with_status(n_graphs=1)
+            batch.velocities = torch.ones(batch.num_nodes, 3)
+
+            fused.step(batch)
+            assert batch.status.item() == 1
+            assert batch.reprime_pending.item()
+            assert torch.equal(batch.velocities, torch.ones_like(batch.velocities))
+
+            fused.step(batch)
+            assert not batch.reprime_pending.item()
+            assert batch.status.item() == fused.exit_status
+        finally:
+            torch.compiler.reset()
 
     def test_compile_step_creates_compiled_callable(self) -> None:
         """compile_step=True should replace step with compiled callable."""
@@ -791,6 +947,67 @@ class TestFusedStage:
         fused.step(batch)
         assert (batch.status == 2).all()
 
+    def test_reprime_entry_converges_after_force_refresh(self) -> None:
+        """A configured entry may converge after its reprime compute."""
+        dynamics0 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
+        dynamics1 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
+        dynamics2 = BaseDynamics(model=self.model)
+        fused = FusedStage(
+            sub_stages=[(0, dynamics0), (1, dynamics1), (2, dynamics2)],
+            reprime_on_entry={1},
+        )
+        batch = create_batch_with_status(n_graphs=1)
+        batch.status = torch.tensor([0])
+
+        fused.step(batch)
+        assert batch.status.item() == 1
+        assert batch.reprime_pending.item()
+
+        fused.step(batch)
+        assert batch.status.item() == 2
+        assert not batch.reprime_pending.item()
+
+    def test_force_priming_does_not_count_as_a_stage_step(self) -> None:
+        """A force-priming iteration does not advance the stage step counter."""
+        fused = FusedStage(
+            sub_stages=[
+                (0, BaseDynamics(model=self.model, n_steps=1)),
+                (1, BaseDynamics(model=self.model, n_steps=1)),
+                (2, BaseDynamics(model=self.model)),
+            ],
+            reprime_on_entry={1},
+        )
+        batch = create_batch_with_status(n_graphs=1)
+        batch.status = torch.tensor([0])
+
+        fused.step(batch)
+
+        # The graph completes stage 0 and enters stage 1. It must refresh its
+        # forces before stage 1 can perform its first dynamics update.
+        assert batch.status.item() == 1
+        assert batch.reprime_pending.item()
+        assert batch.n_steps_counter_1.item() == 0
+
+        fused.step(batch)
+
+        # This iteration only refreshes the forces. No stage-1 dynamics update
+        # occurred, so the stage-1 step counter must remain unchanged.
+        assert batch.status.item() == 1
+        assert not batch.reprime_pending.item()
+        assert batch.n_steps_counter_1.item() == 0
+
+        fused.step(batch)
+
+        # The graph now performs its first stage-1 update. Since stage 1 has
+        # n_steps=1, it immediately advances to stage 2.
+        assert batch.status.item() == 2
+
     def test_compile_method_creates_compiled_callable(self) -> None:
         """Calling .compile() on an uncompiled FusedStage sets _compiled_step."""
         dynamics = BaseDynamics(model=self.model)
@@ -897,7 +1114,9 @@ class TestFusedStage:
         dyn2 = BaseDynamics(model=self.model)
 
         # BaseDynamics.__add__ doesn't set compile_step, so start with FusedStage
-        fused_compiled = FusedStage(sub_stages=[(0, dyn0)], compile_step=True)
+        fused_compiled = FusedStage(
+            sub_stages=[(0, dyn0)], compile_step=True, reprime_on_entry={0}
+        )
         fused2 = fused_compiled + dyn1
         fused3 = fused2 + dyn2
 
@@ -905,6 +1124,7 @@ class TestFusedStage:
         assert fused3.compile_step is True
         assert fused3._compiled_step is None
         assert len(fused3.sub_stages) == 3
+        assert fused3.reprime_on_entry == frozenset({0})
 
         # Explicit compile triggers it
         fused3.compile()
@@ -1627,7 +1847,8 @@ class TestFusedStageSubstageHooks:
 
     Verifies that hooks registered on substages fire correctly during
     FusedStage.step(), including:
-    - BEFORE_STEP, AFTER_COMPUTE, BEFORE_PRE_UPDATE, AFTER_POST_UPDATE, AFTER_STEP
+    - BEFORE_STEP, BEFORE_PRE_UPDATE, AFTER_PRE_UPDATE, AFTER_COMPUTE
+    - BEFORE_POST_UPDATE, AFTER_POST_UPDATE, AFTER_STEP
     - ON_CONVERGE (when convergence is detected)
     - Hook frequency is respected
     - Correct firing order
@@ -1635,8 +1856,6 @@ class TestFusedStageSubstageHooks:
 
     Stages that are NOT fired on substages:
     - BEFORE_COMPUTE (compute is shared, not per-substage)
-    - AFTER_PRE_UPDATE (masked_update is atomic, no intermediate hooks)
-    - BEFORE_POST_UPDATE (same reason)
     """
 
     def setup_method(self) -> None:
@@ -1711,6 +1930,7 @@ class TestFusedStageSubstageHooks:
         batch.status = torch.tensor([0, 0, 0])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1])
 
+        fused._forces_primed = True
         fused.step(batch)
 
         assert hook.call_count == 1
@@ -1836,16 +2056,12 @@ class TestFusedStageSubstageHooks:
         assert len(cap1.masks) == 1
         assert cap1.masks[0].tolist() == [False, False, True]
 
-    def test_non_applicable_stages_not_fired(self) -> None:
-        """BEFORE_COMPUTE, AFTER_PRE_UPDATE, and BEFORE_POST_UPDATE should NOT fire on substages.
+    def test_substage_split_update_hooks_fire(self) -> None:
+        """Split-update hooks fire around the shared model computation.
 
-        These stages are intentionally not fired on substages because:
-        - BEFORE_COMPUTE: compute is shared, not per-substage
-        - AFTER_PRE_UPDATE: masked_update is atomic, no intermediate hooks
-        - BEFORE_POST_UPDATE: same reason
-
-        Registers hooks for all three stages, steps once, and verifies
-        all hooks have call_count == 0.
+        BEFORE_COMPUTE remains shared rather than firing per substage.
+        AFTER_PRE_UPDATE and BEFORE_POST_UPDATE fire at the corresponding
+        substage boundaries.
         """
         dynamics0 = BaseDynamics(model=self.model)
 
@@ -1865,8 +2081,8 @@ class TestFusedStageSubstageHooks:
         fused.step(batch)
 
         assert hook_before_compute.call_count == 0
-        assert hook_after_pre.call_count == 0
-        assert hook_before_post.call_count == 0
+        assert hook_after_pre.call_count == 1
+        assert hook_before_post.call_count == 1
 
     def test_substage_step_count_incremented(self) -> None:
         """Substages and FusedStage should have step_count incremented together.

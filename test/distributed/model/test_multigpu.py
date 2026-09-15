@@ -34,7 +34,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.distributed.config import DomainConfig
+from nvalchemi.distributed.config import DomainConfig, HookScope
 from nvalchemi.distributed.domain_parallel import DomainParallel
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.integrators.nve import NVE
@@ -356,13 +356,44 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
     batch = Batch.from_data_list([data], device=device) if rank == 0 else None
     local_batch = dd.partition(batch)
 
-    dd._prime_forces(local_batch)
+    local_seen: list[tuple[torch.Tensor | None, int]] = []
+    global_seen: list[tuple[torch.Tensor | None, int]] = []
+
+    class _Probe:
+        stage = DynamicsStage.AFTER_STEP
+        frequency = 1
+
+        def __init__(
+            self,
+            seen: list[tuple[torch.Tensor | None, int]],
+            scope: HookScope,
+        ) -> None:
+            self.seen = seen
+            self.scope = scope
+
+        def __call__(self, ctx: Any, stage: DynamicsStage) -> None:
+            mask = ctx.active_graph_mask
+            self.seen.append(
+                (mask.clone() if mask is not None else None, ctx.batch.num_graphs)
+            )
+
+    dd.register_hook(_Probe(local_seen, HookScope.LOCAL))
+    dd.register_hook(_Probe(global_seen, HookScope.GLOBAL))
+    local_batch, _ = dd.step(local_batch)
 
     assert local_batch.forces is not None
     assert local_batch.forces.shape == (local_batch.num_nodes, 3)
     assert local_batch.energy is not None
     # Forces should be non-zero for a non-equilibrium system
     assert local_batch.forces.abs().max() > 0
+
+    assert len(local_seen) == 1
+    local_mask, _ = local_seen[-1]
+    assert local_mask is None
+
+    assert len(global_seen) == 1
+    global_mask, _ = global_seen[-1]
+    assert global_mask is None
 
 
 @pytest.mark.multigpu

@@ -93,7 +93,25 @@ tensorboard = [
     "tensorboard",
 ]
 uma = [
-    "fairchem-core>=2.0.0",
+    "fairchem-core>=2.22.0",
+    # torchtnt imports pkg_resources, which setuptools 81 removed.
+    "setuptools>=70.0.0,<81",
+]
+uma-cu12 = [
+    "fairchem-core>=2.22.0",
+    "setuptools>=70.0.0,<81",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
+]
+uma-cu13 = [
+    "fairchem-core>=2.22.0",
+    "setuptools>=70.0.0,<81",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -101,25 +119,66 @@ packages = ["nvalchemi"]
 
 # === UV configuration ====
 [tool.uv]
-default-groups = ["dev", "build"]
+default-groups = ["dev", "build", "docs"]
 # torch/torchvision resolve from the explicit PyTorch CUDA indexes while their
 # dependencies come from PyPI; unsafe-best-match lets uv pick the best version
 # across indexes rather than stopping at the first that has the name.
 index-strategy = "unsafe-best-match"
 conflicts = [
+  # UMA needs setuptools<81 while the build group needs the patched release.
+  [
+    { extra = "uma" },
+    { group = "build" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { group = "build" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { group = "build" },
+  ],
   [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
-  # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
-  # (via toolkit-ops), so UMA forks a separate env (`uv sync --extra uma`).
+  # PhysicsNeMo's CUDA extras pull RAPIDS with numba<0.62, while Fairchem 2.22
+  # requires numba>=0.62. Use the standalone UMA CUDA variants instead.
   [
-    { extra = "cu12" },
     { extra = "uma" },
+    { extra = "cu12" },
   ],
   [
-    { extra = "cu13" },
     { extra = "uma" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "cu12" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { extra = "cu12" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma" },
+    { extra = "uma-cu12" },
+  ],
+  [
+    { extra = "uma" },
+    { extra = "uma-cu13" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "uma-cu13" },
   ],
   # MACE 0.3.15 pins e3nn==0.4.4; fairchem-core (UMA) needs e3nn>=0.5 —
   # mutually exclusive, so install one extra per environment.
@@ -127,9 +186,17 @@ conflicts = [
     { extra = "mace" },
     { extra = "uma" },
   ],
+  [
+    { extra = "mace" },
+    { extra = "uma-cu12" },
+  ],
+  [
+    { extra = "mace" },
+    { extra = "uma-cu13" },
+  ],
 ]
 override-dependencies = [
-  "python-hostlist; sys_platform == 'never'"
+  "python-hostlist; sys_platform == 'never'",
 ]
 dependency-metadata = [
   { name = "nvalchemi-toolkit-ops", version = "0.4.1", requires-dist = [
@@ -144,20 +211,22 @@ dependency-metadata = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu126", extra = "uma-cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
 torchvision = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu126", extra = "uma-cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
 
 # these are intended to be developer facing
 [dependency-groups]
 build = [
     "ninja>=1.11.1.4",
-    # setuptools 81 dropped pkg_resources, which fairchem-core's torchtnt
-    # imports at load — pin <81 so the UMA stack imports.
-    "setuptools>=70.0.0,<81",
+    "setuptools>=83.0.0",
 ]
 dev = [
     "pre-commit",
@@ -166,18 +235,15 @@ dev = [
     "pytest-skip-slow>=0.0.5",
     "pytest-asyncio>=0.25.3",
     "pytest-dependency>=0.6.0",
-    "pyyaml>=6.0",
-    "black==22.10.0",
-    "interrogate==1.5.0",
-    "coverage>=7.2.0",
     "pytest-cov>=7.0.0",
-    "ruff==0.11.13",
-    "nvtx",
-    "hypothesis>=6.135.10",
-    "hypothesis-torch>=1.0.11",
-    "rdkit>=2025.3.3",
     "pytest-dependency>=0.6.0",
     "pytest-testmon>=2.2.0",
+    "coverage>=7.2.0",
+    "pyyaml>=6.0",
+    "interrogate==1.5.0",
+    "ruff==0.15.4",
+    "nvtx",
+    "rdkit>=2025.3.3",
 ]
 distribution = [
   "pyarmor==9.1.8",
@@ -195,7 +261,7 @@ docs = [
     "myst-parser>=0.18.0",
     "sphinx-favicon>=1.0.1",
     "pydata-sphinx-theme==0.15.2",
-    "python-dotenv==1.1.1"
+    "python-dotenv==1.2.2",
 ]
 
 [tool.setuptools.packages.find]

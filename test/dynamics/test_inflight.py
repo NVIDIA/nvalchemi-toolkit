@@ -23,17 +23,24 @@ This module tests the full inflight batching workflow including:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import (
     BaseDynamics,
+    BufferConfig,
     ConvergenceHook,
+    DistributedPipeline,
+    DynamicsStage,
     FusedStage,
 )
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -161,6 +168,35 @@ def initialize_batch_for_dynamics(batch: Batch) -> Batch:
     return batch
 
 
+class _IncrementDynamics(BaseDynamics):
+    """Deterministic dynamics used to observe masked pre/post updates."""
+
+    def pre_update(self, batch: Batch) -> None:
+        """Increment positions during the pre-update phase."""
+        with torch.no_grad():
+            batch.positions.add_(1.0)
+
+    def post_update(self, batch: Batch) -> None:
+        """Increment positions during the post-update phase."""
+        with torch.no_grad():
+            batch.positions.add_(1.0)
+
+
+class _MaskRecordingHook:
+    """Record active masks at the post-compute boundary."""
+
+    stage = DynamicsStage.AFTER_COMPUTE
+    frequency = 1
+
+    def __init__(self) -> None:
+        self.active_masks: list[torch.Tensor | None] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Capture a copy of the active graph mask."""
+        active = ctx.active_graph_mask
+        self.active_masks.append(None if active is None else active.clone())
+
+
 # -----------------------------------------------------------------------------
 # TestFusedStageMode2
 # -----------------------------------------------------------------------------
@@ -243,6 +279,207 @@ class TestFusedStageInflight:
         assert result is not None
         # Remaining 1 + replacements 2 = 3 (all slots preserved)
         assert result.num_graphs == 3
+
+    def test_refill_allocates_and_primes_replacement_outputs(self) -> None:
+        """A fully replaced inflight batch is primed before its first update."""
+        dataset = MockDataset([(2, 0)] * 6)
+        sampler = SizeAwareSampler(
+            dataset,
+            max_atoms=6,
+            max_edges=0,
+            max_batch_size=3,
+        )
+        dynamics = DemoDynamics(
+            model=self.model,
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(
+                1e6,
+                source_status=0,
+                target_status=1,
+            ),
+        )
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            refill_frequency=1,
+        )
+
+        with patch.object(
+            fused, "_prime_forces", wraps=fused._prime_forces
+        ) as prime_forces:
+            result = fused.run(batch=None)
+
+        assert result is None
+        assert prime_forces.call_count == 2
+        replacement_batch = prime_forces.call_args_list[1].args[0]
+        assert replacement_batch.forces.shape == (6, 3)
+        assert replacement_batch.energy.shape == (3, 1)
+
+    def test_base_refill_resets_full_batch_force_priming(self) -> None:
+        """BaseDynamics fully primes a reconstructed batch before updating."""
+        dataset = MockDataset([(2, 0)] * 3)
+        sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
+        hook = _MaskRecordingHook()
+        dynamics = _IncrementDynamics(
+            model=self.model,
+            sampler=sampler,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+            hooks=[hook],
+        )
+        batch = initialize_batch_for_dynamics(sampler.build_initial_batch())
+        batch["status"] = torch.tensor([[0], [1]])
+        dynamics._forces_primed = True
+
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert dynamics._forces_primed is False
+        assert getattr(result, "reprime_pending", None) is None
+        assert getattr(result, "forces", None) is None
+        positions_before = result.positions.clone()
+
+        with patch.object(
+            dynamics, "_prime_forces", wraps=dynamics._prime_forces
+        ) as prime_forces:
+            result, converged = dynamics.step(result)
+
+        assert prime_forces.call_count == 1
+        assert converged is not None and converged.tolist() == [0, 1]
+        torch.testing.assert_close(result.positions, positions_before + 2.0)
+        assert hook.active_masks[-1].tolist() == [True, True]
+
+    def test_fused_refill_fully_primes_before_update(
+        self,
+    ) -> None:
+        """FusedStage fully primes a reconstructed batch before updating."""
+        dataset = MockDataset([(2, 0)] * 3)
+        sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
+        hook = _MaskRecordingHook()
+        dynamics = _IncrementDynamics(
+            model=self.model,
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+            hooks=[hook],
+        )
+        fused = FusedStage(sub_stages=[(0, dynamics)], sampler=sampler)
+        batch = initialize_batch_for_dynamics(sampler.build_initial_batch())
+        batch["status"] = torch.tensor([[0], [fused.exit_status]])
+        fused._forces_primed = True
+
+        result = fused.refill_check(batch, fused.exit_status)
+
+        assert result is not None
+        assert fused._forces_primed is False
+        assert not result.reprime_pending.any()
+        positions_before = result.positions.clone()
+
+        with patch.object(
+            fused, "_prime_forces", wraps=fused._prime_forces
+        ) as prime_forces:
+            result, _ = fused.step(result)
+
+        assert prime_forces.call_count == 1
+        torch.testing.assert_close(result.positions, positions_before + 2.0)
+        assert not result.reprime_pending.any()
+        assert hook.active_masks[-1].tolist() == [True, True]
+
+    def test_fused_pipeline_full_drain_resets_force_priming(self) -> None:
+        """A rebuilt FusedStage pipeline batch uses the full-prime path."""
+        dataset = MockDataset([(2, 0)] * 4)
+        sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
+        dynamics = _IncrementDynamics(model=self.model)
+        stage = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=BufferConfig(
+                num_systems=2,
+                num_nodes=4,
+                num_edges=0,
+            ),
+        )
+        stage.active_batch = initialize_batch_for_dynamics(
+            sampler.build_initial_batch()
+        )
+        stage.active_batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        stepped_batch = stage.active_batch
+        stage._forces_primed = True
+        pipeline = DistributedPipeline(stages={0: stage, 1: stage})
+
+        def drain_active_batch(converged: torch.Tensor | None) -> None:
+            assert converged is not None
+            stage.active_batch = None
+
+        with (
+            patch("nvalchemi.dynamics.base.dist.is_initialized", return_value=True),
+            patch("nvalchemi.dynamics.base.dist.get_rank", return_value=0),
+            patch.object(
+                stage,
+                "step",
+                return_value=(stepped_batch, torch.tensor([0, 1])),
+            ),
+            patch.object(
+                stage,
+                "_poststep_sync_buffers",
+                side_effect=drain_active_batch,
+            ),
+        ):
+            pipeline.step()
+
+        assert stage.active_batch is not None
+        assert getattr(stage.active_batch, "reprime_pending", None) is None
+        assert getattr(stage.active_batch, "forces", None) is None
+        assert getattr(stage.active_batch, "energy", None) is None
+        assert stage._forces_primed is False
+
+    def test_base_pipeline_full_drain_resets_force_priming(self) -> None:
+        """A rebuilt BaseDynamics pipeline batch uses the full-prime path."""
+        dataset = MockDataset([(2, 0)] * 4)
+        sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
+        stage = _IncrementDynamics(
+            model=self.model,
+            sampler=sampler,
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=BufferConfig(
+                num_systems=2,
+                num_nodes=4,
+                num_edges=0,
+            ),
+        )
+        stage.active_batch = initialize_batch_for_dynamics(
+            sampler.build_initial_batch()
+        )
+        stepped_batch = stage.active_batch
+        stage._forces_primed = True
+        pipeline = DistributedPipeline(stages={0: stage, 1: stage})
+
+        def drain_active_batch(converged: torch.Tensor | None) -> None:
+            assert converged is not None
+            stage.active_batch = None
+
+        with (
+            patch("nvalchemi.dynamics.base.dist.is_initialized", return_value=True),
+            patch("nvalchemi.dynamics.base.dist.get_rank", return_value=0),
+            patch.object(
+                stage,
+                "step",
+                return_value=(stepped_batch, torch.tensor([0, 1])),
+            ),
+            patch.object(
+                stage,
+                "_poststep_sync_buffers",
+                side_effect=drain_active_batch,
+            ),
+        ):
+            pipeline.step()
+
+        assert stage.active_batch is not None
+        assert getattr(stage.active_batch, "reprime_pending", None) is None
+        assert getattr(stage.active_batch, "forces", None) is None
+        assert getattr(stage.active_batch, "energy", None) is None
+        assert stage._forces_primed is False
 
     def test_refill_clears_stale_last_converged(self) -> None:
         """A graduation that shrinks the batch must drop stale ``_last_converged``.
@@ -854,9 +1091,8 @@ class TestInflightWithConvergence:
         N sub-stages). The last sub-stage needs a manually-registered hook to
         migrate samples to exit_status.
 
-        Note: Both hooks fire in the same step because AFTER_STEP hooks for all
-        sub-stages fire after all masked updates complete. So samples can migrate
-        0 -> 1 -> 2 in a single step.
+        Because neither target requires reprime, both convergence hooks may
+        migrate a graph sequentially after the same shared model computation.
         """
         # Create 2-sub-stage FusedStage (opt + md style)
         # Use high thresholds so DemoModel forces always trigger convergence
@@ -929,7 +1165,7 @@ class TestInflightWithConvergence:
         batch = sampler.build_initial_batch()
         initialize_batch_for_dynamics(batch)
 
-        # After 1 step: status should migrate 0 -> 1 -> 2
+        # Neither stage requires reprime, so status should migrate 0 -> 1 -> 2 after 1 step
         batch, _converged = fused.step(batch)
 
         # All samples should be at exit_status=2

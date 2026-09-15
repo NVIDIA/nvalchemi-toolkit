@@ -265,9 +265,15 @@ class LoggingHook:
         with stream_ctx:
             if use_stream:
                 self._stream.wait_stream(main_stream)
-            td = td.to("cpu", non_blocking=True)
+            cpu_td = td.to("cpu", non_blocking=True)
+            if use_stream:
+                # Keep each CUDA snapshot's storage alive until its asynchronous
+                # copy on the logging stream has completed.
+                for value in td.values():
+                    if value.is_cuda:
+                        value.record_stream(self._stream)
 
-        self._executor.submit(self._dispatch, td, step_count)
+        self._executor.submit(self._dispatch, cpu_td, step_count)
 
     @torch.compiler.disable
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
