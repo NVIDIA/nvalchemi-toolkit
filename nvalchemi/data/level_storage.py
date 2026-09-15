@@ -452,8 +452,11 @@ def _expand_segments_warp(
 ) -> torch.Tensor:
     """Expand segment indices to element indices using a Warp kernel.
 
-    The kernel overload matching *index_dtype* is selected automatically,
-    so no dtype conversion is performed on the input tensors.
+    The kernel overload matching *index_dtype* is selected automatically, and
+    the pointer slices it reads are cast to that dtype: a storage built with an
+    explicit ``batch_ptr`` keeps it in ``int32``, which is what a clone — and
+    therefore every device move — hands its own materialized pointer back as,
+    and what the ``int64`` overload rejects outright rather than converting.
 
     Parameters
     ----------
@@ -486,8 +489,8 @@ def _expand_segments_warp(
 
     kernel = _expand_segments_overloads[wp_dtype]
 
-    starts = batch_ptr[seg_idx]
-    ends = batch_ptr[seg_idx + 1]
+    starts = batch_ptr[seg_idx].to(index_dtype)
+    ends = batch_ptr[seg_idx + 1].to(index_dtype)
     lengths = ends - starts
 
     cumlen = torch.cumsum(lengths, dim=0, dtype=index_dtype)

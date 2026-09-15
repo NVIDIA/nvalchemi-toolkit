@@ -27,6 +27,7 @@ from nvalchemi.data.level_storage import (
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
+    _expand_segments_warp,
 )
 
 
@@ -1422,3 +1423,21 @@ class TestMultiLevelStorageToSegmented:
 
         with pytest.raises(ValueError, match="[Bb]atch size mismatch"):
             m.to_segmented(validate=False)
+
+
+# -----------------------------------------------------------------------------
+# _expand_segments_warp
+# -----------------------------------------------------------------------------
+class TestExpandSegmentsWarp:
+    """Tests for the Warp segment-expansion helper."""
+
+    def test_int32_pointer_expands_under_int64_index_dtype(self, gpu_device):
+        """An int32 seg_idx and batch_ptr expand through the int64 kernel overload."""
+        device = torch.device(gpu_device)
+        batch_ptr = torch.tensor([0, 2, 5, 9], device=device, dtype=torch.int32)
+        seg_idx = torch.tensor([0, 2], device=device, dtype=torch.int32)
+
+        out = _expand_segments_warp(seg_idx, batch_ptr, device, torch.int64)
+
+        assert out.dtype == torch.int64
+        assert out.tolist() == [0, 1, 5, 6, 7, 8]

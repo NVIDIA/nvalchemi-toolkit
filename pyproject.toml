@@ -55,6 +55,7 @@ include = ["nvalchemi/**/*.py"]
 [project.scripts]
 nvalchemi-io-test = "nvalchemi.data.io_test:main"
 nvalchemi-training = "nvalchemi.training.cli:main"
+nvalchemi-distill = "nvalchemi.training.distillation.cli:distill"
 
 [project.urls]
 

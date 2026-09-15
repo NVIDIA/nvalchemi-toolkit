@@ -18,10 +18,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 from torch.utils.data import DataLoader
+
+_ModelT = TypeVar("_ModelT", bound=torch.nn.Module)
 
 __all__ = [
     "configure_dataloader",
@@ -29,6 +31,7 @@ __all__ = [
     "freeze_unconfigured_models",
     "move_to_devices",
     "train_configured_models",
+    "unwrap_model",
 ]
 
 
@@ -228,3 +231,36 @@ def configure_parallelism(
         f"Unsupported parallelism strategy: {strategy!r}; "
         "supported strategies: ['none']"
     )
+
+
+def unwrap_model(model: _ModelT) -> _ModelT:
+    """Return the module a parallelism wrapper owns, or the model itself.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        A model as a strategy holds it, wrapped or bare.
+
+    Returns
+    -------
+    torch.nn.Module
+        The wrapped module, or ``model`` unchanged when nothing wraps it.
+
+    Notes
+    -----
+    A wrapper is recognized by the ``module`` attribute it publishes rather than
+    by its class, so an FSDP wrapper and a hand-rolled one are unwrapped exactly
+    as a :class:`~torch.nn.parallel.DistributedDataParallel` replica is. An
+    isinstance check would silently narrow that to the one wrapper it names,
+    which is not what the callers promise.
+
+    The return type is the argument's own, because a wrapper is a runtime
+    substitution behind the type a caller declared: a strategy annotates its
+    models as the interface it drives them through and a hook swaps a replica
+    in underneath, so unwrapping hands back the very surface that annotation
+    named — a :class:`~nvalchemi.models.base.BaseModelMixin` for a caller that
+    goes on to read ``model_config``, rather than the bare
+    :class:`~torch.nn.Module` a widened signature would leave it holding.
+    """
+    module = getattr(model, "module", None)
+    return model if module is None else module

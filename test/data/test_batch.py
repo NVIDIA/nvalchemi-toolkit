@@ -379,6 +379,27 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 2]
 
+    def test_index_select_with_int32_batch_ptr(self, device):
+        """A batch whose pointer was materialized before the device move still selects."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        batch = Batch.from_data_list(data)
+        _ = batch.batch_ptr
+        batch = batch.to(device)
+        assert batch.batch_ptr.dtype == torch.int32
+
+        sub = batch[torch.tensor([0, 2], device=device)]
+
+        assert sub.num_graphs == 2
+        assert sub.num_nodes_list == [2, 4]
+        torch.testing.assert_close(
+            sub.positions,
+            torch.cat([data[0].positions, data[2].positions]).to(device),
+        )
+
     def test_index_select_with_edges_applies_edge_index_correction(self):
         """index_select on a batch with edges corrects neighbor_list offsets."""
         data_list = [

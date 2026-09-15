@@ -1849,7 +1849,38 @@ def _common_template_options(function: Any) -> Any:
     return function
 
 
-@click.group(context_settings={"max_content_width": 100}, epilog=_MAIN_EPILOG)
+class _TrainingGroup(click.Group):
+    """Training CLI root that resolves the distillation group on first use.
+
+    The distillation recipe CLI lives beside the strategy it drives and reuses
+    this module's spec models, so importing it here at module scope would close
+    an import cycle. Resolving it when a command is looked up instead keeps the
+    cycle open, keeps ``--help`` complete, and keeps the dynamics and
+    evaluation stack a recipe pulls in out of an ordinary training run.
+    """
+
+    def _load_distillation(self) -> None:
+        """Attach the distillation group unless it is already registered."""
+        if "distill" in self.commands:
+            return
+        from nvalchemi.training.distillation.cli import distill
+
+        self.add_command(distill)
+
+    def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+        """Return a registered command, resolving the distillation group first."""
+        self._load_distillation()
+        return super().get_command(ctx, name)
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        """Return every command name, resolving the distillation group first."""
+        self._load_distillation()
+        return super().list_commands(ctx)
+
+
+@click.group(
+    cls=_TrainingGroup, context_settings={"max_content_width": 100}, epilog=_MAIN_EPILOG
+)
 def main() -> None:
     """Review and scaffold nvalchemi training specifications."""
 

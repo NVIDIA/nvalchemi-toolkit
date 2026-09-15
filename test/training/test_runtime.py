@@ -25,7 +25,17 @@ from nvalchemi.training.runtime import (
     configure_dataloader,
     freeze_unconfigured_models,
     move_to_devices,
+    unwrap_model,
 )
+
+
+class _ToyWrapper(nn.Module):
+    """Parallelism wrapper stand-in publishing the module it owns."""
+
+    def __init__(self, module: nn.Module) -> None:
+        """Hold *module* under the attribute every such wrapper publishes."""
+        super().__init__()
+        self.module = module
 
 
 class TestRuntimeHelpers:
@@ -90,3 +100,13 @@ class TestRuntimeHelpers:
             assert [param.requires_grad for param in params] == [False] * len(params)
         assert omitted.training is True
         assert [param.requires_grad for param in params] == [True] * len(params)
+
+    def test_a_wrapper_holding_the_module_is_unwrapped(self) -> None:
+        model = nn.Linear(2, 1)
+
+        assert unwrap_model(_ToyWrapper(model)) is model
+
+    def test_a_bare_model_is_returned_unchanged(self) -> None:
+        model = nn.Linear(2, 1)
+
+        assert unwrap_model(model) is model
