@@ -46,6 +46,7 @@ from torch.distributed import ProcessGroup, Work
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.level_storage import (
+    TORCH_DTYPE_MAP,
     LevelSchema,
     MultiLevelStorage,
     SegmentedLevelStorage,
@@ -68,9 +69,46 @@ _LEVEL_ALIASES = {
     "edges": "edges",
     "system": "system",
 }
+_INT32_MAX = torch.iinfo(torch.int32).max
+_UNIFORM_BUFFER_DTYPES = frozenset(
+    {torch.bool, torch.float32, torch.float64, torch.int32, torch.int64}
+)
 
 
 _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
+
+
+def _canonical_schema_dtype(schema: LevelSchema, key: str) -> torch.dtype | str | None:
+    """Return the effective dtype for a schema field, preserving unknown names."""
+    declared = schema.dtypes.get(key)
+    if declared is None:
+        return None
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
+
+def _checked_product_lengths(
+    left_lengths: Sequence[int],
+    right_lengths: Sequence[int],
+    level_name: str,
+) -> list[int]:
+    """Return product cardinalities after checking int32 pointer limits."""
+    products: list[int] = []
+    total = 0
+    for left, right in zip(left_lengths, right_lengths, strict=True):
+        product = int(left) * int(right)
+        if product > _INT32_MAX:
+            raise OverflowError(
+                f"Product level '{level_name}' cardinality {product} exceeds "
+                f"int32 maximum ({_INT32_MAX})"
+            )
+        total += product
+        if total > _INT32_MAX:
+            raise OverflowError(
+                f"Product level '{level_name}' cumulative cardinality {total} "
+                f"exceeds int32 maximum ({_INT32_MAX})"
+            )
+        products.append(product)
+    return products
 
 
 def _build_batch_storage(
@@ -153,9 +191,35 @@ def _build_batch_storage(
         return fallback_level
 
     node_offset = 0
-    for key_value_pairs, n_nodes, n_edges in samples:
+    selected_keys: tuple[str, ...] | None = None
+    for sample_index, (key_value_pairs, n_nodes, n_edges) in enumerate(samples):
+        pairs = list(key_value_pairs)
+        if selected_keys is None:
+            selected_keys = tuple(key for key, _ in pairs)
+        values_by_key = dict(pairs)
+
+        # The legacy collator selects fields from the first sample.  Keep that
+        # ordering and selection for built-in fields, but reject a custom field
+        # that appears only in a later sample instead of silently dropping it.
+        for key, _ in pairs:
+            if key in selected_keys:
+                continue
+            level = _classify(key)
+            if (
+                level is not None
+                and _LEVEL_ALIASES.get(level, level) not in _BUILTIN_LEVELS
+            ):
+                raise ValueError(
+                    f"Custom field '{key}' in level "
+                    f"'{_LEVEL_ALIASES.get(level, level)}' appears only in "
+                    f"later sample {sample_index}"
+                )
+
         sample_pairs: list[tuple[str, Tensor]] = []
-        for key, value in key_value_pairs:
+        for key in selected_keys:
+            if key not in values_by_key:
+                continue
+            value = values_by_key[key]
             level = _classify(key)
             if level is None:
                 continue
@@ -166,15 +230,15 @@ def _build_batch_storage(
                 level = "edges"
             elif level == "system":
                 level = "system"
-            if level == "edges":
-                if key in _INDEX_KEYS:
-                    value = value + node_offset
+            if level == "edges" and key in _INDEX_KEYS:
+                value = value + node_offset
             sample_pairs.append((key, value))
         records.append((sample_pairs, n_nodes, n_edges))
         node_offset += n_nodes
 
     num_samples = len(records)
     grouped: dict[str, dict[str, list[Tensor]]] = defaultdict(lambda: defaultdict(list))
+    field_samples: dict[tuple[str, str], list[int]] = defaultdict(list)
     for sample_index, (pairs, _, _) in enumerate(records):
         seen = set()
         for key, value in pairs:
@@ -191,6 +255,7 @@ def _build_batch_storage(
                 )
             seen.add(key)
             grouped[group_name][key].append(value)
+            field_samples[(group_name, key)].append(sample_index)
 
     # All fields selected from the first sample must be available in every
     # sample.  The old hard-coded path eventually failed on inconsistent
@@ -198,9 +263,23 @@ def _build_batch_storage(
     for group_name, fields in grouped.items():
         for key, values in fields.items():
             if len(values) != num_samples:
+                field_kind = (
+                    "Custom field" if group_name not in _BUILTIN_LEVELS else "Field"
+                )
+                present_samples = field_samples[(group_name, key)]
+                missing_samples = [
+                    index
+                    for index in range(num_samples)
+                    if index not in present_samples
+                ]
+                missing_location = (
+                    f"sample {missing_samples[0]}"
+                    if len(missing_samples) == 1
+                    else f"samples {missing_samples}"
+                )
                 raise ValueError(
-                    f"Field '{key}' in level '{group_name}' is missing from one or "
-                    "more samples"
+                    f"{field_kind} '{key}' in level '{group_name}' is missing from "
+                    f"{missing_location}"
                 )
             if attr_map.level_kinds.get(group_name) != "product" and any(
                 value.ndim == 0 for value in values
@@ -209,6 +288,58 @@ def _build_batch_storage(
                     f"Field '{key}' in level '{group_name}' must have a leading "
                     "cardinality dimension"
                 )
+
+    # Custom fields own their dtype and trailing shape in the effective schema
+    # of this batch.  Normalize that schema from the first value only after all
+    # samples have been checked, so an input schema is never mutated and a
+    # rejected batch cannot leave partially updated metadata.
+    inferred_dtypes: list[tuple[str, str, bool, torch.dtype]] = []
+    for group_name, fields in grouped.items():
+        if group_name in _BUILTIN_LEVELS:
+            continue
+        kind = attr_map.level_kinds[group_name]
+        for key, values in fields.items():
+            first_value = values[0]
+            if any(value.dtype != first_value.dtype for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible dtypes: "
+                    f"{[value.dtype for value in values]}"
+                )
+            trailing_start = 2 if kind == "product" else 1
+            trailing_shape = first_value.shape[trailing_start:]
+            if any(
+                value.shape[trailing_start:] != trailing_shape for value in values[1:]
+            ):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible trailing shapes: "
+                    f"{[tuple(value.shape[trailing_start:]) for value in values]}"
+                )
+
+            declared_dtype = attr_map.dtypes.get(key)
+            if declared_dtype is not None:
+                try:
+                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has "
+                        f"unsupported declared dtype '{declared_dtype}'"
+                    ) from exc
+                if expected_dtype != first_value.dtype:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has dtype "
+                        f"{first_value.dtype}, expected declared dtype "
+                        f"{declared_dtype}"
+                    )
+
+            if declared_dtype is None:
+                inferred_dtypes.append(
+                    (key, group_name, kind != "uniform", first_value.dtype)
+                )
+
+    for key, group_name, is_segmented, dtype in inferred_dtypes:
+        attr_map.set(key, group_name, dtype=dtype, is_segmented=is_segmented)
 
     level_counts: dict[str, list[int | None]] = {
         "atoms": [record[1] for record in records],
@@ -341,10 +472,7 @@ def _build_batch_storage(
                         f"{tuple(payload_shape)}"
                     )
 
-        expected = [
-            left_count * right_count
-            for left_count, right_count in zip(left_counts, right_counts, strict=True)
-        ]
+        expected = _checked_product_lengths(left_counts, right_counts, group_name)
         level_counts[group_name] = expected
         for key, values in fields.items():
             # Flatten only after both axes and payload shapes are validated.
@@ -753,6 +881,9 @@ class Batch(DataMixin):
 
         Raises
         ------
+        OverflowError
+            If a product level's per-graph or cumulative cardinality exceeds
+            the signed int32 pointer range.
         KeyError
             If *name* is not registered or its segmented cardinality cannot
             be resolved from materialized data or resolved product parents.
@@ -764,7 +895,7 @@ class Batch(DataMixin):
         group = self._storage.groups.get(name)
         if group is not None:
             if isinstance(group, SegmentedLevelStorage):
-                return group.batch_ptr
+                return group.batch_ptr[: self.num_graphs + 1]
             return torch.arange(
                 self.num_graphs + 1, dtype=torch.int32, device=self.device
             )
@@ -791,11 +922,27 @@ class Batch(DataMixin):
                 ) from exc
             left_lengths = left_ptr[1:] - left_ptr[:-1]
             right_lengths = right_ptr[1:] - right_ptr[:-1]
-            product_lengths = left_lengths * right_lengths
+            product_lengths = left_lengths.to(torch.int64) * right_lengths.to(
+                torch.int64
+            )
+            if (
+                product_lengths.numel()
+                and int(product_lengths.max().item()) > _INT32_MAX
+            ):
+                raise OverflowError(
+                    f"Product level '{name}' cardinality exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
+            cumulative = torch.cumsum(product_lengths, dim=0, dtype=torch.int64)
+            if cumulative.numel() and int(cumulative[-1].item()) > _INT32_MAX:
+                raise OverflowError(
+                    f"Product level '{name}' cumulative cardinality exceeds "
+                    f"int32 maximum ({_INT32_MAX})"
+                )
             return torch.cat(
                 [
                     torch.zeros(1, dtype=torch.int32, device=self.device),
-                    torch.cumsum(product_lengths, dim=0, dtype=torch.int32),
+                    cumulative.to(torch.int32),
                 ]
             )
 
@@ -940,23 +1087,18 @@ class Batch(DataMixin):
         system_key_set = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
+
         # Iterate keys in dict (= pydantic field declaration) order so that
         # downstream insertion order into grouped storage is deterministic
         # across processes. Using ``set(...)`` here would iterate in
         # PYTHONHASHSEED-dependent order, producing rank-divergent group dicts
         # that break collective issue ordering in DD.
-        actual_keys = [
-            k
-            for k in data_list[0].model_dump(exclude_none=True).keys()
-            if k not in excluded
-        ]
-
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:
                 pairs = (
                     (key, value)
-                    for key in actual_keys
-                    if isinstance((value := getattr(data, key, None)), Tensor)
+                    for key, value in data.model_dump(exclude_none=True).items()
+                    if key not in excluded and isinstance(value, Tensor)
                 )
                 yield pairs, data.num_nodes, data.num_edges
 
@@ -1039,9 +1181,6 @@ class Batch(DataMixin):
         system_key_set = AtomicData._default_system_keys
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
-        actual_keys = [
-            k for k in first if k not in excluded and isinstance(first[k], Tensor)
-        ]
 
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:
@@ -1050,8 +1189,8 @@ class Batch(DataMixin):
                 n_edges = nl.shape[0] if isinstance(nl, Tensor) else 0
                 pairs = (
                     (key, value)
-                    for key in actual_keys
-                    if isinstance((value := data.get(key)), Tensor)
+                    for key, value in data.items()
+                    if key not in excluded and isinstance(value, Tensor)
                 )
                 yield pairs, n_nodes, n_edges
 
@@ -1486,8 +1625,11 @@ class Batch(DataMixin):
 
         Computes a fit mask for every materialized level and copies only graphs
         that fit in all levels. Uses the existing storage buffer operations and
-        their dtype limitations. If *copied_mask* is provided, it is updated
-        with the combined copy mask for :meth:`defrag`.
+        their dtype limitations. Materialized custom segmented and product
+        payloads must use ``torch.float32``; custom uniform payloads and
+        built-in levels retain their existing buffer-kernel behavior. If
+        *copied_mask* is provided, it is updated with the combined copy mask
+        for :meth:`defrag`.
 
         Parameters
         ----------
@@ -1798,9 +1940,9 @@ class Batch(DataMixin):
 
         def _custom_resolution(
             level_schema: LevelSchema,
-        ) -> dict[str, tuple[str, str | None]]:
+        ) -> dict[str, tuple[str, torch.dtype | str | None]]:
             return {
-                key: (group, level_schema.dtypes.get(key))
+                key: (group, _canonical_schema_dtype(level_schema, key))
                 for key, group in level_schema.attr_to_group.items()
                 if group not in _BUILTIN_LEVELS
             }
@@ -1890,12 +2032,12 @@ class Batch(DataMixin):
             )
 
         custom_resolution = {
-            key: (group, schema.dtypes.get(key))
+            key: (group, _canonical_schema_dtype(schema, key))
             for key, group in schema.attr_to_group.items()
             if group not in _BUILTIN_LEVELS
         }
         other_resolution = {
-            key: (group, other_schema.dtypes.get(key))
+            key: (group, _canonical_schema_dtype(other_schema, key))
             for key, group in other_schema.attr_to_group.items()
             if group not in _BUILTIN_LEVELS
         }
@@ -1960,6 +2102,19 @@ class Batch(DataMixin):
                         f"Custom level '{name}' field '{field}' has incompatible "
                         f"trailing shapes: {value.shape[1:]} vs "
                         f"{other_value.shape[1:]}"
+                    )
+                kind = schema.level_kind(name)
+                if kind == "uniform" and value.dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' dtype {value.dtype} "
+                        "is not supported by uniform buffer kernels"
+                    )
+                if kind in {"segmented", "product"} and (
+                    value.dtype != torch.float32 or other_value.dtype != torch.float32
+                ):
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' buffer payloads "
+                        "must use float32"
                     )
 
         # Preserve the existing built-in tolerance for missing groups and
@@ -2147,12 +2302,6 @@ class Batch(DataMixin):
 
         schema = self._storage.attr_map.clone()
         kind = schema.level_kind(group_name)
-        schema.set(
-            key,
-            group_name,
-            dtype=values[0].dtype if values and isinstance(values[0], Tensor) else None,
-            is_segmented=kind != "uniform",
-        )
         values = [v.to(device) if isinstance(v, Tensor) else v for v in values]
 
         def _validate_value(value: Any) -> Tensor:
@@ -2166,6 +2315,47 @@ class Batch(DataMixin):
             return value
 
         values = [_validate_value(value) for value in values]
+        if group_name not in _BUILTIN_LEVELS:
+            first_dtype = values[0].dtype
+            if any(value.dtype != first_dtype for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible dtypes: "
+                    f"{[value.dtype for value in values]}"
+                )
+            declared_dtype = schema.dtypes.get(key)
+            if declared_dtype is not None:
+                try:
+                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has "
+                        f"unsupported declared dtype '{declared_dtype}'"
+                    ) from exc
+                if expected_dtype != first_dtype:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has dtype "
+                        f"{first_dtype}, expected declared dtype {declared_dtype}"
+                    )
+            trailing_start = 2 if kind == "product" else 1
+            first_shape = values[0].shape[trailing_start:]
+            if any(value.shape[trailing_start:] != first_shape for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible trailing shapes: "
+                    f"{[tuple(value.shape[trailing_start:]) for value in values]}"
+                )
+
+        schema.set(
+            key,
+            group_name,
+            dtype=(
+                values[0].dtype
+                if group_name in _BUILTIN_LEVELS or key not in schema.dtypes
+                else None
+            ),
+            is_segmented=kind != "uniform",
+        )
         group = self._storage.groups.get(group_name)
         if group is None and group_name in _BUILTIN_LEVELS:
             raise ValueError(f"Group '{group_name}' not found in batch")
@@ -2255,12 +2445,9 @@ class Batch(DataMixin):
                             f"cardinalities {known_counts}"
                         )
                     parent_counts[axis] = counts
-                expected = [
-                    left_count * right_count
-                    for left_count, right_count in zip(
-                        left_counts, right_counts, strict=True
-                    )
-                ]
+                expected = _checked_product_lengths(
+                    left_counts, right_counts, group_name
+                )
                 if group is not None and expected != [
                     int(count) for count in group.segment_lengths[: self.num_graphs]
                 ]:
@@ -2497,6 +2684,8 @@ class Batch(DataMixin):
         Transmits the fixed metadata header and built-in level data first.
         Materialized custom level segment lengths and tensor payloads follow
         in schema order. A zero-graph batch sends only the metadata header.
+        The wire format does not negotiate custom layouts; the receiver must
+        provide a matching custom template as a caller precondition.
 
         Parameters
         ----------
@@ -2624,7 +2813,8 @@ class Batch(DataMixin):
             and custom level definitions. Required when receiving custom
             levels and for the first structured receive. Its materialized
             levels, field order, dtypes, and trailing shapes must match the
-            sender; callers may cache it for subsequent calls.
+            sender; callers may cache it for subsequent calls. No custom
+            layout negotiation occurs on the wire.
         tag : int
             Base message tag.
         group : ProcessGroup, optional
@@ -2660,6 +2850,8 @@ class Batch(DataMixin):
         """Blocking send to *dst*.
 
         Equivalent to ``self.isend(dst, tag=tag, group=group).wait()``.
+        When custom levels are present, the receiver must supply a matching
+        template; the wire format performs no custom layout negotiation.
 
         Parameters
         ----------
@@ -2695,7 +2887,9 @@ class Batch(DataMixin):
         template : Batch, optional
             Template batch providing attribute keys, dtypes, group structure,
             and custom level definitions. Required when receiving custom
-            levels and must match the sender's materialized layout.
+            levels and must match the sender's materialized layout. This
+            matching template is a caller precondition; no custom layout
+            negotiation occurs on the wire.
         tag : int
             Base message tag.
         group : ProcessGroup, optional

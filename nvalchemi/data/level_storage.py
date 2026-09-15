@@ -262,7 +262,7 @@ class LevelSchema:
             for attr in attrs
         }
         self.segmented_groups: set[str] = (
-            segmented_groups
+            segmented_groups.copy()
             if segmented_groups is not None
             else DEFAULT_SEGMENTED_GROUPS.copy()
         )
@@ -275,7 +275,7 @@ class LevelSchema:
                     f"dtype keys must match attribute set. Missing: {expected - provided}, "
                     f"extra: {provided - expected}"
                 )
-            self.dtypes: dict[str, str] = dtypes
+            self.dtypes: dict[str, str] = dtypes.copy()
         else:
             self.dtypes = DEFAULT_DTYPES.copy()
 
@@ -436,8 +436,16 @@ class LevelSchema:
         Raises
         ------
         ValueError
-            If the requested segmentation would invalidate a product level.
+            If the requested segmentation would invalidate a product level or
+            *dtype* is an unsupported ``torch.dtype`` value.
         """
+        normalized_dtype = dtype
+        if isinstance(dtype, torch.dtype):
+            try:
+                normalized_dtype = TORCH_DTYPE_MAP_INVERSE[dtype]
+            except KeyError as exc:
+                raise ValueError(f"Unsupported torch dtype: {dtype}") from exc
+
         level_kind = self.level_kinds.get(group_name)
         if level_kind == "product" and is_segmented is False:
             raise ValueError(f"Product level '{group_name}' cannot be made uniform")
@@ -470,12 +478,8 @@ class LevelSchema:
                 self.segmented_groups.discard(group_name)
                 self.level_kinds[group_name] = "uniform"
 
-        if dtype is not None:
-            self.dtypes[attr_name] = (
-                TORCH_DTYPE_MAP_INVERSE[dtype]
-                if isinstance(dtype, torch.dtype)
-                else dtype
-            )
+        if normalized_dtype is not None:
+            self.dtypes[attr_name] = normalized_dtype
 
     def mark_group_segmented(self, group_name: str) -> None:
         """Mark *group_name* as segmented."""
@@ -1314,10 +1318,12 @@ class UniformLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
-        Copies only float32 attributes; only as many rows as fit in this
-        storage's empty slots (dest_mask[i] False = empty). Uses Warp buffer
-        kernels (no host sync). If copied_mask is provided, it is updated in
-        place with True for each row that was copied.
+        Copies attributes whose dtypes are supported by the buffer kernels
+        (``bool``, ``float32``, ``float64``, ``int32``, or ``int64``); only as
+        many rows as fit in this storage's empty slots (dest_mask[i] False =
+        empty). Uses Warp buffer kernels (no host sync). If copied_mask is
+        provided, it is updated in place with True for each row that was
+        copied.
 
         Parameters
         ----------
@@ -1359,6 +1365,8 @@ class UniformLevelStorage(BaseLevelStorage):
                 raise ValueError(
                     f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
                 )
+        initial_dest_mask = dest_mask.clone()
+        final_dest_mask: Tensor | None = None
         for key in common:
             src_t = src._data[key]
             dest_t = self._data[key]
@@ -1366,13 +1374,22 @@ class UniformLevelStorage(BaseLevelStorage):
                 raise ValueError(
                     f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
                 )
+            field_dest_mask = initial_dest_mask.clone()
+            field_copied_mask = out_mask.clone()
             put_masked_per_system(
                 src_t,
                 mask,
                 dest_t,
-                dest_mask,
-                out_mask,
+                field_dest_mask,
+                field_copied_mask,
             )
+            if final_dest_mask is None:
+                final_dest_mask = field_dest_mask
+                out_mask.copy_(field_copied_mask)
+            elif not torch.equal(out_mask, field_copied_mask):
+                raise RuntimeError("Uniform fields produced different copied-row masks")
+        if final_dest_mask is not None:
+            dest_mask.copy_(final_dest_mask)
         num_copied = out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
             object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
@@ -1384,10 +1401,11 @@ class UniformLevelStorage(BaseLevelStorage):
         """Defrag in-place: remove rows where copied_mask[i] is True.
 
         Rows with copied_mask[i] True (previously put) are dropped; remaining
-        rows move to the front in place. Only float32 attributes are
-        compacted. Buffer shape is unchanged (fixed-size batches). Other
-        attributes are indexed with the same indices (so must be kept in sync
-        if present).
+        rows move to the front in place. Attributes with dtypes supported by
+        the buffer kernels (``bool``, ``float32``, ``float64``, ``int32``, or
+        ``int64``) are compacted. Buffer shape is unchanged (fixed-size
+        batches). Other attributes are indexed with the same indices (so must
+        be kept in sync if present).
 
         Parameters
         ----------
@@ -2355,7 +2373,8 @@ class MultiLevelStorage:
             for key in group.keys():
                 if key in seen:
                     raise ValueError(
-                        f"Attribute '{key}' is duplicated in group '{group_name}'"
+                        f"Attribute '{key}' is duplicated across storage groups; "
+                        f"found again in group '{group_name}'"
                     )
                 seen.add(key)
 

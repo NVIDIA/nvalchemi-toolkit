@@ -346,6 +346,72 @@ class TestBatchConstruction:
         assert batch.level_keys["left_right"] == set()
         assert batch.level_ptr("left_right").tolist() == [0, 6, 8]
 
+    @pytest.mark.parametrize(
+        "node_counts",
+        [[50_000], [40_000, 40_000]],
+        ids=["per-graph", "cumulative"],
+    )
+    def test_level_ptr_rejects_int32_product_overflow(self, node_counts: list[int]):
+        schema = LevelSchema()
+        schema.add_product_level("pairs", left="atoms", right="atoms")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(num_nodes) for num_nodes in node_counts],
+            attr_map=schema,
+        )
+
+        with pytest.raises(OverflowError, match="int32 maximum"):
+            batch.level_ptr("pairs")
+
+    def test_custom_schema_fields_retain_first_sample_order_and_infer_dtype(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("first_values", "samples")
+        schema.set("second_values", "samples")
+
+        first = _minimal_atomic_data(2)
+        first.first_values = torch.tensor([[1.0], [2.0]], dtype=torch.float64)
+        first.second_values = torch.tensor([[10.0], [20.0]], dtype=torch.float64)
+        second = _minimal_atomic_data(1)
+        second.second_values = torch.tensor([[30.0]], dtype=torch.float64)
+        second.first_values = torch.tensor([[3.0]], dtype=torch.float64)
+
+        batch = Batch.from_data_list([first, second], attr_map=schema)
+
+        assert list(batch._storage.groups["samples"].keys()) == [
+            "first_values",
+            "second_values",
+        ]
+        assert batch._storage.attr_map.dtypes["first_values"] == "float64"
+        assert batch._storage.attr_map.dtypes["second_values"] == "float64"
+        assert "first_values" not in schema.dtypes
+        assert "second_values" not in schema.dtypes
+        assert batch.first_values[:, 0].tolist() == [1.0, 2.0, 3.0]
+        assert batch.second_values[:, 0].tolist() == [10.0, 20.0, 30.0]
+
+    def test_custom_later_only_field_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("later_values", "samples")
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(2)
+        second.later_values = torch.ones(1, 1)
+
+        with pytest.raises(ValueError, match="appears only in later sample 1"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_missing_field_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        first = _minimal_atomic_data(2)
+        first.sample_values = torch.ones(1, 1)
+        second = _minimal_atomic_data(2)
+
+        with pytest.raises(
+            ValueError, match="Custom field 'sample_values'.*missing from sample 1"
+        ):
+            Batch.from_data_list([first, second], attr_map=schema)
+
     def test_batch_with_system_only_storage(self):
         """Batch built with only system group: batch, ptr, num_nodes_list, etc. hit None branches."""
         system = UniformLevelStorage(
@@ -624,6 +690,36 @@ class TestBatchConstruction:
 
         with pytest.raises(ValueError, match="cardinalities"):
             Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_dtype_mismatch_is_rejected_without_schema_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        before = schema.clone()
+        first = _minimal_atomic_data(2)
+        first.sample_values = torch.ones(1, 1, dtype=torch.float32)
+        second = _minimal_atomic_data(2)
+        second.sample_values = torch.ones(1, 1, dtype=torch.float64)
+
+        with pytest.raises(ValueError, match="incompatible dtypes"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+        assert schema.dtypes == before.dtypes
+        assert schema.attr_to_group == before.attr_to_group
+
+    def test_custom_declared_dtype_must_match_tensor_dtype(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        before = schema.clone()
+        data = _minimal_atomic_data(2)
+        data.sample_values = torch.ones(1, 1, dtype=torch.float32)
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            Batch.from_data_list([data], attr_map=schema)
+
+        assert schema.dtypes == before.dtypes
+        assert schema.attr_to_group == before.attr_to_group
 
     def test_edge_cardinality_inference_stays_local_to_batch(self):
         data = _minimal_atomic_data(2)
@@ -1047,6 +1143,61 @@ class TestBatchMutation:
         assert batch.get_data(0).pair_features.shape == (2, 4, 1)
         assert batch.get_data(1).pair_features.shape == (3, 1, 1)
 
+    def test_add_key_custom_dtype_validation_precedes_storage_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        before_groups = tuple(batch._storage.groups)
+        before_keys = {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        }
+
+        with pytest.raises(ValueError, match="incompatible dtypes"):
+            batch.add_key(
+                "sample_values",
+                [
+                    torch.ones(1, 1, dtype=torch.float32),
+                    torch.ones(1, 1, dtype=torch.float64),
+                ],
+                level="samples",
+            )
+
+        assert tuple(batch._storage.groups) == before_groups
+        assert {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        } == before_keys
+
+    def test_add_key_respects_declared_custom_dtype_before_storage_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        before_groups = tuple(batch._storage.groups)
+        before_keys = {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        }
+        before_dtypes = batch._storage.attr_map.dtypes.copy()
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            batch.add_key(
+                "sample_values",
+                [
+                    torch.ones(1, 1, dtype=torch.float32),
+                    torch.ones(1, 1, dtype=torch.float32),
+                ],
+                level="samples",
+            )
+
+        assert tuple(batch._storage.groups) == before_groups
+        assert {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        } == before_keys
+        assert batch._storage.attr_map.dtypes == before_dtypes
+
     def test_add_key_custom_overwrite_and_unknown_level_fallback(self):
         schema = LevelSchema()
         schema.add_level("samples", segmented=True)
@@ -1061,7 +1212,10 @@ class TestBatchMutation:
         )
         batch.add_key(
             "sample_values",
-            [torch.full((2, 1), 2), torch.full((3, 1), 3)],
+            [
+                torch.full((2, 1), 2.0, dtype=torch.float32),
+                torch.full((3, 1), 3.0, dtype=torch.float32),
+            ],
             level="samples",
             overwrite=True,
         )
@@ -1187,6 +1341,24 @@ class TestBatchMutation:
             left.append(right)
         torch.testing.assert_close(left.sample_features, left_before)
         torch.testing.assert_close(right.sample_features, right_before)
+
+    def test_append_accepts_equivalent_custom_dtype_aliases(self):
+        left_schema = _custom_uniform_schema()
+        left_schema.set("metadata_values", "metadata", dtype="float")
+        right_schema = _custom_uniform_schema()
+        right_schema.set("metadata_values", "metadata", dtype="float32")
+
+        left_data = _minimal_atomic_data(2)
+        left_data.metadata_values = torch.tensor([[1.0]], dtype=torch.float32)
+        right_data = _minimal_atomic_data(2)
+        right_data.metadata_values = torch.tensor([[2.0]], dtype=torch.float32)
+        left = Batch.from_data_list([left_data], attr_map=left_schema)
+        right = Batch.from_data_list([right_data], attr_map=right_schema)
+
+        left.append(right)
+
+        assert left.num_graphs == 2
+        assert left.metadata_values[:, 0].tolist() == [1.0, 2.0]
 
     def test_append_preserves_other_edge_index(self):
         """append() must not mutate the other batch's neighbor_list."""
@@ -1935,7 +2107,8 @@ class TestBatchPutDefrag:
         assert buffer.num_graphs == 1
         assert buffer._storage.groups["molecules"].batch_ptr[:2].tolist() == [0, 3]
         assert buffer.pair_values.shape == (20, 1)
-        assert buffer.level_ptr("pairs")[:2].tolist() == [0, 6]
+        assert buffer.level_ptr("pairs").tolist() == [0, 6]
+        assert buffer.level_ptr("pairs").numel() == buffer.num_graphs + 1
         source.defrag(copied)
         assert source.num_graphs == 1
         assert source.level_ptr("pairs")[:2].tolist() == [0, 3]
@@ -1974,9 +2147,9 @@ class TestBatchPutDefrag:
         target_source = Batch.from_data_list(
             [_custom_buffer_data(2, 2)], attr_map=target_schema
         )
-        source = Batch.from_data_list(
-            [_custom_buffer_data(2, 2)], attr_map=source_schema
-        )
+        source_data = _custom_buffer_data(2, 2)
+        source_data.molecule_values = source_data.molecule_values.to(torch.float64)
+        source = Batch.from_data_list([source_data], attr_map=source_schema)
         buffer = Batch.empty(
             num_systems=2,
             num_nodes=10,
@@ -1988,6 +2161,82 @@ class TestBatchPutDefrag:
             buffer.put(source, torch.ones(1, dtype=torch.bool))
         assert buffer.num_graphs == 0
         assert buffer.positions.eq(0).all()
+
+    def test_put_accepts_equivalent_custom_dtype_aliases(self):
+        target_schema = _custom_buffer_schema()
+        target_schema.set("molecule_values", "molecules", dtype="float32")
+        source_schema = _custom_buffer_schema()
+        source_schema.set("molecule_values", "molecules", dtype="float")
+        target = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=target_schema
+        )
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=source_schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=target,
+            level_capacities={"molecules": 5, "pairs": 5},
+        )
+
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+
+        assert buffer.num_graphs == 1
+        assert buffer.molecule_values[:2, 0].tolist() == [0.0, 1.0]
+
+    @pytest.mark.parametrize("kind", ["uniform", "segmented", "product"])
+    def test_put_rejects_non_float32_custom_buffer_payload_before_mutation(self, kind):
+        schema = LevelSchema()
+        data = _minimal_atomic_data(2)
+        if kind == "uniform":
+            schema.add_level("observables", segmented=False)
+            schema.set("observable_values", "observables")
+            data.observable_values = torch.tensor([[1]], dtype=torch.float16)
+            level = "observables"
+            capacities = {}
+            error = "not supported by uniform buffer kernels"
+        elif kind == "segmented":
+            schema.add_level("samples", segmented=True)
+            schema.set("sample_values", "samples")
+            data.sample_values = torch.tensor([[1], [2]], dtype=torch.int64)
+            level = "samples"
+            capacities = {"samples": 4}
+            error = "must use float32"
+        else:
+            schema.add_level("samples", segmented=True)
+            schema.add_product_level("pairs", left="atoms", right="samples")
+            schema.set("pair_values", "pairs")
+            data.pair_values = torch.arange(6, dtype=torch.int64).reshape(2, 3, 1)
+            level = "pairs"
+            capacities = {"pairs": 8}
+            error = "must use float32"
+
+        source = Batch.from_data_list([data], attr_map=schema)
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+            level_capacities=capacities,
+        )
+        before_positions = buffer.positions.clone()
+        before_payload = {
+            key: value.clone() for key, value in buffer._storage.groups[level].items()
+        }
+        before_ptr = buffer.level_ptr(level).clone()
+        copied = torch.zeros(1, dtype=torch.bool)
+
+        with pytest.raises(ValueError, match=error):
+            buffer.put(source, torch.ones(1, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False]
+        assert buffer.num_graphs == 0
+        torch.testing.assert_close(buffer.positions, before_positions)
+        for key, value in before_payload.items():
+            torch.testing.assert_close(buffer._storage.groups[level][key], value)
+        torch.testing.assert_close(buffer.level_ptr(level), before_ptr)
 
 
 class TestBatchRecvHandleWait:
@@ -2414,6 +2663,25 @@ class TestBatchFromRawDicts:
         assert batch.my_custom_scalar.shape == (2,)
         assert batch.my_custom_scalar[0].item() == 42.0
         assert batch.my_custom_scalar[1].item() == 99.0
+
+    def test_custom_later_only_field_in_raw_dict_is_rejected_with_sample_index(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("later_values", "samples")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "later_values": torch.ones(1, 1),
+            },
+        ]
+
+        with pytest.raises(ValueError, match="appears only in later sample 1"):
+            Batch.from_raw_dicts(raw, attr_map=schema)
 
     def test_field_levels_classifies_custom_atom_key(self) -> None:
         """field_levels routes custom per-atom tensors to atom level."""

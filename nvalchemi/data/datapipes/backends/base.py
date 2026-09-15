@@ -150,12 +150,13 @@ class Reader(ABC):
 
     @property
     def field_levels(self) -> dict[str, str]:
-        """Per-field level classification: ``"atom"``, ``"edge"``, or ``"system"``.
+        """Return the level classification for each explicitly classified field.
 
-        Override in subclasses that store explicit level metadata (e.g.
-        Zarr stores).  The default returns an empty dict, which causes
-        downstream consumers to fall back to
-        :data:`AtomicData._default_*_keys` for classification.
+        Values may be the built-in ``"atom"``, ``"edge"``, or ``"system"``
+        aliases or names registered by :attr:`level_schema`. Override this
+        property in readers that store explicit level metadata, such as Zarr
+        readers. The default empty mapping lets downstream consumers fall back
+        to the standard :class:`~nvalchemi.data.AtomicData` classifications.
 
         Returns
         -------

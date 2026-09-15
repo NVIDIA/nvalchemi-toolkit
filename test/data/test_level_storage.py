@@ -57,6 +57,24 @@ class TestLevelSchema:
         assert schema.attr_to_group["e"] == "global"
         assert schema.group("x") == "nodes"
 
+    def test_constructor_copies_mutable_inputs(self):
+        groups = {"samples": {"value"}}
+        segmented = {"samples"}
+        dtypes = {"value": "float32"}
+        schema = LevelSchema(
+            group_to_attrs=groups,
+            segmented_groups=segmented,
+            dtypes=dtypes,
+        )
+
+        groups["samples"].add("other")
+        segmented.clear()
+        dtypes["value"] = "float64"
+
+        assert schema.group_to_attrs == {"samples": {"value"}}
+        assert schema.segmented_groups == {"samples"}
+        assert schema.dtypes == {"value": "float32"}
+
     def test_custom_level_order(self):
         schema = LevelSchema(
             group_to_attrs={
@@ -277,6 +295,40 @@ class TestLevelSchema:
         assert schema.dtype("x") == "float32"
         schema.set("y", "atoms", dtype=torch.int64)
         assert schema.dtype("y") == "int64"
+
+    def test_set_validates_before_mutating(self):
+        schema = LevelSchema()
+        schema.set("value", "atoms", dtype="float32")
+        before = (
+            {name: attrs.copy() for name, attrs in schema.group_to_attrs.items()},
+            schema.attr_to_group.copy(),
+            schema.segmented_groups.copy(),
+            schema.dtypes.copy(),
+            schema.level_kinds.copy(),
+            schema.level_names,
+        )
+
+        with pytest.raises(ValueError, match="Unsupported torch dtype"):
+            schema.set("value", "system", dtype=torch.bfloat16)
+
+        after = (
+            {name: attrs.copy() for name, attrs in schema.group_to_attrs.items()},
+            schema.attr_to_group.copy(),
+            schema.segmented_groups.copy(),
+            schema.dtypes.copy(),
+            schema.level_kinds.copy(),
+            schema.level_names,
+        )
+        assert after == before
+
+    def test_set_keeps_legacy_permissive_inputs(self):
+        schema = LevelSchema()
+
+        schema.set("", "", dtype="not-a-dtype", is_segmented=1)
+
+        assert schema.attr_to_group[""] == ""
+        assert schema.dtypes[""] == "not-a-dtype"
+        assert schema.level_kind("") == "segmented"
 
     def test_group_raises_for_unknown_attr(self):
         schema = LevelSchema()
@@ -627,6 +679,36 @@ class TestUniformLevelStorage:
         assert copied_mask[1].item() is False
         assert copied_mask[2].item() is False
         assert dest["a"][2].item() == 1.0
+
+    def test_put_aligns_multiple_fields_to_same_slots(self):
+        """Every uniform field receives each source row in the same slot."""
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor([[1.0], [2.0], [3.0]]),
+                "b": torch.tensor([[10.0], [20.0], [30.0]]),
+            },
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(4, 1), "b": torch.zeros(4, 1)},
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(3, dtype=torch.bool)
+        dest_mask = torch.tensor([True, False, True, False])
+
+        dest.put(
+            src,
+            torch.ones(3, dtype=torch.bool),
+            copied_mask=copied,
+            dest_mask=dest_mask,
+        )
+
+        assert copied.tolist() == [True, True, False]
+        assert dest_mask.tolist() == [True, True, True, False]
+        assert dest["a"].squeeze(1).tolist() == [0.0, 1.0, 2.0, 0.0]
+        assert dest["b"].squeeze(1).tolist() == [0.0, 10.0, 20.0, 0.0]
 
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
@@ -1226,6 +1308,23 @@ class TestMultiLevelStorage:
     def test_empty_construction(self):
         m = MultiLevelStorage(attr_map=LevelSchema())
         assert len(m) == 0
+
+    def test_duplicate_attribute_error_identifies_cross_group_collision(self):
+        groups = {
+            "atoms": UniformLevelStorage(
+                data={"shared": torch.zeros(1, 1)},
+                device="cpu",
+                validate=False,
+            ),
+            "system": UniformLevelStorage(
+                data={"shared": torch.zeros(1, 1)},
+                device="cpu",
+                validate=False,
+            ),
+        }
+
+        with pytest.raises(ValueError, match="duplicated across storage groups"):
+            MultiLevelStorage(groups=groups, validate=True)
 
     def test_from_data_factory(self):
         data = {

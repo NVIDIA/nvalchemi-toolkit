@@ -179,7 +179,17 @@ a variable number of constraint records per system. Each record is represented h
 by an eight-element feature vector.
 
 ```python
+import torch
+
 from nvalchemi.data import AtomicData, Batch, LevelSchema
+
+data_list = [
+    AtomicData(
+        positions=torch.randn(num_atoms, 3),
+        atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+    )
+    for num_atoms in (2, 3)
+]
 
 schema = LevelSchema()
 schema.add_level("constraints", segmented=True)
@@ -227,13 +237,25 @@ different parents, `left × right` and `right × left` have different logical ax
 orders. Both parents must be registered ordinary segmented levels; products cannot
 use a uniform or product parent.
 
-Pass the Hessian schema through the existing `attr_map` argument, then assign the
-field with {py:meth}`~nvalchemi.data.Batch.add_key`:
+Position Hessians returned by PyTorch normally interleave the atom and Cartesian
+axes as `[N_i, 3, N_i, 3]`. Move the second atom axis next to the first before
+storing the Cartesian `3 x 3` blocks on the product level:
 
 ```python
-hessian_batch = Batch.from_data_list(data_list, attr_map=hessian_schema)
-hessian_blocks = [torch.randn(2, 2, 3, 3), torch.randn(3, 3, 3, 3)]
+def quadratic_energy(positions):
+    return positions.square().sum()
 
+
+raw_hessians = [
+    torch.func.hessian(quadratic_energy)(data.positions) for data in data_list
+]
+# Each raw Hessian has shape [N_i, 3, N_i, 3].
+hessian_blocks = [
+    hessian.permute(0, 2, 1, 3).contiguous() for hessian in raw_hessians
+]
+# Each stored value now has shape [N_i, N_i, 3, 3].
+
+hessian_batch = Batch.from_data_list(data_list, attr_map=hessian_schema)
 hessian_batch.add_key("hessian_blocks", hessian_blocks, level="atom_atom")
 
 print(hessian_batch.level_ptr("atom_atom").tolist())  # [0, 4, 13]
@@ -296,6 +318,11 @@ selection, append, device movement, buffering, and point-to-point batch transpor
 Custom segmented payloads remain opaque: only the built-in `neighbor_list` receives
 automatic atom-index offsets. A custom edge-like tensor that contains indices must
 manage its own index semantics.
+
+Custom point-to-point transport uses the receiver's template to determine message
+order, field dtypes, and payload shapes. The sender and receiver must therefore use
+independently matching templates; the transport does not negotiate or validate two
+different layouts at runtime.
 
 ## Neighbor list formats
 
@@ -394,6 +421,11 @@ metadata but no element-buffer entry in `level_capacities`. Use
 {py:meth}`~nvalchemi.data.Batch.empty_like` to create an empty buffer that
 preserves an existing batch's complete materialized layout and capacities.
 
+The current segmented buffer kernels copy `float32` custom segmented and product
+payloads. Other custom payload dtypes are rejected before the buffer is modified.
+This restriction does not change the dtype support of ordinary, tightly packed
+`Batch` objects.
+
 ### Filling the buffer with `put`
 
 {py:meth}`nvalchemi.data.batch.Batch.put` copies selected graphs from a source batch
@@ -460,15 +492,18 @@ loaded_batch = dataset.load_batches([[0, 1]])[0]
 ```
 
 `reader.level_schema` returns an independent schema. `Dataset` and
-{py:class}`~nvalchemi.data.InMemoryDataset` propagate it automatically through their
-batch-loading paths.
+{py:class}`~nvalchemi.data.InMemoryDataset` propagate field-bearing custom levels
+and fieldless parents whose counts can be recovered from product payload axes. A
+level represented only by a stored pointer, with no field or product payload, is
+preserved by Zarr but is not reconstructed by those dataset batching paths.
 
 {py:meth}`~nvalchemi.data.AtomicDataZarrWriter.add_custom` can add a field on a new
 custom level to an existing store by accepting its `attr_map` and complete physical
 store prefix pointers through `level_ptrs`. Each pointer must have one entry more
 than the number of physical samples and must cover deleted rows as well as active
-samples. Once a definition and its pointers are stored, later fields on the same
-level can reuse them.
+samples. Definitions, pointers, and tensor conversion are validated before new
+level groups or arrays are created. Once a definition and its pointers are stored,
+later fields on the same level can reuse them.
 
 Legacy stores are opened without migration or rewriting. Conversely, Toolkit
 versions that predate custom levels do not know how to recover fields stored in the

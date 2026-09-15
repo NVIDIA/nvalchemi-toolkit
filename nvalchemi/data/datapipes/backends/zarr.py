@@ -871,6 +871,10 @@ class AtomicDataZarrWriter:
         ------
         FileNotFoundError
             If store does not exist.
+        ValueError
+            If required custom fields, pointers, dtypes, or trailing shapes
+            are incompatible with the existing store. These checks complete
+            before any target array is extended.
         """
         self._append_batch(data)
 
@@ -891,6 +895,9 @@ class AtomicDataZarrWriter:
         ------
         FileNotFoundError
             If store does not exist.
+        ValueError
+            If required custom fields, pointers, dtypes, or trailing shapes
+            are incompatible with the existing store.
         """
         pass
 
@@ -927,7 +934,10 @@ class AtomicDataZarrWriter:
         ------
         ValueError
             If the level definition, pointer, field name, or tensor shape is
-            incompatible with the store.
+            incompatible with the store. Tensor conversion and all supplied
+            pointer validation complete before the store is changed.
+        TypeError
+            If the tensor cannot be converted to a NumPy array for Zarr I/O.
         FileNotFoundError
             If store does not exist.
         """
@@ -940,6 +950,10 @@ class AtomicDataZarrWriter:
             raise ValueError("Custom field key must be a non-empty string")
         if not isinstance(data, torch.Tensor) or data.ndim == 0:
             raise ValueError("Custom data must be a tensor with a leading dimension")
+        # Convert before creating any groups or updating metadata. In
+        # particular, bfloat16 tensors cannot be converted through NumPy and
+        # must leave the store unchanged when rejected.
+        array = self._to_numpy(data)
         resolved_level = {
             "atom": "atoms",
             "edge": "edges",
@@ -959,7 +973,6 @@ class AtomicDataZarrWriter:
             all_keys = set(fields.get("core", {})) | set(fields.get("custom", {}))
             if key in all_keys or key in root["custom"]:
                 raise ValueError(f"Field '{key}' already exists")
-            array = self._to_numpy(data)
             root["custom"].create_array(
                 key, data=array, **self._resolve_array_kwargs(key, "custom", array)
             )
@@ -1065,6 +1078,15 @@ class AtomicDataZarrWriter:
                 }
             )
 
+        known_pointer_names = set(schema.level_kinds)
+        known_pointer_names.update(("atoms", "edges"))
+        unknown_pointers = set(ptr_inputs) - known_pointer_names
+        if unknown_pointers:
+            raise ValueError(
+                "Pointers were supplied for unknown levels: "
+                + ", ".join(sorted(unknown_pointers))
+            )
+
         def checked_ptr(name: str, ptr: torch.Tensor) -> torch.Tensor:
             if (
                 not isinstance(ptr, torch.Tensor)
@@ -1085,6 +1107,13 @@ class AtomicDataZarrWriter:
                     f"Level pointer for '{name}' must be a full nondecreasing prefix pointer"
                 )
             return ptr
+
+        checked_inputs: dict[str, torch.Tensor] = {}
+        for name, supplied in ptr_inputs.items():
+            if name in schema.level_kinds and schema.level_kind(name) == "uniform":
+                raise ValueError(f"Uniform level '{name}' cannot have a pointer")
+            checked_inputs[name] = checked_ptr(name, supplied)
+        ptr_inputs = checked_inputs
 
         def resolve_ptr(name: str) -> torch.Tensor:
             if name in ptr_cache:
@@ -1134,19 +1163,24 @@ class AtomicDataZarrWriter:
                 f"Data shape[0]={data.shape[0]} does not match expected size={expected}"
             )
 
-        # All validation is complete; only now materialize groups, metadata, pointers, and field.
+        # Complete schema and array-creation preparation before materializing
+        # any groups. Both operations are local and cannot partially update
+        # the store if validation fails.
+        schema.set(
+            key, resolved_level, dtype=data.dtype, is_segmented=kind != "uniform"
+        )
+        array_kwargs = self._resolve_array_kwargs(key, "custom", array)
+
+        # All validation is complete; only now materialize groups, metadata,
+        # pointers, and field.
         levels_group = root.require_group("levels")
         ptr_group = meta_group.require_group("level_ptrs")
         for name in closure:
             levels_group.require_group(name)
             if schema.level_kind(name) != "uniform" and name not in ptr_group:
                 self._write_level_ptr(ptr_group, name, resolve_ptr(name))
-        array = self._to_numpy(data)
         levels_group.require_group(resolved_level).create_array(
-            key, data=array, **self._resolve_array_kwargs(key, "custom", array)
-        )
-        schema.set(
-            key, resolved_level, dtype=data.dtype, is_segmented=kind != "uniform"
+            key, data=array, **array_kwargs
         )
         root.attrs["levels"] = {
             "version": 1,
@@ -1297,6 +1331,22 @@ class AtomicDataZarrWriter:
                 name: meta_group["level_ptrs"][name][:]
                 for name in meta_group["level_ptrs"].array_keys()
             }
+        # Snapshot descriptors before the all-deleted path reopens the store
+        # in ``mode="w"``. Zarr group/array handles become empty after that
+        # replacement, so their shapes and dtypes must be retained here
+        # without copying payloads that will not be reused.
+        core_snapshot = {
+            key: (core_group[key].shape, core_group[key].dtype)
+            for key in core_group.array_keys()
+        }
+        custom_snapshot = (
+            {
+                key: (root["custom"][key].shape, root["custom"][key].dtype)
+                for key in root["custom"].array_keys()
+            }
+            if "custom" in root
+            else {}
+        )
 
         # Find active sample indices
         active_indices = np.where(samples_mask)[0]
@@ -1319,23 +1369,25 @@ class AtomicDataZarrWriter:
                     data=array,
                     **self._resolve_array_kwargs(key, "meta", array),
                 )
-            for key in core_group.array_keys():
-                source = core_group[key]
-                empty = np.empty((0, *source.shape[1:]), dtype=source.dtype)
+            for key, (source_shape, source_dtype) in core_snapshot.items():
+                axis = _get_cat_dim(key)
+                if axis < 0:
+                    axis += len(source_shape)
+                empty_shape = list(source_shape)
+                empty_shape[axis] = 0
+                empty = np.empty(tuple(empty_shape), dtype=source_dtype)
                 new_core.create_array(
                     key,
                     data=empty,
                     **self._resolve_array_kwargs(key, "core", empty),
                 )
-            if "custom" in root:
-                for key in root["custom"].array_keys():
-                    source = root["custom"][key]
-                    empty = np.empty((0, *source.shape[1:]), dtype=source.dtype)
-                    new_custom.create_array(
-                        key,
-                        data=empty,
-                        **self._resolve_array_kwargs(key, "custom", empty),
-                    )
+            for key, (source_shape, source_dtype) in custom_snapshot.items():
+                empty = np.empty((0, *source_shape[1:]), dtype=source_dtype)
+                new_custom.create_array(
+                    key,
+                    data=empty,
+                    **self._resolve_array_kwargs(key, "custom", empty),
+                )
             new_root.attrs["num_samples"] = 0
             new_root.attrs["fields"] = fields_metadata
             if levels_metadata is not None:
@@ -1572,6 +1624,22 @@ class AtomicDataZarrWriter:
         for level, key, value in self._field_items(data):
             source_fields.setdefault(level, {})[key] = value
 
+        # Materialize required incoming fields before any target array is
+        # resized. Additional fields in legacy stores remain permissively
+        # ignored, including fields whose dtype cannot be converted for Zarr.
+        source_arrays: dict[str, dict[str, np.ndarray]] = {}
+
+        def materialize_source(level: str, key: str) -> np.ndarray:
+            try:
+                value = source_fields[level][key]
+            except KeyError as exc:
+                raise ValueError(
+                    f"Required source field '{key}' is missing at level '{level}'"
+                ) from exc
+            array = self._to_numpy(value)
+            source_arrays.setdefault(level, {})[key] = array
+            return array
+
         source_ptrs: dict[str, torch.Tensor] = {}
         for name in custom_levels:
             if schema.level_kind(name) == "uniform":
@@ -1580,6 +1648,36 @@ class AtomicDataZarrWriter:
                 source_ptrs[name] = data.level_ptr(name).to(torch.long)
             except KeyError:
                 pass
+
+        def checked_source_ptr(name: str, pointer: torch.Tensor) -> np.ndarray:
+            pointer_np = self._to_numpy(pointer)
+            if (
+                pointer_np.ndim != 1
+                or not np.issubdtype(pointer_np.dtype, np.integer)
+                or len(pointer_np) != data.num_graphs + 1
+                or pointer_np[0] != 0
+                or np.any(pointer_np[1:] < pointer_np[:-1])
+            ):
+                raise ValueError(
+                    f"Custom pointer '{name}' must be a full nondecreasing prefix pointer"
+                )
+            return pointer_np.astype(np.int64, copy=False)
+
+        source_ptr_arrays = {
+            name: checked_source_ptr(name, pointer)
+            for name, pointer in source_ptrs.items()
+        }
+
+        fields_metadata_raw = root.attrs.get("fields", {"core": {}, "custom": {}})
+        if not isinstance(fields_metadata_raw, Mapping):
+            raise ValueError("Invalid Zarr fields metadata")
+        fields_metadata: dict[str, dict[str, str]] = {
+            name: dict(values)
+            for name, values in fields_metadata_raw.items()
+            if isinstance(values, Mapping)
+        }
+        if set(fields_metadata) != set(fields_metadata_raw):
+            raise ValueError("Invalid Zarr fields metadata")
 
         if stored_custom:
             levels_group = root["levels"]
@@ -1603,15 +1701,64 @@ class AtomicDataZarrWriter:
                     raise ValueError(
                         f"Custom append requires identical materialized fields for '{name}'"
                     )
-                for key, value in source_fields.get(name, {}).items():
+                for key in source_fields.get(name, {}):
+                    materialize_source(name, key)
                     target = levels_group[name][key]
                     if (
-                        np.dtype(self._to_numpy(value).dtype) != target.dtype
-                        or value.shape[1:] != target.shape[1:]
+                        np.dtype(source_arrays[name][key].dtype) != target.dtype
+                        or source_arrays[name][key].shape[1:] != target.shape[1:]
                     ):
                         raise ValueError(
                             f"Custom append field '{key}' has incompatible dtype or trailing shape"
                         )
+
+            for name in custom_levels:
+                fields = source_arrays.get(name, {})
+                if not fields:
+                    continue
+                if schema.level_kind(name) == "uniform":
+                    expected_size = data.num_graphs
+                elif name in source_ptr_arrays:
+                    expected_size = int(source_ptr_arrays[name][-1])
+                else:
+                    raise ValueError(
+                        f"Custom append requires a resolved pointer for '{name}'"
+                    )
+                for key, array in fields.items():
+                    target = levels_group[name][key]
+                    if array.shape[0] != expected_size:
+                        raise ValueError(
+                            f"Custom append field '{key}' does not match its level pointer"
+                        )
+
+        # Root custom arrays are the legacy extension point and remain
+        # permissive about additional incoming fields. Existing arrays are
+        # required, however, because otherwise their appended rows would be
+        # silently missing and the store would become unreadable.
+        root_custom_appends: dict[str, np.ndarray] = {}
+        custom_fields = fields_metadata.get("custom", {})
+        for key in root["custom"].array_keys():
+            level = custom_fields.get(key, "system")
+            source_level = {"atom": "atoms", "edge": "edges", "system": "system"}.get(
+                level
+            )
+            if source_level is None:
+                raise ValueError(f"Custom field '{key}' has an invalid level")
+            if key not in source_fields.get(source_level, {}):
+                raise ValueError(
+                    f"Custom append requires existing field '{key}' at level '{level}'"
+                )
+            array = materialize_source(source_level, key)
+            target = root["custom"][key]
+            if (
+                array.ndim != target.ndim
+                or array.shape[1:] != target.shape[1:]
+                or np.dtype(array.dtype) != target.dtype
+            ):
+                raise ValueError(
+                    f"Custom append field '{key}' has incompatible dtype or trailing shape"
+                )
+            root_custom_appends[key] = array
 
         old_num_samples = int(root.attrs["num_samples"])
         old_atoms_ptr = torch.from_numpy(meta_group["atoms_ptr"][:]).to(torch.long)
@@ -1632,7 +1779,9 @@ class AtomicDataZarrWriter:
             np.ones(int(new_edges_ptr[-1] - old_edges_ptr[-1]), dtype=bool),
         )
 
-        fields_metadata = dict(root.attrs.get("fields", {"core": {}, "custom": {}}))
+        # Preserve the legacy built-in append route. Custom fields above are
+        # fully converted and checked before mutation; built-in fields retain
+        # their historical conversion and assignment behavior.
         for key in core_group.array_keys():
             level = fields_metadata.get("core", {}).get(key, _get_field_level(key))
             source_level = {"atom": "atoms", "edge": "edges", "system": "system"}[level]
@@ -1646,17 +1795,20 @@ class AtomicDataZarrWriter:
                 core_group[key], self._to_numpy(value), axis=_get_cat_dim(key)
             )
 
+        for key, array in root_custom_appends.items():
+            self._extend_array(root["custom"][key], array)
+
         if stored_custom:
             ptr_group = meta_group["level_ptrs"]
-            for name, ptr in source_ptrs.items():
+            for name, ptr in source_ptr_arrays.items():
                 old_ptr = int(ptr_group[name][-1])
-                self._extend_array(ptr_group[name], self._to_numpy(ptr[1:] + old_ptr))
+                self._extend_array(ptr_group[name], ptr[1:] + old_ptr)
             levels_group = root["levels"]
-            for name, fields in source_fields.items():
+            for name, fields in source_arrays.items():
                 if name not in custom_levels:
                     continue
                 for key, value in fields.items():
-                    self._extend_array(levels_group[name][key], self._to_numpy(value))
+                    self._extend_array(levels_group[name][key], value)
         root.attrs["num_samples"] = old_num_samples + data.num_graphs
 
     @staticmethod
@@ -1843,74 +1995,186 @@ class AtomicDataZarrReader(Reader):
         ------
         RuntimeError
             If the reader has been closed.
+        ValueError
+            If a versioned custom-level layout is malformed.
         """
         if self._root is None:
             raise RuntimeError("Cannot refresh a closed reader.")
 
-        # Re-open the store to pick up structural changes
-        self._root = zarr.open(self._store, mode="r")
+        # Build every piece of state locally. A malformed external update must
+        # not leave a previously usable reader half-refreshed.
+        root = zarr.open(self._store, mode="r")
+        if "meta" not in root or "core" not in root:
+            raise ValueError("Zarr store must contain 'meta' and 'core' groups")
+        meta_group = root["meta"]
+        atoms_ptr = torch.from_numpy(meta_group["atoms_ptr"][:]).to(torch.long)
+        edges_ptr = torch.from_numpy(meta_group["edges_ptr"][:]).to(torch.long)
+        samples_mask = torch.from_numpy(meta_group["samples_mask"][:]).to(torch.bool)
+        num_samples = len(samples_mask)
 
-        # Cache pointer arrays as torch tensors
-        self._atoms_ptr = torch.from_numpy(self._root["meta"]["atoms_ptr"][:]).to(
-            torch.long
-        )
-        self._edges_ptr = torch.from_numpy(self._root["meta"]["edges_ptr"][:]).to(
-            torch.long
-        )
+        try:
+            fields_metadata_raw = root.attrs.get("fields", {"core": {}, "custom": {}})
+            if not isinstance(fields_metadata_raw, Mapping):
+                raise TypeError("fields metadata must be a mapping")
+            fields_metadata: dict[str, dict[str, str]] = {
+                name: dict(values)
+                for name, values in fields_metadata_raw.items()
+                if isinstance(values, Mapping)
+            }
+            if set(fields_metadata) != set(fields_metadata_raw):
+                raise TypeError("fields metadata entries must be mappings")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid Zarr fields metadata") from exc
 
-        # Cache samples mask
-        self._samples_mask = torch.from_numpy(self._root["meta"]["samples_mask"][:]).to(
-            torch.bool
-        )
-
-        # Build logical->physical index mapping (indices where mask is True)
-        self._active_indices = torch.where(self._samples_mask)[0]
-
-        # Cache fields metadata
-        self._fields_metadata: dict[str, dict[str, str]] = dict(
-            self._root.attrs.get("fields", {"core": {}, "custom": {}})
-        )
-        levels = self._root.attrs.get("levels")
-        self._level_schema = (
-            AtomicDataZarrWriter._schema_from_levels(levels)
-            if levels is not None
-            else None
-        )
-        if self._level_schema is not None:
-            if "levels" not in self._root:
+        level_schema: LevelSchema | None = None
+        level_ptrs: dict[str, torch.Tensor] = {}
+        levels = root.attrs.get("levels")
+        if levels is not None:
+            try:
+                level_schema = AtomicDataZarrWriter._schema_from_levels(levels)
+            except (KeyError, TypeError) as exc:
+                raise ValueError("Invalid Zarr custom level schema") from exc
+            if "levels" not in root:
                 raise ValueError(
                     "Custom Zarr level metadata is missing its levels group"
                 )
-            registered_fields: set[str] = set()
-            existing_fields = set(self._fields_metadata.get("core", {})) | set(
-                self._fields_metadata.get("custom", {})
+
+            levels_group = root["levels"]
+            registered_names = set(
+                AtomicDataZarrWriter._custom_level_names(level_schema)
             )
-            for level_name in self._root["levels"].group_keys():
-                if level_name not in self._level_schema.level_kinds:
-                    raise ValueError(
-                        f"Stored field group '{level_name}' is not registered"
-                    )
-                for key in self._root["levels"][level_name].array_keys():
+            stored_names = set(levels_group.group_keys())
+            unknown_groups = stored_names - registered_names
+            if unknown_groups:
+                raise ValueError(
+                    "Stored field group(s) are not registered: "
+                    + ", ".join(sorted(unknown_groups))
+                )
+
+            level_fields = fields_metadata.get("levels", {})
+            if not isinstance(level_fields, Mapping):
+                raise ValueError("Invalid custom-level field metadata")
+            existing_fields = set(fields_metadata.get("core", {})) | set(
+                fields_metadata.get("custom", {})
+            )
+            registered_fields: set[str] = set()
+            for level_name in stored_names:
+                level_group = levels_group[level_name]
+                kind = level_schema.level_kind(level_name)
+                for key in level_group.array_keys():
                     if key in registered_fields or key in existing_fields:
                         raise ValueError(f"Duplicate stored field '{key}'")
-                    array = self._root["levels"][level_name][key]
-                    dtype = torch.from_numpy(np.empty(0, dtype=array.dtype)).dtype
-                    self._level_schema.set(
+                    if level_fields.get(key) != level_name:
+                        raise ValueError(
+                            f"Custom field '{key}' is missing level metadata"
+                        )
+                    array = level_group[key]
+                    try:
+                        dtype = torch.from_numpy(np.empty(0, dtype=array.dtype)).dtype
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"Custom field '{key}' has an unsupported dtype"
+                        ) from exc
+                    level_schema.set(
                         key,
                         level_name,
                         dtype=dtype,
-                        is_segmented=self._level_schema.level_kind(level_name)
-                        != "uniform",
+                        is_segmented=kind != "uniform",
                     )
                     registered_fields.add(key)
-        self._level_ptrs: dict[str, torch.Tensor] = {}
-        if self._level_schema is not None and "level_ptrs" in self._root["meta"]:
-            self._level_ptrs = {
-                name: torch.from_numpy(self._root["meta"]["level_ptrs"][name][:]).to(
-                    torch.long
+                    if kind == "uniform" and array.shape[0] != num_samples:
+                        raise ValueError(
+                            f"Uniform custom field '{key}' must have one row per sample"
+                        )
+
+            stale_fields = set(level_fields) - registered_fields
+            if stale_fields:
+                raise ValueError(
+                    "Custom-level metadata names missing arrays: "
+                    + ", ".join(sorted(stale_fields))
                 )
-                for name in self._root["meta"]["level_ptrs"].array_keys()
-            }
+
+            ptr_group = meta_group.get("level_ptrs")
+            if ptr_group is not None:
+                for name in ptr_group.array_keys():
+                    if name not in registered_names:
+                        raise ValueError(
+                            f"Pointer '{name}' is not a registered custom level"
+                        )
+                    if level_schema.level_kind(name) == "uniform":
+                        raise ValueError(
+                            f"Uniform level '{name}' cannot have a pointer"
+                        )
+                    pointer_array = ptr_group[name]
+                    pointer = pointer_array[:]
+                    if not np.issubdtype(pointer.dtype, np.integer):
+                        raise ValueError(f"Pointer '{name}' must have an integer dtype")
+                    if (
+                        pointer.ndim != 1
+                        or len(pointer) != num_samples + 1
+                        or pointer[0] != 0
+                        or np.any(pointer[1:] < pointer[:-1])
+                    ):
+                        raise ValueError(
+                            f"Pointer '{name}' must be a full nondecreasing prefix pointer"
+                        )
+                    level_ptrs[name] = torch.from_numpy(pointer).to(torch.long)
+
+            for level_name in stored_names:
+                kind = level_schema.level_kind(level_name)
+                level_group = levels_group[level_name]
+                pointer = level_ptrs.get(level_name)
+                if kind != "uniform" and level_group.array_keys() and pointer is None:
+                    raise ValueError(
+                        f"Segmented custom level '{level_name}' is missing its pointer"
+                    )
+                if pointer is not None:
+                    expected_size = int(pointer[-1])
+                    for key in level_group.array_keys():
+                        if level_group[key].shape[0] != expected_size:
+                            raise ValueError(
+                                f"Custom field '{key}' does not match pointer '{level_name}'"
+                            )
+
+            for name in registered_names:
+                if level_schema.level_kind(name) != "product":
+                    continue
+                pointer = level_ptrs.get(name)
+                if pointer is None:
+                    continue
+                left, right = level_schema.product_parents[name]
+                left_ptr = {
+                    "atoms": atoms_ptr,
+                    "edges": edges_ptr,
+                }.get(left, level_ptrs.get(left))
+                right_ptr = {
+                    "atoms": atoms_ptr,
+                    "edges": edges_ptr,
+                }.get(right, level_ptrs.get(right))
+                if left_ptr is None or right_ptr is None:
+                    raise ValueError(
+                        f"Product level '{name}' has unresolved parent pointers"
+                    )
+                lengths = (left_ptr[1:] - left_ptr[:-1]) * (
+                    right_ptr[1:] - right_ptr[:-1]
+                )
+                expected = torch.cat(
+                    [torch.zeros(1, dtype=torch.long), torch.cumsum(lengths, 0)]
+                )
+                if not torch.equal(pointer, expected):
+                    raise ValueError(
+                        f"Product pointer '{name}' does not match its parent pointers"
+                    )
+
+        # Swap only after all prospective state and layout checks succeed.
+        self._root = root
+        self._atoms_ptr = atoms_ptr
+        self._edges_ptr = edges_ptr
+        self._samples_mask = samples_mask
+        self._active_indices = torch.where(samples_mask)[0]
+        self._fields_metadata = fields_metadata
+        self._level_schema = level_schema
+        self._level_ptrs = level_ptrs
 
     @property
     def field_levels(self) -> dict[str, str]:
