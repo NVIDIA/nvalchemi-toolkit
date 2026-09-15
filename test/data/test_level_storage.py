@@ -691,12 +691,15 @@ class TestUniformLevelStorage:
             validate=False,
         )
         dest = UniformLevelStorage(
-            data={"a": torch.zeros(4, 1), "b": torch.zeros(4, 1)},
+            data={
+                "a": torch.tensor([[99.0], [0.0], [0.0], [0.0]]),
+                "b": torch.tensor([[999.0], [0.0], [0.0], [0.0]]),
+            },
             device="cpu",
             validate=False,
         )
         copied = torch.zeros(3, dtype=torch.bool)
-        dest_mask = torch.tensor([True, False, True, False])
+        dest_mask = torch.tensor([True, False, False, False])
 
         dest.put(
             src,
@@ -705,10 +708,10 @@ class TestUniformLevelStorage:
             dest_mask=dest_mask,
         )
 
-        assert copied.tolist() == [True, True, False]
-        assert dest_mask.tolist() == [True, True, True, False]
-        assert dest["a"].squeeze(1).tolist() == [0.0, 1.0, 2.0, 0.0]
-        assert dest["b"].squeeze(1).tolist() == [0.0, 10.0, 20.0, 0.0]
+        assert copied.tolist() == [True, True, True]
+        assert dest_mask.tolist() == [True, True, True, True]
+        assert dest["a"].squeeze(1).tolist() == [99.0, 1.0, 2.0, 3.0]
+        assert dest["b"].squeeze(1).tolist() == [999.0, 10.0, 20.0, 30.0]
 
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
@@ -898,6 +901,106 @@ class TestSegmentedLevelStorage:
                 validate=True,
             )
 
+    def test_fieldless_metadata_uses_int32_pointer_without_wrapping(self):
+        storage = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[torch.iinfo(torch.int32).max, 0],
+            device="cpu",
+            validate=False,
+        )
+
+        assert storage.segment_lengths.dtype == torch.int32
+        assert storage.batch_ptr.dtype == torch.int32
+        assert storage.batch_ptr.tolist() == [
+            0,
+            torch.iinfo(torch.int32).max,
+            torch.iinfo(torch.int32).max,
+        ]
+        assert storage.clone().batch_ptr.tolist() == storage.batch_ptr.tolist()
+        assert storage.select(1).segment_lengths.tolist() == [0]
+
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            (
+                {"segment_lengths": [torch.iinfo(torch.int32).max + 1]},
+                "Segment length exceeds",
+            ),
+            (
+                {"segment_lengths": [torch.iinfo(torch.int32).max, 1]},
+                "Segment pointer exceeds",
+            ),
+            (
+                {
+                    "segment_lengths": [0],
+                    "batch_ptr": torch.tensor(
+                        [0, torch.iinfo(torch.int32).max + 1], dtype=torch.int64
+                    ),
+                },
+                "Supplied batch_ptr exceeds",
+            ),
+        ],
+    )
+    def test_segment_metadata_overflow_raises_before_int32_narrowing(
+        self, kwargs, match
+    ):
+        with pytest.raises(OverflowError, match=match):
+            SegmentedLevelStorage(data=None, device="cpu", validate=False, **kwargs)
+
+    def test_fieldless_buffer_put_rejects_overflow_without_mutation(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[1],
+            device="cpu",
+            batch_ptr_capacity=4,
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[maximum],
+            device="cpu",
+            batch_ptr_capacity=4,
+            validate=False,
+        )
+        copied = torch.zeros(1, dtype=torch.bool)
+        fit = torch.ones(1, dtype=torch.bool)
+
+        destination.compute_put_per_system_fit_mask(
+            source, torch.tensor([True]), None, fit
+        )
+        assert fit.tolist() == [False]
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            destination.put(source, torch.tensor([True]), copied_mask=copied)
+
+        assert destination.segment_lengths.tolist() == [maximum]
+        assert destination.batch_ptr.tolist() == [0, maximum, maximum, maximum]
+        assert copied.tolist() == [False]
+
+    def test_fieldless_fit_accepts_zero_length_at_int32_boundary(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2, 0, 1],
+            device="cpu",
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[maximum - 2],
+            batch_ptr_capacity=6,
+            device="cpu",
+            validate=False,
+        )
+        fit = torch.zeros(3, dtype=torch.bool)
+
+        destination.compute_put_per_system_fit_mask(
+            source, torch.ones(3, dtype=torch.bool), None, fit
+        )
+
+        assert fit.tolist() == [True, True, False]
+
     def test_setitem_length_mismatch_raises(self):
         """_validate_setitem raises when value length != num_elements."""
         s = SegmentedLevelStorage(
@@ -991,6 +1094,43 @@ class TestSegmentedLevelStorage:
         assert (s.batch_idx[:2] == 0).all()
         assert (s.batch_idx[2:5] == 1).all()
 
+    def test_concatenate_preserves_only_preallocated_pointer_capacity(self):
+        """Concatenation preserves allocated, but not merely cached, capacity."""
+        other = SegmentedLevelStorage(
+            data={"x": torch.tensor([[2.0], [3.0]])},
+            segment_lengths=[2],
+            device="cpu",
+            validate=False,
+        )
+        lazy = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        lazy.concatenate(other)
+        assert lazy.batch_ptr.tolist() == [0, 1, 3]
+
+        cached = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        _ = cached.batch_ptr
+        cached.concatenate(other)
+        assert cached.batch_ptr.tolist() == [0, 1, 3]
+
+        allocated = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            batch_ptr_capacity=5,
+            device="cpu",
+            validate=False,
+        )
+        allocated.concatenate(other)
+        assert allocated.batch_ptr.tolist() == [0, 1, 3, 3, 3]
+
     def test_update_at(self):
         s = SegmentedLevelStorage(
             data={"x": torch.zeros(5, 2)},
@@ -1019,6 +1159,30 @@ class TestSegmentedLevelStorage:
         assert len(s) == 4
         assert s.num_elements() == 5 + 4
         assert s.segment_lengths.tolist() == [2, 3, 1, 3]
+
+    def test_concatenate_prevalidates_metadata_before_payload_mutation(self):
+        """An overflowing append leaves the original payload and metadata intact."""
+        maximum = torch.iinfo(torch.int32).max
+        storage = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[maximum],
+            device="cpu",
+            validate=False,
+        )
+        other = SegmentedLevelStorage(
+            data={"x": torch.tensor([[2.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            storage.concatenate(other)
+
+        assert storage.segment_lengths.tolist() == [maximum]
+        assert storage._batch_ptr is None
+        assert storage._batch_ptr_capacity is None
+        torch.testing.assert_close(storage["x"], torch.tensor([[1.0]]))
 
     def test_is_segmented_true(self):
         s = SegmentedLevelStorage(
@@ -1159,6 +1323,32 @@ class TestSegmentedLevelStorage:
         assert len(dest) == 3
         torch.testing.assert_close(dest["x"][10:12], src["x"][:2])
         torch.testing.assert_close(dest["x"][12:15], src["x"][2:5])
+
+    def test_payload_buffer_put_rejects_int32_overflow_before_copy(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data={"x": torch.ones(1, 1)},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data={"x": torch.zeros(1, 1).expand(maximum, 1)},
+            segment_lengths=[maximum],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        source_mask = torch.tensor([True])
+        fit_mask = torch.ones(1, dtype=torch.bool)
+        destination.compute_put_per_system_fit_mask(source, source_mask, None, fit_mask)
+
+        assert fit_mask.tolist() == [False]
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            destination.put(source, source_mask)
+        assert destination.segment_lengths.tolist() == [maximum]
+        assert destination.batch_ptr.tolist() == [0, maximum, maximum, maximum]
+        assert not hasattr(source, "_copied_mask")
 
     def test_compute_put_per_system_fit_mask_no_batch_ptr_room(self):
         """compute_put_per_system_fit_mask zeros fit_mask when dest has no batch_ptr room."""

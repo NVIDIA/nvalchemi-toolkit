@@ -75,6 +75,109 @@ def _atomic_data_with_edges_and_system(
     )
 
 
+def _fieldless_builtin_batch(
+    atom_lengths: list[int],
+    edge_lengths: list[int],
+    *,
+    pointer_capacity: int | None = None,
+) -> Batch:
+    """Build a metadata-only legacy batch for fieldless atoms/edges coverage."""
+    schema = LevelSchema()
+    groups = {
+        "atoms": SegmentedLevelStorage(
+            data=None,
+            segment_lengths=atom_lengths,
+            batch_ptr_capacity=pointer_capacity,
+            device="cpu",
+            attr_map=schema,
+            validate=False,
+        ),
+        "edges": SegmentedLevelStorage(
+            data=None,
+            segment_lengths=edge_lengths,
+            batch_ptr_capacity=pointer_capacity,
+            device="cpu",
+            attr_map=schema,
+            validate=False,
+        ),
+    }
+    return Batch._construct(
+        device="cpu",
+        keys={"node": set(), "edge": set(), "system": set()},
+        storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=False),
+    )
+
+
+def _custom_boundary_batch(
+    segment_length: int,
+    energy: float,
+    *,
+    payload_value: float | None = None,
+) -> Batch:
+    """Build a small batch with boundary-sized custom segment metadata."""
+    schema = LevelSchema()
+    schema.add_level("samples", segmented=True)
+    sample_data = None
+    if payload_value is not None:
+        schema.set("sample_values", "samples", dtype=torch.float32)
+        base = torch.tensor([[payload_value]], dtype=torch.float32)
+        sample_data = {"sample_values": base.expand(segment_length, 1)}
+
+    groups = {
+        "system": UniformLevelStorage(
+            data={"energy": torch.tensor([[energy]], dtype=torch.float32)},
+            device="cpu",
+            attr_map=schema,
+            validate=True,
+        ),
+        "samples": SegmentedLevelStorage(
+            data=sample_data,
+            segment_lengths=[segment_length],
+            device="cpu",
+            attr_map=schema,
+            validate=True,
+        ),
+    }
+    return Batch._construct(
+        device="cpu",
+        keys={"node": set(), "edge": set(), "system": {"energy"}},
+        storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=True),
+    )
+
+
+def _builtin_edge_product_schema() -> LevelSchema:
+    """Build the public fieldless-edges product schema."""
+    schema = LevelSchema()
+    schema.add_product_level("atom_edges", left="atoms", right="edges")
+    schema.set("atom_edge_values", "atom_edges")
+    return schema
+
+
+def _builtin_edge_product_data(
+    num_nodes: int, num_edges: int, offset: float
+) -> AtomicData:
+    """Build an AtomicData item with a fieldless built-in edge parent."""
+    data = _minimal_atomic_data(num_nodes)
+    data.atom_edge_values = (
+        torch.arange(num_nodes * num_edges, dtype=torch.float32)
+        .add_(offset)
+        .reshape(num_nodes, num_edges, 1)
+    )
+    return data
+
+
+def _builtin_edge_product_batch() -> Batch:
+    """Build public atoms-times-fieldless-edges data with zero-edge graph."""
+    return Batch.from_data_list(
+        [
+            _builtin_edge_product_data(2, 3, 10.0),
+            _builtin_edge_product_data(3, 0, 20.0),
+            _builtin_edge_product_data(1, 2, 30.0),
+        ],
+        attr_map=_builtin_edge_product_schema(),
+    )
+
+
 def _custom_buffer_schema(*, fieldless_parent: bool = False) -> LevelSchema:
     """Build a schema used by the custom buffer lifecycle tests."""
     schema = LevelSchema()
@@ -98,7 +201,11 @@ def _custom_buffer_data(
         data.molecule_values = torch.arange(num_molecules, dtype=torch.float32).reshape(
             -1, 1
         )
-    data.pair_values = torch.zeros(num_nodes, num_molecules, 1)
+    data.pair_values = (
+        torch.arange(num_nodes * num_molecules, dtype=torch.float32)
+        .add_(num_nodes * 10 + num_molecules)
+        .reshape(num_nodes, num_molecules, 1)
+    )
     return data
 
 
@@ -232,6 +339,37 @@ def _custom_transport_gloo_worker(
         dist.destroy_process_group()
 
 
+def _builtin_edge_product_gloo_worker(rank: int, world_size: int, port: int) -> None:
+    """Send the public fieldless built-in edge parent fixture over Gloo."""
+    dist.init_process_group(
+        backend="gloo",
+        init_method=f"tcp://127.0.0.1:{port}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=30),
+    )
+    try:
+        template = _builtin_edge_product_batch()
+        if rank == 0:
+            template.send(dst=1, tag=43)
+        else:
+            received = Batch.recv(src=0, device="cpu", template=template, tag=43)
+            assert "neighbor_list" not in received
+            assert received.level_ptr("atoms").tolist() == [0, 2, 5, 6]
+            assert received.level_ptr("edges").tolist() == [0, 3, 3, 5]
+            assert received.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+            torch.testing.assert_close(
+                received.atom_edge_values, template.atom_edge_values
+            )
+            for graph_idx in range(received.num_graphs):
+                torch.testing.assert_close(
+                    received.get_data(graph_idx).atom_edge_values,
+                    template.get_data(graph_idx).atom_edge_values,
+                )
+    finally:
+        dist.destroy_process_group()
+
+
 def _available_tcp_port() -> int:
     """Reserve and return an available local TCP port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -326,6 +464,20 @@ class TestBatchConstruction:
 
         assert batch.level_keys["atoms"] == set()
         assert batch.level_ptr("atoms").tolist() == [0, 0, 0]
+
+    def test_level_ptr_rejects_uniform_graph_count_overflow(self):
+        system = UniformLevelStorage(
+            data={"energy": torch.zeros(1, 1)}, device="cpu", validate=False
+        )
+        object.__setattr__(system, "_num_kept", torch.iinfo(torch.int32).max + 1)
+        batch = Batch._construct(
+            device="cpu",
+            keys={"system": {"energy"}},
+            storage=MultiLevelStorage(groups={"system": system}, validate=False),
+        )
+
+        with pytest.raises(OverflowError, match="Uniform level 'system'"):
+            batch.level_ptr("system")
 
     def test_level_ptr_derives_fieldless_product_from_resolved_parents(self):
         schema = LevelSchema()
@@ -928,6 +1080,7 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 4]
         assert sub.num_nodes == 7
+        assert sub.level_ptr("atoms").dtype == torch.int32
 
     def test_index_select_int(self, device):
         batch = Batch.from_data_list(
@@ -1042,6 +1195,95 @@ class TestBatchMutation:
         assert b1.num_graphs == 3
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
+
+    def test_append_select_and_rebatch_fieldless_builtin_segment_metadata(self):
+        left = _fieldless_builtin_batch([2, 1], [3, 0], pointer_capacity=5)
+        right = _fieldless_builtin_batch([4], [2])
+
+        left.append(right)
+
+        assert left.level_ptr("atoms").tolist() == [0, 2, 3, 7]
+        assert left.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert left._storage.groups["atoms"].batch_ptr.shape[0] == 5
+        selected = left.index_select([1, 2])
+        assert selected.level_ptr("atoms").tolist() == [0, 1, 5]
+        assert selected.level_ptr("edges").tolist() == [0, 0, 2]
+
+        selected.append(selected.clone())
+        assert selected.level_ptr("atoms").tolist() == [0, 1, 5, 6, 10]
+        assert selected.level_ptr("edges").tolist() == [0, 0, 2, 2, 4]
+
+    def test_fieldless_builtin_edge_product_lifecycle(self):
+        """Atoms-times-edges products retain fieldless edge cardinalities."""
+        original = _builtin_edge_product_batch()
+        left = Batch.from_data_list(
+            original.to_data_list()[:2], attr_map=original._storage.attr_map
+        )
+        right = Batch.from_data_list(
+            original.to_data_list()[2:], attr_map=original._storage.attr_map
+        )
+
+        left.append(right)
+
+        assert "neighbor_list" not in left
+        assert left.level_ptr("atoms").tolist() == [0, 2, 5, 6]
+        assert left.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert left.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+        for graph_idx in range(left.num_graphs):
+            torch.testing.assert_close(
+                left.get_data(graph_idx).atom_edge_values,
+                original.get_data(graph_idx).atom_edge_values,
+            )
+
+        selected = left.index_select([2, 0])
+        assert selected.level_ptr("edges").tolist() == [0, 2, 5]
+        for graph_idx, source_idx in enumerate((2, 0)):
+            torch.testing.assert_close(
+                selected.get_data(graph_idx).atom_edge_values,
+                original.get_data(source_idx).atom_edge_values,
+            )
+
+        repeated = selected.clone()
+        repeated.append(selected)
+        assert repeated.level_ptr("edges").tolist() == [0, 2, 5, 7, 10]
+        rebatch = Batch.from_data_list(
+            repeated.to_data_list(), attr_map=repeated._storage.attr_map
+        )
+        assert rebatch.level_ptr("atom_edges").tolist() == [0, 2, 8, 10, 16]
+        for graph_idx, source_idx in enumerate((2, 0, 2, 0)):
+            torch.testing.assert_close(
+                rebatch.get_data(graph_idx).atom_edge_values,
+                original.get_data(source_idx).atom_edge_values,
+            )
+
+    def test_append_fieldless_metadata_prevalidates_pointer_overflow(self):
+        maximum = torch.iinfo(torch.int32).max
+        left = _fieldless_builtin_batch([maximum], [0], pointer_capacity=4)
+        right = _fieldless_builtin_batch([1], [0])
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            left.append(right)
+
+        assert left.level_ptr("atoms").tolist() == [0, maximum]
+        assert left.level_ptr("edges").tolist() == [0, 0]
+
+    def test_append_payload_overflow_is_atomic_across_levels(self):
+        maximum = torch.iinfo(torch.int32).max
+        left = _custom_boundary_batch(maximum, 11.0, payload_value=7.0)
+        right = _custom_boundary_batch(1, 22.0, payload_value=9.0)
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            left.append(right)
+
+        assert left.num_graphs == 1
+        assert left.energy.tolist() == [[11.0]]
+        assert left.level_ptr("samples").tolist() == [0, maximum]
+        assert left.sample_values.shape == (maximum, 1)
+        assert left.sample_values[0].item() == 7.0
+        assert right.num_graphs == 1
+        assert right.energy.tolist() == [[22.0]]
+        assert right.level_ptr("samples").tolist() == [0, 1]
+        assert right.sample_values.tolist() == [[9.0]]
 
     def test_append_data(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
@@ -2051,6 +2293,42 @@ class TestBatchPutDefrag:
         assert buffer.num_graphs == 0
         assert buffer.positions.eq(0).all()
 
+    def test_put_fieldless_overflow_is_rejected_before_uniform_copy(self):
+        maximum = torch.iinfo(torch.int32).max
+        first = _custom_boundary_batch(maximum, 11.0)
+        second = _custom_boundary_batch(1, 22.0)
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=0,
+            num_edges=0,
+            template=first,
+        )
+        occupancy = torch.zeros(2, dtype=torch.bool)
+        copied = torch.zeros(1, dtype=torch.bool)
+
+        buffer.put(
+            first,
+            torch.tensor([True]),
+            copied_mask=copied,
+            dest_mask=occupancy,
+        )
+        assert copied.tolist() == [True]
+        assert occupancy.tolist() == [True, False]
+
+        copied.zero_()
+        buffer.put(
+            second,
+            torch.tensor([True]),
+            copied_mask=copied,
+            dest_mask=occupancy,
+        )
+
+        assert copied.tolist() == [False]
+        assert occupancy.tolist() == [True, False]
+        assert buffer.num_graphs == 1
+        assert buffer.energy.tolist() == [[11.0], [0.0]]
+        assert buffer.level_ptr("samples").tolist() == [0, maximum]
+
     def test_put_uniform_groups_share_occupancy_snapshot(self):
         schema = _custom_uniform_schema()
         data_list = []
@@ -2100,6 +2378,8 @@ class TestBatchPutDefrag:
             level_capacities={"pairs": 20},
         )
         copied = torch.zeros(2, dtype=torch.bool)
+        expected_first = source.get_data(0).pair_values.clone()
+        expected_second = source.get_data(1).pair_values.clone()
 
         buffer.put(source, torch.tensor([True, False]), copied_mask=copied)
 
@@ -2109,9 +2389,11 @@ class TestBatchPutDefrag:
         assert buffer.pair_values.shape == (20, 1)
         assert buffer.level_ptr("pairs").tolist() == [0, 6]
         assert buffer.level_ptr("pairs").numel() == buffer.num_graphs + 1
+        torch.testing.assert_close(buffer.get_data(0).pair_values, expected_first)
         source.defrag(copied)
         assert source.num_graphs == 1
         assert source.level_ptr("pairs")[:2].tolist() == [0, 3]
+        torch.testing.assert_close(source.get_data(0).pair_values, expected_second)
 
     def test_zero_clears_segment_caches_and_reuses_custom_buffer(self):
         schema = _custom_buffer_schema(fieldless_parent=True)
@@ -2131,6 +2413,7 @@ class TestBatchPutDefrag:
 
         assert buffer.num_graphs == 0
         assert buffer._storage.groups["pairs"].batch_ptr.shape[0] == 4
+        assert buffer.pair_values.eq(0).all()
         assert not hasattr(buffer._storage.groups["pairs"], "_num_segments")
         buffer.put(
             Batch.from_data_list(
@@ -2288,6 +2571,104 @@ class TestBatchRecvHandleWait:
             assert h.wait.called, "irecv handle should have wait() called"
         for h in mock_td_handles:
             assert h.wait.called, "TensorDict handle should have wait() called"
+
+    def test_wait_constructs_fieldless_builtin_groups_after_length_receives(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _fieldless_builtin_batch([1, 1], [1, 1])
+        pending_lengths = iter(([2, 3], [1, 0]))
+
+        class ReceiveWork:
+            def __init__(self, target, values):
+                self.target = target
+                self.values = values
+
+            def wait(self):
+                self.target.copy_(torch.tensor(self.values, dtype=torch.int32))
+
+        def receive(target, *args, **kwargs):
+            return ReceiveWork(target, next(pending_lengths))
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor([2, 5, 1], dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+        with patch("torch.distributed.irecv", side_effect=receive):
+            received = handle.wait()
+
+        assert set(received._storage.groups) == {"atoms", "edges"}
+        assert received.level_ptr("atoms").tolist() == [0, 2, 5]
+        assert received.level_ptr("edges").tolist() == [0, 1, 1]
+        assert received.level_keys == {"atoms": set(), "edges": set(), "system": set()}
+
+    def test_wait_receives_public_fieldless_builtin_edge_product(self):
+        """Receive waits for built-in lengths before product reconstruction."""
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _builtin_edge_product_batch()
+        pending_lengths = iter(([2, 3, 1], [3, 0, 2], [6, 0, 2]))
+
+        class ReceiveWork:
+            def __init__(self, target, values):
+                self.target = target
+                self.values = values
+
+            def wait(self):
+                self.target.copy_(torch.tensor(self.values, dtype=torch.int32))
+
+        def receive(target, *args, **kwargs):
+            return ReceiveWork(target, next(pending_lengths))
+
+        payloads = iter(
+            [
+                template._storage.groups["atoms"]._data[: template.num_nodes],
+                template._storage.groups["atom_edges"]._data[
+                    : template._storage.groups["atom_edges"].num_elements()
+                ],
+            ]
+        )
+
+        def receive_tensordict(
+            destination, src=None, init_tag=None, group=None, return_premature=False
+        ):
+            source = next(payloads)
+            for key in destination.keys():
+                destination[key].copy_(source[key])
+            return [MagicMock()]
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor([3, 6, 5], dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+        with (
+            patch("torch.distributed.irecv", side_effect=receive),
+            patch("tensordict.TensorDict.irecv", receive_tensordict),
+        ):
+            received = handle.wait()
+
+        assert "neighbor_list" not in received
+        assert received.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert received.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+        torch.testing.assert_close(received.atom_edge_values, template.atom_edge_values)
+        for graph_idx in range(received.num_graphs):
+            torch.testing.assert_close(
+                received.get_data(graph_idx).atom_edge_values,
+                template.get_data(graph_idx).atom_edge_values,
+            )
 
 
 class TestBatchRecvHandleEmpty:
@@ -2564,6 +2945,18 @@ class TestCustomBatchTransport:
         mp.spawn(
             _custom_transport_gloo_worker,
             args=(2, _available_tcp_port(), sentinel),
+            nprocs=2,
+            join=True,
+        )
+
+    @pytest.mark.skipif(
+        not dist.is_available() or not dist.is_gloo_available(),
+        reason="gloo backend is required",
+    )
+    def test_fieldless_builtin_edge_product_round_trip_over_gloo(self):
+        mp.spawn(
+            _builtin_edge_product_gloo_worker,
+            args=(2, _available_tcp_port()),
             nprocs=2,
             join=True,
         )

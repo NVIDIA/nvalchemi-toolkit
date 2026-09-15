@@ -51,6 +51,7 @@ from nvalchemi.data.level_storage import (
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
+    _checked_segment_metadata,
 )
 
 # Edge-level keys whose values are node indices and therefore need
@@ -882,8 +883,8 @@ class Batch(DataMixin):
         Raises
         ------
         OverflowError
-            If a product level's per-graph or cumulative cardinality exceeds
-            the signed int32 pointer range.
+            If the level's graph count, per-graph product cardinality, or
+            cumulative cardinality exceeds the signed int32 pointer range.
         KeyError
             If *name* is not registered or its segmented cardinality cannot
             be resolved from materialized data or resolved product parents.
@@ -896,12 +897,22 @@ class Batch(DataMixin):
         if group is not None:
             if isinstance(group, SegmentedLevelStorage):
                 return group.batch_ptr[: self.num_graphs + 1]
+            if self.num_graphs > _INT32_MAX:
+                raise OverflowError(
+                    f"Uniform level '{name}' graph count exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
             return torch.arange(
                 self.num_graphs + 1, dtype=torch.int32, device=self.device
             )
 
         kind = schema.level_kind(name)
         if kind == "uniform":
+            if self.num_graphs > _INT32_MAX:
+                raise OverflowError(
+                    f"Uniform level '{name}' graph count exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
             return torch.arange(
                 self.num_graphs + 1, dtype=torch.int32, device=self.device
             )
@@ -1643,7 +1654,8 @@ class Batch(DataMixin):
             copy mask (fit in all levels). If None, stored on *src_batch*.
         dest_mask : Tensor, optional
             Shared occupancy mask for uniform levels, with ``True`` denoting an
-            occupied destination slot. If ``None``, all slots are available.
+            occupied destination slot. Occupied slots must form a dense prefix.
+            If ``None``, all slots are available.
         """
         device = self.device
         n = src_batch.num_graphs
@@ -2160,6 +2172,36 @@ class Batch(DataMixin):
 
         self._validate_custom_append(other)
 
+        # Verify every segmented pointer that the append will extend before
+        # any payload or neighbor-list offset can mutate either batch.
+        for group_name, group in self._storage.groups.items():
+            other_group = other._storage.groups.get(group_name)
+            if not (
+                isinstance(group, SegmentedLevelStorage)
+                and isinstance(other_group, SegmentedLevelStorage)
+            ):
+                continue
+
+            group_fields = set(group.keys())
+            other_fields = set(other_group.keys())
+            both_fieldless = not group_fields and not other_fields
+            if not both_fieldless and not group_fields.intersection(other_fields):
+                # Segmented concatenate is a no-op without a shared payload.
+                continue
+            _checked_segment_metadata(
+                torch.cat(
+                    [
+                        group.segment_lengths.to(
+                            device=group.device, dtype=torch.int64
+                        ),
+                        other_group.segment_lengths.to(
+                            device=group.device, dtype=torch.int64
+                        ),
+                    ]
+                ),
+                group.device,
+            )
+
         atoms = self._atoms_group
         other_atoms = other._atoms_group
         saved_ei = None
@@ -2176,30 +2218,21 @@ class Batch(DataMixin):
                 other_group = other._storage.groups.get(group_name)
                 if other_group is not None:
                     if (
-                        group_name not in _BUILTIN_LEVELS
-                        and isinstance(group, SegmentedLevelStorage)
+                        isinstance(group, SegmentedLevelStorage)
                         and isinstance(other_group, SegmentedLevelStorage)
-                        and not (set(group.keys()) & set(other_group.keys()))
+                        and not set(group.keys())
+                        and not set(other_group.keys())
                     ):
-                        # SegmentedLevelStorage.concatenate() intentionally
-                        # leaves fieldless groups untouched.  Custom parent
-                        # levels can be fieldless while still carrying the
-                        # per-graph cardinalities needed by a product, so
-                        # append their segment metadata explicitly.
-                        group.segment_lengths = torch.cat(
-                            [
-                                group.segment_lengths,
-                                other_group.segment_lengths.to(group.device),
-                            ]
+                        # Fieldless segmented levels retain per-graph
+                        # cardinality even without payload tensors.
+                        group._replace_segment_lengths(
+                            torch.cat(
+                                [
+                                    group.segment_lengths,
+                                    other_group.segment_lengths.to(group.device),
+                                ]
+                            )
                         )
-                        group._batch_idx = None
-                        group._batch_ptr = None
-                        group._batch_ptr_np = None
-                        group._segment_indices = None
-                        if hasattr(group, "_num_segments"):
-                            object.__delattr__(group, "_num_segments")
-                        if hasattr(group, "_num_elements_kept"):
-                            object.__delattr__(group, "_num_elements_kept")
                         continue
                     group.concatenate(other_group)
                 else:
@@ -3105,6 +3138,13 @@ class _BatchRecvHandle:
             if self._template is not None
             else LevelSchema()
         )
+        builtin_specs: list[
+            tuple[
+                str,
+                TensorDict | None,
+                Tensor | None,
+            ]
+        ] = []
 
         for name, capacity, seg_lens in [
             ("atoms", num_nodes, atoms_seg),
@@ -3123,6 +3163,7 @@ class _BatchRecvHandle:
             keys = list(template_grp.keys())
             if not keys:
                 tag_offset += _transport_payload_tag_span(template_grp)
+                builtin_specs.append((name, None, seg_lens))
                 continue
 
             recv_data = {}
@@ -3147,30 +3188,37 @@ class _BatchRecvHandle:
             else:
                 handles.append(td_handles)
             tag_offset += _transport_payload_tag_span(template_grp)
+            builtin_specs.append((name, recv_td, seg_lens))
 
+        for h in handles:
+            if h is not None and hasattr(h, "wait"):
+                h.wait()
+
+        # Segment-length receives populate uninitialized tensors.  Construct
+        # segmented storage only after those receives complete, including
+        # fieldless built-in atoms/edges where no TensorDict I/O was needed.
+        for name, recv_td, seg_lens in builtin_specs:
             if name == "system":
-                storage = UniformLevelStorage(
-                    data={k: recv_td[k] for k in keys},
+                if recv_td is None:
+                    continue
+                groups[name] = UniformLevelStorage(
+                    data={key: recv_td[key] for key in recv_td.keys()},
                     device=self._device,
                     validate=False,
                     attr_map=attr_map,
                 )
-                groups[name] = storage
-            else:
-                if seg_lens is None:
-                    continue
-                storage = SegmentedLevelStorage(
-                    data={k: recv_td[k] for k in keys},
+            elif seg_lens is not None:
+                groups[name] = SegmentedLevelStorage(
+                    data=(
+                        {key: recv_td[key] for key in recv_td.keys()}
+                        if recv_td is not None
+                        else None
+                    ),
                     segment_lengths=seg_lens,
                     device=self._device,
                     validate=False,
                     attr_map=attr_map,
                 )
-                groups[name] = storage
-
-        for h in handles:
-            if h is not None and hasattr(h, "wait"):
-                h.wait()
 
         custom_groups = (
             _custom_transport_groups(self._template)

@@ -278,9 +278,13 @@ values; it does not compute the Hessian.
 
 {py:attr}`~nvalchemi.data.Batch.level_keys` reports every cardinality-resolved level
 and its fields in schema order. A fieldless resolved level appears with an empty set.
-{py:meth}`~nvalchemi.data.Batch.level_ptr` returns its cumulative per-system pointer.
-The existing {py:attr}`~nvalchemi.data.Batch.keys` property remains the node, edge,
-and system compatibility view and does not list custom levels.
+{py:meth}`~nvalchemi.data.Batch.level_ptr` returns its cumulative per-system pointer
+as an `int32` tensor. This limit applies to each materialized level in one in-memory
+`Batch`; constructing a level whose packed cardinality exceeds the signed `int32`
+range raises an error. Zarr uses `int64` pointers for dataset-wide offsets, so the
+total dataset may contain more entities than a single `Batch`. The existing
+{py:attr}`~nvalchemi.data.Batch.keys` property remains the node, edge, and system
+compatibility view and does not list custom levels.
 
 ### Fieldless cardinality metadata
 

@@ -618,6 +618,50 @@ class TestAtomicDataZarrWriter:
             "reordered_metadata" not in zarr.open(path, mode="r")["levels"]["metadata"]
         )
 
+    def test_add_custom_rejects_cross_layout_duplicate_atom_field(
+        self, tmp_path: Path
+    ) -> None:
+        """Reject a built-in alias colliding with an existing custom field."""
+        path = tmp_path / "duplicate-field.zarr"
+        writer = AtomicDataZarrWriter(path)
+        writer.write([_make_atomic_data(2, 0), _make_atomic_data(3, 0)])
+        schema = LevelSchema()
+        schema.add_level("sites", segmented=True)
+        writer.add_custom(
+            "feat",
+            torch.ones(5, 1),
+            "sites",
+            attr_map=schema,
+            level_ptrs={"sites": torch.tensor([0, 2, 5])},
+        )
+
+        def snapshot(group: zarr.Group) -> dict[str, object]:
+            return {
+                "attrs": dict(group.attrs),
+                "groups": {
+                    name: snapshot(group[name]) for name in sorted(group.group_keys())
+                },
+                "arrays": {
+                    name: {
+                        "attrs": dict(group[name].attrs),
+                        "dtype": str(group[name].dtype),
+                        "shape": group[name].shape,
+                    }
+                    for name in sorted(group.array_keys())
+                },
+            }
+
+        before = snapshot(zarr.open(path, mode="r"))
+        with pytest.raises(ValueError, match="already exists"):
+            writer.add_custom("feat", torch.ones(5, 1), "atom")
+        after = snapshot(zarr.open(path, mode="r"))
+        assert after == before
+
+        reader = AtomicDataZarrReader(path)
+        sample, _ = reader[0]
+        assert sample["feat"].shape == (2, 1)
+        reader.close()
+
     @pytest.mark.parametrize(
         "pointer",
         [

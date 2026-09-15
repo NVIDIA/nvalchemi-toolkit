@@ -959,6 +959,20 @@ class AtomicDataZarrWriter:
             "edge": "edges",
             "system": "system",
         }.get(level, level)
+        fields = dict(root.attrs.get("fields", {"core": {}, "custom": {}}))
+        all_keys: set[str] = set()
+        for group_name in ("core", "custom"):
+            if group_name in root:
+                all_keys.update(root[group_name].array_keys())
+        if "levels" in root:
+            for level_group in root["levels"].group_keys():
+                all_keys.update(root["levels"][level_group].array_keys())
+        for field_metadata in fields.values():
+            if isinstance(field_metadata, Mapping):
+                all_keys.update(field_metadata)
+        if key in all_keys:
+            raise ValueError(f"Field '{key}' already exists")
+
         if resolved_level in _BUILTIN_LEVELS:
             expected = {
                 "atoms": int(meta_group["atoms_ptr"][-1]),
@@ -969,10 +983,6 @@ class AtomicDataZarrWriter:
                 raise ValueError(
                     f"Data shape[0]={data.shape[0]} does not match expected size={expected}"
                 )
-            fields = dict(root.attrs.get("fields", {"core": {}, "custom": {}}))
-            all_keys = set(fields.get("core", {})) | set(fields.get("custom", {}))
-            if key in all_keys or key in root["custom"]:
-                raise ValueError(f"Field '{key}' already exists")
             root["custom"].create_array(
                 key, data=array, **self._resolve_array_kwargs(key, "custom", array)
             )
@@ -1056,12 +1066,6 @@ class AtomicDataZarrWriter:
                     is_segmented=kind != "uniform",
                 )
 
-        all_keys = set(root["core"].array_keys()) | set(root["custom"].array_keys())
-        if "levels" in root:
-            for level_group in root["levels"].group_keys():
-                all_keys.update(root["levels"][level_group].array_keys())
-        if key in all_keys:
-            raise ValueError(f"Field '{key}' already exists")
         kind = schema.level_kind(resolved_level)
         ptr_inputs = dict(level_ptrs or {})
         ptr_cache: dict[str, torch.Tensor] = {
@@ -1186,7 +1190,6 @@ class AtomicDataZarrWriter:
             "version": 1,
             "definitions": self._schema_definitions(schema),
         }
-        fields = dict(root.attrs.get("fields", {"core": {}, "custom": {}}))
         fields.setdefault("levels", {})[key] = resolved_level
         root.attrs["fields"] = fields
 

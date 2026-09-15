@@ -35,6 +35,7 @@ from pydantic import (
 from nvalchemi import OptionalDependency
 from nvalchemi import _typing as t
 from nvalchemi.data.data import DataMixin  # type: ignore
+from nvalchemi.data.level_storage import DEFAULT_ATTRIBUTE_MAP
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -88,6 +89,7 @@ class AtomicNumberTable:
 
 
 _DEFAULT_MASS_TABLE: torch.Tensor | None = None
+_BUILTIN_FIELD_NAMES = frozenset().union(*DEFAULT_ATTRIBUTE_MAP.values())
 
 
 def _default_mass_table() -> torch.Tensor:
@@ -726,10 +728,33 @@ class AtomicData(BaseModel, DataMixin):
         dtype: torch.dtype | None = None,
         non_blocking: bool = False,
     ) -> AtomicData:
-        """Return a device-moved copy while retaining private level metadata."""
+        """Return a device-moved copy with synchronized level metadata.
+
+        Floating custom-field dtype declarations follow an explicit dtype
+        conversion so the returned object can be batched again immediately.
+
+        Raises
+        ------
+        ValueError
+            If the requested dtype cannot be represented by the level schema.
+        """
         moved = DataMixin.to(self, device, dtype, non_blocking)
         if self._level_schema is not None:
-            moved._level_schema = self._level_schema.clone()
+            schema = self._level_schema.clone()
+            if dtype is not None:
+                for key, group_name in schema.attr_to_group.items():
+                    if key in _BUILTIN_FIELD_NAMES:
+                        continue
+                    original = getattr(self, key, None)
+                    converted = getattr(moved, key, None)
+                    if (
+                        isinstance(original, torch.Tensor)
+                        and isinstance(converted, torch.Tensor)
+                        and original.dtype.is_floating_point
+                        and original.dtype != converted.dtype
+                    ):
+                        schema.set(key, group_name, dtype=converted.dtype)
+            moved._level_schema = schema
         return moved  # type: ignore[return-value]
 
     @property
