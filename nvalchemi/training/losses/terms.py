@@ -593,6 +593,15 @@ class ForceMSELoss(BaseLossFunction):
         How to handle prediction/target dtype mismatches before validation.
         ``"strict"`` raises; the other policies cast one tensor to match the
         other.
+
+    Notes
+    -----
+    Both sides of the reduction accumulate in at least fp32 on the padded
+    layout as well as the dense one, so an fp16 total past the half-precision
+    ceiling of 65504 no longer saturates to ``inf`` before it is normalized. A
+    half-precision input therefore returns an fp32 loss and
+    :attr:`per_sample_loss` whichever layout it arrives in; fp32 and fp64
+    inputs are unchanged.
     """
 
     requires_eval_grad: bool = True
@@ -655,14 +664,17 @@ class ForceMSELoss(BaseLossFunction):
             if num_graphs is None:
                 num_graphs = getattr(batch, "num_graphs", None)
         if not self.normalize_by_atom_count:
+            acc_dtype = torch.promote_types(residual.dtype, torch.float32)
             if residual.ndim == 3:
-                per_graph_num = residual.sum(dim=(-2, -1))
-                per_graph_den = valid_components.sum(dim=(-2, -1))
+                per_graph_num = residual.sum(dim=(-2, -1), dtype=acc_dtype)
+                per_graph_den = valid_components.sum(dim=(-2, -1), dtype=acc_dtype)
                 self.per_sample_loss = (
                     per_graph_num / per_graph_den.clamp_min(1.0)
                 ).detach()
                 return per_graph_num.sum() / per_graph_den.sum().clamp_min(1.0)
-            return residual.sum() / valid_components.sum().clamp_min(1.0)
+            return residual.sum(dtype=acc_dtype) / valid_components.sum(
+                dtype=acc_dtype
+            ).clamp_min(1.0)
         per_graph_num, per_graph_den = self._per_graph_force_terms(
             residual, valid_components, batch_idx, num_graphs
         )
@@ -733,7 +745,11 @@ class ForceMSELoss(BaseLossFunction):
         num_graphs: object,  # noqa: ARG002
     ) -> tuple[_PerGraphValues, _PerGraphValues]:
         """Return padded-force per-graph numerators and denominators."""
-        return squared_error.sum(dim=(-2, -1)), valid_components.sum(dim=(-2, -1))
+        acc_dtype = torch.promote_types(squared_error.dtype, torch.float32)
+        return (
+            squared_error.sum(dim=(-2, -1), dtype=acc_dtype),
+            valid_components.sum(dim=(-2, -1), dtype=acc_dtype),
+        )
 
     @dispatch
     def _per_graph_force_terms(  # noqa: F811
@@ -796,6 +812,12 @@ class ForceHuberLoss(ForceMSELoss):
         How to handle prediction/target dtype mismatches before validation.
         ``"strict"`` raises; the other policies cast one tensor to match the
         other.
+
+    Notes
+    -----
+    The inherited reduction widens its sums exactly as :class:`ForceMSELoss`
+    does, so a half-precision input returns an fp32 loss on the dense and the
+    padded force layout alike.
     """
 
     def __init__(
@@ -882,6 +904,15 @@ class ForceL2NormLoss(BaseLossFunction):
         How to handle prediction/target dtype mismatches before validation.
         ``"strict"`` raises; the other policies cast one tensor to match the
         other.
+
+    Notes
+    -----
+    Per-atom norms and their atom counts accumulate in at least fp32 on the
+    padded layout as well as the dense one, so an fp16 total past the
+    half-precision ceiling of 65504 no longer saturates to ``inf`` before it is
+    normalized. A half-precision input therefore returns an fp32 loss and
+    :attr:`per_sample_loss` whichever layout it arrives in; fp32 and fp64
+    inputs are unchanged.
     """
 
     def __init__(
@@ -947,12 +978,17 @@ class ForceL2NormLoss(BaseLossFunction):
             if num_graphs is None:
                 num_graphs = getattr(batch, "num_graphs", None)
         if not self.normalize_by_atom_count:
+            acc_dtype = torch.promote_types(residual.dtype, torch.float32)
             if residual.ndim == 2:
-                per_graph_counts = atom_weights.sum(dim=-1).clamp_min(1.0)
+                per_graph_counts = atom_weights.sum(dim=-1, dtype=acc_dtype).clamp_min(
+                    1.0
+                )
                 self.per_sample_loss = (
-                    residual.sum(dim=-1) / per_graph_counts
+                    residual.sum(dim=-1, dtype=acc_dtype) / per_graph_counts
                 ).detach()
-            return residual.sum() / atom_weights.sum().clamp_min(1.0)
+            return residual.sum(dtype=acc_dtype) / atom_weights.sum(
+                dtype=acc_dtype
+            ).clamp_min(1.0)
         per_graph_sum_l2, per_graph_counts = self._per_graph_atom_terms(
             residual, atom_weights, batch_idx, num_graphs
         )
@@ -995,7 +1031,11 @@ class ForceL2NormLoss(BaseLossFunction):
                 per_graph_sum(per_atom_values, batch_idx, num_graphs=num_graphs),
                 per_graph_sum(atom_weights, batch_idx, num_graphs=num_graphs),
             )
-        return per_atom_values.sum(dim=-1), atom_weights.sum(dim=-1)
+        acc_dtype = torch.promote_types(per_atom_values.dtype, torch.float32)
+        return (
+            per_atom_values.sum(dim=-1, dtype=acc_dtype),
+            atom_weights.sum(dim=-1, dtype=acc_dtype),
+        )
 
     def extra_repr(self) -> str:
         """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""

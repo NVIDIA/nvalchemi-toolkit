@@ -1862,13 +1862,16 @@ def load_checkpoint(
                 "load_checkpoint(strategy=...) restores the complete live strategy; "
                 "model_names is not supported in this mode."
             )
+        # A live restore targets the live strategy, not the recorded device.
         loaded = _restore_checkpoint_into_strategy(
             root,
             manifest,
             checkpoint_index=checkpoint_index,
             strategy=strategy,
             strategy_metadata=strategy_metadata,
-            map_location=load_location,
+            map_location=(
+                load_location if map_location is not None else strategy.devices[0]
+            ),
         )
         if strategy_metadata is not None:
             loaded["strategy_metadata"] = _with_strategy_device_override(

@@ -661,6 +661,18 @@ class TestDemoModelWrapper:
         assert hasattr(result, "node_embeddings")
         assert hasattr(result, "graph_embeddings")
 
+    def test_compute_embeddings_on_multi_graph_batch(
+        self, demo_model, simple_batch
+    ) -> None:
+        """A batch gets its node embeddings in the atoms group, one row per atom."""
+        hidden_dim = demo_model.embedding_shapes["node_embeddings"][-1]
+
+        result = demo_model.compute_embeddings(simple_batch)
+
+        assert result.node_embeddings.shape == (5, hidden_dim)
+        assert result.graph_embeddings.shape == (2, hidden_dim)
+        assert "node_embeddings" in result._atoms_group
+
     def test_export_model(self, demo_model, tmp_path):
         path = tmp_path / "demo.pt"
         demo_model.export_model(path)

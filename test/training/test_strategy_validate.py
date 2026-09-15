@@ -331,3 +331,18 @@ class TestStrategyValidateStepCadenceGate:
         # Epoch cadence ignores the step-ran signal.
         assert strategy._should_validate(TrainingStage.AFTER_EPOCH) is True
         assert strategy._validation_checkpoint(TrainingStage.AFTER_EPOCH) is True
+
+
+class TestStrategyValidateDevicePlacement:
+    """validate() honours the strategy's configured devices."""
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_validate_before_run_moves_models_to_strategy_device(self) -> None:
+        """A standalone validation pass moves the models onto the strategy device."""
+        strategy = _make_validation_strategy(devices=[torch.device("cuda", 0)])
+        assert next(strategy.models["main"].parameters()).device.type == "cpu"
+
+        summary = strategy.validate()
+
+        assert summary is not None
+        assert next(strategy.models["main"].parameters()).device.type == "cuda"

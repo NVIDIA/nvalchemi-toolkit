@@ -20,7 +20,8 @@ Scatter reductions (``V ... → B ...``)
 :func:`per_graph_sum` and :func:`per_graph_mean` take a flat per-node
 tensor with a ``batch_idx`` mapping each node to its graph and reduce
 the leading node dim into a per-graph output, preserving trailing dims
-verbatim.
+verbatim. Both accumulate in at least fp32 and return that width, so a
+half-precision input reduces to an fp32 per-graph tensor.
 
 These helpers only produce per-graph tensors. They do not choose the
 final scalar weighting across graphs. For per-graph values :math:`x_i`,
@@ -142,13 +143,25 @@ def _per_graph_sum_resolved(
     batch_idx: BatchIndices,
     num_graphs: _NumGraphs,
 ) -> Float[torch.Tensor, "B ..."]:  # noqa: F722
-    """Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved."""
+    """Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved.
+
+    The accumulator is at least fp32 regardless of the input dtype, and the
+    widened result is returned as is. CUDA scatter atomics round after every
+    add, so a bf16 running sum stops growing at 256 and an fp16 one at 2048: a
+    graph-balanced force loss over a few thousand atoms was off by more than a
+    factor of three. Casting the total back to the input dtype reintroduced the
+    same class of failure from the other end, since an fp16 per-graph sum of a
+    few thousand squared errors exceeds ``65504`` and saturates to ``inf``
+    before the caller divides it by the atom count. fp32 and fp64 inputs are
+    untouched: their accumulator already matches their dtype.
+    """
     out_shape = (num_graphs, *values.shape[1:])
-    out = torch.zeros(out_shape, dtype=values.dtype, device=values.device)
+    acc_dtype = torch.promote_types(values.dtype, torch.float32)
+    out = torch.zeros(out_shape, dtype=acc_dtype, device=values.device)
     idx_shape = [1] * (values.ndim - 1)
     index = batch_idx.view(-1, *idx_shape).expand_as(values)
     # TODO: refactor to use warp kernels when backwards ready
-    out.scatter_add_(0, index, values)
+    out.scatter_add_(0, index, values.to(acc_dtype))
     return out
 
 
@@ -178,7 +191,10 @@ def per_graph_sum(
     Returns
     -------
     Float[torch.Tensor, "B ..."]
-        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``.
+        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``. The sum
+        accumulates in at least fp32 and keeps that width, so half-precision
+        inputs (fp16, bf16) come back as fp32 rather than overflowing a
+        narrow output; fp32 and fp64 inputs return their own dtype.
     """
     batch_idx, resolved = _prep_reduction(values, batch_idx, num_graphs, name="values")
     return _per_graph_sum_resolved(values, batch_idx, resolved)
@@ -205,7 +221,8 @@ def per_graph_mean(
     Returns
     -------
     Float[torch.Tensor, "B ..."]
-        Per-graph means.
+        Per-graph means, in fp32 for half-precision inputs — see
+        :func:`per_graph_sum`.
     """
     batch_idx, resolved = _prep_reduction(values, batch_idx, num_graphs, name="values")
     totals = _per_graph_sum_resolved(values, batch_idx, resolved)

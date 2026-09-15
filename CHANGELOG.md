@@ -101,6 +101,66 @@
   PhysicsNeMo's RAPIDS extras, whose numba upper bound conflicts with Fairchem
   2.22.
 
+- **int32 batch pointers in the Warp segment-expansion kernel** —
+  `Batch.index_select` raised from `_expand_segments_warp` on CUDA whenever the
+  storage held its `batch_ptr` in int32, which is what the storage constructor
+  casts an explicit pointer to and therefore what every `clone()` and device
+  move produces once the pointer has been materialized — a path dynamics reach
+  through the compaction `refill_check` performs on a batch moved after its
+  pointer was built. The pointer slices the kernel reads are now cast to the
+  launch dtype, so a moved or cloned batch selects on the accelerator like any
+  other.
+- **Segment expansion on a non-default GPU** — the Warp expansion kernel behind
+  `Batch.index_select` was launched against whichever CUDA device happened to be
+  current, so a batch whose storage records a bare `cuda` while its tensors live
+  on another GPU read unmapped memory (`an illegal memory access was
+  encountered`) on every host where the current device is not `cuda:0`, and the
+  launch left that device selected for the rest of the process. The kernel now
+  launches on the device the batch pointer lives on and restores the caller's
+  current device.
+- **Level storages recorded an unresolved device** — `to_device("cuda")` and
+  construction with `device="cuda"` stored the bare request while the tensors
+  landed on whichever GPU was current, so the storage's `device` disagreed with
+  its own data as soon as the current device changed and later pointer builds
+  and concatenations raised `Expected all tensors to be on the same device`. A
+  bare `cuda` is now resolved to the current device at the moment it is
+  recorded.
+- **Appending a CPU batch onto an accelerator batch** — `Batch.append` and
+  `SegmentedLevelStorage.concatenate` moved every contributed tensor to the
+  target device except `segment_lengths`, so mixing a CPU source into a CUDA
+  target raised `Expected all tensors to be on the same device` out of
+  `torch.cat`. The segment lengths are now moved like everything else.
+- **Low-precision graph-balanced losses** — `per_graph_sum` accumulated in the
+  input dtype, and CUDA scatter atomics round after every add, so a bf16 running
+  sum stopped growing at 256 and an fp16 one at 2048. A per-atom-normalized
+  force loss over 3000 atoms was wrong by a factor of 3.6 in bf16 and 10% in
+  fp16. Sums now accumulate in at least fp32 and are returned in fp32 for
+  half-precision inputs — on the padded `(B, V_max, 3)` force layout as well
+  as the dense `(V, 3)` one — so a per-graph total past the fp16 ceiling of
+  65504 no longer saturates to `inf` before the loss normalizes it, and a
+  half-precision force loss returns the same fp32 value whichever layout it is
+  given; fp32 and fp64 results are unchanged.
+- **Demo model embeddings on a batch** — `DemoModelWrapper.compute_embeddings`
+  set `node_embeddings` as a plain attribute, which a `Batch` routes to its
+  system group, so the per-atom tensor failed the batch-size check and the call
+  raised on every batch. Node embeddings are now written to the atoms group, as
+  the MACE wrapper already does.
+- **`TrainingStrategy.validate()` before `run()`** — models were moved to
+  `devices` only by `run()` and the checkpoint restore path, so a standalone
+  validation pass on a CUDA strategy fed GPU batches to CPU models and failed
+  with `Expected all tensors to be on the same device`. `validate()` now makes
+  the same (idempotent) move.
+- **Checkpoint resume across devices** — a live restore loaded weights and
+  optimizer state onto the device recorded in the checkpoint rather than the one
+  the live strategy runs on, and `run()` reused resumed optimizer state without
+  following the models it had just moved. Resuming a `cuda:0` checkpoint on
+  another GPU, or on a rank a `DDPHook` re-pins, died in the first optimizer
+  step with `Expected all tensors to be on the same device`. Live restores now
+  target the live device, and the new
+  `nvalchemi.training.rehome_optimizer_state` helper (applied automatically
+  whenever a resumed optimizer is reused, by `run()` and by `train_batch()`)
+  moves resumed state onto its parameters, including tensors a custom optimizer
+  nests inside dicts, lists, or tuples.
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
   ever differentiated with respect to positions and charges, so a non-hybrid
   Ewald returned a wrong `dE/dq`, and strain-autograd through the detached

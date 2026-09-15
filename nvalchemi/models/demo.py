@@ -246,7 +246,13 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
         graph_embedding.scatter_add_(0, batch_indices.unsqueeze(-1), embedding)
         # write embeddings to data structure
         data.graph_embeddings = graph_embedding
-        data.node_embeddings = embedding
+        # A plain attribute set on a Batch routes to the system group, where a
+        # per-node tensor fails the batch-size check.
+        atoms_group = data._atoms_group if isinstance(data, Batch) else None
+        if atoms_group is not None:
+            atoms_group["node_embeddings"] = embedding
+        else:
+            data.node_embeddings = embedding
         return data
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:

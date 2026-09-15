@@ -379,6 +379,79 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 2]
 
+    def test_index_select_with_int32_batch_ptr(self, device):
+        """A batch whose pointer was materialized before the device move still selects."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        batch = Batch.from_data_list(data)
+        _ = batch.batch_ptr
+        batch = batch.to(device)
+        assert batch.batch_ptr.dtype == torch.int32
+
+        sub = batch[torch.tensor([0, 2], device=device)]
+
+        assert sub.num_graphs == 2
+        assert sub.num_nodes_list == [2, 4]
+        torch.testing.assert_close(
+            sub.positions,
+            torch.cat([data[0].positions, data[2].positions]).to(device),
+        )
+
+    @pytest.mark.multigpu
+    def test_index_select_on_indexless_cuda_batch_off_the_current_device(self) -> None:
+        """A batch moved to a bare ``cuda`` selects with any GPU current."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+            sub = batch[torch.tensor([0, 2], device="cuda")]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert torch.cuda.current_device() == 1
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_move_records_the_storage_device_on_the_batch(self) -> None:
+        """A batch moved to a bare ``cuda`` keeps selecting once that GPU is no longer current."""
+        data = [
+            _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
+            _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
+            _atomic_data_with_edges_and_system(num_nodes=4, num_edges=1),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+        with torch.cuda.device(0):
+            sub = batch[torch.tensor([0, 2])]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert sub.device == torch.device("cuda", 1)
+            assert batch.index_select([1]).num_nodes_list == [3]
+            assert batch.edge_ptr.device == torch.device("cuda", 1)
+            assert batch.batch_idx.device == torch.device("cuda", 1)
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_construction_records_the_resolved_device(self) -> None:
+        """``from_data_list(device="cuda")`` records the GPU its tensors reached."""
+        data = [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data, device="cuda")
+
+        with torch.cuda.device(0):
+            assert batch[torch.tensor([1])].num_nodes_list == [3]
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
     def test_index_select_with_edges_applies_edge_index_correction(self):
         """index_select on a batch with edges corrects neighbor_list offsets."""
         data_list = [
@@ -455,6 +528,19 @@ class TestBatchMutation:
         assert b1.num_graphs == 3
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
+
+    def test_append_cpu_batch_into_gpu_batch(self, gpu_device) -> None:
+        """Appending a CPU batch onto an accelerator batch moves the segment lengths."""
+        b1 = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        ).to(gpu_device)
+        b2 = Batch.from_data_list([_minimal_atomic_data(4)])
+
+        b1.append(b2)
+
+        assert b1.num_graphs == 3
+        assert b1.num_nodes_list == [2, 3, 4]
+        assert b1.positions.device.type == "cuda"
 
     def test_append_data(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
