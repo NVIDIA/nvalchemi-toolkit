@@ -47,6 +47,7 @@ from nvalchemi.dynamics.paths.neb.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
 )
+from nvalchemi.dynamics.paths.neb.neb import _NEB_FIRE2_DEFAULTS
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -222,10 +223,19 @@ class TestNEBConfiguration:
             for hook in engine.hooks
         )
 
-    def test_fire2_default_kwargs_are_optimizer_specific(self) -> None:
-        strategy = NEB(model=_model())
+    def test_fire2_explicit_kwargs_override_neb_defaults(self) -> None:
+        strategy = NEB(
+            model=_model(),
+            optimizer_kwargs={"dt": 0.02, "maxstep": 0.03},
+        )
 
-        assert strategy.optimizer_kwargs == {"dt": 0.01}
+        assert strategy.optimizer_kwargs["dt"] == 0.02
+        assert strategy.optimizer_kwargs["maxstep"] == 0.03
+        assert strategy.optimizer_kwargs["dt"] != _NEB_FIRE2_DEFAULTS["dt"]
+        assert strategy.optimizer_kwargs["maxstep"] != _NEB_FIRE2_DEFAULTS["maxstep"]
+        assert (
+            strategy.optimizer_kwargs["delaystep"] == _NEB_FIRE2_DEFAULTS["delaystep"]
+        )
 
     def test_default_neighbor_hooks_are_generated_by_model(self) -> None:
         generated = _NoOpHook()
