@@ -137,6 +137,18 @@ _NEB_MANAGED_OPTIMIZER_KWARGS = {
     "n_steps",
 }
 
+_NEB_FIRE2_DEFAULTS = {
+    "dt": 0.04,
+    "maxstep": 0.1,
+    "delaystep": 20,
+    "dtgrow": 1.1,
+    "dtshrink": 0.5,
+    "alphashrink": 0.99,
+    "alpha0": 0.25,
+    "tmax": 0.055,
+    "tmin": 0.0075,
+}
+
 
 class NEB(DynamicsStrategy):
     """Run regular or climbing-image nudged elastic band optimization.
@@ -186,7 +198,8 @@ class NEB(DynamicsStrategy):
         default_factory=dict,
         description=(
             "Keyword arguments forwarded to each internal optimizer stage. "
-            "When using FIRE2, defaults include dt = 0.01."
+            "When using FIRE2, NEB-tuned defaults are applied to unspecified "
+            "parameters."
         ),
     )
     fmax: float = Field(
@@ -392,7 +405,8 @@ class NEB(DynamicsStrategy):
     def _validate_configuration(self) -> NEB:
         """Validate cross-field constraints and supported runtime types."""
         if self.optimizer is FIRE2:
-            self.optimizer_kwargs.setdefault("dt", 0.01)
+            for name, value in _NEB_FIRE2_DEFAULTS.items():
+                self.optimizer_kwargs.setdefault(name, value)
         else:
             raise NotImplementedError(
                 f"Unsupported NEB optimizer: {self.optimizer.__qualname__}"
