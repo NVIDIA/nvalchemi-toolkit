@@ -45,13 +45,17 @@ Notes
 * Only a **single species** is supported in this wrapper.  Epsilon and sigma
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.active_outputs`` including ``"stress"``.  When enabled, the
-  wrapper returns a ``"stress"`` key containing the tensile-positive Cauchy
-  stress ``-W/V`` in energy units.  After calling ``Batch.from_data_list``, set
-  the placeholder directly:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
-  therefore not carried through batching automatically.
+  ``model_config.active_outputs`` including ``"stress"`` (e.g. via
+  ``model.set_config("active_outputs", {"energy", "forces", "stress"})``).
+  When enabled, the wrapper returns a ``"stress"`` key containing the
+  tensile-positive Cauchy stress ``-W/V`` in energy units.  After calling
+  ``Batch.from_data_list``, set the placeholder directly:
+  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  NPT/NPH
+  integrators read ``batch.stress`` before the first model evaluation and
+  the compute loop updates it in place, so the tensor must already exist.
+  It can be omitted only when the source data already carries ``stress``,
+  which is a named :class:`~nvalchemi.data.AtomicData` field and survives
+  batching.
 """
 
 from __future__ import annotations

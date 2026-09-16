@@ -135,6 +135,9 @@ class EnergyDriftMonitorHook:
       hook to be registered before the batch is available.
     * For batched simulations, drift is computed **per graph** and the
       maximum drift across all graphs is compared to the threshold.
+    * Status-filtered and inflight dynamics are not yet supported. Their
+      reference energies and elapsed steps must be tracked per system rather
+      than by batch position.
     """
 
     def __init__(
@@ -218,4 +221,10 @@ class EnergyDriftMonitorHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Check energy drift against the configured threshold."""
+        if ctx.active_graph_mask is not None:
+            raise NotImplementedError(
+                "EnergyDriftMonitorHook does not yet support status-filtered "
+                "or inflight dynamics because reference energies and elapsed "
+                "steps must be tracked per system."
+            )
         self._check_drift(ctx.batch, ctx.step_count, ctx.global_rank or 0)

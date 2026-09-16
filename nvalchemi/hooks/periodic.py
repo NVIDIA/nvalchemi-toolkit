@@ -202,7 +202,9 @@ class WrapPeriodicHook:
         self.frequency = frequency
         self.stage = stage
 
-    def _wrap_positions(self, batch: Batch) -> None:
+    def _wrap_positions(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
         """Wrap positions into the unit cell in-place."""
         cell = batch.cell
         pbc = batch.pbc
@@ -211,8 +213,10 @@ class WrapPeriodicHook:
             cell = cell.squeeze(1)
         if pbc.dim() == 3:
             pbc = pbc.squeeze(1)
+        if active_graph_mask is not None:
+            pbc = pbc & active_graph_mask.unsqueeze(-1)
         wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch_idx)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Wrap positions into the unit cell in-place."""
-        self._wrap_positions(ctx.batch)
+        self._wrap_positions(ctx.batch, getattr(ctx, "active_graph_mask", None))

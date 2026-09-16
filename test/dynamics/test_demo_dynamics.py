@@ -167,6 +167,20 @@ class TestFirstStep:
             torch.zeros_like(batch.velocities),
         )
 
+    def test_step_matches_single_step_run(self) -> None:
+        """Direct ``step`` and one-step ``run`` use identical primed forces."""
+        model = DemoModelWrapper(DemoModel())
+        step_dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
+        run_dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
+        step_batch = _make_batch()
+        run_batch = step_batch.clone()
+
+        step_dynamics.step(step_batch)
+        run_dynamics.run(run_batch, n_steps=1)
+
+        assert torch.allclose(step_batch.positions, run_batch.positions)
+        assert torch.allclose(step_batch.velocities, run_batch.velocities)
+
 
 # ---------------------------------------------------------------------------
 # Multi-graph independence
@@ -251,7 +265,7 @@ class TestInterfaceContract:
 
     def test_hooks_fire_in_order(self) -> None:
         """
-        A single step must fire hooks in the canonical order.
+        An already-primed step must fire hooks in the canonical order.
 
         Expected: BEFORE_STEP -> BEFORE_PRE_UPDATE -> AFTER_PRE_UPDATE ->
         BEFORE_COMPUTE -> AFTER_COMPUTE -> BEFORE_POST_UPDATE ->
@@ -277,6 +291,8 @@ class TestInterfaceContract:
             )
 
         batch = _make_batch()
+        # Isolate the regular step lifecycle from one-time force priming.
+        dynamics._forces_primed = True
         dynamics.step(batch)
 
         assert record_list == [s.name for s in stages]
