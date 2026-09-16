@@ -39,6 +39,11 @@ from nvalchemi.dynamics.paths.neb.neb import NEB, ClimbingImageConfig
 
 AFTER_REGULAR_EXIT_STATUS = 2
 
+MULLER_BROWN_FIRE2_PARAMETERS = {
+    "dtgrow": 1.05,
+    "alpha0": 0.09,
+}
+
 
 def _cuda_sync(device: torch.device) -> None:
     """Synchronize CUDA work before reading timing or result tensors."""
@@ -83,7 +88,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ),
         n_steps=(args.max_regular_steps + args.max_climbing_steps + 1),
         # Accounting for one reprime-only iteration when entering climbing-image NEB
-        optimizer_kwargs={"dt": args.dt},
+        # The reduced-unit Muller--Brown surface has a substantially different
+        # force scale from atomistic potentials, so use benchmark-specific FIRE2
+        # parameters rather than the production-oriented NEB defaults.
+        optimizer_kwargs={"dt": args.dt, **MULLER_BROWN_FIRE2_PARAMETERS},
         compile=args.compile_workflow,
     )
     _cuda_sync(device)
