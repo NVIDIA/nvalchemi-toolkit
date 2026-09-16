@@ -26,6 +26,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
 from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.neb._ops.modes import ENDPOINT, REGULAR_NEB
 from nvalchemi.dynamics.paths.neb._ops.registry import get_neb_method
@@ -67,10 +68,10 @@ class _NEBWorkspace:
         ``(num_atoms,)``.
     cell : Tensor
         Representative cell per path, shape ``(num_paths, 3, 3)``.
-    inv_cell : Tensor
-        Inverse representative cell per path, shape ``(num_paths, 3, 3)``.
     pbc : Tensor
         Periodic-boundary flags per path, shape ``(num_paths, 3)``.
+    mic : PreparedMIC
+        Reduced-lattice MIC buffers prepared once during admission.
     effective_forces : Tensor
         Per-atom output force buffer, shape ``(num_atoms, 3)``.
     link_lengths : Tensor
@@ -87,8 +88,8 @@ class _NEBWorkspace:
     spring_constants: Tensor
     fixed_node_mask: Tensor
     cell: Tensor
-    inv_cell: Tensor
     pbc: Tensor
+    mic: PreparedMIC
     effective_forces: Tensor
     link_lengths: Tensor
     tangent_buffer: Tensor
@@ -374,8 +375,8 @@ class NEBForceHook:
         # dense identity matrices rather than zero-stride expanded views.
         cells = batch.cell if "cell" in batch else None
         pbcs = batch.pbc if "pbc" in batch else None
-        # `path_start` is a list of graph indices that correspond to the first image of each graph
-        path_start = layout.group_ptr[:-1]
+        # Graph indices selecting the first image of each path.
+        first_image_idx = layout.group_ptr[:-1]
         if cells is None:
             path_cell = (
                 torch.eye(3, dtype=dtype, device=device)
@@ -383,13 +384,13 @@ class NEBForceHook:
                 .repeat(layout.num_groups, 1, 1)
             )
         else:
-            path_cell = cells[path_start].to(dtype=dtype).contiguous()
+            path_cell = cells[first_image_idx].to(dtype=dtype).contiguous()
         if pbcs is None:
             path_pbc = torch.zeros(
                 layout.num_groups, 3, dtype=torch.bool, device=device
             )
         else:
-            path_pbc = pbcs[path_start].bool().contiguous()
+            path_pbc = pbcs[first_image_idx].bool().contiguous()
 
         n_links = batch.num_graphs - layout.num_groups
         spring_constants = torch.empty(n_links, dtype=dtype, device=device)
@@ -435,12 +436,13 @@ class NEBForceHook:
         )
 
         # Keep kernel-only masks and buffers private on workspace.
+        prepared_mic = prepare_batch_mic(batch, path_cell, path_pbc)
         self._workspace = _NEBWorkspace(
             spring_constants=spring_constants,
             fixed_node_mask=batch.neb_fixed_node_mask,
             cell=path_cell,
-            inv_cell=torch.linalg.inv(path_cell).contiguous(),
             pbc=path_pbc,
+            mic=prepared_mic,
             effective_forces=torch.empty_like(batch.positions),
             link_lengths=torch.empty(n_links, dtype=dtype, device=device),
             tangent_buffer=torch.empty_like(batch.positions),
@@ -505,9 +507,11 @@ class NEBForceHook:
             image_force_mode=batch.force_mode,
             path_energy_ref=stats.endpoint_reference_energy.contiguous(),
             path_energy_max=stats.highest_interior_energy.contiguous(),
-            cell=workspace.cell,
-            inv_cell=workspace.inv_cell,
-            pbc=workspace.pbc,
+            mic_mode=workspace.mic.mode,
+            periodic_basis=workspace.mic.periodic_basis,
+            cartesian_to_fractional=workspace.mic.cartesian_to_fractional,
+            mic_candidate_count=workspace.mic.candidate_count,
+            candidate_shifts=workspace.mic.candidate_shifts,
             method=method_name,
             tangent_buffer=workspace.tangent_buffer,
             effective_forces=workspace.effective_forces,
@@ -552,7 +556,6 @@ class NEBForceHook:
             image_ptr=workspace.image_ptr,
             layout=batch.group_layout,
             cell=workspace.cell,
-            inv_cell=workspace.inv_cell,
             pbc=workspace.pbc,
             step_count=ctx.step_count,
         )
