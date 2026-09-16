@@ -1,4 +1,3 @@
-<!-- markdownlint-disable MD014 -->
 
 (dynamics_paths_guide)=
 
@@ -30,7 +29,12 @@ can build this batch yourself, or use the two basic interpolation utilities
 below to go from just reactant/product endpoints:
 
 ```python
-from nvalchemi.dynamics.paths import interpolate_paths, IDPPModel, prepare_idpp_targets, NEB
+from nvalchemi.dynamics.paths import (
+    IDPPModel,
+    NEB,
+    interpolate_paths,
+    prepare_idpp_targets,
+)
 
 paths = interpolate_paths(initial, final, num_images=7)  # linear interpolation
 
@@ -42,6 +46,7 @@ paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
 `interpolate_paths` linearly interpolates positions between index-matched
 endpoint graphs and drops stale fields (`forces`, `energy`, `velocities`,
 ...) --- reattach `velocities` before optimizing.
+
 {py:func}`~nvalchemi.dynamics.paths.prepare_idpp_targets` +
 {py:class}`~nvalchemi.dynamics.paths.IDPPModel` relax the path against target
 pairwise distances (IDPP,
@@ -111,22 +116,38 @@ training and fine-tuning specs.
 `method="improved_tangent"` (the default and only named, serializable method)
 implements the Henkelman--Jónsson improved tangent
 ([*J. Chem. Phys.* 113, 9978 (2000)](https://doi.org/10.1063/1.1323224)).
-For an interior image with neighbor energies $E_-, E, E_+$ and
-displacement vectors $\mathbf{d}_\pm$ to the adjacent images:
+For an interior image with neighbor energies $E^-, E, E^+$ and
+displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
 
-- **Tangent**: $\boldsymbol{\tau} = w_+\mathbf{d}_+ + w_-\mathbf{d}_-$
-  (then normalized), where the weights $w_\pm$ favor the higher-energy
+- **Tangent**: $\boldsymbol{\tau} = w^+\mathbf{d}^+ + w^-\mathbf{d}^-$
+  (then normalized), where the weights $w^\pm$ favor the higher-energy
   neighbor on monotonic sections of the path and blend both links at an
   extremum.
 - **Effective (regular) force**:
-  $\mathbf{F}^{\mathrm{NEB}} = \mathbf{F} - (\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}} + F^{\mathrm{s}}_{\parallel}\hat{\boldsymbol{\tau}}$,
-  i.e. the physical force projected perpendicular to the tangent, plus a
-  spring force along it, $F^{\mathrm{s}}_{\parallel} = k_+\lVert\mathbf{d}_+\rVert - k_-\lVert\mathbf{d}_-\rVert$.
+
+  $$
+  \mathbf{F}^{\mathrm{NEB}} = \mathbf{F}
+  - (\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}}
+  {}+ F^{\mathrm{s},\parallel}\hat{\boldsymbol{\tau}}
+  $$
+
+  That is the physical force projected perpendicular to the tangent, plus the
+  parallel spring contribution
+
+  $$
+  F^{\mathrm{s},\parallel}
+  = k^+\lVert\mathbf{d}^+\rVert - k^-\lVert\mathbf{d}^-\rVert.
+  $$
+
 - **Climbing-image force**:
-  $\mathbf{F}^{\mathrm{climb}} = \mathbf{F} - 2(\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}}$
-  --- the spring force is dropped and the parallel physical-force component
-  is reversed, driving the image uphill along the path toward the saddle
-  point.
+
+  $$
+  \mathbf{F}^{\mathrm{climb}} = \mathbf{F}
+  - 2(\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}}
+  $$
+
+  The spring force is dropped and the parallel physical-force component is
+  reversed, driving the image uphill along the path toward the saddle point.
 
 To use a different formulation, pass a custom
 {py:class}`~nvalchemi.dynamics.paths.NEBMethod` to `method`. It bundles three
@@ -274,6 +295,18 @@ duplicating that construction here, read `NEB.build_engine()` in
 `nvalchemi/dynamics/paths/neb/neb.py` --- it is the reference
 implementation for a two-substage, `status`-gated `FusedStage` with
 `ClimbingImageSelectionHook(status_code=...)` scoped to the climbing stage.
+
+## Periodic paths
+
+Interpolation, IDPP, and NEB automatically apply the minimum-image convention
+(MIC): each displacement uses the nearest periodic copy of an atom. This works
+with orthogonal or skewed cells and with periodicity in only some directions.
+Each `pbc` entry enables the corresponding row of `cell` (a lattice vector),
+which need not align with the Cartesian x, y, or z axis. The enabled cell
+vectors must be linearly independent. Nonperiodic paths are left unchanged.
+
+Wrapped endpoints do not record whether a path is intended to cross one or more
+whole cells. For such winding paths, provide appropriately unwrapped images.
 
 ## See also
 
