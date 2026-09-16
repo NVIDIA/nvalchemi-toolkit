@@ -55,9 +55,11 @@ def _neb_kernel_arg_types(dtype: object, stored: bool) -> list[object]:
         wp.array(dtype=wp.int32),
         wp.array(dtype=dtype),
         wp.array(dtype=dtype),
+        wp.array(dtype=wp.int32),
         wp.array(dtype=mat),
         wp.array(dtype=mat),
-        wp.array(dtype=wp.vec3b),
+        wp.array(dtype=wp.int32),
+        wp.array2d(dtype=vec),
     ]
     if stored:
         types.append(wp.array(dtype=vec))

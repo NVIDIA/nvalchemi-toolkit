@@ -51,7 +51,11 @@ def _inputs(device: str = "cuda", dtype: torch.dtype = torch.float64):
         device=device,
         dtype=dtype,
     )
-    cell = (10 * torch.eye(3, device=device, dtype=dtype)[None]).contiguous()
+    mic_mode = torch.zeros(1, device=device, dtype=torch.int32)
+    periodic_basis = torch.zeros((1, 3, 3), device=device, dtype=dtype)
+    cartesian_to_fractional = torch.zeros_like(periodic_basis)
+    mic_candidate_count = torch.zeros(1, device=device, dtype=torch.int32)
+    candidate_shifts = torch.zeros((1, 26, 3), device=device, dtype=dtype)
     return (
         positions,
         torch.arange(positions.numel(), device=device, dtype=dtype).reshape_as(
@@ -67,9 +71,11 @@ def _inputs(device: str = "cuda", dtype: torch.dtype = torch.float64):
         torch.tensor([0, 2, 0], device=device, dtype=torch.int32),
         torch.tensor([0], device=device, dtype=dtype),
         torch.tensor([1], device=device, dtype=dtype),
-        cell,
-        torch.linalg.inv(cell).contiguous(),
-        torch.zeros((1, 3), device=device, dtype=torch.bool),
+        mic_mode,
+        periodic_basis,
+        cartesian_to_fractional,
+        mic_candidate_count,
+        candidate_shifts,
     )
 
 
@@ -81,14 +87,33 @@ def _inputs(device: str = "cuda", dtype: torch.dtype = torch.float64):
 def _minimum_image_displacement(
     r_a: torch.Tensor,
     r_b: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    path_idx: int,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
 ) -> torch.Tensor:
     """Return minimum-image displacements using only Torch operations."""
-    fractional = (r_a - r_b) @ inv_cell
-    wrapped = fractional - torch.floor(fractional + 0.5)
-    return torch.where(pbc, wrapped, fractional) @ cell
+    displacement = r_a - r_b
+    if int(mic_mode[path_idx]) == 0:
+        return displacement
+    fractional = displacement @ cartesian_to_fractional[path_idx]
+    offset = 0.5 if int(mic_mode[path_idx]) == 1 else 0.0
+    wrapped = fractional - torch.floor(fractional + offset)
+    base = (
+        displacement
+        - fractional @ periodic_basis[path_idx]
+        + wrapped @ periodic_basis[path_idx]
+    )
+    best_sq = torch.sum(base.square(), dim=-1)
+    for shift in candidate_shifts[path_idx, : int(mic_candidate_count[path_idx])]:
+        candidate = base + shift
+        candidate_sq = torch.sum(candidate.square(), dim=-1)
+        improve = candidate_sq < best_sq
+        base = torch.where(improve[:, None], candidate, base)
+        best_sq = torch.where(improve, candidate_sq, best_sq)
+    return base
 
 
 def _naive_improved_tangent_neb_forces(
@@ -102,9 +127,11 @@ def _naive_improved_tangent_neb_forces(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute improved-tangent NEB forces with a readable Torch oracle."""
     del image_path_idx, path_energy_ref, path_energy_max
@@ -130,9 +157,12 @@ def _naive_improved_tangent_neb_forces(
             displacement = _minimum_image_displacement(
                 positions[next_atom_start : next_atom_start + atom_stop - atom_start],
                 positions[atom_start:atom_stop],
-                cell[path_idx],
-                inv_cell[path_idx],
-                pbc[path_idx],
+                path_idx,
+                mic_mode,
+                periodic_basis,
+                cartesian_to_fractional,
+                mic_candidate_count,
+                candidate_shifts,
             )
             displacements[path_idx, image_idx] = displacement
             link_lengths[image_idx - path_idx] = torch.linalg.vector_norm(displacement)
@@ -391,6 +421,87 @@ class TestNEBKernelParity:
             atol=tolerance,
             rtol=tolerance,
         )
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA is required"
+            ),
+        ),
+    ],
+)
+def test_skewed_cell_link_lengths_use_exact_mic_for_both_kernel_strategies(
+    device: str,
+    dtype: torch.dtype,
+) -> None:
+    """Stored-tangent and Gram-statistics kernels search skew-cell images."""
+    # Compare both kernel strategies using the same improved-tangent setup.
+    stored_method = get_neb_method("improved_tangent")
+    assert isinstance(stored_method, _StoredTangentMethod)
+    gram_method = "test_skewed_mic_gram_stats"
+    register_neb_method(
+        name=gram_method,
+        tangent_fn=stored_method.tangent_fn,
+        force_fn=neb_effective_force_from_gram_stats,
+        climbing_force_fn=stored_method.climbing_force_fn,
+    )
+    inputs = list(_inputs(device=device, dtype=dtype))
+    # Use identical two-atom images so both path links have the same known
+    # displacement and therefore the same expected minimum-image length.
+    one_image = torch.tensor(
+        [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        dtype=dtype,
+        device=device,
+    )
+    offset = torch.tensor([0.7, 0.49, 0.0], dtype=dtype, device=device)
+    inputs[0] = torch.cat((one_image, one_image + offset, one_image + 2 * offset))
+    # This tilted lattice makes component-wise fractional rounding insufficient.
+    cell = torch.tensor(
+        [[[1.0, 0.0, 0.0], [0.5, 1.0, 0.0], [0.0, 0.0, 1.0]]],
+        dtype=dtype,
+        device=device,
+    )
+    # Enumerate nearby lattice translations for the general skew-cell MIC scan.
+    coefficients = torch.cartesian_prod(
+        *[torch.arange(-1, 2, device=device) for _ in range(3)]
+    )
+    coefficients = coefficients[torch.any(coefficients != 0, dim=1)]
+    candidate_shifts = torch.zeros((1, 26, 3), dtype=dtype, device=device)
+    candidate_shifts[0] = coefficients.to(dtype) @ cell[0]
+    # Select general MIC mode and provide its cell, inverse, and candidate shifts.
+    inputs[10:15] = [
+        torch.tensor([2], device=device, dtype=torch.int32),
+        cell,
+        torch.linalg.inv(cell).contiguous(),
+        torch.tensor([26], device=device, dtype=torch.int32),
+        candidate_shifts.contiguous(),
+    ]
+    # The best per-atom image is (0.2, -0.51, 0); two atoms contribute to each
+    # link norm, which explains the factor of two.
+    expected_link = torch.sqrt(
+        torch.tensor(2 * (0.2**2 + 0.51**2), dtype=dtype, device=device)
+    )
+
+    # Only link lengths are relevant here; the two force strategies are tested
+    # independently through the second return value.
+    stored_links = neb_forces(*inputs, method="improved_tangent")[1]
+    gram_links = neb_forces(*inputs, method=gram_method)[1]
+
+    tolerance = 2.0e-6 if dtype == torch.float32 else 1.0e-12
+
+    # The three images form two links, and both must use the exact skew-cell MIC.
+    torch.testing.assert_close(
+        stored_links, expected_link.expand(2), atol=tolerance, rtol=tolerance
+    )
+    torch.testing.assert_close(
+        gram_links, expected_link.expand(2), atol=tolerance, rtol=tolerance
+    )
 
 
 # =============================================================================

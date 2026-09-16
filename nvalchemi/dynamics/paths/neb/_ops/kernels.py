@@ -55,36 +55,94 @@ _SCALAR_DTYPES = (wp.float32, wp.float64)
 def _mic(
     r_a: Any,
     r_b: Any,
-    cell: Any,
-    inv_cell: Any,
-    pbc: wp.vec3b,
+    mode: wp.int32,
+    periodic_basis: Any,
+    cartesian_to_fractional: Any,
+    path_idx: wp.int32,
+    candidate_count: wp.int32,
+    candidate_shifts: wp.array2d(dtype=Any),
 ) -> Any:
-    """Return the minimum-image displacement from ``r_b`` to ``r_a``.
+    """Return the minimum-image displacement from ``r_b`` to ``r_a`` using reusable
+    reduced-lattice MIC data.
 
     Parameters
     ----------
     r_a, r_b : wp.vec3f or wp.vec3d
-        Cartesian positions whose displacement is computed.
-    cell, inv_cell : wp.mat33f or wp.mat33d
-        Cell matrix and its inverse for the path.
-    pbc : wp.vec3b
-        Periodic boundary flags for each cell dimension.
+        Cartesian position vectors. The unwrapped displacement is
+        ``r_a - r_b``.
+    mode : wp.int32
+        Prepared MIC algorithm mode, as described below.
+    periodic_basis : wp.vec3f or wp.vec3d
+        Reduced periodic lattice vectors stored as the rows of a padded 3-by-3
+        matrix. Unused rows are zero for partial periodicity.
+    cartesian_to_fractional : wp.vec3f or wp.vec3d
+        Padded 3-by-3 right-inverse mapping Cartesian row vectors to coordinates
+        in ``periodic_basis``. Unused columns are zero.
+    path_idx : wp.int32, scalar
+        Index of the current path.
+    candidate_count : wp.int32, scalar
+        Number of active candidate translations for the current path.
+    candidate_shifts : wp.array2d, shape (num_paths, 26), dtype wp.vec3f or wp.vec3d
+        Fixed-capacity per-path array of nonzero Cartesian lattice translations.
+        Each element is a three-component vector, so the corresponding Torch
+        tensor has shape ``(num_paths, 26, 3)``.
+
+    Notes
+    -----
+    The preparation step assigns one of three modes per path:
+
+    - ``0`` (nonperiodic): return ``r_a - r_b`` immediately. No lattice data or
+      candidate shifts are used.
+    - ``1`` (orthogonal): project the displacement onto the mutually orthogonal
+      periodic basis, round each periodic coordinate to its nearest image, and
+      preserve the component perpendicular to the periodic span. A candidate
+      search is unnecessary because independent rounding is exact for an
+      orthogonal basis.
+    - ``2`` (general): wrap into the ``[0, 1)`` fundamental parallelepiped
+      of the validated Minkowski-reduced basis, then compare that representative
+      with its 26 neighboring translations. This fixed search is exact in up to
+      three periodic dimensions.
 
     Returns
     -------
     wp.vec3f or wp.vec3d
-        Minimum-image displacement with the same type as ``r_a`` and ``r_b``.
+        The shortest prepared-image displacement equivalent to ``r_a - r_b``.
+        Exact ties retain the first candidate encountered.
     """
     displacement = r_a - r_b
-    fractional = displacement * inv_cell
-    half = type(fractional[0])(0.5)
-    if pbc[0]:
-        fractional[0] = fractional[0] - wp.floor(fractional[0] + half)
-    if pbc[1]:
-        fractional[1] = fractional[1] - wp.floor(fractional[1] + half)
-    if pbc[2]:
-        fractional[2] = fractional[2] - wp.floor(fractional[2] + half)
-    return fractional * cell
+    if mode == wp.int32(0):
+        return displacement
+
+    # Active periodic coordinates are packed first; zero-padded columns make
+    # the remaining fractional components zero for partial periodicity.
+    fractional = displacement * cartesian_to_fractional
+    offset = type(fractional[0])(0.0)
+    if mode == wp.int32(1):
+        offset = type(fractional[0])(0.5)
+    wrapped = fractional
+    wrapped[0] = wrapped[0] - wp.floor(wrapped[0] + offset)
+    wrapped[1] = wrapped[1] - wp.floor(wrapped[1] + offset)
+    wrapped[2] = wrapped[2] - wp.floor(wrapped[2] + offset)
+    residual = displacement - fractional * periodic_basis
+    wrapped_periodic = wrapped * periodic_basis
+    if mode == wp.int32(1):
+        return residual + wrapped_periodic
+
+    # Compare only the periodic component: a large common perpendicular
+    # residual can erase candidate norm differences in float32.
+
+    # Loop through the different shift vectors to determine the shortest displacement
+    best = wrapped_periodic
+    best_sq = wp.dot(best, best)
+    shift_idx = wp.int32(0)
+    while shift_idx < candidate_count:
+        candidate = wrapped_periodic + candidate_shifts[path_idx, shift_idx]
+        candidate_sq = wp.dot(candidate, candidate)
+        if candidate_sq < best_sq:
+            best = candidate
+            best_sq = candidate_sq
+        shift_idx = shift_idx + 1
+    return residual + best
 
 
 @wp.func
@@ -187,9 +245,11 @@ def build_stored_tangent_neb_kernel(
         image_force_mode: wp.array(dtype=wp.int32),
         path_energy_ref: wp.array(dtype=Any),
         path_energy_max: wp.array(dtype=Any),
-        cell: wp.array(dtype=Any),
-        inv_cell: wp.array(dtype=Any),
-        pbc: wp.array(dtype=wp.vec3b),
+        mic_mode: wp.array(dtype=wp.int32),
+        periodic_basis: wp.array(dtype=Any),
+        cartesian_to_fractional: wp.array(dtype=Any),
+        mic_candidate_count: wp.array(dtype=wp.int32),
+        candidate_shifts: wp.array2d(dtype=Any),
         tangent_buffer: wp.array(dtype=Any),
         effective_forces: wp.array(dtype=Any),
         link_lengths: wp.array(dtype=Any),
@@ -217,10 +277,12 @@ def build_stored_tangent_neb_kernel(
             Effective-force mode of each image.
         path_energy_ref, path_energy_max : wp.array, shape (num_paths,), dtype wp.float32 or wp.float64
             Reference and maximum interior-image energies for each path.
-        cell, inv_cell : wp.array, shape (num_paths,), dtype wp.mat33f or wp.mat33d
-            Cell matrix and its inverse for each path.
-        pbc : wp.array, shape (num_paths,), dtype wp.vec3b
-            Periodic boundary flags for each path and Cartesian dimension.
+        mic_mode, mic_candidate_count : wp.array, dtype wp.int32
+            Per-path MIC mode and active fixed-array candidate count.
+        periodic_basis, cartesian_to_fractional : wp.array, dtype wp.mat33f or wp.mat33d
+            Reduced periodic bases and Cartesian-to-periodic coordinate maps.
+        candidate_shifts : wp.array2d, shape (num_paths, 26), dtype wp.vec3f or wp.vec3d
+            Fixed-capacity per-path candidate translations for skewed periodic cells.
         tangent_buffer : wp.array, shape (num_atoms,), dtype wp.vec3f or wp.vec3d
             Scratch space for constructed tangents, overwritten with unit tangents.
         effective_forces : wp.array, shape (num_atoms,), dtype wp.vec3f or wp.vec3d
@@ -236,7 +298,6 @@ def build_stored_tangent_neb_kernel(
         """
         image_idx, lane = wp.tid()
         path_idx = image_path_idx[image_idx]
-        path_pbc = pbc[path_idx]
         mode = image_force_mode[image_idx]
         atom_start = image_ptr[image_idx]
         atom_stop = image_ptr[image_idx + 1]
@@ -277,9 +338,12 @@ def build_stored_tangent_neb_kernel(
                 d_plus = _mic(
                     positions[next_atom_idx],
                     positions[atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    path_pbc,
+                    mic_mode[path_idx],
+                    periodic_basis[path_idx],
+                    cartesian_to_fractional[path_idx],
+                    path_idx,
+                    mic_candidate_count[path_idx],
+                    candidate_shifts,
                 )
                 local_dplus_sq = local_dplus_sq + wp.dot(d_plus, d_plus)
                 if should_compute_force:
@@ -287,9 +351,12 @@ def build_stored_tangent_neb_kernel(
                     d_minus = _mic(
                         positions[atom_idx],
                         positions[prev_atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        path_pbc,
+                        mic_mode[path_idx],
+                        periodic_basis[path_idx],
+                        cartesian_to_fractional[path_idx],
+                        path_idx,
+                        mic_candidate_count[path_idx],
+                        candidate_shifts,
                     )
                     tangent = weight_plus * d_plus + weight_minus * d_minus
                     tangent_buffer[atom_idx] = tangent
@@ -343,9 +410,12 @@ def build_stored_tangent_neb_kernel(
                 d_plus = _mic(
                     positions[next_atom_idx],
                     positions[atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    path_pbc,
+                    mic_mode[path_idx],
+                    periodic_basis[path_idx],
+                    cartesian_to_fractional[path_idx],
+                    path_idx,
+                    mic_candidate_count[path_idx],
+                    candidate_shifts,
                 )
                 tangent = d_plus / tangent_norm
             elif fallback == 2:
@@ -353,9 +423,12 @@ def build_stored_tangent_neb_kernel(
                 d_minus = _mic(
                     positions[atom_idx],
                     positions[prev_atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    path_pbc,
+                    mic_mode[path_idx],
+                    periodic_basis[path_idx],
+                    cartesian_to_fractional[path_idx],
+                    path_idx,
+                    mic_candidate_count[path_idx],
+                    candidate_shifts,
                 )
                 tangent = d_minus / tangent_norm
             tangent_buffer[atom_idx] = tangent
@@ -461,9 +534,11 @@ def build_gram_stats_neb_kernel(
         image_force_mode: wp.array(dtype=wp.int32),
         path_energy_ref: wp.array(dtype=Any),
         path_energy_max: wp.array(dtype=Any),
-        cell: wp.array(dtype=Any),
-        inv_cell: wp.array(dtype=Any),
-        pbc: wp.array(dtype=wp.vec3b),
+        mic_mode: wp.array(dtype=wp.int32),
+        periodic_basis: wp.array(dtype=Any),
+        cartesian_to_fractional: wp.array(dtype=Any),
+        mic_candidate_count: wp.array(dtype=wp.int32),
+        candidate_shifts: wp.array2d(dtype=Any),
         effective_forces: wp.array(dtype=Any),
         link_lengths: wp.array(dtype=Any),
     ):
@@ -490,10 +565,12 @@ def build_gram_stats_neb_kernel(
             Effective-force mode of each image.
         path_energy_ref, path_energy_max : wp.array, shape (num_paths,), dtype wp.float32 or wp.float64
             Reference and maximum interior-image energies for each path.
-        cell, inv_cell : wp.array, shape (num_paths,), dtype wp.mat33f or wp.mat33d
-            Cell matrix and its inverse for each path.
-        pbc : wp.array, shape (num_paths,), dtype wp.vec3b
-            Periodic boundary flags for each path and Cartesian dimension.
+        mic_mode, mic_candidate_count : wp.array, dtype wp.int32
+            Per-path MIC mode and active fixed-array candidate count.
+        periodic_basis, cartesian_to_fractional : wp.array, dtype wp.mat33f or wp.mat33d
+            Reduced periodic bases and Cartesian-to-periodic coordinate maps.
+        candidate_shifts : wp.array2d, shape (num_paths, 26), dtype wp.vec3f or wp.vec3d
+            Fixed-capacity per-path candidate translations for skewed periodic cells.
         effective_forces : wp.array, shape (num_atoms,), dtype wp.vec3f or wp.vec3d
             Output effective NEB force for each atom.
         link_lengths : wp.array, shape (num_images - num_paths,), dtype wp.float32 or wp.float64
@@ -506,7 +583,6 @@ def build_gram_stats_neb_kernel(
         """
         image_idx, lane = wp.tid()
         path_idx = image_path_idx[image_idx]
-        path_pbc = pbc[path_idx]
         mode = image_force_mode[image_idx]
         atom_start = image_ptr[image_idx]
         atom_stop = image_ptr[image_idx + 1]
@@ -548,9 +624,12 @@ def build_gram_stats_neb_kernel(
                 d_plus = _mic(
                     positions[next_atom_idx],
                     positions[atom_idx],
-                    cell[path_idx],
-                    inv_cell[path_idx],
-                    path_pbc,
+                    mic_mode[path_idx],
+                    periodic_basis[path_idx],
+                    cartesian_to_fractional[path_idx],
+                    path_idx,
+                    mic_candidate_count[path_idx],
+                    candidate_shifts,
                 )
                 local_dplus_sq = local_dplus_sq + wp.dot(d_plus, d_plus)
                 if should_compute_force:
@@ -558,9 +637,12 @@ def build_gram_stats_neb_kernel(
                     d_minus = _mic(
                         positions[atom_idx],
                         positions[prev_atom_idx],
-                        cell[path_idx],
-                        inv_cell[path_idx],
-                        path_pbc,
+                        mic_mode[path_idx],
+                        periodic_basis[path_idx],
+                        cartesian_to_fractional[path_idx],
+                        path_idx,
+                        mic_candidate_count[path_idx],
+                        candidate_shifts,
                     )
                     physical_force = physical_forces[atom_idx]
                     local_dplus_dot_dminus = local_dplus_dot_dminus + wp.dot(
@@ -659,16 +741,22 @@ def build_gram_stats_neb_kernel(
             d_plus = _mic(
                 positions[next_atom_idx],
                 positions[atom_idx],
-                cell[path_idx],
-                inv_cell[path_idx],
-                path_pbc,
+                mic_mode[path_idx],
+                periodic_basis[path_idx],
+                cartesian_to_fractional[path_idx],
+                path_idx,
+                mic_candidate_count[path_idx],
+                candidate_shifts,
             )
             d_minus = _mic(
                 positions[atom_idx],
                 positions[prev_atom_idx],
-                cell[path_idx],
-                inv_cell[path_idx],
-                path_pbc,
+                mic_mode[path_idx],
+                periodic_basis[path_idx],
+                cartesian_to_fractional[path_idx],
+                path_idx,
+                mic_candidate_count[path_idx],
+                candidate_shifts,
             )
             tangent = positions[atom_idx] * zero
             if fallback == 0:

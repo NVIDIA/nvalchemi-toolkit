@@ -69,9 +69,13 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         modes,
         energy_ref,
         energy_max,
-        cell,
-        inv_cell,
-        pbc,
+        # Prepared minimum-image convention (MIC) inputs. Candidate translations
+        # use a fixed per-path capacity; mic_candidate_count selects the active prefix.
+        mic_mode,
+        periodic_basis,
+        cartesian_to_fractional,
+        mic_candidate_count,
+        candidate_shifts,
     ) = x
     if pos.ndim != 2 or pos.shape[1] != 3:
         raise ValueError("positions must have shape (num_atoms, 3)")
@@ -93,8 +97,8 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         "spring_constants": (springs, (num_links,)),
         "path_energy_ref": (energy_ref, (p,)),
         "path_energy_max": (energy_max, (p,)),
-        "cell": (cell, (p, 3, 3)),
-        "inv_cell": (inv_cell, (p, 3, 3)),
+        "periodic_basis": (periodic_basis, (p, 3, 3)),
+        "cartesian_to_fractional": (cartesian_to_fractional, (p, 3, 3)),
     }
     for name, (tensor, shape) in floats.items():
         if tensor.shape != shape:
@@ -110,6 +114,8 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         "path_ptr": (path_ptr, (p + 1,)),
         "image_path_idx": (image_path_idx, (i,)),
         "image_force_mode": (modes, (i,)),
+        "mic_mode": (mic_mode, (p,)),
+        "mic_candidate_count": (mic_candidate_count, (p,)),
     }
     for name, (tensor, shape) in ints.items():
         if (
@@ -120,13 +126,13 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         ):
             raise ValueError(f"{name} must be a matching contiguous int32 tensor")
     if (
-        pbc.shape != (p, 3)
-        or pbc.dtype != torch.bool
-        or pbc.device != pos.device
-        or not pbc.is_contiguous()
+        candidate_shifts.shape != (p, 26, 3)
+        or candidate_shifts.dtype != pos.dtype
+        or candidate_shifts.device != pos.device
+        or not candidate_shifts.is_contiguous()
     ):
         raise ValueError(
-            "pbc must be a matching contiguous bool tensor of shape (num_paths, 3)"
+            "candidate_shifts must be a matching contiguous floating tensor of shape (num_paths, 26, 3)"
         )
     return a, num_links
 
@@ -216,9 +222,11 @@ def _stored_tangent_neb_forces_out_op(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
     tangent: torch.Tensor,
     forces_out: torch.Tensor,
     links_out: torch.Tensor,
@@ -237,9 +245,11 @@ def _stored_tangent_neb_forces_out_op(
             image_force_mode,
             path_energy_ref,
             path_energy_max,
-            cell,
-            inv_cell,
-            pbc,
+            mic_mode,
+            periodic_basis,
+            cartesian_to_fractional,
+            mic_candidate_count,
+            candidate_shifts,
         ),
         forces_out,
         links_out,
@@ -262,9 +272,11 @@ def _gram_stats_neb_forces_out_op(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
     forces_out: torch.Tensor,
     links_out: torch.Tensor,
 ) -> None:
@@ -282,9 +294,11 @@ def _gram_stats_neb_forces_out_op(
             image_force_mode,
             path_energy_ref,
             path_energy_max,
-            cell,
-            inv_cell,
-            pbc,
+            mic_mode,
+            periodic_basis,
+            cartesian_to_fractional,
+            mic_candidate_count,
+            candidate_shifts,
         ),
         forces_out,
         links_out,
@@ -313,9 +327,11 @@ def stored_tangent_neb_forces(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
     *,
     method: str = "improved_tangent",
     tangent_buffer: torch.Tensor | None = None,
@@ -342,10 +358,18 @@ def stored_tangent_neb_forces(
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
         Reference and maximum interior-image energies of every path.
-    cell, inv_cell : torch.Tensor, shape (num_paths, 3, 3)
-        Cell matrices and their inverses.
-    pbc : torch.Tensor, shape (num_paths, 3), dtype bool
-        Periodic boundary flags of every path.
+    mic_mode : torch.Tensor, shape (num_paths,), dtype int32
+        Per-path minimum-image convention (MIC) algorithm selector: ``0`` for
+        nonperiodic passthrough, ``1`` for orthogonal-basis wrapping, and ``2``
+        for general reduced-basis search.
+    periodic_basis, cartesian_to_fractional : torch.Tensor, shape (num_paths, 3, 3)
+        Reduced periodic lattice vectors packed into the leading rows and
+        Cartesian-to-periodic coordinate maps packed into the leading columns.
+        Unused rows and columns are zero for partial periodicity.
+    mic_candidate_count : torch.Tensor, shape (num_paths,), dtype int32
+        Number of active candidate translations for each path (0, 8, or 26).
+    candidate_shifts : torch.Tensor, shape (num_paths, 26, 3)
+        Fixed-capacity nonzero Cartesian candidate translations for each path.
     method : str, optional
         User-facing NEB formulation identifier.
     tangent_buffer : torch.Tensor, shape (num_atoms, 3), optional
@@ -373,9 +397,11 @@ def stored_tangent_neb_forces(
         image_force_mode,
         path_energy_ref,
         path_energy_max,
-        cell,
-        inv_cell,
-        pbc,
+        mic_mode,
+        periodic_basis,
+        cartesian_to_fractional,
+        mic_candidate_count,
+        candidate_shifts,
     )
     num_atoms, num_links = _validate_neb_inputs(x)
     tangent_buffer = (
@@ -416,9 +442,11 @@ def gram_stats_neb_forces(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
     *,
     method: str = "improved_tangent",
     effective_forces: torch.Tensor | None = None,
@@ -444,10 +472,18 @@ def gram_stats_neb_forces(
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
         Reference and maximum interior-image energies of every path.
-    cell, inv_cell : torch.Tensor, shape (num_paths, 3, 3)
-        Cell matrices and their inverses.
-    pbc : torch.Tensor, shape (num_paths, 3), dtype bool
-        Periodic boundary flags of every path.
+    mic_mode : torch.Tensor, shape (num_paths,), dtype int32
+        Per-path minimum-image convention (MIC) algorithm selector: ``0`` for
+        nonperiodic passthrough, ``1`` for orthogonal-basis wrapping, and ``2``
+        for general reduced-basis search.
+    periodic_basis, cartesian_to_fractional : torch.Tensor, shape (num_paths, 3, 3)
+        Reduced periodic lattice vectors packed into the leading rows and
+        Cartesian-to-periodic coordinate maps packed into the leading columns.
+        Unused rows and columns are zero for partial periodicity.
+    mic_candidate_count : torch.Tensor, shape (num_paths,), dtype int32
+        Number of active candidate translations for each path (0, 8, or 26).
+    candidate_shifts : torch.Tensor, shape (num_paths, 26, 3)
+        Fixed-capacity nonzero Cartesian candidate translations for each path.
     method : str, optional
         User-facing NEB formulation identifier.
     effective_forces : torch.Tensor, shape (num_atoms, 3), optional
@@ -473,9 +509,11 @@ def gram_stats_neb_forces(
         image_force_mode,
         path_energy_ref,
         path_energy_max,
-        cell,
-        inv_cell,
-        pbc,
+        mic_mode,
+        periodic_basis,
+        cartesian_to_fractional,
+        mic_candidate_count,
+        candidate_shifts,
     )
     num_atoms, num_links = _validate_neb_inputs(x)
     effective_forces = (
@@ -507,9 +545,11 @@ def neb_forces(
     image_force_mode: torch.Tensor,
     path_energy_ref: torch.Tensor,
     path_energy_max: torch.Tensor,
-    cell: torch.Tensor,
-    inv_cell: torch.Tensor,
-    pbc: torch.Tensor,
+    mic_mode: torch.Tensor,
+    periodic_basis: torch.Tensor,
+    cartesian_to_fractional: torch.Tensor,
+    mic_candidate_count: torch.Tensor,
+    candidate_shifts: torch.Tensor,
     *,
     method: str = "improved_tangent",
     tangent_buffer: torch.Tensor | None = None,
@@ -537,10 +577,18 @@ def neb_forces(
         Effective-force mode of every image.
     path_energy_ref, path_energy_max : torch.Tensor, shape (num_paths,)
         Reference and maximum interior-image energies of every path.
-    cell, inv_cell : torch.Tensor, shape (num_paths, 3, 3)
-        Cell matrices and their inverses.
-    pbc : torch.Tensor, shape (num_paths, 3), dtype bool
-        Periodic boundary flags of every path.
+    mic_mode : torch.Tensor, shape (num_paths,), dtype int32
+        Per-path minimum-image convention (MIC) algorithm selector: ``0`` for
+        nonperiodic passthrough, ``1`` for orthogonal-basis wrapping, and ``2``
+        for general reduced-basis search.
+    periodic_basis, cartesian_to_fractional : torch.Tensor, shape (num_paths, 3, 3)
+        Reduced periodic lattice vectors packed into the leading rows and
+        Cartesian-to-periodic coordinate maps packed into the leading columns.
+        Unused rows and columns are zero for partial periodicity.
+    mic_candidate_count : torch.Tensor, shape (num_paths,), dtype int32
+        Number of active candidate translations for each path (0, 8, or 26).
+    candidate_shifts : torch.Tensor, shape (num_paths, 26, 3)
+        Fixed-capacity nonzero Cartesian candidate translations for each path.
     method : str, optional
         User-facing NEB formulation identifier; selects the underlying
         storage strategy (stored-tangent or Gram-stats).
@@ -571,9 +619,11 @@ def neb_forces(
         image_force_mode,
         path_energy_ref,
         path_energy_max,
-        cell,
-        inv_cell,
-        pbc,
+        mic_mode,
+        periodic_basis,
+        cartesian_to_fractional,
+        mic_candidate_count,
+        candidate_shifts,
     )
     if isinstance(spec, _StoredTangentMethod):
         return stored_tangent_neb_forces(
