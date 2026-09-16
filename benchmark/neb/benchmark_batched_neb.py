@@ -231,7 +231,6 @@ def _run_workflow(
         ),
         n_steps=(args.max_regular_steps + args.max_climbing_steps + 1),
         # Accounting for one reprime-only iteration when entering climbing-image NEB
-        optimizer_kwargs={"dt": args.dt},
         extra_hooks=[FreezeAtomsHook()],
         compile=args.compile_workflow,
     )
@@ -411,7 +410,6 @@ def parser() -> argparse.ArgumentParser:
         "--device", default="cuda" if torch.cuda.is_available() else "cpu"
     )
     result.add_argument("--dtype", choices=("float32", "float64"), default="float32")
-    result.add_argument("--dt", type=float, default=0.01)
     result.add_argument("--fmax", type=float, default=0.002)
     result.add_argument("--spring", type=float, default=0.1)
     result.add_argument("--max-regular-steps", type=int, default=5000)

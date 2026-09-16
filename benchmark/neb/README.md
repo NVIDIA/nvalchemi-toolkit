@@ -52,7 +52,7 @@ For a quick smoke test:
 ```bash
 uv run --extra cu12 --extra mace python benchmark/neb/benchmark_batched_neb.py \
   --images 5 --device cuda \
-  --max-regular-steps 2 --max-climbing-steps 2 --max-steps 6 --fmax 1e6
+  --max-regular-steps 2 --max-climbing-steps 2 --fmax 1e6
 ```
 
 For CUDA 13, replace `cu12` with `cu13`.
