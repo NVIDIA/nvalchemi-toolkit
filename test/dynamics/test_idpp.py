@@ -26,6 +26,7 @@ from nvalchemi.dynamics.paths import (
     interpolate_paths,
     prepare_idpp_targets,
 )
+from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
 
 # =============================================================================
 # Helpers
@@ -56,6 +57,17 @@ def _prepared_path(image: AtomicData, target_distances: Tensor) -> Batch:
     image.add_edge_property("idpp_target_distances", target_distances)
     paths = Batch.from_data_list([image] * 3)
     paths.set_group_layout(torch.zeros(3, dtype=torch.long, device=paths.device))
+    if "cell" in paths:
+        path_cell = paths.cell[:1].to(paths.positions.dtype)
+    else:
+        path_cell = torch.eye(
+            3, dtype=paths.positions.dtype, device=paths.device
+        ).unsqueeze(0)
+    if "pbc" in paths:
+        path_pbc = paths.pbc[:1]
+    else:
+        path_pbc = torch.zeros((1, 3), dtype=torch.bool, device=paths.device)
+    prepare_batch_mic(paths, path_cell, path_pbc)
     return paths
 
 
@@ -126,6 +138,7 @@ class TestPrepareIDPPTargets:
         model = IDPPModel()
         outputs = model(paths)
 
+        assert paths._mic_data.mode.shape == (2,)
         assert paths.num_edges_per_graph.tolist() == [1, 1, 1, 3, 3, 3, 3]
         assert outputs["energy"].shape == (7, 1)
         assert outputs["forces"].shape == paths.positions.shape
@@ -242,3 +255,61 @@ class TestIDPPModel:
         assert model.make_neighbor_hooks() == []
         with pytest.raises(KeyError, match="prepare_idpp_targets"):
             model(paths)
+
+    def test_model_requires_prepared_mic(self) -> None:
+        """IDPP forward rejects missing MIC state instead of preparing it."""
+        data = _pair_data(
+            distance=1.5,
+            target=1.0,
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0),
+            pbc=torch.ones((1, 3), dtype=torch.bool),
+        )
+        data._mic_data = None
+
+        with pytest.raises(RuntimeError, match="explicit MIC preparation"):
+            IDPPModel()(data)
+
+
+class TestMICCacheLifecycle:
+    """MIC setup does not retain stale geometry inputs."""
+
+    @pytest.mark.parametrize("changed", ["cell", "pbc", "layout", "dtype"])
+    def test_setup_rebuilds_changed_geometry(self, changed: str) -> None:
+        """Setup detects changes even when the source tensors mutate in place."""
+        paths = _pair_data(0.5, 0.8)
+        cell = torch.eye(3, dtype=paths.positions.dtype).unsqueeze(0)
+        pbc = torch.ones((1, 3), dtype=torch.bool)
+        original = prepare_batch_mic(paths, cell, pbc)
+        if changed == "cell":
+            cell.mul_(2)
+        elif changed == "pbc":
+            pbc.zero_()
+        elif changed == "layout":
+            paths.set_group_layout(torch.arange(3))
+            cell = cell.repeat(3, 1, 1)
+            pbc = pbc.repeat(3, 1)
+        else:
+            paths.positions = paths.positions.float()
+            cell = cell.float()
+        updated = prepare_batch_mic(paths, cell, pbc)
+        assert updated is not original
+        assert prepare_batch_mic(paths, cell, pbc) is updated
+        assert updated.periodic_basis.dtype == cell.dtype
+        assert updated.mode.numel() == cell.shape[0]
+
+    def test_position_updates_reuse_geometry(self) -> None:
+        """Moving atoms does not change cell-dependent MIC preparation."""
+        paths = _pair_data(0.5, 0.8)
+        original = paths._mic_data
+        paths.positions.add_(0.1)
+        prepare_idpp_targets(paths)
+        assert paths._mic_data is original
+
+    @pytest.mark.parametrize("move", [False, True])
+    def test_copy_discards_cache(self, move: bool) -> None:
+        """Batch copies discard derived MIC state and rebuild it on demand."""
+        paths = _pair_data(0.5, 0.8)
+        copied = paths.to("cpu") if move else paths.clone()
+        assert getattr(copied, "_mic_data", None) is None
+        prepare_idpp_targets(copied)
+        assert copied._mic_data is not paths._mic_data

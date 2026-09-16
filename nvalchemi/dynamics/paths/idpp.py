@@ -24,7 +24,11 @@ from torch import Tensor, nn
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import SegmentedLevelStorage
-from nvalchemi.dynamics.paths._geometry import minimum_image_displacement
+from nvalchemi.dynamics.paths._geometry import (
+    PreparedMIC,
+    minimum_image_displacement,
+    prepare_batch_mic,
+)
 from nvalchemi.dynamics.paths.validate import validate_paths
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
@@ -34,9 +38,8 @@ _TARGET_DISTANCE_KEY = "idpp_target_distances"
 def _pair_displacements(
     positions: Tensor,
     pair_indices: Tensor,
-    pair_batch: Tensor,
-    cell: Tensor | None,
-    pbc: Tensor | None,
+    pair_path: Tensor,
+    prepared_mic: PreparedMIC,
 ) -> Tensor:
     """Return pair displacements with batched minimum-image wrapping.
 
@@ -47,14 +50,10 @@ def _pair_displacements(
     pair_indices : Tensor
         Global atom indices for each pair with shape ``(E, 2)``. Each row
         contains the source and destination indices ``(i, j)``.
-    pair_batch : Tensor
-        Image index for each pair with shape ``(E,)``.
-    cell : Tensor or None
-        Cell vectors for every image with shape ``(B, 3, 3)``. ``None``
-        denotes nonperiodic geometry.
-    pbc : Tensor or None
-        Periodic-boundary flags for every image with shape ``(B, 3)``.
-        ``None`` denotes nonperiodic geometry.
+    pair_path : Tensor
+        Path index for each pair with shape ``(E,)``.
+    prepared_mic : PreparedMIC
+        Reusable path-level cell-dependent geometry.
 
     Returns
     -------
@@ -63,7 +62,7 @@ def _pair_displacements(
         shape ``(E, 3)``.
     """
     displacements = positions[pair_indices[:, 1]] - positions[pair_indices[:, 0]]
-    return minimum_image_displacement(displacements, pair_batch, cell, pbc)
+    return minimum_image_displacement(displacements, pair_path, prepared=prepared_mic)
 
 
 def prepare_idpp_targets(paths: Batch) -> Batch:
@@ -99,6 +98,24 @@ def prepare_idpp_targets(paths: Batch) -> Batch:
     validate_paths(paths)
 
     layout = paths.group_layout
+    first_image_idx = layout.group_ptr[:-1]
+    if "cell" in paths:
+        path_cell = paths.cell[first_image_idx].to(paths.positions.dtype).contiguous()
+    else:
+        path_cell = (
+            torch.eye(3, dtype=paths.positions.dtype, device=paths.device)
+            .unsqueeze(0)
+            .repeat(layout.num_groups, 1, 1)
+        )
+    if "pbc" in paths:
+        path_pbc = paths.pbc[first_image_idx].contiguous()
+    else:
+        path_pbc = torch.zeros(
+            layout.num_groups, 3, dtype=torch.bool, device=paths.device
+        )
+    # Prepare MIC using the cell and PBC settings from the first image of each path.
+    prepare_batch_mic(paths, path_cell, path_pbc)
+
     node_ptr = paths.batch_ptr.long()  # [B + 1]
     node_image = paths.batch_idx.long()  # [N]
     num_atoms = paths.num_nodes_per_graph.long()  # [B]
@@ -136,13 +153,11 @@ def prepare_idpp_targets(paths: Batch) -> Batch:
     # E_init = E_final = number of edges in the initial or the final image.
     initial_pair_mask = image_rank == 0  # [E]
     initial_endpoint_pairs = pair_indices[initial_pair_mask]  # [E_init, 2]
-    initial_endpoint_pair_image = pair_image[initial_pair_mask]  # [E_init]
     initial_endpoint_displacements = _pair_displacements(
         paths.positions,
         initial_endpoint_pairs,
-        initial_endpoint_pair_image,
-        paths.cell if "cell" in paths else None,
-        paths.pbc if "pbc" in paths else None,
+        pair_path[initial_pair_mask],
+        paths._mic_data,
     )  # [E_init, 3]
     initial_endpoint_distances = torch.linalg.vector_norm(
         initial_endpoint_displacements, dim=-1
@@ -150,13 +165,11 @@ def prepare_idpp_targets(paths: Batch) -> Batch:
 
     final_pair_mask = image_rank == last_image_rank  # [E]
     final_endpoint_pairs = pair_indices[final_pair_mask]  # [E_final, 2]
-    final_endpoint_pair_image = pair_image[final_pair_mask]  # [E_final]
     final_endpoint_displacements = _pair_displacements(
         paths.positions,
         final_endpoint_pairs,
-        final_endpoint_pair_image,
-        paths.cell if "cell" in paths else None,
-        paths.pbc if "pbc" in paths else None,
+        pair_path[final_pair_mask],
+        paths._mic_data,
     )  # [E_final, 3]
     final_endpoint_distances = torch.linalg.vector_norm(
         final_endpoint_displacements, dim=-1
@@ -302,15 +315,33 @@ class IDPPModel(nn.Module, BaseModelMixin):
         positions = inputs["positions"]
         num_graphs = data.num_graphs
         pair_batch = data.batch_idx.index_select(0, pair_indices[:, 0]).long()
+        cell = inputs.get("cell")
+        pbc = inputs.get("pbc")
+        prepared_mic = getattr(data, "_mic_data", None)
+        if cell is not None and pbc is not None and prepared_mic is None:
+            raise RuntimeError(
+                "Periodic IDPP data requires explicit MIC preparation; "
+                "call prepare_idpp_targets after moving the batch"
+            )
+        if prepared_mic is not None:
+            if prepared_mic.periodic_basis.device != positions.device:
+                raise RuntimeError("Prepared MIC data is on the wrong device")
+            if prepared_mic.periodic_basis.dtype != positions.dtype:
+                raise RuntimeError("Prepared MIC data has the wrong dtype")
 
         with torch.no_grad():
-            displacements = _pair_displacements(
-                positions,
-                pair_indices,
-                pair_batch,
-                inputs.get("cell"),
-                inputs.get("pbc"),
-            )
+            if prepared_mic is None:
+                displacements = (
+                    positions[pair_indices[:, 1]] - positions[pair_indices[:, 0]]
+                )
+            else:
+                pair_path = data.group_layout.group_idx[pair_batch]
+                displacements = _pair_displacements(
+                    positions,
+                    pair_indices,
+                    pair_path,
+                    prepared_mic,
+                )
             distances = torch.linalg.vector_norm(displacements, dim=-1)
             minimum_distance = torch.finfo(positions.dtype).eps
             # This guards against overlaps introduced unexpectedly during optimization
