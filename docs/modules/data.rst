@@ -16,6 +16,7 @@ Core classes
 
    AtomicData
    Batch
+   LevelSchema
 
 I/O and pipelines
 -----------------

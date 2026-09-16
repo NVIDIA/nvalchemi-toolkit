@@ -61,6 +61,13 @@
 
 ### Core Data Layer
 
+- **Extensible batch levels** - `LevelSchema` and `Batch` now support custom
+  uniform, segmented, and ordered product levels. Custom definitions,
+  fields, and product-derived cardinalities are preserved through construction,
+  reconstruction, selection, append, reusable buffers, point-to-point transport,
+  and Zarr persistence. Pointer-only levels remain available in direct `Batch` and
+  Zarr storage workflows. Existing atom, edge, and system APIs remain compatible,
+  and legacy-only Zarr stores retain their existing layout.
 - **In-memory datapipes** - new `InMemoryDataset` stores a fully materialized
   `Batch` in memory and serves graph-indexed `Batch` selections through the
   same `load_batches` / fused-prefetch interface used by `DataLoader`. It can
