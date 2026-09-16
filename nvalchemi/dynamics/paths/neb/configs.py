@@ -63,8 +63,6 @@ class SpringContext:
         Mapping from packed images to NEB paths.
     cell : Tensor
         Representative cell for each path, shape ``(num_paths, 3, 3)``.
-    inv_cell : Tensor
-        Inverse representative cell for each path, shape ``(num_paths, 3, 3)``.
     pbc : Tensor
         Periodic-boundary flags for each path, shape ``(num_paths, 3)``.
     step_count : int
@@ -77,7 +75,6 @@ class SpringContext:
     image_ptr: Tensor
     layout: GroupLayout
     cell: Tensor
-    inv_cell: Tensor
     pbc: Tensor
     step_count: int
 

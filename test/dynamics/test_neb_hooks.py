@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import importlib
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -26,6 +26,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
+from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
 from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.neb import (
     ConstantSpringConfig,
@@ -313,6 +314,11 @@ class TestNEBForceHook:
         assert seen["path_ptr"] is workspace.path_ptr
         assert seen["image_path_idx"] is workspace.image_path_idx
         assert seen["image_force_mode"] is batch.force_mode
+        assert seen["mic_mode"] is workspace.mic.mode
+        assert seen["periodic_basis"] is workspace.mic.periodic_basis
+        assert seen["cartesian_to_fractional"] is workspace.mic.cartesian_to_fractional
+        assert seen["mic_candidate_count"] is workspace.mic.candidate_count
+        assert seen["candidate_shifts"] is workspace.mic.candidate_shifts
         assert seen["image_force_mode"][1] == CLIMBING_NEB
         assert seen["image_force_mode"][[0, 3]].tolist() == [ENDPOINT] * 2
 
@@ -480,7 +486,6 @@ class TestNEBForceHook:
         assert context.image_ptr is workspace.image_ptr
         assert context.layout is batch.group_layout
         assert context.cell is workspace.cell
-        assert context.inv_cell is workspace.inv_cell
         assert context.pbc is workspace.pbc
         assert context.step_count == 7
         assert context.num_links == 3
@@ -526,6 +531,22 @@ class TestNEBForceHook:
             hook._workspace.pbc,
             torch.tensor([[True, True, True], [True, False, False]]),
         )
+
+    def test_reuses_prepared_mic_geometry(self) -> None:
+        """Admission reuses compatible MIC geometry already cached on the batch."""
+        batch = _bands([0.0] * 3, [0, 0, 0])
+        batch.cell = torch.eye(3).unsqueeze(0).repeat(3, 1, 1)
+        batch.pbc = torch.ones((3, 3), dtype=torch.bool)
+        prepared = prepare_batch_mic(batch, batch.cell[:1], batch.pbc[:1])
+        hook = _force_hook()
+
+        with patch("nvalchemi.dynamics.paths._geometry.prepare_mic") as prepare:
+            hook(DynamicsContext(batch=batch), DynamicsStage.ON_ADMISSION)
+
+        prepare.assert_not_called()
+        assert hook._workspace is not None
+        assert hook._workspace.mic is prepared
+        assert batch._mic_data is prepared
 
     def test_applies_distinct_fixed_atom_indices_per_path(self, device: str) -> None:
         images = [
