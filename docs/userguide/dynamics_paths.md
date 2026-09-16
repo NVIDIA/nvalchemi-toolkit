@@ -38,6 +38,15 @@ from nvalchemi.dynamics.paths import (
 
 paths = interpolate_paths(initial, final, num_images=7)  # linear interpolation
 
+# optionally remove rigid endpoint displacement before interpolation
+paths = interpolate_paths(
+    initial,
+    final,
+    num_images=7,
+    remove_translation_and_rotation=True,
+    fit_mask=initial.atomic_numbers > 1,  # fit on corresponding heavy atoms
+)
+
 # optional: refine with IDPP before switching to the real model
 prepare_idpp_targets(paths)
 paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
@@ -45,8 +54,15 @@ paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
 
 `interpolate_paths` linearly interpolates positions between index-matched
 endpoint graphs and drops stale fields (`forces`, `energy`, `velocities`,
-...) --- reattach `velocities` before optimizing.
-
+...) --- reattach `velocities` before optimizing. Set
+`remove_translation_and_rotation=True` to align each final structure to its
+paired initial structure first. For periodic paths, this reconciles
+minimum-image positions and removes translation without rotating the cell. An
+optional Boolean `fit_mask`, following the flattened node layout of `initial`,
+restricts the corresponding atom pairs used to fit each transform without
+restricting which atoms are transformed. Every path must select at least one
+atom; for example, `initial.atomic_numbers > 1` fits molecular paths using only
+heavy atoms.
 {py:func}`~nvalchemi.dynamics.paths.prepare_idpp_targets` +
 {py:class}`~nvalchemi.dynamics.paths.IDPPModel` relax the path against target
 pairwise distances (IDPP,

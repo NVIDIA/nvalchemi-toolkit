@@ -22,7 +22,9 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import Batch
+from nvalchemi.dynamics.paths._alignment import align_batch_positions
 from nvalchemi.dynamics.paths._geometry import (
+    PreparedMIC,
     minimum_image_displacement,
     prepare_mic,
 )
@@ -70,8 +72,8 @@ def _normalize_num_images(num_images: int | Sequence[int], num_paths: int) -> li
 
 def _validate_endpoint_geometry(
     initial: Batch, final: Batch
-) -> tuple[Tensor | None, Tensor]:
-    """Validate and return cells and PBC shared by all endpoint pairs."""
+) -> tuple[Tensor | None, Tensor, PreparedMIC | None]:
+    """Validate and prepare cells and PBC shared by all endpoint pairs."""
     initial_has_cell = "cell" in initial
     final_has_cell = "cell" in final
     if initial_has_cell != final_has_cell:
@@ -108,11 +110,13 @@ def _validate_endpoint_geometry(
         and not torch.allclose(cell, final_cell, rtol=_CELL_RTOL, atol=_CELL_ATOL)
     ):
         raise ValueError("Paired endpoints must have the same cell")
-    if torch.any(pbc):
-        if cell is None:
+    if cell is None:
+        if torch.any(pbc):
             raise ValueError("Periodic endpoints must define a cell")
-        prepare_mic(cell, pbc)
-    return cell, pbc
+        prepared_mic = None
+    else:
+        prepared_mic = prepare_mic(cell, pbc)
+    return cell, pbc, prepared_mic
 
 
 def _discard_stale_fields(batch: Batch) -> None:
@@ -132,6 +136,8 @@ def interpolate_paths(
     initial: Batch,
     final: Batch,
     num_images: int | Sequence[int],
+    remove_translation_and_rotation: bool = False,
+    fit_mask: Tensor | None = None,
 ) -> Batch:
     """Interpolate paired endpoint batches into grouped reaction paths.
 
@@ -148,6 +154,16 @@ def interpolate_paths(
         Total number of images per path, including both endpoints. An integer
         applies the same count to every path. A sequence supplies one count per
         paired endpoint graph. Every count must be at least three.
+    remove_translation_and_rotation : bool, optional
+        Align each final structure to its paired initial structure before
+        interpolation. For non-periodic systems, both rigid translation and
+        rotation are removed. For periodic systems, rotation is disabled and
+        minimum-image translation is removed. Default is ``False``.
+    fit_mask : Tensor or None, optional
+        Boolean node mask with shape ``(initial.num_nodes,)``. Selected atom
+        pairs determine each path's alignment. Each path must select at least
+        one atom. Requires ``remove_translation_and_rotation=True``. ``None``
+        uses all atom pairs for fitting.
 
     Returns
     -------
@@ -157,7 +173,8 @@ def interpolate_paths(
     Raises
     ------
     TypeError
-        If ``num_images`` is not an integer or integer sequence.
+        If ``num_images`` is not an integer or integer sequence, or if
+        ``fit_mask`` is not boolean.
     ValueError
         If the endpoint batches or interpolation options are incompatible.
 
@@ -165,9 +182,10 @@ def interpolate_paths(
     -----
     Structural and model-input fields are copied from each initial graph.
     Neighbor data, model outputs, and dynamical state are discarded.
-    Endpoint coordinates are retained exactly, even when periodic interior
-    images follow an unwrapped minimum-image path. The input endpoint batches
-    are never modified.
+    Unless alignment is requested, endpoint coordinates are retained exactly,
+    even when periodic interior images follow an unwrapped minimum-image path.
+    With alignment, terminal images use the aligned final coordinates. The
+    input endpoint batches are never modified.
     """
     if initial.num_graphs == 0 or final.num_graphs == 0:
         raise ValueError("Endpoint batches must contain at least one graph")
@@ -184,12 +202,28 @@ def interpolate_paths(
         raise ValueError(
             "Paired endpoints must have identical atomic numbers in the same order"
         )
-    cell, pbc = _validate_endpoint_geometry(initial, final)
+    if fit_mask is not None and not remove_translation_and_rotation:
+        raise ValueError("fit_mask requires remove_translation_and_rotation=True")
+    cell, pbc, prepared_mic = _validate_endpoint_geometry(initial, final)
+    final_positions = final.positions
+    if remove_translation_and_rotation:
+        final_positions = align_batch_positions(
+            initial.positions,
+            final_positions,
+            initial.batch_idx,
+            initial.num_nodes_per_graph,
+            cell,
+            pbc,
+            fit_mask=fit_mask,
+            prepared_mic=prepared_mic,
+            skip_extra_checks=True,
+        ).positions
     endpoint_displacement = minimum_image_displacement(
-        final.positions - initial.positions,
+        final_positions - initial.positions,
         initial.batch_idx,
         cell,
         pbc,
+        prepared=prepared_mic,
     )
     interpolation_target = initial.positions + endpoint_displacement
     # Materialize every ragged path directly from segmented batch tensors.
@@ -226,7 +260,7 @@ def interpolate_paths(
     node_rank = image_rank[output_graph]
     positions = torch.where((node_rank == 0)[:, None], start_positions, interpolated)
     terminal = node_rank == image_counts_tensor[source_graph] - 1
-    positions = torch.where(terminal[:, None], final.positions[source_node], positions)
+    positions = torch.where(terminal[:, None], final_positions[source_node], positions)
 
     result.positions = positions
     _discard_stale_fields(result)
