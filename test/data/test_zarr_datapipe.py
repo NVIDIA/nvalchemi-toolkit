@@ -3354,6 +3354,44 @@ class TestFusedBatchPrefetch:
         assert "my_flag" in batch.keys["system"]
         assert batch.my_flag.shape[0] == 4
 
+    @pytest.mark.parametrize("skip_validation", [False, True])
+    def test_dataset_uses_custom_level_added_after_reader_refresh(
+        self, tmp_path: Path, skip_validation: bool
+    ) -> None:
+        """An existing Dataset uses custom metadata from a refreshed reader."""
+        path = tmp_path / "refreshed-custom-level.zarr"
+        writer = AtomicDataZarrWriter(path)
+        writer.write([_make_ordered_atomic_data(i) for i in range(1, 4)])
+
+        with AtomicDataZarrReader(path) as reader:
+            dataset = Dataset(reader, device="cpu", skip_validation=skip_validation)
+            schema = LevelSchema()
+            schema.add_level("sites", segmented=True)
+            site_values = torch.tensor([[10.0, 11.0], [20.0, 21.0], [22.0, 23.0]])
+            writer.add_custom(
+                "site_values",
+                site_values,
+                "sites",
+                attr_map=schema,
+                level_ptrs={"sites": torch.tensor([0, 1, 3, 3])},
+            )
+            reader.refresh()
+
+            batch = dataset.load_batches([[1, 0, 2]])[0]
+            sample, _ = dataset[1]
+
+        assert batch.level_keys["sites"] == {"site_values"}
+        assert batch.level_ptr("sites").tolist() == [0, 2, 3, 3]
+        torch.testing.assert_close(
+            batch.site_values,
+            torch.cat((site_values[1:3], site_values[0:1])),
+        )
+
+        rebuilt = Batch.from_data_list([sample], device="cpu")
+        assert rebuilt.level_keys["sites"] == {"site_values"}
+        assert rebuilt.level_ptr("sites").tolist() == [0, 2]
+        torch.testing.assert_close(rebuilt.site_values, site_values[1:3])
+
     def test_skip_validation_custom_atom_key_roundtrip(
         self, tmp_path: Path, gpu_device: str
     ) -> None:

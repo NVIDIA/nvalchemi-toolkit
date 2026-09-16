@@ -84,6 +84,8 @@ class Reader(ABC):
         self.pin_memory = pin_memory
         self.include_index_in_metadata = include_index_in_metadata
         self.coordinated_subsampling = coordinated_subsampling
+        # Refreshable readers increment this only after replacing cached metadata.
+        self._metadata_revision = 0
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor data for a single sample.

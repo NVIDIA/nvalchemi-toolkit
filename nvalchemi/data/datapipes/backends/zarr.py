@@ -2178,6 +2178,7 @@ class AtomicDataZarrReader(Reader):
         self._fields_metadata = fields_metadata
         self._level_schema = level_schema
         self._level_ptrs = level_ptrs
+        self._metadata_revision += 1
 
     @property
     def field_levels(self) -> dict[str, str]:
