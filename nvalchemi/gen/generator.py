@@ -130,6 +130,7 @@ import warnings
 from collections.abc import Iterator
 from contextlib import nullcontext
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Protocol,
@@ -150,6 +151,9 @@ from pydantic import (
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
+
+if TYPE_CHECKING:
+    from nvalchemi.gen.pipeline import GenerationPipeline
 
 __all__ = [
     "GeneratingFunction",
@@ -964,3 +968,27 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             ``self.stream()`` — an unbounded stream of unconditional draws.
         """
         return self.stream()
+
+    def __or__(self, other: Any) -> GenerationPipeline:
+        """Compose sequentially into a :class:`GenerationPipeline`.
+
+        Mirrors :meth:`nvalchemi.dynamics.base.BaseDynamics.__or__`. (``+``
+        stays reserved for concurrent/fused composition, as in dynamics.)
+
+        Parameters
+        ----------
+        other
+            A :class:`AtomisticGenerator`, a dynamics engine, a ``Batch -> Batch``
+            callable, or an existing pipeline.
+
+        Returns
+        -------
+        GenerationPipeline
+            ``self`` followed by ``other`` (prepended when ``other`` is
+            already a pipeline).
+        """
+        from nvalchemi.gen.pipeline import GenerationPipeline
+
+        if isinstance(other, GenerationPipeline):
+            return GenerationPipeline(stages=[self, *other.stages])
+        return GenerationPipeline(stages=[self, other])

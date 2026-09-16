@@ -189,3 +189,13 @@ class TestDemoNonparametricGeneration:
         out = gen(source)
         assert isinstance(out, Batch)
         assert out.num_graphs == 2
+
+    def test_pipeline_source_stage(self) -> None:
+        """The function folds into a pipeline as a plain Batch -> Batch stage."""
+        pipe = (
+            AtomisticGenerator(generator_func=make_demo_gan_generate(DemoGANModel()))
+            | demo_nonparametric_generation
+        )
+        out = pipe(None)
+        assert isinstance(out, Batch)
+        assert out.num_graphs == 1
