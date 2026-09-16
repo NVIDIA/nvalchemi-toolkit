@@ -72,11 +72,19 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_serializer,
+    field_validator,
     model_validator,
 )
 
+from nvalchemi._serialization import _callable_path_of, _return_importable
 from nvalchemi.data import Batch
 from nvalchemi.gen.generator import AtomisticGenerator
+from nvalchemi.training import (
+    BaseSpec,
+    create_model_spec,
+    create_model_spec_from_json,
+)
 
 __all__ = ["GenerationPipeline"]
 
@@ -217,6 +225,93 @@ class GenerationPipeline(BaseModel):
             if isinstance(stage, AtomisticGenerator):
                 stage.compile(**kwargs)
         return self
+
+    @field_validator("stages", mode="before")
+    @classmethod
+    def _deserialize_stages(cls, v: Any) -> Any:
+        """Rebuild serialized stage payloads to live stages.
+
+        A dict with a ``cls_path`` key is a captured callable payload
+        (dotted-path or factory capture) and deserializes through the
+        training spec machinery; any other dict is a serialized
+        :class:`~nvalchemi.gen.generator.AtomisticGenerator` and revalidates as
+        one. Live stages pass through unchanged.
+
+        Parameters
+        ----------
+        v
+            The raw ``stages`` input.
+
+        Returns
+        -------
+        Any
+            The stages list with payloads rebuilt, or ``v`` unchanged when
+            not a list.
+        """
+        if not isinstance(v, list):
+            return v
+        out: list[Any] = []
+        for item in v:
+            if isinstance(item, dict):
+                if "cls_path" in item:
+                    out.append(create_model_spec_from_json(item).build())
+                else:
+                    out.append(AtomisticGenerator.model_validate(item))
+            else:
+                out.append(item)
+        return out
+
+    @field_serializer("stages")
+    def _serialize_stages(self, stages: list[Any]) -> list[dict[str, Any]]:
+        """Capture each stage as a JSON-safe nested payload.
+
+        :class:`~nvalchemi.gen.generator.AtomisticGenerator` stages serialize via
+        their own dump; any other stage (a plain ``Batch -> Batch``
+        callable) is captured by dotted import path through the
+        :func:`~nvalchemi._serialization._return_importable` identity
+        factory, or via the object's own ``to_spec()`` when it provides one.
+        Callable *instances* (e.g. dynamics engines) carry no import path
+        and are rejected. Fires for both ``model_dump()`` and
+        ``model_dump_json()``.
+
+        Parameters
+        ----------
+        stages
+            The live stages list.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            One payload per stage: a nested AtomisticGenerator dump, or a
+            :class:`~nvalchemi.training.BaseSpec` payload carrying
+            ``cls_path``.
+
+        Raises
+        ------
+        TypeError
+            If a stage's ``to_spec()`` does not return a
+            :class:`~nvalchemi.training.BaseSpec`, or the stage has no
+            importable dotted path.
+        """
+        payloads: list[dict[str, Any]] = []
+        for stage in stages:
+            if isinstance(stage, AtomisticGenerator):
+                payloads.append(stage.model_dump(mode="json"))
+                continue
+            to_spec = getattr(stage, "to_spec", None)
+            if callable(to_spec):
+                spec = to_spec()
+                if not isinstance(spec, BaseSpec):
+                    raise TypeError(
+                        "Pipeline stage to_spec() must return a BaseSpec, "
+                        f"got {type(spec).__name__}."
+                    )
+            else:
+                spec = create_model_spec(
+                    _return_importable, path=_callable_path_of(stage)
+                )
+            payloads.append(spec.model_dump(mode="json"))
+        return payloads
 
     def _infer_device(self) -> torch.device | None:
         """Infer the session device from the first AtomisticGenerator stage.

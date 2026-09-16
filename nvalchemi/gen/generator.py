@@ -135,14 +135,26 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    FieldSerializationInfo,
+    field_serializer,
     field_validator,
     model_validator,
 )
 from tensordict import TensorDictBase
 
+from nvalchemi._serialization import (
+    _callable_path_of,
+    _return_importable,
+    _wrap_custom_type,
+)
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
+from nvalchemi.training import (
+    BaseSpec,
+    create_model_spec,
+    create_model_spec_from_json,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.gen.pipeline import GenerationPipeline
@@ -155,6 +167,13 @@ __all__ = [
 
 InputT = TypeVar("InputT")
 SampleT = TypeVar("SampleT")
+
+
+_SerializableOptionalDevice: TypeAlias = _wrap_custom_type(torch.device) | None
+"""``torch.device | None`` annotation reusing the registered device serializer.
+
+Round-trips via :func:`str` / :class:`torch.device` — the pair registered in
+:mod:`nvalchemi._serialization` (``register_type_serializer``)."""
 
 
 @runtime_checkable
@@ -325,7 +344,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
 
     generator_func: GeneratingFunction
     condition_func: ConditionFunction | None = None
-    device: torch.device | None = Field(
+    device: _SerializableOptionalDevice = Field(
         default=None,
         description=(
             "Device pin for generated batches: 'cpu' always valid, 'cuda[:i]' "
@@ -488,6 +507,152 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 )
         return device
 
+    @field_validator(
+        "generator_func", "batch_mapping", "condition_func", "hooks", mode="before"
+    )
+    @classmethod
+    def _deserialize_spec_payloads(cls, v: Any) -> Any:
+        """Rebuild live objects from spec payloads at load time.
+
+        A ``dict`` value is a :class:`~nvalchemi.training.BaseSpec` payload
+        captured at dump time and is deserialized with the training spec
+        machinery (:func:`~nvalchemi.training.create_model_spec_from_json`;
+        ``build`` resolves nested spec payloads recursively). ``hooks``
+        arrives as a list of payloads, each deserialized the same way. Live
+        callables and hook instances pass through unchanged.
+
+        Parameters
+        ----------
+        v
+            The raw field input.
+
+        Returns
+        -------
+        Any
+            The rebuilt object(s), or ``v`` unchanged.
+        """
+        if isinstance(v, dict):
+            return create_model_spec_from_json(v).build()
+        if isinstance(v, list):
+            return [
+                create_model_spec_from_json(item).build()
+                if isinstance(item, dict)
+                else item
+                for item in v
+            ]
+        return v
+
+    @field_serializer("generator_func", "batch_mapping", "condition_func")
+    def _serialize_callable(
+        self, fn: Callable[..., Any] | None, info: FieldSerializationInfo
+    ) -> dict[str, Any] | None:
+        """Capture a callable field as a JSON-safe spec payload.
+
+        The object's own ``to_spec()`` when it provides one, else a
+        dotted-path capture of the module-level callable through the
+        :func:`~nvalchemi._serialization._return_importable` identity
+        factory. Lambdas, closures, and ``functools.partial`` objects carry
+        no import path and are rejected by
+        :func:`~nvalchemi._serialization._callable_path_of`. Fires for both
+        ``model_dump()`` and ``model_dump_json()``.
+
+        Parameters
+        ----------
+        fn
+            The live callable, or ``None``.
+        info
+            Field metadata (the field name labels capture errors).
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The serialized :class:`~nvalchemi.training.BaseSpec` payload.
+
+        Raises
+        ------
+        TypeError
+            If ``fn.to_spec()`` does not return a
+            :class:`~nvalchemi.training.BaseSpec`, or ``fn`` has no
+            importable dotted path.
+        """
+        if fn is None:
+            return None
+        to_spec = getattr(fn, "to_spec", None)
+        if callable(to_spec):
+            spec = to_spec()
+            if not isinstance(spec, BaseSpec):
+                raise TypeError(
+                    f"{info.field_name}.to_spec() must return a BaseSpec, "
+                    f"got {type(spec).__name__}."
+                )
+        else:
+            spec = create_model_spec(_return_importable, path=_callable_path_of(fn))
+        return spec.model_dump(mode="json")
+
+    @field_serializer("hooks")
+    def _serialize_hooks(self, hooks: list[Any]) -> list[dict[str, Any]]:
+        """Capture each hook as a JSON-safe attribute-faithful spec payload.
+
+        The payload is the hook class path plus its ``__init__`` keyword
+        arguments, each read back from the same-named attribute (the
+        attribute-faithful convention). Values must be JSON-serializable —
+        keep hook state out of the constructor.
+
+        Parameters
+        ----------
+        hooks
+            The live hook list.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            One :class:`~nvalchemi.training.BaseSpec` payload per hook.
+
+        Raises
+        ------
+        TypeError
+            If an ``__init__`` parameter cannot be read back from an
+            attribute.
+        """
+        payloads: list[dict[str, Any]] = []
+        for hook in hooks:
+            cls = type(hook)
+            kwargs: dict[str, Any] = {}
+            for p in list(inspect.signature(cls.__init__).parameters.values())[1:]:
+                if p.kind in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                ):
+                    continue
+                if not hasattr(hook, p.name):
+                    raise TypeError(
+                        f"Cannot capture {cls.__name__} in a spec: __init__ "
+                        f"parameter {p.name!r} is not stored as a same-named "
+                        "attribute on the instance. Hook classes must be "
+                        "attribute-faithful to be spec-able."
+                    )
+                kwargs[p.name] = getattr(hook, p.name)
+            payloads.append(create_model_spec(cls, **kwargs).model_dump(mode="json"))
+        return payloads
+
+    @field_serializer("consumes_fields", "produces_fields")
+    def _serialize_field_declarations(
+        self, value: frozenset[str] | None
+    ) -> list[str] | None:
+        """Serialize field declarations as sorted lists for stable payloads.
+
+        Parameters
+        ----------
+        value
+            The declared field set, or ``None``.
+
+        Returns
+        -------
+        list[str] | None
+            The sorted declaration list, or ``None``.
+        """
+        return sorted(value) if value is not None else None
+
     @model_validator(mode="after")
     def _default_field_declarations(self) -> AtomisticGenerator:
         """Default field declarations from ``generator_func`` attributes when present.
@@ -580,6 +745,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         eager. Non-tensor-pure generating functions will
         graph-break under ``torch.compile``; compile the model inside such
         functions directly instead.
+
 
         Parameters
         ----------

@@ -155,6 +155,27 @@ def _import_callable(target_path: str) -> Callable[..., Any]:
     return obj
 
 
+def _return_importable(path: str) -> Callable[..., Any]:
+    """Identity factory: return the callable at ``path``.
+
+    Exists so a bare module-level callable (not a factory) can live in a
+    spec: ``create_model_spec(_return_importable, path=...)`` builds back to
+    the callable itself. Referenced by dotted path inside stored payloads —
+    do not rename or move.
+
+    Parameters
+    ----------
+    path
+        Dotted import path of the callable to return.
+
+    Returns
+    -------
+    Callable
+        The imported callable.
+    """
+    return _import_callable(path)
+
+
 def _callable_path_of(target: Callable[..., Any]) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``target``."""
     module = getattr(target, "__module__", None)
