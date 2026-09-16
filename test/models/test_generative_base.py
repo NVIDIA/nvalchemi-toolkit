@@ -16,13 +16,16 @@
 
 Covers:
 
-* :class:`~nvalchemi.models.gen.base.GenerativeModelConfig` construction,
-  validation (intents-in-map), ``input_modalities``/``output_modalities``
-  properties, and config round-trip (serialize -> deserialize -> equality).
+* :class:`~nvalchemi.models.gen.base.GenerativeModelConfig` construction and
+  validation of its four capability fields (``supports_variable_atoms``,
+  ``consumes_fields``, ``produces_fields``, ``prediction_outputs``),
+  ``extra="forbid"`` rejection, subclassing, and config round-trip
+  (serialize -> deserialize -> equality).
 * :class:`~nvalchemi.models.gen.base.GenerativeModelMixin` contract via a tiny
-  demo subclass: ``model_config`` enforcement, ``forward``/
-  ``adapt_output`` (emitting ``{"flow": velocity}``), ``condition`` replication
-  by ``num_samples``, and the optional ``to_batch``/``prior_template`` hooks.
+  demo subclass: ``model_config`` enforcement (including subclassed configs),
+  ``forward``/``adapt_output`` (emitting ``{"flow": velocity}``),
+  ``condition`` replication by ``num_samples``, and the optional
+  ``to_batch``/``prior_template`` hooks.
 
 These tests are CPU-only, GPU-free and import no optional deps.
 """
@@ -33,11 +36,11 @@ from collections import OrderedDict
 
 import pytest
 import torch
+from pydantic import ValidationError
 from tensordict import TensorDict
 from torch import Tensor, nn
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.gen.enums import GenerativeIntent, Modality
 from nvalchemi.models.gen.base import (
     GenerativeModelConfig,
     GenerativeModelMixin,
@@ -79,6 +82,28 @@ def _make_batch(num_graphs: int = 2) -> Batch:
     return Batch.from_data_list([_make_atomic_data() for _ in range(num_graphs)])
 
 
+def _build_cfg(**overrides) -> GenerativeModelConfig:
+    """Build a valid config, with overrides.
+
+    Parameters
+    ----------
+    **overrides
+        Field overrides.
+
+    Returns
+    -------
+    GenerativeModelConfig
+        The config.
+    """
+    fields = {
+        "supports_variable_atoms": True,
+        "consumes_fields": frozenset({"positions", "atomic_numbers"}),
+        "produces_fields": frozenset({"positions", "atomic_numbers"}),
+    }
+    fields.update(overrides)
+    return GenerativeModelConfig(**fields)
+
+
 class _DemoGenerativeModel(nn.Module, GenerativeModelMixin):
     """Tiny generative model for contract tests.
 
@@ -91,17 +116,7 @@ class _DemoGenerativeModel(nn.Module, GenerativeModelMixin):
     def __init__(self, target: Tensor | None = None) -> None:
         super().__init__()
         self.target = target if target is not None else torch.tensor([[1.0, 0.0, 0.0]])
-        self.model_config = GenerativeModelConfig(
-            intents={GenerativeIntent.CREATE, GenerativeIntent.SAMPLE},
-            supports_variable_atoms=True,
-            output_artifact=Modality.CRYSTAL,
-            intent_modality_map={
-                GenerativeIntent.CREATE: frozenset({Modality.CRYSTAL}),
-                GenerativeIntent.SAMPLE: frozenset({Modality.CRYSTAL}),
-            },
-            consumes_fields=frozenset({"positions", "atomic_numbers"}),
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
-        )
+        self.model_config = _build_cfg()
 
     def forward(
         self,
@@ -136,7 +151,7 @@ class _DemoGenerativeModel(nn.Module, GenerativeModelMixin):
         target = self.target.to(x.device, dtype=x.dtype).expand_as(x)
         return target - x
 
-    def to_batch(self, sample: TensorDict, cond_batch: Batch) -> Batch:
+    def to_batch(self, sample: TensorDict, cond_batch: Batch | None = None) -> Batch:
         """Reconstruct by returning the conditioning batch unchanged.
 
         Parameters
@@ -144,7 +159,7 @@ class _DemoGenerativeModel(nn.Module, GenerativeModelMixin):
         sample
             Sample TensorDict (unused by this toy model).
         cond_batch
-            Conditioning batch.
+            Conditioning batch, if any.
 
         Returns
         -------
@@ -170,98 +185,67 @@ class _DemoGenerativeModel(nn.Module, GenerativeModelMixin):
         return torch.zeros(cond_batch.num_graphs, 1, 3)
 
 
+class _ExtendedConfig(GenerativeModelConfig):
+    """A model-specific config subclass (the documented extension pattern)."""
+
+    temperature: float = 1.0
+
+
 class TestGenerativeModelConfig:
-    """Tests for :class:`GenerativeModelConfig`."""
-
-    @staticmethod
-    def _build_cfg() -> GenerativeModelConfig:
-        """Build a representative config used across the tests.
-
-        Returns
-        -------
-        GenerativeModelConfig
-            A config with create/sample (output) and condition (input) intents.
-        """
-        return GenerativeModelConfig(
-            intents={
-                GenerativeIntent.CREATE,
-                GenerativeIntent.SAMPLE,
-                GenerativeIntent.CONDITION,
-            },
-            supports_variable_atoms=True,
-            output_artifact=Modality.CRYSTAL,
-            intent_modality_map={
-                GenerativeIntent.CREATE: frozenset({Modality.CRYSTAL}),
-                GenerativeIntent.SAMPLE: frozenset({Modality.CRYSTAL}),
-                GenerativeIntent.CONDITION: frozenset({Modality.TEXT}),
-            },
-            consumes_fields=frozenset({"positions", "atomic_numbers"}),
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
-        )
+    """``GenerativeModelConfig``: the four-field capability surface."""
 
     def test_construction(self) -> None:
-        """Config accepts the documented fields and defaults."""
-        cfg = self._build_cfg()
+        """The four fields validate; ``prediction_outputs`` defaults to None."""
+        cfg = _build_cfg()
         assert cfg.supports_variable_atoms is True
-        assert cfg.output_artifact is Modality.CRYSTAL
-        assert cfg.active_prediction_outputs is None
+        assert cfg.consumes_fields == frozenset({"positions", "atomic_numbers"})
+        assert cfg.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert cfg.prediction_outputs is None
 
-    def test_intents_in_map_validator_rejects_mismatch(self) -> None:
-        """A missing intent in the map raises :class:`ValueError`."""
-        with pytest.raises(ValueError, match="missing from intent_modality_map"):
-            GenerativeModelConfig(
-                intents={GenerativeIntent.CREATE, GenerativeIntent.PROPOSE},
-                supports_variable_atoms=True,
-                output_artifact=Modality.CRYSTAL,
-                intent_modality_map={
-                    GenerativeIntent.CREATE: frozenset({Modality.CRYSTAL}),
-                },
-                consumes_fields=frozenset(),
-                produces_fields=frozenset({"positions"}),
-            )
-
-    def test_input_and_output_modalities(self) -> None:
-        """``output_modalities`` covers output intents + artifact; input covers the rest."""
-        cfg = self._build_cfg()
-        assert cfg.output_modalities == frozenset({Modality.CRYSTAL})
-        assert cfg.input_modalities == frozenset({Modality.TEXT})
-
-    def test_config_round_trip(self) -> None:
-        """Serialize -> deserialize -> equality ."""
-        cfg = self._build_cfg()
-        restored = GenerativeModelConfig.model_validate(cfg.model_dump())
-        assert restored == cfg
-        assert restored.input_modalities == cfg.input_modalities
-        assert restored.output_modalities == cfg.output_modalities
-
-    def test_active_prediction_outputs_round_trip(self) -> None:
-        """A non-default ``active_prediction_outputs`` survives a round-trip."""
-        cfg = GenerativeModelConfig(
-            intents={GenerativeIntent.CREATE},
-            supports_variable_atoms=False,
-            output_artifact=Modality.POINT_CLOUD,
-            intent_modality_map={
-                GenerativeIntent.CREATE: frozenset({Modality.POINT_CLOUD}),
-            },
-            consumes_fields=frozenset(),
-            produces_fields=frozenset({"positions"}),
-            active_prediction_outputs={"flow"},
-        )
-        restored = GenerativeModelConfig.model_validate(cfg.model_dump())
-        assert restored == cfg
-        assert restored.active_prediction_outputs == {"flow"}
+    def test_unknown_kwarg_rejected(self) -> None:
+        """``extra="forbid"``: retired and unknown fields alike raise."""
+        with pytest.raises(ValidationError):
+            _build_cfg(intents={"create"})
+        with pytest.raises(ValidationError):
+            _build_cfg(bogus_field=1)
 
     def test_field_declarations_required(self) -> None:
         """Omitting ``consumes_fields``/``produces_fields`` raises."""
-        with pytest.raises(ValueError, match="consumes_fields"):
+        with pytest.raises(ValidationError, match="consumes_fields"):
+            GenerativeModelConfig(supports_variable_atoms=True)
+        with pytest.raises(ValidationError, match="produces_fields"):
             GenerativeModelConfig(
-                intents={GenerativeIntent.CREATE},
-                supports_variable_atoms=True,
-                output_artifact=Modality.CRYSTAL,
-                intent_modality_map={
-                    GenerativeIntent.CREATE: frozenset({Modality.CRYSTAL}),
-                },
+                supports_variable_atoms=True, consumes_fields=frozenset()
             )
+
+    def test_config_round_trip(self) -> None:
+        """Serialize -> deserialize -> equality."""
+        cfg = _build_cfg()
+        restored = GenerativeModelConfig.model_validate(cfg.model_dump())
+        assert restored == cfg
+
+    def test_prediction_outputs_round_trip(self) -> None:
+        """A non-default ``prediction_outputs`` survives a round-trip."""
+        cfg = _build_cfg(
+            supports_variable_atoms=False,
+            consumes_fields=frozenset(),
+            produces_fields=frozenset({"positions"}),
+            prediction_outputs={"flow"},
+        )
+        restored = GenerativeModelConfig.model_validate(cfg.model_dump())
+        assert restored == cfg
+        assert restored.prediction_outputs == {"flow"}
+
+    def test_subclassed_config(self) -> None:
+        """A subclass carrying model-specific fields validates as a config."""
+        cfg = _ExtendedConfig(
+            supports_variable_atoms=False,
+            consumes_fields=frozenset(),
+            produces_fields=frozenset({"positions"}),
+            temperature=2.5,
+        )
+        assert isinstance(cfg, GenerativeModelConfig)
+        assert cfg.temperature == 2.5
 
 
 class TestGenerativeModelMixin:
@@ -282,6 +266,25 @@ class TestGenerativeModelMixin:
         with pytest.raises(TypeError, match="must set"):
             _BadModel()
 
+    def test_subclassed_config_passes_enforcement(self) -> None:
+        """The ``isinstance`` enforcement accepts config subclasses."""
+
+        class _ExtendedModel(nn.Module, GenerativeModelMixin):
+            def __init__(self) -> None:
+                super().__init__()
+                self.model_config = _ExtendedConfig(
+                    supports_variable_atoms=True,
+                    consumes_fields=frozenset(),
+                    produces_fields=frozenset({"positions"}),
+                )
+
+            def forward(self, data, *, x, t, xsc=None, **kwargs):  # noqa: ANN001
+                del data, x, t, xsc, kwargs
+                return x
+
+        model = _ExtendedModel()
+        assert model.model_config.temperature == 1.0
+
     def test_forward_returns_raw_velocity(self) -> None:
         """``forward`` returns a raw tensor (not ``ModelOutputs``)."""
         model = _DemoGenerativeModel()
@@ -301,27 +304,16 @@ class TestGenerativeModelMixin:
         assert "flow" in out
         assert out["flow"] is raw
 
-    def test_condition_replicates_by_num_samples(self) -> None:
-        """``condition`` tiles each conditioning graph ``num_samples`` times."""
+    def test_adapt_output_uses_prediction_outputs(self) -> None:
+        """``prediction_outputs`` drives the ``adapt_output`` key set."""
         model = _DemoGenerativeModel()
+        model.model_config = _build_cfg(prediction_outputs={"flow", "score"})
         batch = _make_batch(num_graphs=2)
-        cond = model.condition(batch, num_samples=3)
-        assert isinstance(cond, Batch)
-        assert cond.num_graphs == 6
-
-    def test_condition_single_atomic_data(self) -> None:
-        """``condition`` on an :class:`AtomicData` builds a replicated batch."""
-        model = _DemoGenerativeModel()
-        ad = _make_atomic_data()
-        cond = model.condition(ad, num_samples=4)
-        assert cond is not None
-        assert cond.num_graphs == 4
-
-    def test_condition_passes_through_tensor_containers(self) -> None:
-        """The default condition passes a TensorDict through unchanged."""
-        model = _DemoGenerativeModel()
-        container = TensorDict({"emb": torch.randn(4, 8)}, batch_size=[4])
-        assert model.condition(container, num_samples=3) is container
+        raw = {"flow": torch.randn(2, 1, 3), "score": torch.randn(2, 1, 3)}
+        out = model.adapt_output(raw, batch)
+        assert set(out) == {"flow", "score"}
+        assert out["flow"] is raw["flow"]
+        assert out["score"] is raw["score"]
 
     def test_to_batch_and_prior_template_hooks(self) -> None:
         """Optional ``to_batch`` and ``prior_template`` hooks work as documented."""
@@ -334,8 +326,19 @@ class TestGenerativeModelMixin:
         assert recon is batch
 
     def test_extra_repr_uses_config(self) -> None:
-        """``extra_repr`` summarizes the generative config."""
+        """``extra_repr`` summarizes the declared field contracts."""
         model = _DemoGenerativeModel()
         rep = model.extra_repr()
-        assert "create" in rep
-        assert "crystal" in rep
+        assert "consumes_fields" in rep
+        assert "positions" in rep
+        assert "produces_fields" in rep
+
+    def test_extra_repr_with_empty_declarations(self) -> None:
+        """``extra_repr`` renders empty declarations cleanly."""
+        model = _DemoGenerativeModel()
+        model.model_config = _build_cfg(
+            consumes_fields=frozenset(), produces_fields=frozenset({"positions"})
+        )
+        rep = model.extra_repr()
+        assert "consumes_fields={}" in rep
+        assert "positions" in rep

@@ -19,15 +19,17 @@ non-energy counterpart to :mod:`nvalchemi.models.base`. The mixin owns
 only the raw model output (predicted flow/velocity) from one forward
 call, plus the model↔:class:`~nvalchemi.data.Batch` translation methods.
 It owns no scheduler, sampler, or guidance; those compose on the
-:class:`~nvalchemi.gen.generator.AtomGenerator` via a
-:class:`~nvalchemi.gen.generator.GeneratingFunction`.
+:class:`~nvalchemi.gen.generator.AtomisticGenerator` via a
+:class:`~nvalchemi.gen.generator.GeneratingFunction`. The demo module
+also ships module-level factories
+(:func:`~nvalchemi.models.gen.demo.make_demo_gan_generate`,
+:func:`~nvalchemi.models.gen.demo.make_demo_diffusion_generate`) that
+build model-owning generating functions in a spec-capturable way.
 """
 
 from __future__ import annotations
 
-from nvalchemi.gen.enums import GenerativeIntent, Modality
 from nvalchemi.models.gen.base import (
-    ArtifactT,
     GenerativeModelConfig,
     GenerativeModelMixin,
 )
@@ -35,15 +37,16 @@ from nvalchemi.models.gen.demo import (
     DemoDiffusionModel,
     DemoGANModel,
     demo_nonparametric_generation,
+    make_demo_diffusion_generate,
+    make_demo_gan_generate,
 )
 
 __all__ = [
-    "ArtifactT",
     "DemoDiffusionModel",
     "DemoGANModel",
-    "GenerativeIntent",
     "GenerativeModelConfig",
     "GenerativeModelMixin",
-    "Modality",
     "demo_nonparametric_generation",
+    "make_demo_diffusion_generate",
+    "make_demo_gan_generate",
 ]

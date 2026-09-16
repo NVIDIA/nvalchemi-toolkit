@@ -15,29 +15,32 @@
 """Toolkit-level generative API surface.
 
 This package provides the abstract
-:class:`~nvalchemi.gen.generator.AtomGenerator` inference driver — a fixed
-condition → generate pipeline with lifecycle hooks
+:class:`~nvalchemi.gen.generator.AtomisticGenerator` inference driver — a fixed
+generate → map pipeline with lifecycle hooks
 (:class:`~nvalchemi.gen.stages.GenerationStage`,
-:class:`~nvalchemi.hooks.GenerationContext`).
+:class:`~nvalchemi.hooks.GenerationContext`) — plus sequential
+composition via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
+
+Spec-based construction lives in :mod:`nvalchemi.gen.spec`, which is
+deliberately not re-exported here: importing it pulls in the training spec
+machinery, so it stays an opt-in concrete-module import.
 """
 
 from __future__ import annotations
 
-from nvalchemi.gen.enums import GenerativeIntent, Modality
 from nvalchemi.gen.generator import (
-    AtomGenerator,
+    AtomisticGenerator,
+    ConditionFunction,
     GeneratingFunction,
-    default_condition,
+    MaterializationFunction,
 )
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext
 
 __all__ = [
-    "AtomGenerator",
+    "ConditionFunction",
     "GenerationContext",
     "GenerationStage",
-    "GenerativeIntent",
     "GeneratingFunction",
-    "Modality",
-    "default_condition",
+    "MaterializationFunction",
 ]

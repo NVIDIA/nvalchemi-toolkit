@@ -14,11 +14,12 @@
 # limitations under the License.
 """Tests for the demo generative models (:mod:`nvalchemi.models.gen.demo`).
 
-Covers mixin conformance and config validity, the defaults-everywhere path
-(a bare ``AtomGenerator(model=...)`` runs via the model's ``generate`` /
-``to_batch`` fallbacks), seeding reproducibility, PhysicsNeMo interop for
-the diffusion demo, and the nonparametric synthetic-structure source.
-CPU-only, GPU-free.
+Covers mixin conformance and config validity, the factory pattern
+(``make_demo_*_generate`` builds the model-owning generating function the
+:class:`~nvalchemi.gen.generator.AtomisticGenerator` consumes), seeding
+reproducibility, spec capture via the factory objects' own ``to_spec``,
+PhysicsNeMo interop for the diffusion demo, and the nonparametric
+synthetic-structure source. CPU-only, GPU-free.
 """
 
 from __future__ import annotations
@@ -26,62 +27,101 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.gen import AtomGenerator, GenerativeIntent, Modality
+from nvalchemi.gen import AtomisticGenerator
 from nvalchemi.models.gen import (
     DemoDiffusionModel,
     DemoGANModel,
     GenerativeModelMixin,
     demo_nonparametric_generation,
+    make_demo_diffusion_generate,
+    make_demo_gan_generate,
 )
 
 
 class TestDemoGANModel:
-    """``DemoGANModel``: mixin surface, config, and the bare-generator path."""
+    """``DemoGANModel``: mixin surface, config, and the factory path."""
 
     def test_mixin_conformance_and_config(self) -> None:
         """The demo satisfies the mixin contract and declares its config."""
         model = DemoGANModel()
         assert isinstance(model, GenerativeModelMixin)
-        assert model.model_config.output_artifact is Modality.POINT_CLOUD
-        assert model.model_config.intents == {
-            GenerativeIntent.CREATE,
-            GenerativeIntent.SAMPLE,
-        }
+        assert model.model_config.supports_variable_atoms is False
         assert model.model_config.consumes_fields == frozenset()
         assert model.model_config.produces_fields == frozenset(
             {"positions", "atomic_numbers"}
         )
+        assert model.model_config.prediction_outputs is None
 
-    def test_bare_generator_runs_via_model_fallbacks(self) -> None:
-        """``AtomGenerator(model=...)`` needs neither generating function nor
-        materialization argument — the model's ``generate``/``to_batch`` serve.
-        """
-        gen = AtomGenerator(model=DemoGANModel(num_atoms=4))
-        out = gen(num_samples_per_batch=3)
+    def test_factory_generator_runs(self) -> None:
+        """The factory-built generating function drives a bare ``AtomisticGenerator``."""
+        gen = AtomisticGenerator(
+            generator_func=make_demo_gan_generate(DemoGANModel(num_atoms=4))
+        )
+        out = gen(num_samples=3)
         assert isinstance(out, Batch)
         assert out.num_graphs == 3
         assert out["positions"].shape == (12, 3)
 
+    def test_condition_attribute_tiles_batch_input(self) -> None:
+        """The factory object's ``condition`` tiles a Batch by ``num_samples``."""
+        fn = make_demo_gan_generate(DemoGANModel(num_atoms=4))
+        source = demo_nonparametric_generation(num_samples=2, num_atoms=4)
+        tiled = fn.condition(source, num_samples=3)
+        assert isinstance(tiled, Batch)
+        assert tiled.num_graphs == 6
+
+    def test_driver_tiles_conditioning_batch_via_attribute(self) -> None:
+        """Through the driver, a Batch input yields ``num_samples`` per graph."""
+        gen = AtomisticGenerator(
+            generator_func=make_demo_gan_generate(DemoGANModel(num_atoms=4))
+        )
+        source = demo_nonparametric_generation(num_samples=2, num_atoms=4)
+        out = gen(source, num_samples=3)
+        assert out.num_graphs == 6
+
+    def test_factory_object_carries_device_and_fields(self) -> None:
+        """The factory object exposes the attributes the driver reads."""
+        fn = make_demo_gan_generate(DemoGANModel())
+        assert fn.device == torch.device("cpu")
+        assert callable(fn.condition)
+        assert fn.consumes_fields == frozenset()
+        assert fn.produces_fields == frozenset({"positions", "atomic_numbers"})
+        gen = AtomisticGenerator(generator_func=fn)
+        # The defaults chain picked the declarations up at construction.
+        assert gen.consumes_fields == frozenset()
+        assert gen.produces_fields == frozenset({"positions", "atomic_numbers"})
+
     def test_seeded_sessions_reproduce(self) -> None:
         """Same model + same seed across sessions gives identical draws."""
         model = DemoGANModel()
-        gen = AtomGenerator(model=model, seed=7)
+        gen = AtomisticGenerator(generator_func=make_demo_gan_generate(model), seed=7)
         with gen:
-            first = gen.sample(num_samples_per_batch=2)
+            first = gen.sample(num_samples=2)
         with gen:
-            second = gen.sample(num_samples_per_batch=2)
+            second = gen.sample(num_samples=2)
         assert torch.equal(first["positions"], second["positions"])
 
 
 class TestDemoDiffusionModel:
     """``DemoDiffusionModel``: the physicsnemo-convention forward and sampler."""
 
-    def test_bare_generator_runs_via_model_fallbacks(self) -> None:
-        """The built-in EDM Euler loop drives a bare ``AtomGenerator``."""
-        gen = AtomGenerator(model=DemoDiffusionModel(num_atoms=5))
-        out = gen(num_samples_per_batch=2, num_steps=2)
+    def test_factory_generator_runs(self) -> None:
+        """The built-in EDM Euler loop drives a bare ``AtomisticGenerator``."""
+        gen = AtomisticGenerator(
+            generator_func=make_demo_diffusion_generate(DemoDiffusionModel(num_atoms=5))
+        )
+        out = gen(num_samples=2, num_steps=2)
         assert out.num_graphs == 2
         assert out["positions"].shape == (10, 3)
+
+    def test_driver_tiles_conditioning_batch_via_attribute(self) -> None:
+        """The diffusion factory's ``condition`` tiles through the driver."""
+        gen = AtomisticGenerator(
+            generator_func=make_demo_diffusion_generate(DemoDiffusionModel(num_atoms=5))
+        )
+        source = demo_nonparametric_generation(num_samples=2, num_atoms=5)
+        out = gen(source, num_samples=3, num_steps=2)
+        assert out.num_graphs == 6
 
     def test_forward_physicsnemo_compatible(self) -> None:
         """The demo wraps in ``EDMPreconditioner`` and runs ``sample`` — the
@@ -101,11 +141,13 @@ class TestDemoDiffusionModel:
     def test_seeded_sessions_reproduce(self) -> None:
         """All randomness is the initial noise, so seeds reproduce draws."""
         model = DemoDiffusionModel()
-        gen = AtomGenerator(model=model, seed=3)
+        gen = AtomisticGenerator(
+            generator_func=make_demo_diffusion_generate(model), seed=3
+        )
         with gen:
-            first = gen.sample(num_samples_per_batch=2)
+            first = gen.sample(num_samples=2)
         with gen:
-            second = gen.sample(num_samples_per_batch=2)
+            second = gen.sample(num_samples=2)
         assert torch.equal(first["positions"], second["positions"])
 
 
@@ -139,3 +181,11 @@ class TestDemoNonparametricGeneration:
         )
         assert torch.equal(a["positions"], b["positions"])
         assert torch.equal(a["atomic_numbers"], b["atomic_numbers"])
+
+    def test_batch_passthrough_source(self) -> None:
+        """As a ``generator_func`` it returns a ``Batch`` — no mapping needed."""
+        gen = AtomisticGenerator(generator_func=demo_nonparametric_generation)
+        source = demo_nonparametric_generation(num_samples=2)
+        out = gen(source)
+        assert isinstance(out, Batch)
+        assert out.num_graphs == 2
