@@ -178,7 +178,6 @@ idpp = NEB(
     model=IDPPModel(),
     fmax=0.1,
     n_steps=100,
-    optimizer_kwargs={"dt": 0.01, "maxstep": 0.03},
 )
 idpp_band = idpp.run(idpp_band)
 
@@ -307,9 +306,9 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 # ``spring=0.1`` uses the same spring constant for every link in the band. For
 # more advanced spring schemes, provide a custom
 # :class:`~nvalchemi.dynamics.paths.SpringConfig` to compute per-link values.
-# ``optimizer_kwargs`` configure the internal
-# :class:`~nvalchemi.dynamics.FIRE2` stages, while ``n_steps=500`` limits the
-# total number of optimization steps.
+# The internal :class:`~nvalchemi.dynamics.FIRE2` stages use the NEB-tuned
+# optimizer defaults, while ``n_steps=500`` limits the total number of
+# optimization steps.
 #
 # Passing ``diagnostics_log_path`` enables a
 # :class:`~nvalchemi.dynamics.paths.hooks.PathDiagnosticsHook` together with a
@@ -341,7 +340,6 @@ neb = NEB(
     fmax=0.05,
     n_steps=500,
     climbing=ClimbingImageConfig(regular_fmax=0.5),
-    optimizer_kwargs={"dt": 0.01, "maxstep": 0.03},
     diagnostics_log_path=NEB_LOG,
 )
 neb_band = neb.run(neb_band)
