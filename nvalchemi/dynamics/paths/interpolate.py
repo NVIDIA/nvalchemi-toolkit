@@ -22,7 +22,10 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.paths._geometry import minimum_image_displacement
+from nvalchemi.dynamics.paths._geometry import (
+    minimum_image_displacement,
+    prepare_mic,
+)
 
 _CELL_RTOL = 1e-5
 _CELL_ATOL = 1e-6
@@ -105,14 +108,10 @@ def _validate_endpoint_geometry(
         and not torch.allclose(cell, final_cell, rtol=_CELL_RTOL, atol=_CELL_ATOL)
     ):
         raise ValueError("Paired endpoints must have the same cell")
-    periodic = torch.any(pbc, dim=1)
-    if torch.any(periodic):
+    if torch.any(pbc):
         if cell is None:
             raise ValueError("Periodic endpoints must define a cell")
-        try:
-            torch.linalg.inv(cell[periodic])
-        except RuntimeError as error:
-            raise ValueError("Periodic endpoint cells must be invertible") from error
+        prepare_mic(cell, pbc)
     return cell, pbc
 
 
