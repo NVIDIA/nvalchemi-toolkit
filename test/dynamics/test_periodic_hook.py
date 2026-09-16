@@ -103,6 +103,27 @@ class TestWrapPeriodicHook:
         )
         assert torch.allclose(batch.positions, expected, atol=1e-5)
 
+    def test_wraps_only_active_graphs(self, device: str) -> None:
+        """Leave positions in inactive substages unwrapped."""
+        batch = _make_periodic_batch(
+            n_graphs=2, atoms_per_graph=2, cell_size=10.0, device=device
+        )
+        batch["positions"] = torch.tensor(
+            [[12.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [15.0, 0.0, 0.0], [-4.0, 0.0, 0.0]],
+            device=device,
+        )
+        ctx = _make_ctx(batch, _make_dynamics())
+        ctx.active_graph_mask = torch.tensor([True, False], device=device)
+
+        WrapPeriodicHook()(ctx, DynamicsStage.AFTER_POST_UPDATE)
+
+        assert torch.allclose(
+            batch.positions[:2, 0], torch.tensor([2.0, 9.0], device=device)
+        )
+        assert torch.allclose(
+            batch.positions[2:, 0], torch.tensor([15.0, -4.0], device=device)
+        )
+
     def test_already_wrapped_is_idempotent(self, device: str) -> None:
         """Verify wrapping positions already inside the cell is a no-op."""
         batch = _make_periodic_batch(cell_size=10.0, device=device)

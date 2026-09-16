@@ -121,6 +121,10 @@ class BiasedPotentialHook:
     * The ``bias_fn`` is called **after** the model forward pass, so
       it has access to the model-computed forces and energy via the
       batch if needed (e.g. for force-matching penalties).
+    * When only some graphs are active, ``bias_fn`` is still called with the
+      entire batch and must return energies and forces for the entire batch.
+      The hook adds those values only to the active graphs and their atoms,
+      while inactive graphs remain unchanged.
     * Because the bias modifies forces in-place, it interacts correctly
       with :class:`MaxForceClampHook` — register the clamp hook
       **after** the bias hook to clamp the total (model + bias) forces.
@@ -147,10 +151,12 @@ class BiasedPotentialHook:
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Compute and add the bias potential."""
-        self._apply_bias(ctx.batch)
+        self._apply_bias(ctx.batch, getattr(ctx, "active_graph_mask", None))
 
-    def _apply_bias(self, batch: Batch) -> None:
-        """Apply bias potential to the batch."""
+    def _apply_bias(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
+        """Apply bias potential to all or only the active graphs in ``batch``."""
         bias_energy, bias_forces = self.bias_fn(batch)
 
         if not torch.compiler.is_compiling():
@@ -164,6 +170,17 @@ class BiasedPotentialHook:
                     f"bias_forces shape {bias_forces.shape} does not match "
                     f"batch.forces shape {batch.forces.shape}"
                 )
+
+        if active_graph_mask is not None:
+            active_atoms = active_graph_mask[batch.batch_idx]
+            bias_energy = torch.where(
+                active_graph_mask.unsqueeze(-1),
+                bias_energy,
+                torch.zeros_like(bias_energy),
+            )
+            bias_forces = torch.where(
+                active_atoms.unsqueeze(-1), bias_forces, torch.zeros_like(bias_forces)
+            )
 
         if self.inplace:
             batch.energy.add_(bias_energy)

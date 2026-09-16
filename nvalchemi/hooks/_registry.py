@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
@@ -178,7 +179,12 @@ class HookRegistryMixin:
                 return True
         return False
 
-    def _call_hooks(self, stage: Enum, batch: Batch | None) -> None:
+    def _call_hooks(
+        self,
+        stage: Enum,
+        batch: Batch | None,
+        **context_kwargs: Any,
+    ) -> None:
         """Call hooks registered for the given stage, gated by frequency.
 
         Hooks fire when ``self.step_count % hook.frequency == 0``.
@@ -192,8 +198,10 @@ class HookRegistryMixin:
             Current workflow stage.
         batch : Batch | None
             Current batch being processed, if available.
+        **context_kwargs
+            Workflow-specific fields forwarded to :meth:`_build_context`.
         """
-        ctx = self._build_context(batch)
+        ctx = self._build_context(batch, **context_kwargs)
         for hook in self.hooks:
             runs_on_stage = getattr(hook, "_runs_on_stage", None)
             if runs_on_stage is not None:
