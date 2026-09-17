@@ -213,6 +213,22 @@ print(constraint_batch.constraint_features.shape)  # torch.Size([5, 8])
 The two systems contain four and one constraint records. These counts do not need to
 match their atom or edge counts.
 
+Registering a level defines its cardinality semantics; it does not automatically
+assign arbitrary tensor fields to that level. There are three ways to classify a
+custom field:
+
+1. For a field already present on each `AtomicData`, call
+   `schema.set("constraint_features", "constraints")` before constructing the
+   batch.
+2. Pass `field_levels={"constraint_features": "constraints"}` to
+   {py:meth}`~nvalchemi.data.Batch.from_data_list`.
+3. Add values after construction with
+   `batch.add_key("constraint_features", values, level="constraints")`, as in the
+   example above.
+
+All three routes record field ownership in the batch-owned schema. The explicit
+`field_levels` form is useful when the input objects should remain unchanged.
+
 ### Storing a Hessian
 
 An atom-by-atom Hessian can use a separate product level whose left and right parents
@@ -425,10 +441,13 @@ metadata but no element-buffer entry in `level_capacities`. Use
 {py:meth}`~nvalchemi.data.Batch.empty_like` to create an empty buffer that
 preserves an existing batch's complete materialized layout and capacities.
 
-The current segmented buffer kernels copy `float32` custom segmented and product
-payloads. Other custom payload dtypes are rejected before the buffer is modified.
-This restriction does not change the dtype support of ordinary, tightly packed
-`Batch` objects.
+The generic buffer kernels support `bool`, `float32`, `float64`, `int32`, and
+`int64` payloads, and built-in fields may use any of those dtypes. Custom uniform
+levels use the same set. For custom segmented and product levels,
+{py:meth}`~nvalchemi.data.Batch.put` currently accepts only `float32` payloads.
+Unsupported or mismatched dtypes are rejected before any batch group is modified.
+This narrower buffer-copy policy does not change the dtype support of ordinary,
+tightly packed `Batch` objects.
 
 ### Filling the buffer with `put`
 
@@ -479,20 +498,55 @@ This version applies only to that metadata; it is not a store-wide format versio
 A batch containing only the built-in levels retains the existing `core/`, `custom/`,
 and built-in pointer layout and does not create custom-level metadata.
 
+The example below writes two ordinary systems, then adds a variable-length
+`constraints` field. The pointer is a complete physical-store prefix pointer: the
+two systems own two and three constraint rows, respectively.
+
 ```python
+import torch
+
 from nvalchemi.data import (
+    AtomicData,
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    Batch,
     Dataset,
+    LevelSchema,
 )
 
+systems = [
+    AtomicData(
+        positions=torch.zeros(num_atoms, 3),
+        atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+    )
+    for num_atoms in (2, 3)
+]
+
 writer = AtomicDataZarrWriter("features.zarr")
-writer.write(hessian_batch)
+writer.write(Batch.from_data_list(systems))
+
+schema = LevelSchema()
+schema.add_level("constraints", segmented=True)
+constraint_ptr = torch.tensor([0, 2, 5], dtype=torch.int64)
+constraint_values = torch.arange(40, dtype=torch.float32).reshape(5, 8)
+writer.add_custom(
+    "constraint_features",
+    constraint_values,
+    "constraints",
+    attr_map=schema,
+    level_ptrs={"constraints": constraint_ptr},
+)
 
 reader = AtomicDataZarrReader("features.zarr")
 stored_schema = reader.level_schema
-dataset = Dataset(reader, device="cuda")
+dataset = Dataset(reader, device="cpu")
 loaded_batch = dataset.load_batches([[0, 1]])[0]
+
+print(loaded_batch.level_ptr("constraints").tolist())  # [0, 2, 5]
+print(loaded_batch.constraint_features.shape)  # torch.Size([5, 8])
+print(loaded_batch.get_data(1).constraint_features.shape)  # torch.Size([3, 8])
+print(loaded_batch.get_data(1).constraint_features[0].tolist())
+# [16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0]
 ```
 
 `reader.level_schema` returns an independent schema. `Dataset` and

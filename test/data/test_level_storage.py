@@ -713,6 +713,66 @@ class TestUniformLevelStorage:
         assert dest["a"].squeeze(1).tolist() == [99.0, 1.0, 2.0, 3.0]
         assert dest["b"].squeeze(1).tolist() == [999.0, 10.0, 20.0, 30.0]
 
+    @pytest.mark.parametrize(
+        ("dtype", "values"),
+        [
+            (torch.bool, [True, False, True]),
+            (torch.float32, [1.0, 2.0, 3.0]),
+            (torch.float64, [1.0, 2.0, 3.0]),
+            (torch.int32, [1, 2, 3]),
+            (torch.int64, [1, 2, 3]),
+        ],
+    )
+    def test_put_and_defrag_support_all_buffer_dtypes(self, dtype, values):
+        src = UniformLevelStorage(
+            data={"value": torch.tensor(values, dtype=dtype).reshape(-1, 1)},
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"value": torch.zeros(3, 1, dtype=dtype)},
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(3, dtype=torch.bool)
+
+        dest.put(src, torch.tensor([True, False, True]), copied_mask=copied)
+
+        torch.testing.assert_close(dest["value"][:2, 0], src["value"][[0, 2], 0])
+        src.defrag(copied)
+        torch.testing.assert_close(
+            src["value"][:1, 0], torch.tensor([values[1]], dtype=dtype)
+        )
+
+    def test_put_rejects_dtypes_before_payload_or_mask_mutation(self):
+        src = UniformLevelStorage(
+            data={"value": torch.ones(2, 1, dtype=torch.float32)},
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"value": torch.zeros(2, 1, dtype=torch.float64)},
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+        dest_mask = torch.zeros(2, dtype=torch.bool)
+
+        with pytest.raises(
+            ValueError,
+            match="Field 'value' has incompatible dtypes: torch.float64 vs torch.float32",
+        ):
+            dest.put(
+                src,
+                torch.ones(2, dtype=torch.bool),
+                copied_mask=copied,
+                dest_mask=dest_mask,
+            )
+
+        assert copied.tolist() == [False, False]
+        assert dest_mask.tolist() == [False, False]
+        assert dest["value"].eq(0).all()
+
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
         device = "cpu"
@@ -947,6 +1007,22 @@ class TestSegmentedLevelStorage:
         with pytest.raises(OverflowError, match=match):
             SegmentedLevelStorage(data=None, device="cpu", validate=False, **kwargs)
 
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"segment_lengths": [-1]}, "Segment lengths cannot be negative"),
+            (
+                {"segment_lengths": [0], "batch_ptr": torch.tensor([0, -1])},
+                "batch_ptr values cannot be negative",
+            ),
+        ],
+    )
+    def test_segment_metadata_rejects_negative_values_without_validation(
+        self, kwargs, match
+    ):
+        with pytest.raises(ValueError, match=match):
+            SegmentedLevelStorage(data=None, device="cpu", validate=False, **kwargs)
+
     def test_fieldless_buffer_put_rejects_overflow_without_mutation(self):
         maximum = torch.iinfo(torch.int32).max
         source = SegmentedLevelStorage(
@@ -1081,6 +1157,31 @@ class TestSegmentedLevelStorage:
         sub = s[torch.tensor([0, 2])]
         assert len(sub) == 2
         assert sub.num_elements() == 2 + 6
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is unavailable"
+                ),
+            ),
+        ],
+    )
+    def test_empty_segment_selection_returns_without_pointer_indexing(self, device):
+        storage = SegmentedLevelStorage(
+            data={"x": torch.ones(3, 1, device=device)},
+            segment_lengths=[1, 2],
+            device=device,
+            validate=False,
+        )
+
+        selected = storage[torch.tensor([], dtype=torch.int64, device=device)]
+
+        assert len(selected) == 0
+        assert selected["x"].numel() == 0
 
     def test_batch_ptr_lazy(self):
         s = SegmentedLevelStorage(
@@ -1318,6 +1419,123 @@ class TestSegmentedLevelStorage:
         torch.testing.assert_close(
             src["x"][:2], torch.tensor([[2.0], [3.0]], device=device)
         )
+
+    @pytest.mark.parametrize(
+        ("dtype", "values"),
+        [
+            (torch.bool, [True, False, True]),
+            (torch.float32, [1.0, 2.0, 3.0]),
+            (torch.float64, [1.0, 2.0, 3.0]),
+            (torch.int32, [1, 2, 3]),
+            (torch.int64, [1, 2, 3]),
+        ],
+    )
+    def test_put_and_defrag_support_all_buffer_dtypes(self, dtype, values):
+        src = SegmentedLevelStorage(
+            data={"value": torch.tensor(values, dtype=dtype).reshape(-1, 1)},
+            segment_lengths=[1, 2],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={"value": torch.zeros(3, 1, dtype=dtype)},
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        dest.put(src, torch.tensor([True, False]), copied_mask=copied)
+
+        torch.testing.assert_close(dest["value"][:1], src["value"][:1])
+        assert dest.segment_lengths.tolist() == [1]
+        src.defrag(copied)
+        torch.testing.assert_close(
+            src["value"][:2, 0], torch.tensor(values[1:], dtype=dtype)
+        )
+        assert src.segment_lengths.tolist() == [2]
+
+    def test_put_keeps_multiple_segmented_fields_aligned(self):
+        src = SegmentedLevelStorage(
+            data={
+                "ids": torch.tensor([[11], [21], [22]], dtype=torch.int64),
+                "values": torch.tensor([[1.5], [2.5], [3.5]], dtype=torch.float64),
+            },
+            segment_lengths=[1, 2],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={
+                "ids": torch.zeros(3, 1, dtype=torch.int64),
+                "values": torch.zeros(3, 1, dtype=torch.float64),
+            },
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        dest.put(src, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [True, True]
+        assert dest.segment_lengths.tolist() == [1, 2]
+        torch.testing.assert_close(dest["ids"], src["ids"])
+        torch.testing.assert_close(dest["values"], src["values"])
+
+    def test_put_rejects_later_segmented_field_before_mutation(self):
+        src = SegmentedLevelStorage(
+            data={
+                "first": torch.tensor([[1.0], [2.0]]),
+                "mismatch": torch.tensor([[3.0], [4.0]]),
+            },
+            segment_lengths=[1, 1],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={
+                "first": torch.zeros(2, 1),
+                "mismatch": torch.zeros(2, 1, dtype=torch.float64),
+            },
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        with pytest.raises(
+            ValueError, match="Field 'mismatch' has incompatible dtypes"
+        ):
+            dest.put(src, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False, False]
+        assert dest.segment_lengths.tolist() == []
+        assert dest["first"].eq(0).all()
+
+    def test_defrag_rejects_unsupported_dtype_before_compacting_first_field(self):
+        storage = SegmentedLevelStorage(
+            data={
+                "first": torch.tensor([[1.0], [2.0]]),
+                "unsupported": torch.tensor([[1.0], [2.0]], dtype=torch.float16),
+            },
+            segment_lengths=[1, 1],
+            device="cpu",
+            validate=False,
+        )
+        before = storage["first"].clone()
+
+        with pytest.raises(
+            ValueError,
+            match="Field 'unsupported' dtype torch.float16 is not supported by buffer kernels",
+        ):
+            storage.defrag(torch.tensor([True, False]))
+
+        torch.testing.assert_close(storage["first"], before)
+        assert storage.segment_lengths.tolist() == [1, 1]
 
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""

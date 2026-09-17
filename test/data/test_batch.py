@@ -21,6 +21,7 @@ from datetime import timedelta
 
 import pytest
 import torch
+from tensordict import TensorDict
 from torch import distributed as dist
 from torch import multiprocessing as mp
 
@@ -1385,6 +1386,45 @@ class TestBatchMutation:
         assert batch.get_data(0).pair_features.shape == (2, 4, 1)
         assert batch.get_data(1).pair_features.shape == (3, 1, 1)
 
+    def test_add_key_product_rejects_insufficient_rank(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="rank >= 2"):
+            batch.add_key("pair_features", [torch.zeros(4)], level="atom_atom")
+
+    def test_add_key_self_product_rejects_unequal_axes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="requires equal left and right"):
+            batch.add_key("pair_features", [torch.zeros(2, 3, 1)], level="atom_atom")
+
+    def test_add_key_product_rejects_parent_cardinality_mismatch(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="do not match parent 'atoms'"):
+            batch.add_key("pair_features", [torch.zeros(3, 4, 1)], level="atom_sample")
+
+    def test_add_key_product_rejects_incompatible_payload_shapes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        with pytest.raises(ValueError, match="incompatible trailing shapes"):
+            batch.add_key(
+                "pair_features",
+                [torch.zeros(2, 2, 1), torch.zeros(3, 3, 2)],
+                level="atom_atom",
+            )
+
     def test_add_key_custom_dtype_validation_precedes_storage_mutation(self):
         schema = LevelSchema()
         schema.add_level("samples", segmented=True)
@@ -2184,6 +2224,30 @@ class TestBatchPutDefrag:
         assert group._data["metadata_values"].shape == (5, 1)
         assert len(group) == 0
 
+    def test_empty_atomic_data_template_preserves_custom_float64_uniform_payload(self):
+        schema = _custom_uniform_schema()
+        schema.set("metadata_values", "metadata", dtype=torch.float64)
+        template = AtomicData(
+            positions=torch.zeros(2, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([1, 8], dtype=torch.int64),
+        )
+        template.metadata_values = torch.tensor([[3.5]], dtype=torch.float64)
+        source = Batch.from_data_list([template], attr_map=schema)
+        carried_template = source.get_data(0)
+        buffer = Batch.empty(
+            num_systems=1,
+            num_nodes=2,
+            num_edges=0,
+            template=carried_template,
+        )
+
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+
+        assert buffer.metadata_values.dtype == torch.float64
+        torch.testing.assert_close(
+            buffer.get_data(0).metadata_values, carried_template.metadata_values
+        )
+
     @pytest.mark.parametrize(
         "capacities, error",
         [
@@ -2393,6 +2457,110 @@ class TestBatchPutDefrag:
         assert buffer.metadata_values[1].item() == 20.0
         assert buffer.energy[0].item() == 0.0
         assert buffer.energy[2].item() == 0.0
+
+    def test_put_and_defrag_preserve_mixed_builtin_buffer_dtypes(self):
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(3)
+        first.atomic_numbers = torch.tensor([1, 6], dtype=torch.int64)
+        second.atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.int64)
+        source = Batch.from_data_list([first, second])
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=5,
+            num_edges=0,
+            template=source,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.tensor([True, False]), copied_mask=copied)
+
+        assert copied.tolist() == [True, False]
+        torch.testing.assert_close(buffer.atomic_numbers[:2], first.atomic_numbers)
+        torch.testing.assert_close(buffer.positions[:2], first.positions)
+        source.defrag(copied)
+        torch.testing.assert_close(source.atomic_numbers[:3], second.atomic_numbers)
+        torch.testing.assert_close(source.positions[:3], second.positions)
+
+    def test_put_omits_paired_fieldless_uniform_schema_group(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        source = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+        )
+        source_metadata = UniformLevelStorage(
+            data=None, device="cpu", attr_map=schema, validate=False
+        )
+        source_metadata._data = TensorDict({}, batch_size=[2], device="cpu")
+        buffer_metadata = UniformLevelStorage(
+            data=None, device="cpu", attr_map=schema, validate=False
+        )
+        buffer_metadata._data = TensorDict({}, batch_size=[2], device="cpu")
+        source._storage.groups["metadata"] = source_metadata
+        buffer._storage.groups["metadata"] = buffer_metadata
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [True, True]
+        assert buffer.num_graphs == 2
+        assert buffer._storage.groups["metadata"]._data.is_empty()
+
+    def test_put_rejects_builtin_dtype_mismatch_before_any_group_mutates(self):
+        source = Batch.from_data_list([_minimal_atomic_data(2)])
+        source._storage.groups["atoms"]._data["atomic_numbers"] = torch.ones(
+            2, dtype=torch.int32
+        )
+        buffer = Batch.empty(
+            num_systems=1,
+            num_nodes=2,
+            num_edges=0,
+            template=source,
+        )
+        buffer._storage.groups["atoms"]._data["atomic_numbers"] = torch.zeros(
+            2, dtype=torch.int64
+        )
+        copied = torch.zeros(1, dtype=torch.bool)
+        before_positions = buffer.positions.clone()
+        before_ptr = buffer.batch_ptr.clone()
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "Level 'atoms' field 'atomic_numbers' has incompatible buffer dtypes: "
+                "torch.int64 vs torch.int32"
+            ),
+        ):
+            buffer.put(source, torch.ones(1, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False]
+        torch.testing.assert_close(buffer.positions, before_positions)
+        torch.testing.assert_close(buffer.batch_ptr, before_ptr)
+
+    def test_defrag_prevalidates_all_groups_before_compacting_any_payload(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(2)])
+        batch._storage.groups["atoms"]._data["atomic_numbers"] = torch.ones(
+            4, dtype=torch.float16
+        )
+        before_positions = batch.positions.clone()
+        before_ptr = batch.batch_ptr.clone()
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "Level 'atoms' field 'atomic_numbers' dtype torch.float16 is not "
+                "supported by buffer kernels"
+            ),
+        ):
+            batch.defrag(torch.tensor([True, False]))
+
+        torch.testing.assert_close(batch.positions, before_positions)
+        torch.testing.assert_close(batch.batch_ptr, before_ptr)
 
     def test_put_and_defrag_support_product_and_fieldless_parent(self):
         schema = _custom_buffer_schema(fieldless_parent=True)

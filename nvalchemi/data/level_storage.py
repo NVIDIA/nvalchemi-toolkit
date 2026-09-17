@@ -591,7 +591,38 @@ class LevelSchema:
 # warp-accelerated helper
 # ---------------------------------------------------------------------------
 _INT32_MAX: int = 2**31 - 1
-_INT32_MIN: int = -(2**31)
+
+
+def _validate_buffer_field_pairs(
+    destination: TensorDict,
+    source: TensorDict,
+) -> list[str]:
+    """Validate participating buffer fields and return them in destination order."""
+    fields = [key for key in destination.keys() if key in source.keys()]
+    for key in fields:
+        dest_dtype = destination[key].dtype
+        source_dtype = source[key].dtype
+        if dest_dtype != source_dtype:
+            raise ValueError(
+                f"Field '{key}' has incompatible dtypes: {dest_dtype} vs {source_dtype}"
+            )
+        if dest_dtype not in TORCH_TO_WP:
+            raise ValueError(
+                f"Field '{key}' dtype {dest_dtype} is not supported by buffer kernels"
+            )
+    return fields
+
+
+def _validate_buffer_field_dtypes(data: TensorDict) -> list[str]:
+    """Validate buffer field dtypes and return fields in storage order."""
+    fields = list(data.keys())
+    for key in fields:
+        dtype = data[key].dtype
+        if dtype not in TORCH_TO_WP:
+            raise ValueError(
+                f"Field '{key}' dtype {dtype} is not supported by buffer kernels"
+            )
+    return fields
 
 
 def _checked_segment_metadata(
@@ -611,15 +642,35 @@ def _checked_segment_metadata(
     lengths64 = to_tensor(segment_lengths, device=device).to(torch.int64)
     if lengths64.ndim != 1:
         raise ValueError("segment_lengths must be one-dimensional")
-    if (lengths64 > _INT32_MAX).any() or (lengths64 < _INT32_MIN).any():
-        raise OverflowError(
-            f"Segment length exceeds signed int32 range ({_INT32_MIN}, {_INT32_MAX})"
+    cumulative64 = torch.cumsum(lengths64, dim=0, dtype=torch.int64)
+    invalid_lengths = (
+        (lengths64 < 0) | (lengths64 > _INT32_MAX) | (cumulative64 > _INT32_MAX)
+    ).any()
+    supplied64: Tensor | None = None
+    invalid_metadata = invalid_lengths
+    if batch_ptr is not None:
+        supplied64 = to_tensor(batch_ptr, device=device).to(torch.int64)
+        if supplied64.ndim != 1:
+            raise ValueError("batch_ptr must be one-dimensional")
+        invalid_metadata = (
+            invalid_metadata | ((supplied64 < 0) | (supplied64 > _INT32_MAX)).any()
         )
 
-    cumulative64 = torch.cumsum(lengths64, dim=0, dtype=torch.int64)
-    if (cumulative64 > _INT32_MAX).any() or (cumulative64 < _INT32_MIN).any():
+    if bool(invalid_metadata):
+        if bool((lengths64 < 0).any()):
+            raise ValueError(f"Segment lengths cannot be negative: {lengths64}")
+        if bool((lengths64 > _INT32_MAX).any()):
+            raise OverflowError(
+                f"Segment length exceeds signed int32 maximum ({_INT32_MAX})"
+            )
+        if bool((cumulative64 > _INT32_MAX).any()):
+            raise OverflowError(
+                f"Segment pointer exceeds signed int32 maximum ({_INT32_MAX})"
+            )
+        if supplied64 is not None and bool((supplied64 < 0).any()):
+            raise ValueError(f"batch_ptr values cannot be negative: {supplied64}")
         raise OverflowError(
-            f"Segment pointer exceeds signed int32 range ({_INT32_MIN}, {_INT32_MAX})"
+            f"Supplied batch_ptr exceeds signed int32 maximum ({_INT32_MAX})"
         )
     logical_ptr = torch.cat(
         [
@@ -628,14 +679,7 @@ def _checked_segment_metadata(
         ]
     )
 
-    if batch_ptr is not None:
-        supplied64 = to_tensor(batch_ptr, device=device).to(torch.int64)
-        if supplied64.ndim != 1:
-            raise ValueError("batch_ptr must be one-dimensional")
-        if (supplied64 > _INT32_MAX).any() or (supplied64 < _INT32_MIN).any():
-            raise OverflowError(
-                f"Supplied batch_ptr exceeds signed int32 range ({_INT32_MIN}, {_INT32_MAX})"
-            )
+    if supplied64 is not None:
         return lengths64.to(torch.int32), supplied64.to(torch.int32)
 
     capacity = max(batch_ptr_capacity or 0, logical_ptr.numel())
@@ -739,14 +783,22 @@ def _expand_segments_warp(
 
     kernel = _expand_segments_overloads[wp_dtype]
 
+    if seg_idx.numel() == 0:
+        return torch.empty(0, device=device, dtype=index_dtype)
+
     starts = batch_ptr[seg_idx].to(index_dtype)
     ends = batch_ptr[seg_idx + 1].to(index_dtype)
     lengths = ends - starts
 
+    if bool(((starts < 0) | (ends < 0)).any()):
+        raise ValueError("batch_ptr values cannot be negative")
+    if bool((lengths < 0).any()):
+        raise ValueError("Segment lengths cannot be negative")
+
     cumlen64 = torch.cumsum(lengths, dim=0, dtype=torch.int64)
     total = int(cumlen64[-1].item())
     if total > _INT32_MAX:
-        raise ValueError(
+        raise OverflowError(
             f"Total element count {total} exceeds int32 maximum "
             f"({_INT32_MAX}); the Warp kernel uses int32 loop bounds"
         )
@@ -1372,12 +1424,11 @@ class UniformLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
-        Copies attributes whose dtypes are supported by the buffer kernels
-        (``bool``, ``float32``, ``float64``, ``int32``, or ``int64``); only as
-        many rows as fit in this storage's empty slots (dest_mask[i] False =
-        empty). Uses Warp buffer kernels (no host sync). If copied_mask is
-        provided, it is updated in place with True for each row that was
-        copied.
+        Supported payload dtypes are bool, float32, float64, int32, and int64;
+        source and destination dtypes must match. Only as many rows as fit in
+        this storage's empty slots (dest_mask[i] False = empty) are copied.
+        Uses Warp buffer kernels. If copied_mask is provided, it is updated in
+        place with True for each row that was copied.
 
         Parameters
         ----------
@@ -1397,14 +1448,20 @@ class UniformLevelStorage(BaseLevelStorage):
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
-        if not common:
+        fields = _validate_buffer_field_pairs(self._data, src._data)
+        if not fields:
             raise ValueError("put requires at least one common attribute")
         n_src = len(src)
         dest_capacity = self._data.shape[0]
         if mask.shape[0] != n_src:
             raise ValueError(f"mask shape {mask.shape[0]} != len(src) {n_src}")
         mask = mask.to(device=self.device, dtype=torch.bool)
+        for key in fields:
+            dest_t = self._data[key]
+            if dest_t.shape[0] < dest_capacity:
+                raise ValueError(
+                    f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
+                )
         if copied_mask is not None:
             if copied_mask.shape[0] != n_src:
                 raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
@@ -1421,14 +1478,18 @@ class UniformLevelStorage(BaseLevelStorage):
                     f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
                 )
         initial_dest_mask = dest_mask.clone()
-        final_dest_mask: Tensor | None = None
-        for key in common:
+        first_key, *remaining_keys = fields
+        first_dest_mask = initial_dest_mask.clone()
+        put_masked_per_system(
+            src._data[first_key],
+            mask,
+            self._data[first_key],
+            first_dest_mask,
+            out_mask,
+        )
+        for key in remaining_keys:
             src_t = src._data[key]
             dest_t = self._data[key]
-            if dest_t.shape[0] < dest_capacity:
-                raise ValueError(
-                    f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
-                )
             field_dest_mask = initial_dest_mask.clone()
             field_copied_mask = out_mask.clone()
             put_masked_per_system(
@@ -1438,13 +1499,7 @@ class UniformLevelStorage(BaseLevelStorage):
                 field_dest_mask,
                 field_copied_mask,
             )
-            if final_dest_mask is None:
-                final_dest_mask = field_dest_mask
-                out_mask.copy_(field_copied_mask)
-            elif not torch.equal(out_mask, field_copied_mask):
-                raise RuntimeError("Uniform fields produced different copied-row masks")
-        if final_dest_mask is not None:
-            dest_mask.copy_(final_dest_mask)
+        dest_mask.copy_(first_dest_mask)
         num_copied = out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
             object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
@@ -1456,11 +1511,10 @@ class UniformLevelStorage(BaseLevelStorage):
         """Defrag in-place: remove rows where copied_mask[i] is True.
 
         Rows with copied_mask[i] True (previously put) are dropped; remaining
-        rows move to the front in place. Attributes with dtypes supported by
+        rows move to the front in place. Payloads must use a dtype supported by
         the buffer kernels (``bool``, ``float32``, ``float64``, ``int32``, or
-        ``int64``) are compacted. Buffer shape is unchanged (fixed-size
-        batches). Other attributes are indexed with the same indices (so must
-        be kept in sync if present).
+        ``int64``). All fields are validated before compaction. Buffer shape is
+        unchanged for fixed-size batches.
 
         Parameters
         ----------
@@ -1484,10 +1538,9 @@ class UniformLevelStorage(BaseLevelStorage):
             copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
         if copied_mask.shape[0] != n_src:
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
-        for key in list(self._data.keys()):
+        fields = _validate_buffer_field_dtypes(self._data)
+        for key in fields:
             t = self._data[key]
-            if t.dtype not in TORCH_TO_WP:
-                continue
             # Pass a clone so the kernel's in-place mask update doesn't affect other keys
             defrag_per_system(t, copied_mask.clone())
         object.__setattr__(self, "_num_kept", int((~copied_mask).sum().item()))
@@ -1739,16 +1792,20 @@ class SegmentedLevelStorage(BaseLevelStorage):
         segment_lengths: list[int] | Tensor,
         *,
         preserve_pointer: bool = True,
+        normalized_metadata: tuple[Tensor, Tensor] | None = None,
     ) -> None:
         """Replace segment metadata, preserving pointer capacity when present."""
         had_pointer_cache = preserve_pointer and self._batch_ptr is not None
         preserve_capacity = preserve_pointer and self._batch_ptr_capacity is not None
         pointer_capacity = self._batch_ptr_capacity if preserve_capacity else None
-        self.segment_lengths, pointer = _checked_segment_metadata(
-            segment_lengths,
-            self.device,
-            batch_ptr_capacity=pointer_capacity,
-        )
+        if normalized_metadata is None:
+            self.segment_lengths, pointer = _checked_segment_metadata(
+                segment_lengths,
+                self.device,
+                batch_ptr_capacity=pointer_capacity,
+            )
+        else:
+            self.segment_lengths, pointer = normalized_metadata
         if had_pointer_cache or preserve_capacity:
             self._batch_ptr = pointer
         else:
@@ -2131,7 +2188,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             ends = self._batch_ptr[num_dest_segments].to(torch.int64) + torch.cumsum(
                 masked_lengths, dim=0, dtype=torch.int64
             )
-            fit_mask.copy_(source_mask & (ends >= _INT32_MIN) & (ends <= _INT32_MAX))
+            fit_mask.copy_(source_mask & (ends >= 0) & (ends <= _INT32_MAX))
             return
         source._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
@@ -2151,7 +2208,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             masked_lengths, dim=0, dtype=torch.int64
         )
         dest_capacity = min(self._data.shape[0], _INT32_MAX)
-        fit_mask.copy_(source_mask & (ends >= _INT32_MIN) & (ends <= dest_capacity))
+        fit_mask.copy_(source_mask & (ends >= 0) & (ends <= dest_capacity))
 
     def put(
         self,
@@ -2163,10 +2220,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """Put segments where mask[i] is True from src into this storage (buffer).
 
         New segment boundaries are appended to this storage's batch_ptr.
-        Fieldless source and destination groups copy segment metadata only;
-        payload-bearing groups retain the existing float32 copy limitation.
-        If *copied_mask* is provided, it is updated in place for each copied
-        segment.
+        Supported payload dtypes are bool, float32, float64, int32, and int64;
+        source and destination dtypes must match. Fieldless source and
+        destination groups copy segment metadata only. If *copied_mask* is
+        provided, it is updated in place for each copied segment.
 
         Parameters
         ----------
@@ -2201,7 +2258,11 @@ class SegmentedLevelStorage(BaseLevelStorage):
             selected_lengths = source_lengths[mask]
             old_lengths = self.segment_lengths[:num_dest_segments]
             combined_lengths = torch.cat([old_lengths, selected_lengths])
-            _checked_segment_metadata(combined_lengths, self.device)
+            normalized_metadata = _checked_segment_metadata(
+                combined_lengths,
+                self.device,
+                batch_ptr_capacity=self._batch_ptr_capacity,
+            )
             if copied_mask is not None:
                 if copied_mask.shape[0] != n_seg:
                     raise ValueError(
@@ -2217,13 +2278,17 @@ class SegmentedLevelStorage(BaseLevelStorage):
             if self._batch_ptr.shape[0] < min_batch_ptr_size:
                 out_mask.zero_()
                 return
-            self._replace_segment_lengths(combined_lengths, preserve_pointer=True)
+            self._replace_segment_lengths(
+                combined_lengths,
+                preserve_pointer=True,
+                normalized_metadata=normalized_metadata,
+            )
             out_mask.copy_(mask)
             return
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
-        if not common:
+        fields = _validate_buffer_field_pairs(self._data, src._data)
+        if not fields:
             raise ValueError("put requires at least one common attribute")
         n_seg = len(src)
         if mask.shape[0] != n_seg:
@@ -2249,15 +2314,20 @@ class SegmentedLevelStorage(BaseLevelStorage):
         dest_batch_ptr = self._batch_ptr
         if dest_batch_ptr.shape[0] < min_batch_ptr_size:
             return
-        new_num_dest = None
-        for key in common:
+        first_key, *remaining_keys = fields
+        new_num_dest = put_masked_segmented(
+            src._data[first_key],
+            src._batch_ptr,
+            mask,
+            self._data[first_key],
+            dest_batch_ptr,
+            num_dest_segments,
+            out_mask,
+        )
+        for key in remaining_keys:
             src_t = src._data[key]
-            if src_t.dtype != torch.float32:
-                continue
             dest_t = self._data[key]
-            if dest_t.dtype != torch.float32:
-                continue
-            new_num_dest = put_masked_segmented(
+            put_masked_segmented(
                 src_t,
                 src._batch_ptr,
                 mask,
@@ -2280,9 +2350,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """Defrag in-place: remove segments where copied_mask[i] is True.
 
         Kept segments move to the front and pointer metadata is updated in
-        place without trimming allocated capacity. Fieldless groups compact
-        only segment metadata; payload-bearing groups retain the existing
-        storage-kernel dtype limitations.
+        place without trimming allocated capacity. Supported payload dtypes are
+        bool, float32, float64, int32, and int64. All fields are validated
+        before compaction. Fieldless groups compact only segment metadata.
 
         Parameters
         ----------
@@ -2327,7 +2397,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if copied_mask.shape[0] != n_seg:
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
         self._lazy_init_batch_ptr()
-        keys = list(self._data.keys())
+        keys = _validate_buffer_field_dtypes(self._data)
         original_bp = self._batch_ptr.clone()
         num_kept_t = defrag_segmented(
             self._data[keys[0]], self._batch_ptr, copied_mask.clone()

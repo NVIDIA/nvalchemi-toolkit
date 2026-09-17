@@ -170,26 +170,32 @@ def _build_batch_storage(
             "or a registered level"
         )
 
+    classifications: dict[str, str | None] = {}
+
     def _classify(key: str) -> str | None:
+        if key in classifications:
+            return classifications[key]
         if key in node_keys:
-            return "atom"
-        if key in edge_keys:
-            return "edge"
-        if key in system_keys:
-            return "system"
-        if field_levels is not None and key in field_levels:
+            level = "atom"
+        elif key in edge_keys:
+            level = "edge"
+        elif key in system_keys:
+            level = "system"
+        elif field_levels is not None and key in field_levels:
             resolved = _resolve_level(field_levels[key])
             # Preserve explicit metadata-driven routing in the private schema
             # carried by extracted AtomicData.  Legacy key sets still win and
             # are intentionally not rewritten.
             level_kind = attr_map.level_kind(resolved)
             attr_map.set(key, resolved, is_segmented=level_kind != "uniform")
-            return resolved
-        try:
-            return attr_map.group(key)
-        except KeyError:
-            pass
-        return fallback_level
+            level = resolved
+        else:
+            try:
+                level = attr_map.group(key)
+            except KeyError:
+                level = fallback_level
+        classifications[key] = level
+        return level
 
     node_offset = 0
     selected_keys: tuple[str, ...] | None = None
@@ -243,10 +249,7 @@ def _build_batch_storage(
     for sample_index, (pairs, _, _) in enumerate(records):
         seen = set()
         for key, value in pairs:
-            try:
-                group_name = _classify(key)
-            except ValueError:
-                raise
+            group_name = _classify(key)
             if group_name is None:
                 continue
             group_name = _LEVEL_ALIASES.get(group_name, group_name)
@@ -409,8 +412,6 @@ def _build_batch_storage(
     ]
     for group_name in product_groups:
         fields = grouped[group_name]
-        if level_kinds.get(group_name) != "product":
-            continue
         left, right = attr_map.product_parents[group_name]
         first_values = next(iter(fields.values()))
         if any(value.ndim < 2 for values in fields.values() for value in values):
@@ -1635,12 +1636,11 @@ class Batch(DataMixin):
         """Put graphs where mask[i] is True from src_batch into this batch (buffer).
 
         Computes a fit mask for every materialized level and copies only graphs
-        that fit in all levels. Uses the existing storage buffer operations and
-        their dtype limitations. Materialized custom segmented and product
-        payloads must use ``torch.float32``; custom uniform payloads and
-        built-in levels retain their existing buffer-kernel behavior. If
-        *copied_mask* is provided, it is updated with the combined copy mask
-        for :meth:`defrag`.
+        that fit in all levels. Built-in and custom uniform payloads may use
+        ``bool``, ``float32``, ``float64``, ``int32``, or ``int64``. Materialized
+        custom segmented and product payloads must use ``torch.float32``. If
+        *copied_mask* is provided, it is updated with the combined copy mask for
+        :meth:`defrag`.
 
         Parameters
         ----------
@@ -1662,6 +1662,7 @@ class Batch(DataMixin):
         if mask.shape[0] != n:
             raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
         self._validate_custom_put(src_batch)
+        self._prevalidate_buffer_put(src_batch)
         mask = mask.to(device=device, dtype=torch.bool)
         if copied_mask is not None:
             if copied_mask.shape[0] != n:
@@ -1695,7 +1696,15 @@ class Batch(DataMixin):
         for group_name in (*legacy_groups, *custom_groups):
             dest_group = self._storage.groups.get(group_name)
             src_group = src_batch._storage.groups.get(group_name)
-            if dest_group is not None and src_group is not None:
+            if (
+                dest_group is not None
+                and src_group is not None
+                and not (
+                    isinstance(dest_group, UniformLevelStorage)
+                    and dest_group._data.is_empty()
+                    and src_group._data.is_empty()
+                )
+            ):
                 fit_groups.append((group_name, dest_group, src_group))
 
         # Compute every fit before entering the copy phase so a rejected
@@ -1744,8 +1753,9 @@ class Batch(DataMixin):
         """Defrag this batch in-place by removing graphs that were put.
 
         Drops graphs where ``copied_mask[i]`` is ``True`` from every
-        materialized level, including fieldless segmented metadata. Payload
-        groups retain the existing storage dtype limitations.
+        materialized level, including fieldless segmented metadata. Payloads
+        must use a buffer-kernel-supported dtype: ``bool``, ``float32``,
+        ``float64``, ``int32``, or ``int64``.
 
         Parameters
         ----------
@@ -1761,6 +1771,7 @@ class Batch(DataMixin):
             copied_mask = getattr(self, "_copied_mask", None)
             if copied_mask is None:
                 raise ValueError("defrag requires copied_mask or a prior put")
+        self._prevalidate_buffer_defrag()
         # Keep the historical built-in order, then compact each materialized
         # custom level in schema order using the same graph mask.
         legacy_groups = ("system", "atoms", "edges")
@@ -2018,7 +2029,7 @@ class Batch(DataMixin):
                 other_value = other_group[field]
                 if value.dtype != other_value.dtype:
                     raise ValueError(
-                        f"Custom level '{name}' field '{field}' has incompatible "
+                        f"Level '{name}' field '{field}' has incompatible buffer "
                         f"dtypes: {value.dtype} vs {other_value.dtype}"
                     )
                 if value.shape[1:] != other_value.shape[1:]:
@@ -2148,6 +2159,45 @@ class Batch(DataMixin):
                     raise ValueError(
                         f"Level '{name}' field '{field}' has incompatible trailing "
                         f"shapes: {value.shape[1:]} vs {other_value.shape[1:]}"
+                    )
+
+    def _prevalidate_buffer_put(self, other: Batch) -> None:
+        """Validate every payload field before any batch buffer mutation."""
+        for level, dest_group in self._storage.groups.items():
+            source_group = other._storage.groups.get(level)
+            if source_group is None:
+                continue
+            if (
+                isinstance(dest_group, UniformLevelStorage)
+                and dest_group._data.is_empty()
+                and source_group._data.is_empty()
+            ):
+                continue
+            for field in dest_group.keys():
+                if field not in source_group:
+                    continue
+                dest_dtype = dest_group[field].dtype
+                source_dtype = source_group[field].dtype
+                if dest_dtype != source_dtype:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' has incompatible buffer "
+                        f"dtypes: {dest_dtype} vs {source_dtype}"
+                    )
+                if dest_dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' dtype {dest_dtype} is not "
+                        "supported by buffer kernels"
+                    )
+
+    def _prevalidate_buffer_defrag(self) -> None:
+        """Validate every payload field before compacting any batch level."""
+        for level, group in self._storage.groups.items():
+            for field in group.keys():
+                dtype = group[field].dtype
+                if dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' dtype {dtype} is not "
+                        "supported by buffer kernels"
                     )
 
     def append(self, other: Batch) -> None:
@@ -2499,11 +2549,6 @@ class Batch(DataMixin):
                 if group is None:
                     for parent, counts in zip(parent_names, parent_counts, strict=True):
                         if parent not in self._storage.groups:
-                            if counts is None:
-                                raise ValueError(
-                                    f"Cannot infer product level '{group_name}' "
-                                    f"without parent '{parent}' cardinality"
-                                )
                             if not any(
                                 existing_parent == parent
                                 for existing_parent, _ in parents_to_materialize

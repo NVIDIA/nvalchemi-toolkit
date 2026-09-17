@@ -640,7 +640,11 @@ class AtomicDataZarrWriter:
     def _schema_from_levels(levels: Any) -> LevelSchema:
         """Rebuild the persisted level schema, rejecting unknown revisions."""
         if not isinstance(levels, Mapping) or levels.get("version") != 1:
-            raise ValueError("Unsupported Zarr custom level schema version")
+            found = levels.get("version") if isinstance(levels, Mapping) else None
+            raise ValueError(
+                f"Unsupported custom-level metadata version {found}; "
+                "supported version is 1"
+            )
         definitions = levels.get("definitions")
         if not isinstance(definitions, Mapping):
             raise ValueError("Invalid Zarr custom level schema definitions")
@@ -1002,13 +1006,23 @@ class AtomicDataZarrWriter:
             if resolved_level not in schema.level_kinds:
                 if "levels" not in root.attrs:
                     raise ValueError(
-                        f"Invalid level '{level}'. Must be 'atom', 'edge', or 'system'."
+                        f"Custom level '{level}' is not defined in this legacy store; "
+                        "pass attr_map with its definition, or use 'atom', 'edge', "
+                        "or 'system'."
                     )
-                raise ValueError("A schema containing the custom level is required")
+                raise ValueError(
+                    "A schema containing the custom level is required: "
+                    f"expected one of {self._custom_level_names(schema)}, "
+                    f"got {resolved_level}"
+                )
             incoming = schema.clone()
         else:
             if resolved_level not in attr_map.level_kinds:
-                raise ValueError("A schema containing the custom level is required")
+                raise ValueError(
+                    "A schema containing the custom level is required: "
+                    f"expected one of {self._custom_level_names(attr_map)}, "
+                    f"got {resolved_level}"
+                )
             incoming = attr_map.clone()
             stored_names = self._custom_level_names(schema)
             incoming_existing = tuple(
@@ -1021,7 +1035,8 @@ class AtomicDataZarrWriter:
             )
             if incoming_existing != expected_existing:
                 raise ValueError(
-                    "Existing custom level definitions must preserve stored order"
+                    f"Custom level order mismatch: expected {expected_existing}, "
+                    f"got {incoming_existing}"
                 )
             for name in incoming_existing:
                 if (
@@ -1031,7 +1046,18 @@ class AtomicDataZarrWriter:
                     schema.level_kind(name),
                     schema.product_parents.get(name),
                 ):
-                    raise ValueError(f"Incompatible existing custom level '{name}'")
+                    expected = (
+                        schema.level_kind(name),
+                        schema.product_parents.get(name),
+                    )
+                    actual = (
+                        incoming.level_kind(name),
+                        incoming.product_parents.get(name),
+                    )
+                    raise ValueError(
+                        f"Incompatible existing custom level '{name}': "
+                        f"expected {expected}, got {actual}"
+                    )
 
         closure: list[str] = []
 
@@ -1052,7 +1078,15 @@ class AtomicDataZarrWriter:
                 if schema.level_kind(name) != kind or schema.product_parents.get(
                     name
                 ) != incoming.product_parents.get(name):
-                    raise ValueError(f"Incompatible existing custom level '{name}'")
+                    expected = (
+                        schema.level_kind(name),
+                        schema.product_parents.get(name),
+                    )
+                    actual = (kind, incoming.product_parents.get(name))
+                    raise ValueError(
+                        f"Incompatible existing custom level '{name}': "
+                        f"expected {expected}, got {actual}"
+                    )
             elif kind == "product":
                 left, right = incoming.product_parents[name]
                 schema.add_product_level(name, left=left, right=right)
@@ -1099,7 +1133,10 @@ class AtomicDataZarrWriter:
                 not in (torch.int8, torch.int16, torch.int32, torch.int64, torch.uint8)
             ):
                 raise ValueError(
-                    f"Level pointer for '{name}' must be a 1-D integer tensor"
+                    f"Level pointer for '{name}' must be a 1-D integer tensor: "
+                    f"expected a 1-D integer tensor, got "
+                    f"shape={getattr(ptr, 'shape', None)}, "
+                    f"dtype={getattr(ptr, 'dtype', None)}"
                 )
             ptr = ptr.to(torch.long).cpu()
             if (
@@ -1108,7 +1145,9 @@ class AtomicDataZarrWriter:
                 or torch.any(ptr[1:] < ptr[:-1])
             ):
                 raise ValueError(
-                    f"Level pointer for '{name}' must be a full nondecreasing prefix pointer"
+                    f"Level pointer for '{name}' must be a full nondecreasing "
+                    f"prefix pointer: expected length {num_samples + 1} starting "
+                    f"at 0, got {ptr.tolist()}"
                 )
             return ptr
 
@@ -1122,12 +1161,14 @@ class AtomicDataZarrWriter:
         def resolve_ptr(name: str) -> torch.Tensor:
             if name in ptr_cache:
                 supplied = ptr_inputs.get(name)
-                if supplied is not None and not torch.equal(
-                    checked_ptr(name, supplied), ptr_cache[name]
-                ):
-                    raise ValueError(
-                        f"Supplied pointer for '{name}' conflicts with the stored pointer"
-                    )
+                if supplied is not None:
+                    checked_supplied = checked_ptr(name, supplied)
+                    if not torch.equal(checked_supplied, ptr_cache[name]):
+                        raise ValueError(
+                            f"Supplied pointer for '{name}' conflicts with the "
+                            f"stored pointer: expected {ptr_cache[name].tolist()}, "
+                            f"got {checked_supplied.tolist()}"
+                        )
                 return ptr_cache[name]
             kind_ = schema.level_kind(name)
             if kind_ == "product":
@@ -1140,12 +1181,14 @@ class AtomicDataZarrWriter:
                     [torch.zeros(1, dtype=torch.long), torch.cumsum(lengths, 0)]
                 )
                 supplied = ptr_inputs.get(name)
-                if supplied is not None and not torch.equal(
-                    checked_ptr(name, supplied), computed
-                ):
-                    raise ValueError(
-                        f"Supplied product pointer for '{name}' does not match its parents"
-                    )
+                if supplied is not None:
+                    checked_supplied = checked_ptr(name, supplied)
+                    if not torch.equal(checked_supplied, computed):
+                        raise ValueError(
+                            f"Supplied product pointer for '{name}' does not match "
+                            f"its parents: expected {computed.tolist()}, got "
+                            f"{checked_supplied.tolist()}"
+                        )
                 ptr_cache[name] = computed
                 return computed
             supplied = ptr_inputs.get(name)
@@ -1610,7 +1653,10 @@ class AtomicDataZarrWriter:
             stored_schema = self._schema_from_levels(root.attrs["levels"])
             stored_names = self._custom_level_names(stored_schema)
             if custom_levels != stored_names:
-                raise ValueError("Custom append requires identical custom level order")
+                raise ValueError(
+                    f"Custom level order mismatch: expected {stored_names}, "
+                    f"got {custom_levels}"
+                )
             for name in stored_names:
                 if (
                     schema.level_kind(name),
@@ -1619,7 +1665,18 @@ class AtomicDataZarrWriter:
                     stored_schema.level_kind(name),
                     stored_schema.product_parents.get(name),
                 ):
-                    raise ValueError(f"Custom append has incompatible level '{name}'")
+                    expected = (
+                        stored_schema.level_kind(name),
+                        stored_schema.product_parents.get(name),
+                    )
+                    actual = (
+                        schema.level_kind(name),
+                        schema.product_parents.get(name),
+                    )
+                    raise ValueError(
+                        f"Custom append has incompatible level '{name}': "
+                        f"expected {expected}, got {actual}"
+                    )
         elif custom_levels:
             raise ValueError("Cannot append custom levels to a legacy Zarr store")
 
@@ -1662,7 +1719,10 @@ class AtomicDataZarrWriter:
                 or np.any(pointer_np[1:] < pointer_np[:-1])
             ):
                 raise ValueError(
-                    f"Custom pointer '{name}' must be a full nondecreasing prefix pointer"
+                    f"Custom pointer '{name}' must be a full nondecreasing prefix "
+                    f"pointer: expected integer shape ({data.num_graphs + 1},), "
+                    f"got dtype={pointer_np.dtype}, shape={pointer_np.shape}, "
+                    f"values={pointer_np.tolist()}"
                 )
             return pointer_np.astype(np.int64, copy=False)
 
@@ -1691,7 +1751,8 @@ class AtomicDataZarrWriter:
             )
             if set(source_ptrs) != target_ptrs:
                 raise ValueError(
-                    "Custom append requires identical resolved pointer sets"
+                    "Custom resolved pointer levels mismatch: "
+                    f"expected {sorted(target_ptrs)}, got {sorted(source_ptrs)}"
                 )
             for name in custom_levels:
                 target_fields = (
@@ -1702,7 +1763,9 @@ class AtomicDataZarrWriter:
                 actual_fields = set(source_fields.get(name, {}))
                 if actual_fields != target_fields:
                     raise ValueError(
-                        f"Custom append requires identical materialized fields for '{name}'"
+                        f"Custom field set mismatch for level '{name}': "
+                        f"expected {sorted(target_fields)}, got "
+                        f"{sorted(actual_fields)}"
                     )
                 for key in source_fields.get(name, {}):
                     materialize_source(name, key)
@@ -1712,7 +1775,11 @@ class AtomicDataZarrWriter:
                         or source_arrays[name][key].shape[1:] != target.shape[1:]
                     ):
                         raise ValueError(
-                            f"Custom append field '{key}' has incompatible dtype or trailing shape"
+                            f"Custom append field '{key}' has incompatible dtype or "
+                            f"trailing shape: expected dtype={target.dtype}, "
+                            f"shape[1:]={target.shape[1:]}, got "
+                            f"dtype={source_arrays[name][key].dtype}, "
+                            f"shape[1:]={source_arrays[name][key].shape[1:]}"
                         )
 
             for name in custom_levels:
@@ -1725,13 +1792,15 @@ class AtomicDataZarrWriter:
                     expected_size = int(source_ptr_arrays[name][-1])
                 else:
                     raise ValueError(
-                        f"Custom append requires a resolved pointer for '{name}'"
+                        f"Custom append requires a resolved pointer for '{name}': "
+                        "expected a pointer in the incoming batch, got none"
                     )
                 for key, array in fields.items():
                     target = levels_group[name][key]
                     if array.shape[0] != expected_size:
                         raise ValueError(
-                            f"Custom append field '{key}' does not match its level pointer"
+                            f"Custom append field '{key}' does not match its level "
+                            f"pointer: expected {expected_size}, got {array.shape[0]}"
                         )
 
         # Root custom arrays are the legacy extension point and remain
@@ -1759,7 +1828,10 @@ class AtomicDataZarrWriter:
                 or np.dtype(array.dtype) != target.dtype
             ):
                 raise ValueError(
-                    f"Custom append field '{key}' has incompatible dtype or trailing shape"
+                    f"Custom append field '{key}' has incompatible dtype or trailing "
+                    f"shape: expected dtype={target.dtype}, "
+                    f"shape[1:]={target.shape[1:]}, got dtype={array.dtype}, "
+                    f"shape[1:]={array.shape[1:]}"
                 )
             root_custom_appends[key] = array
 
@@ -2087,7 +2159,8 @@ class AtomicDataZarrReader(Reader):
                     registered_fields.add(key)
                     if kind == "uniform" and array.shape[0] != num_samples:
                         raise ValueError(
-                            f"Uniform custom field '{key}' must have one row per sample"
+                            f"Uniform custom field '{key}' must have one row per "
+                            f"sample: expected {num_samples}, got {array.shape[0]}"
                         )
 
             stale_fields = set(level_fields) - registered_fields
@@ -2111,7 +2184,10 @@ class AtomicDataZarrReader(Reader):
                     pointer_array = ptr_group[name]
                     pointer = pointer_array[:]
                     if not np.issubdtype(pointer.dtype, np.integer):
-                        raise ValueError(f"Pointer '{name}' must have an integer dtype")
+                        raise ValueError(
+                            f"Pointer '{name}' must have an integer dtype: "
+                            f"expected an integer dtype, got {pointer.dtype}"
+                        )
                     if (
                         pointer.ndim != 1
                         or len(pointer) != num_samples + 1
@@ -2119,7 +2195,10 @@ class AtomicDataZarrReader(Reader):
                         or np.any(pointer[1:] < pointer[:-1])
                     ):
                         raise ValueError(
-                            f"Pointer '{name}' must be a full nondecreasing prefix pointer"
+                            f"Pointer '{name}' must be a full nondecreasing prefix "
+                            f"pointer: expected shape ({num_samples + 1},), "
+                            f"starting at 0 with nondecreasing values, got "
+                            f"shape={pointer.shape}, values={pointer.tolist()}"
                         )
                     level_ptrs[name] = torch.from_numpy(pointer).to(torch.long)
 
@@ -2136,7 +2215,9 @@ class AtomicDataZarrReader(Reader):
                     for key in level_group.array_keys():
                         if level_group[key].shape[0] != expected_size:
                             raise ValueError(
-                                f"Custom field '{key}' does not match pointer '{level_name}'"
+                                f"Custom field '{key}' does not match pointer "
+                                f"'{level_name}': expected {expected_size}, got "
+                                f"{level_group[key].shape[0]}"
                             )
 
             for name in registered_names:
@@ -2166,7 +2247,8 @@ class AtomicDataZarrReader(Reader):
                 )
                 if not torch.equal(pointer, expected):
                     raise ValueError(
-                        f"Product pointer '{name}' does not match its parent pointers"
+                        f"Product pointer '{name}' does not match its parent pointers: "
+                        f"expected {expected.tolist()}, got {pointer.tolist()}"
                     )
 
         # Swap only after all prospective state and layout checks succeed.
@@ -2269,15 +2351,23 @@ class AtomicDataZarrReader(Reader):
     ) -> list[dict[str, torch.Tensor]]:
         """Load fragmented samples using one orthogonal selection per field."""
         data_by_sorted: list[dict[str, torch.Tensor]] = [{} for _ in sorted_order]
+        pointer_ranges: dict[str, tuple[list[int], list[int], np.ndarray]] = {}
+        for _key, level, _arr in fields:
+            ptr = level_ptrs.get(level)
+            if ptr is None or level in pointer_ranges:
+                continue
+            starts = [int(ptr[index]) for index in sorted_physical]
+            ends = [int(ptr[index + 1]) for index in sorted_physical]
+            rows = _row_indices_for_ranges(starts, ends)
+            pointer_ranges[level] = (starts, ends, rows)
 
         for key, level, arr in fields:
             ptr = level_ptrs.get(level)
             if ptr is not None:
                 if level == "edge":
+                    # Validate edge-field layout even when this fragmented read selects no edge rows.
                     _slice_edge_array(arr, key, 0, 0)
-                starts = [int(ptr[index]) for index in sorted_physical]
-                ends = [int(ptr[index + 1]) for index in sorted_physical]
-                rows = _row_indices_for_ranges(starts, ends)
+                starts, ends, rows = pointer_ranges[level]
                 block = torch.from_numpy(arr.oindex[rows] if len(rows) else arr[:0])
                 offset = 0
                 for i, (start, end) in enumerate(zip(starts, ends, strict=True)):

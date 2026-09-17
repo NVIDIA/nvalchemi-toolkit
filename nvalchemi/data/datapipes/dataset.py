@@ -463,8 +463,16 @@ class Dataset:
         raw_samples: Sequence[tuple[dict[str, torch.Tensor], dict[str, Any]]],
         level_schema: LevelSchema | None,
         stream: torch.cuda.Stream | None = None,
+        *,
+        attach_level_schema: bool = True,
     ) -> tuple[list[tuple[AtomicData, dict[str, Any]]], torch.cuda.Event | None]:
-        """Validate raw samples and transfer them to the target device."""
+        """Validate raw samples and transfer them to the target device.
+
+        ``attach_level_schema=False`` is used only by fused batch reads, whose
+        result carries the explicit schema into ``Batch`` construction. Direct
+        sample reads retain independent per-sample schema attachments so they
+        can be implicitly rebatched by callers.
+        """
         samples = [
             (AtomicData.model_validate(data_dict), metadata)
             for data_dict, metadata in raw_samples
@@ -483,14 +491,19 @@ class Dataset:
                         self._sample_transform(data, metadata)
                         for data, metadata in samples
                     ]
-                if level_schema is not None:
+                if attach_level_schema and level_schema is not None:
                     for data, _metadata in samples:
                         data._level_schema = level_schema.clone()
             event = torch.cuda.Event()
             event.record(stream)
         else:
             samples = [
-                self._finalize_on_device(data, metadata, level_schema)
+                self._finalize_on_device(
+                    data,
+                    metadata,
+                    level_schema,
+                    attach_level_schema=attach_level_schema,
+                )
                 for data, metadata in samples
             ]
 
@@ -626,7 +639,10 @@ class Dataset:
                 result.event = None
             else:
                 samples, event = self._to_atomic_samples(
-                    raw_samples, level_schema, stream
+                    raw_samples,
+                    level_schema,
+                    stream,
+                    attach_level_schema=False,
                 )
                 result.data = [atomic_data for atomic_data, _ in samples]
                 result.metadata = [metadata for _, metadata in samples]
@@ -888,6 +904,8 @@ class Dataset:
         data: AtomicData,
         metadata: dict[str, Any],
         level_schema: LevelSchema | None,
+        *,
+        attach_level_schema: bool = True,
     ) -> tuple[AtomicData, dict[str, Any]]:
         """Move ``data`` to ``target_device`` and apply the transform pipeline.
 
@@ -905,6 +923,10 @@ class Dataset:
             Per-sample metadata dict.
         level_schema : LevelSchema | None
             Schema captured with the reader operation that produced ``data``.
+        attach_level_schema : bool, default=True
+            Attach an independent schema clone to the returned sample. Fused
+            batch conversion disables this because it supplies the schema
+            explicitly to :class:`~nvalchemi.data.batch.Batch`.
 
         Returns
         -------
@@ -915,7 +937,7 @@ class Dataset:
             data = data.to(self.target_device, non_blocking=True)
         if self._sample_transform is not None:
             data, metadata = self._sample_transform(data, metadata)
-        if level_schema is not None:
+        if attach_level_schema and level_schema is not None:
             data._level_schema = level_schema.clone()
         return data, metadata
 
