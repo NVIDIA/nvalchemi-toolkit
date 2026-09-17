@@ -7,6 +7,35 @@
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
+- Toolkit-level generative API (`nvalchemi.gen`): an abstract
+  `AtomisticGenerator` driver that runs a user-supplied generating function
+  (optionally conditioned) and materializes raw samples into `Batch`
+  through an optional `batch_mapping`, lifecycle hooks sharing a per-call
+  `GenerationContext` (`BEFORE_CONDITION` / `AFTER_CONDITION` when a
+  condition step runs, `BEFORE_MAPPING` always — exposing the raw sample
+  in `ctx.sample` before materialization, `AFTER_GENERATE` when mapped),
+  `stream()`, and session context managers (dedicated CUDA stream,
+  session RNG, lazy `torch.compile`). `BEFORE_MAPPING` lets
+  compact-representation workflows filter candidates before paying
+  materialization cost; generating functions may return any container the
+  materialization callable understands (`TensorDict` remains the
+  documented tensor-family case), and `ctx.accepted_mask` records which
+  candidates were accepted (mirroring the dynamics `converged_mask`
+  convention). A materialization callable may return a zero-graph `Batch`
+  (built via `Batch.empty`) to signal total rejection; pipelines
+  short-circuit the remaining stages for that item, and zero-graph
+  *selection* still raises `IndexError`. Sequential composition via
+  `gen_a | gen_b` (`GenerationPipeline`, with construction-time
+  field-contract validation). Generating functions own their
+  model (when there is one) and declare their own field contracts; models
+  publish a four-field frozen `GenerativeModelConfig`.
+- Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
+  `DemoDiffusionModel` — minimal `GenerativeModelMixin` placeholders for
+  testing and debugging (the generative counterpart to
+  `DemoModel`/`DemoModelWrapper`) — with factory-built generating
+  procedures (`make_demo_gan_generate`, `make_demo_diffusion_generate`),
+  plus `demo_nonparametric_generation`, a synthetic-structure source
+  usable standalone or as a pipeline stage.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
