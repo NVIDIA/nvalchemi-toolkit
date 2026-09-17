@@ -99,7 +99,7 @@ BEFORE_STEP (0)
   BEFORE_COMPUTE (3)     →  compute()      →  AFTER_COMPUTE (4)
   BEFORE_POST_UPDATE (5) →  post_update()  →  AFTER_POST_UPDATE (6)
 AFTER_STEP (7)
-ON_CONVERGE (8)   ← BaseDynamics: if detected; FusedStage sub-stage: every step
+ON_CONVERGE (8)   ← BaseDynamics: if detected; fused sub-stage: frequency-eligible steps
 ```
 
 **Stage selection guidelines (dynamics):**
@@ -140,9 +140,10 @@ Update masks are intentionally fixed at step start, so clearing
 iteration without enabling post-update in the current one.
 
 `ON_CONVERGE` remains sub-stage-only because convergence is evaluated
-independently per sub-stage. Registered `ON_CONVERGE` hooks on a fused
-sub-stage run every step and must inspect `ctx.converged_mask`;
-`BaseDynamics.step()` calls them only when convergence is detected.
+independently per sub-stage. Fused sub-stages evaluate convergence every step;
+registered `ON_CONVERGE` hooks run when allowed by `hook.frequency` and must
+inspect `ctx.converged_mask`. `BaseDynamics.step()` calls them only when
+convergence is detected.
 
 ---
 

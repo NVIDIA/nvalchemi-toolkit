@@ -40,7 +40,7 @@ loop is broken into discrete stages, enumerated by
 | `BEFORE_POST_UPDATE` | Just before the integrator's second half-step |
 | `AFTER_POST_UPDATE` | After the second half-step completes |
 | `AFTER_STEP` | At the very end of a step, after all operations |
-| `ON_CONVERGE` | After convergence evaluation; every step for fused sub-stages |
+| `ON_CONVERGE` | After convergence evaluation; for fused sub-stages, runs at the hook’s configured interval |
 
 When a batch is newly admitted, **ON_ADMISSION** hooks fire before force
 priming and before the first step. Admission is reset for every new `run()` and
@@ -61,10 +61,11 @@ Each step then proceeds through these stages in order:
    velocity update with the new forces), bracketed by BEFORE/AFTER_POST_UPDATE hooks.
 5. **AFTER_STEP** hooks fire (convergence checks, logging, ...).
 6. Convergence is evaluated. Standard dynamics fire **ON_CONVERGE** hooks only
-   when systems converge. Registered hooks on a fused sub-stage run every step,
-   receive that sub-stage's convergence mask as `ctx.converged_mask`, and must
-   inspect it to determine which systems converged. Converged systems in a
-   multi-stage pipeline then migrate to the next stage.
+   when systems converge. Fused sub-stages evaluate convergence every step;
+   registered hooks run when allowed by `hook.frequency`, receive that
+   sub-stage's convergence mask as `ctx.converged_mask`, and must inspect it to
+   determine which systems converged. Converged systems in a multi-stage
+   pipeline then migrate to the next stage.
 
 `run(batch, n_steps)` calls `step()` in a loop until all systems converge or
 `n_steps` is reached. Every hook declares which
