@@ -1886,12 +1886,16 @@ class _TrackingHook:
         self.call_count = 0
         self.call_step_counts: list[int] = []
         self.converged_masks: list[torch.Tensor | None] = []
+        self.active_masks: list[torch.Tensor | None] = []
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
-        """Record the call, step count, and converged mask."""
+        """Record the call, step count, and context masks."""
         self.call_count += 1
         self.call_step_counts.append(ctx.step_count)
         self.converged_masks.append(ctx.converged_mask)
+        self.active_masks.append(
+            None if ctx.active_graph_mask is None else ctx.active_graph_mask.clone()
+        )
 
 
 class _OrderedHook:
@@ -2053,7 +2057,7 @@ class TestFusedStageSubstageHooks:
             assert hook.active_masks[0].tolist() == [False, True, False]
 
     def test_admission_hooks_ignore_frequency_across_runs(self) -> None:
-        """Fused and sub-stage admission hooks fire for every run."""
+        """Admission hooks refire across runs with stage-specific masks."""
         dynamics0 = BaseDynamics(model=self.model)
         dynamics1 = BaseDynamics(model=self.model)
         fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
@@ -2070,8 +2074,31 @@ class TestFusedStageSubstageHooks:
         fused.run(batch, n_steps=1)
         fused.run(batch, n_steps=1)
 
-        for hook in hooks:
-            assert hook.call_step_counts == [0, 1]
+        assert hooks[0].call_step_counts == [0, 1]
+        assert hooks[0].active_masks[0].tolist() == [True, True]
+        assert hooks[0].active_masks[1].tolist() == [True, True]
+
+        assert hooks[1].call_step_counts == [0, 1]
+        assert hooks[1].active_masks[0].tolist() == [True, False]
+        assert hooks[1].active_masks[1].tolist() == [True, False]
+
+        assert hooks[2].call_step_counts == [0, 1]
+        assert hooks[2].active_masks[0].tolist() == [False, True]
+        assert hooks[2].active_masks[1].tolist() == [False, True]
+
+    def test_fused_hook_registration_warnings(self) -> None:
+        """Deprecated and sub-stage-only registrations warn clearly."""
+        fused = FusedStage(sub_stages=[(0, BaseDynamics(model=self.model))])
+        deprecated_hook = _TrackingHook(DynamicsStage.AFTER_STEP)
+        converge_hook = _TrackingHook(DynamicsStage.ON_CONVERGE)
+
+        with pytest.warns(DeprecationWarning, match="register_fused_hook"):
+            fused.register_fused_hook(deprecated_hook)
+        with pytest.warns(UserWarning, match="sub-stage-only.*ON_CONVERGE"):
+            fused.register_hook(converge_hook)
+
+        assert deprecated_hook in fused.hooks
+        assert converge_hook in fused.hooks
 
     @pytest.mark.parametrize(
         "stage",

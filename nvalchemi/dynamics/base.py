@@ -620,6 +620,8 @@ class _CommunicationMixin:
         self.done = done
         self.sampler = sampler
         self.refill_frequency = refill_frequency
+        self._admission_initialized: bool = False
+        self._forces_primed: bool = False
         if not device_type:
             device_type = "cuda" if torch.cuda.is_available() else "cpu"
         self.device_type = device_type
@@ -1027,10 +1029,8 @@ class _CommunicationMixin:
         else:
             combined = self.active_batch.to_data_list() + admitted
         self.active_batch = Batch.from_data_list(combined, device=incoming_batch.device)
-        if hasattr(self, "_admission_initialized"):
-            self._admission_initialized = False
-        if hasattr(self, "_forces_primed"):
-            self._forces_primed = False
+        self._admission_initialized = False
+        self._forces_primed = False
 
         if overflow:
             self._overflow_to_sinks(
@@ -1123,10 +1123,8 @@ class _CommunicationMixin:
         remaining_indices = torch.where(~mask)[0]
         self.send_buffer.put(previous_batch, mask=mask)
         self.active_batch = previous_batch.trim(copied_mask=mask)
-        if hasattr(self, "_admission_initialized"):
-            self._admission_initialized = False
-        if hasattr(self, "_forces_primed"):
-            self._forces_primed = False
+        self._admission_initialized = False
+        self._forces_primed = False
 
         # Graph-indexed metadata and integrator state refer to the old batch
         # layout. Keep only state for retained graphs and prevent the next hook
@@ -1327,10 +1325,8 @@ class _CommunicationMixin:
             self.active_batch = previous_batch.index_select(remaining)
         else:
             self.active_batch = None
-        if hasattr(self, "_admission_initialized"):
-            self._admission_initialized = False
-        if hasattr(self, "_forces_primed"):
-            self._forces_primed = False
+        self._admission_initialized = False
+        self._forces_primed = False
 
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):
@@ -1672,8 +1668,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._init_hooks(hooks)
 
         self._last_converged: torch.Tensor | None = None
-        self._forces_primed: bool = False
-        self._admission_initialized = False
 
     @property
     def model_is_conservative(self) -> bool:

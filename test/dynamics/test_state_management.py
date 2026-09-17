@@ -795,6 +795,11 @@ class TestFusedStageStateInit:
         assert first._state.counter.tolist() == [1.0, 0.0]
         assert second._state.counter.tolist() == [0.0, 1.0]
 
+        saved = first._save_state_fields()
+        wrong_cardinality_mask = torch.ones(3, dtype=torch.bool)
+        with pytest.raises(RuntimeError, match="state=2, graphs=3"):
+            first._restore_unmasked_state(saved, wrong_cardinality_mask)
+
 
 # ---------------------------------------------------------------------------
 # TestStateSyncInflight
