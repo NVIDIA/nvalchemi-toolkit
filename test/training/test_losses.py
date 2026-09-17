@@ -173,6 +173,35 @@ def _call_from_batch(
     return composed(tensors, tensors, **(_loss_metadata(batch) | metadata))
 
 
+_OVERFLOWING_FORCE_LOSSES = [
+    (ForceMSELoss, {}, 4.0),
+    (ForceHuberLoss, {"delta": 1000.0}, 6.0),
+    (ForceL2NormLoss, {}, 40.0),
+]
+"""Force terms with a scale whose fp16 per-graph total exceeds 65504."""
+
+_FORCE_LOSS_IDS = ["mse", "huber", "l2norm"]
+_NORM_IDS = ["balanced", "global"]
+
+
+def _force_layout(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    layout: str,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+    """Return dense ``(V, 3)`` or single-graph padded ``(1, V, 3)`` force inputs."""
+    if layout == "dense":
+        batch_idx = torch.zeros(pred.shape[0], dtype=torch.int32, device=device)
+        return pred, target, {"batch_idx": batch_idx, "num_graphs": 1}
+    num_nodes_per_graph = torch.tensor([pred.shape[0]], device=device)
+    return (
+        pred.unsqueeze(0),
+        target.unsqueeze(0),
+        {"num_nodes_per_graph": num_nodes_per_graph},
+    )
+
+
 class TestReductions:
     def setup_method(self) -> None:
         # 3 graphs with 2, 3, 1 atoms respectively.
@@ -224,6 +253,164 @@ class TestReductions:
     def test_per_graph_sum_bad_num_graphs(self) -> None:
         with pytest.raises(ValueError, match="num_graphs must be positive"):
             per_graph_sum(torch.zeros(3), torch.zeros(3, dtype=torch.int32), 0)
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"]
+    )
+    def test_per_graph_sum_low_precision_accumulates_in_fp32(
+        self, device: str, dtype: torch.dtype
+    ) -> None:
+        """Three thousand low-precision ones sum to 3000, not the atomics' ceiling."""
+        num_nodes = 3000
+        values = torch.ones(num_nodes, dtype=dtype, device=device)
+        batch_idx = torch.zeros(num_nodes, dtype=torch.int32, device=device)
+
+        got = per_graph_sum(values, batch_idx, num_graphs=1)
+
+        assert got.dtype == torch.float32
+        expected = torch.tensor([float(num_nodes)], device=device)
+        torch.testing.assert_close(got, expected)
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float64], ids=["fp32", "fp64"]
+    )
+    def test_per_graph_sum_full_precision_is_unchanged(
+        self, dtype: torch.dtype
+    ) -> None:
+        """Widening the accumulator leaves fp32 and fp64 results bit-identical."""
+        values = torch.randn(64, 3, dtype=dtype)
+        batch_idx = torch.arange(64, dtype=torch.int32) // 8
+
+        got = per_graph_sum(values, batch_idx, num_graphs=8)
+
+        expected = torch.zeros(8, 3, dtype=dtype)
+        expected.scatter_add_(0, batch_idx.long().view(-1, 1).expand_as(values), values)
+        assert got.dtype == dtype
+        assert torch.equal(got, expected)
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"]
+    )
+    def test_force_mse_low_precision_matches_fp32_accumulation(
+        self, device: str, dtype: torch.dtype
+    ) -> None:
+        """A low-precision graph-balanced force loss tracks the fp32 reference."""
+        num_nodes = 3000
+        generator = torch.Generator().manual_seed(0)
+        pred = torch.randn(num_nodes, 3, generator=generator).to(device, dtype)
+        target = torch.zeros(num_nodes, 3, device=device, dtype=dtype)
+        batch_idx = torch.zeros(num_nodes, dtype=torch.int32, device=device)
+        loss = ForceMSELoss(normalize_by_atom_count=True)
+
+        got = loss(pred, target, batch_idx=batch_idx, num_graphs=1)
+
+        reference = (pred.float() - target.float()).pow(2).sum() / (3 * num_nodes)
+        assert got.dtype == torch.float32
+        torch.testing.assert_close(got, reference, rtol=0.02, atol=0.0)
+
+    @pytest.mark.parametrize("layout", ["dense", "padded"])
+    def test_force_mse_fp16_sum_past_the_half_precision_ceiling_stays_finite(
+        self, device: str, layout: str
+    ) -> None:
+        """An fp16 per-graph total above 65504 still normalizes to a finite loss."""
+        num_nodes = 3000
+        generator = torch.Generator().manual_seed(0)
+        pred = (4.0 * torch.randn(num_nodes, 3, generator=generator)).to(device)
+        target = torch.zeros(num_nodes, 3, device=device)
+        pred, target, kwargs = _force_layout(pred, target, layout, device)
+        loss = ForceMSELoss(normalize_by_atom_count=True)
+        reference = loss(pred, target, **kwargs)
+        assert pred.half().float().pow(2).sum() > torch.finfo(torch.float16).max
+
+        got = loss(pred.half(), target.half(), **kwargs)
+
+        assert torch.isfinite(got)
+        assert torch.isfinite(loss.per_sample_loss).all()
+        torch.testing.assert_close(got, reference, rtol=0.02, atol=0.0)
+        assert got.dtype == torch.float32
+
+    @pytest.mark.parametrize("normalize_by_atom_count", [True, False], ids=_NORM_IDS)
+    @pytest.mark.parametrize("layout", ["dense", "padded"])
+    @pytest.mark.parametrize(
+        ("loss_cls", "kwargs", "scale"), _OVERFLOWING_FORCE_LOSSES, ids=_FORCE_LOSS_IDS
+    )
+    def test_force_losses_keep_fp16_totals_finite_in_both_layouts(
+        self,
+        device: str,
+        loss_cls: type[BaseLossFunction],
+        kwargs: dict[str, Any],
+        scale: float,
+        layout: str,
+        normalize_by_atom_count: bool,
+    ) -> None:
+        """Every force term returns the same finite fp32 loss on either layout."""
+        num_nodes = 3000
+        generator = torch.Generator().manual_seed(0)
+        pred = (scale * torch.randn(num_nodes, 3, generator=generator)).to(device)
+        target = torch.zeros(num_nodes, 3, device=device)
+        pred, target, call_kwargs = _force_layout(pred, target, layout, device)
+        loss = loss_cls(normalize_by_atom_count=normalize_by_atom_count, **kwargs)
+        reference = loss(pred, target, **call_kwargs)
+
+        got = loss(pred.half(), target.half(), **call_kwargs)
+
+        assert torch.isfinite(got)
+        torch.testing.assert_close(got, reference, rtol=0.02, atol=0.0)
+        assert got.dtype == torch.float32
+        if loss.per_sample_loss is not None:
+            assert torch.isfinite(loss.per_sample_loss).all()
+            assert loss.per_sample_loss.dtype == torch.float32
+
+    @pytest.mark.parametrize("layout", ["dense", "padded"])
+    @pytest.mark.parametrize(
+        ("loss_cls", "kwargs", "scale"), _OVERFLOWING_FORCE_LOSSES, ids=_FORCE_LOSS_IDS
+    )
+    def test_force_losses_full_precision_reductions_are_unchanged(
+        self,
+        loss_cls: type[BaseLossFunction],
+        kwargs: dict[str, Any],
+        scale: float,
+        layout: str,
+    ) -> None:
+        """Widening the reduction leaves fp32 and fp64 losses bit-identical."""
+        num_nodes = 64
+        generator = torch.Generator().manual_seed(0)
+        pred = scale * torch.randn(num_nodes, 3, generator=generator)
+        target = torch.zeros(num_nodes, 3)
+        pred, target, call_kwargs = _force_layout(pred, target, layout, "cpu")
+        loss = loss_cls(**kwargs)
+
+        for dtype in (torch.float32, torch.float64):
+            got = loss(pred.to(dtype), target.to(dtype), **call_kwargs)
+            assert got.dtype == dtype
+
+    @pytest.mark.parametrize(
+        ("loss_cls", "kwargs", "residual"),
+        [(ForceMSELoss, {}, 150.0), (ForceHuberLoss, {"delta": 1000.0}, 250.0)],
+        ids=["mse", "huber"],
+    )
+    def test_dense_component_sum_past_the_fp16_ceiling_matches_padded(
+        self,
+        device: str,
+        loss_cls: type[BaseLossFunction],
+        kwargs: dict[str, Any],
+        residual: float,
+    ) -> None:
+        """One atom whose fp16 xyz terms overflow gives the same loss on either layout."""
+        pred = torch.full((1, 3), residual, device=device, dtype=torch.float16)
+        target = torch.zeros(1, 3, device=device, dtype=torch.float16)
+        loss = loss_cls(normalize_by_atom_count=True, **kwargs)
+        dense, dense_target, dense_kwargs = _force_layout(pred, target, "dense", device)
+        padded, padded_target, padded_kwargs = _force_layout(
+            pred, target, "padded", device
+        )
+
+        got = loss(dense, dense_target, **dense_kwargs)
+        expected = loss(padded, padded_target, **padded_kwargs)
+
+        assert torch.isfinite(got)
+        assert got.dtype == torch.float32
+        torch.testing.assert_close(got, expected)
 
 
 class TestReductionsCompile:
@@ -1169,6 +1356,48 @@ class TestWeightFactors:
             "EnergyMSELoss": 0.5,
             "ForceMSELoss": 4.0,
         }
+
+
+class TestDefaultReductionPrecision:
+    """The default per-element reduction widens half-precision residuals."""
+
+    @pytest.mark.parametrize(
+        ("loss_cls", "kwargs"),
+        [(EnergyMSELoss, {}), (EnergyHuberLoss, {"delta": 100.0})],
+        ids=["mse", "huber"],
+    )
+    def test_fp16_total_past_the_half_precision_ceiling_stays_finite(
+        self,
+        device: str,
+        loss_cls: type[BaseLossFunction],
+        kwargs: dict[str, Any],
+    ) -> None:
+        """An fp16 energy total above 65504 normalizes instead of saturating."""
+        pred = torch.full((64, 1), 40.0, device=device)
+        target = torch.zeros(64, 1, device=device)
+        loss = loss_cls(per_atom=False, **kwargs)
+        expected = loss(pred, target)
+
+        got = loss(pred.half(), target.half())
+
+        assert torch.isfinite(got)
+        assert got.dtype == torch.float32
+        torch.testing.assert_close(got, expected, rtol=0.01, atol=0.0)
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float64], ids=["fp32", "fp64"]
+    )
+    def test_full_precision_reduction_is_unchanged(self, dtype: torch.dtype) -> None:
+        """Widening the accumulator leaves fp32 and fp64 losses bit-identical."""
+        generator = torch.Generator().manual_seed(0)
+        pred = torch.randn(64, 1, generator=generator).to(dtype)
+        target = torch.zeros(64, 1, dtype=dtype)
+        loss = EnergyMSELoss(per_atom=False)
+
+        got = loss(pred, target)
+
+        assert got.dtype == dtype
+        assert torch.equal(got, (pred - target).pow(2).mean())
 
 
 class TestConcreteLosses:

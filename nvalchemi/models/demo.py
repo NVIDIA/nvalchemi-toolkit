@@ -243,10 +243,20 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
             device=embedding.device,
             dtype=embedding.dtype,
         )
-        graph_embedding.scatter_add_(0, batch_indices.unsqueeze(-1), embedding)
+        graph_embedding.scatter_add_(
+            0, batch_indices.long().unsqueeze(-1).expand_as(embedding), embedding
+        )
         # write embeddings to data structure
         data.graph_embeddings = graph_embedding
-        data.node_embeddings = embedding
+        if isinstance(data, Batch):
+            data.add_key(
+                "node_embeddings",
+                list(embedding.split(data.num_nodes_list)),
+                level="node",
+                overwrite=True,
+            )
+        else:
+            data.node_embeddings = embedding
         return data
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:

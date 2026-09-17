@@ -28,6 +28,7 @@ from nvalchemi.data.level_storage import (
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
+    _expand_segments_warp,
 )
 
 
@@ -1316,6 +1317,56 @@ class TestSegmentedLevelStorage:
         assert s.device.type == "cpu"
         assert s.segment_lengths.device.type == "cpu"
 
+    def test_concatenate_moves_other_segment_lengths(self, gpu_device) -> None:
+        """A CPU storage concatenated into a GPU one has its lengths moved first."""
+        target = SegmentedLevelStorage(
+            data={"x": torch.randn(3, 1)},
+            segment_lengths=[3],
+            device=gpu_device,
+            validate=False,
+        )
+        source = SegmentedLevelStorage(
+            data={"x": torch.randn(2, 1)},
+            segment_lengths=[2],
+            device="cpu",
+            validate=False,
+        )
+
+        target.concatenate(source)
+
+        assert target.segment_lengths.tolist() == [3, 2]
+        assert target.segment_lengths.device.type == "cuda"
+
+    @pytest.mark.multigpu
+    def test_to_device_records_the_resolved_cuda_device(self) -> None:
+        """A bare ``"cuda"`` is recorded as the GPU the tensors actually reached."""
+        s = SegmentedLevelStorage(
+            data={"x": torch.randn(3, 1)},
+            segment_lengths=[3],
+            device="cpu",
+            validate=False,
+        )
+
+        with torch.cuda.device(1):
+            s.to_device("cuda")
+
+        assert s.device == torch.device("cuda", 1)
+        assert s.segment_lengths.device == torch.device("cuda", 1)
+        assert s["x"].device == torch.device("cuda", 1)
+
+    @pytest.mark.multigpu
+    def test_constructed_on_bare_cuda_records_the_resolved_device(self) -> None:
+        """Construction on a bare ``"cuda"`` pins the storage to the current GPU."""
+        with torch.cuda.device(1):
+            s = SegmentedLevelStorage(
+                data={"x": torch.randn(3, 1)},
+                segment_lengths=[3],
+                device="cuda",
+                validate=False,
+            )
+
+        assert s.device == torch.device("cuda", 1)
+
     def test_put_and_defrag(self):
         """put copies masked segments from src into self; defrag compacts source."""
         device = "cpu"
@@ -1738,6 +1789,23 @@ class TestSegmentedLevelStorage:
 # -----------------------------------------------------------------------------
 # MultiLevelStorage
 # -----------------------------------------------------------------------------
+def _segmented_multi_level_storage(
+    segment_lengths: list[int], device: str | torch.device
+) -> MultiLevelStorage:
+    """Return a one-group storage whose ``atoms`` attribute ``x`` is segmented."""
+    atoms = SegmentedLevelStorage(
+        data={"x": torch.randn(sum(segment_lengths), 1)},
+        segment_lengths=segment_lengths,
+        device=device,
+        validate=False,
+    )
+    return MultiLevelStorage(
+        groups={"atoms": atoms},
+        attr_map=LevelSchema(group_to_attrs={"atoms": {"x"}}),
+        validate=False,
+    )
+
+
 class TestMultiLevelStorage:
     """Tests for MultiLevelStorage (multi-group container)."""
 
@@ -1882,6 +1950,43 @@ class TestMultiLevelStorage:
         c = m.clone()
         assert c.groups is not m.groups
         assert c["a"] is not m["a"]
+
+    @pytest.mark.multigpu
+    def test_to_device_records_the_resolved_cuda_device(self) -> None:
+        """A multi-level move to a bare ``"cuda"`` records the current GPU everywhere."""
+        atoms = UniformLevelStorage(
+            data={"a": torch.randn(2, 1)}, device="cpu", validate=False
+        )
+        m = MultiLevelStorage(
+            groups={"atoms": atoms},
+            attr_map=LevelSchema(
+                group_to_attrs={"atoms": {"a"}}, segmented_groups=set()
+            ),
+            validate=False,
+        )
+
+        with torch.cuda.device(1):
+            m.to_device("cuda")
+
+        assert m.device == torch.device("cuda", 1)
+        assert m.groups["atoms"].device == torch.device("cuda", 1)
+
+    @pytest.mark.parametrize("entry_point", ["from_batches", "concatenate"])
+    def test_bulk_merge_moves_segment_lengths_to_the_target_device(
+        self, gpu_device, entry_point: str
+    ) -> None:
+        """A CPU storage merged into a GPU one has its segment lengths moved first."""
+        target = _segmented_multi_level_storage([3, 1], device=gpu_device)
+        source = _segmented_multi_level_storage([2], device="cpu")
+
+        if entry_point == "from_batches":
+            merged = MultiLevelStorage.from_batches([target, source])
+        else:
+            merged = target.concatenate(source)
+
+        assert merged.groups["atoms"].segment_lengths.tolist() == [3, 1, 2]
+        assert merged.groups["atoms"].segment_lengths.device.type == "cuda"
+        assert merged["x"].device.type == "cuda"
 
 
 # -----------------------------------------------------------------------------
@@ -2217,3 +2322,49 @@ class TestMultiLevelStorageToSegmented:
 
         with pytest.raises(ValueError, match="[Bb]atch size mismatch"):
             m.to_segmented(validate=False)
+
+
+# -----------------------------------------------------------------------------
+# _expand_segments_warp
+# -----------------------------------------------------------------------------
+class TestExpandSegmentsWarp:
+    """Tests for the Warp segment-expansion helper."""
+
+    def test_int32_pointer_expands_under_int64_index_dtype(self, gpu_device):
+        """An int32 seg_idx and batch_ptr expand through the int64 kernel overload."""
+        device = torch.device(gpu_device)
+        batch_ptr = torch.tensor([0, 2, 5, 9], device=device, dtype=torch.int32)
+        seg_idx = torch.tensor([0, 2], device=device, dtype=torch.int32)
+
+        out = _expand_segments_warp(seg_idx, batch_ptr, torch.int64)
+
+        assert out.dtype == torch.int64
+        assert out.tolist() == [0, 1, 5, 6, 7, 8]
+
+    @pytest.mark.multigpu
+    @pytest.mark.parametrize("current_index", [0, 1])
+    def test_expands_on_the_pointer_device_whatever_is_current(
+        self, current_index: int
+    ) -> None:
+        """Expansion follows the pointer's device, not the current device."""
+        device = torch.device("cuda", 1)
+        with torch.cuda.device(current_index):
+            batch_ptr = torch.tensor([0, 2, 5, 9], device=device, dtype=torch.int32)
+            seg_idx = torch.tensor([0, 2], device=device, dtype=torch.int32)
+
+            out = _expand_segments_warp(seg_idx, batch_ptr, torch.int64)
+
+        assert out.device == device
+        assert out.tolist() == [0, 1, 5, 6, 7, 8]
+
+    @pytest.mark.multigpu
+    def test_restores_the_current_device_after_launch(self) -> None:
+        """Expanding a pointer on another GPU leaves the current device untouched."""
+        device = torch.device("cuda", 1)
+        with torch.cuda.device(0):
+            batch_ptr = torch.tensor([0, 2, 5, 9], device=device, dtype=torch.int32)
+            seg_idx = torch.tensor([0, 2], device=device, dtype=torch.int32)
+
+            _expand_segments_warp(seg_idx, batch_ptr, torch.int64)
+
+            assert torch.cuda.current_device() == 0

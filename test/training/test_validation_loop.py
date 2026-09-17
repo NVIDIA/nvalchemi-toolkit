@@ -27,6 +27,7 @@ from nvalchemi.training import (
     ValidationConfig,
     ValidationLoop,
 )
+from nvalchemi.training._validation import _LossAccumulator
 from test.training.conftest import _build_dataset, _build_demo_model
 from test.training.test_strategy import demo_training_fn
 
@@ -266,3 +267,44 @@ class TestValidationLoopStateRestoration:
             active_loop.execute()
         assert first_param.grad is not None
         assert torch.equal(first_param.grad, saved_grad)
+
+
+class TestLossAccumulatorPrecision:
+    """The running sums behind a validation summary widen at update time."""
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"]
+    )
+    def test_half_precision_batch_losses_accumulate_in_float64(
+        self, dtype: torch.dtype
+    ) -> None:
+        """Five hundred half-precision batch losses average to the float64 truth."""
+        values = [0.7 + 0.2 * (i % 2) for i in range(500)]
+        accumulator = _LossAccumulator(device)
+        for value in values:
+            scalar = torch.tensor(value, dtype=dtype)
+            accumulator.update(
+                {
+                    "total_loss": scalar,
+                    "per_component_unweighted": {"energy": scalar},
+                    "per_component_sample": {"energy": scalar.reshape(1)},
+                    "per_component_weight": {"energy": 1.0},
+                    "per_component_raw_weight": {"energy": 1.0},
+                }
+            )
+
+        summary = accumulator.summary(
+            name="validation",
+            model_source="live",
+            ema_model_keys=(),
+            precision="float32",
+        )
+
+        truth = sum(torch.tensor(v, dtype=dtype).item() for v in values) / len(values)
+        assert summary["total_loss"].item() == pytest.approx(truth, abs=1e-6)
+        assert summary["per_component_unweighted"]["energy"].item() == pytest.approx(
+            truth, abs=1e-6
+        )
+        assert summary["per_component_sample"]["energy"].item() == pytest.approx(
+            truth, abs=1e-6
+        )

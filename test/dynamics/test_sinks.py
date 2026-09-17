@@ -222,6 +222,22 @@ class TestGPUBuffer:
         assert torch.allclose(retrieved.positions, original_positions)
         assert retrieved.num_graphs == 2
 
+    def test_write_moves_a_cpu_batch_to_the_buffer_device(self) -> None:
+        """A batch handed over on CPU is moved to the buffer rather than crashing."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        cuda_batch = create_test_batch(num_graphs=2, device="cuda")
+        cpu_batch = create_test_batch(num_graphs=1, device="cpu")
+
+        buffer.write(cuda_batch)
+        buffer.write(cpu_batch)
+
+        retrieved = buffer.read()
+        assert retrieved.num_graphs == 3
+        assert retrieved.positions.device.type == "cuda"
+        torch.testing.assert_close(
+            retrieved.positions[cuda_batch.num_nodes :].cpu(), cpu_batch.positions
+        )
+
     def test_zero_clears_buffer(self) -> None:
         """Verify zero() clears all stored data."""
         buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")

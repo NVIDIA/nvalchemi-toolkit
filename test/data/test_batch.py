@@ -565,6 +565,29 @@ class TestBatchConstruction:
         ):
             Batch.from_data_list([first, second], attr_map=schema)
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_storage_default_is_built_on_the_requested_device(self) -> None:
+        """A batch that allocates its own storage puts it where the batch says."""
+        batch = Batch(device="cuda:0")
+
+        batch.energy = torch.zeros(1, 1, device="cuda:0")
+
+        assert batch.device == torch.device("cuda", 0)
+        assert batch._storage.device == batch.device
+        assert batch.energy.device == batch.device
+
+    @pytest.mark.multigpu
+    def test_storage_default_follows_a_device_that_is_not_current(self) -> None:
+        """A second-GPU request is honoured while device 0 is current."""
+        with torch.cuda.device(0):
+            batch = Batch(device="cuda:1")
+
+            batch.energy = torch.zeros(1, 1, device="cuda:1")
+
+            assert batch.device == torch.device("cuda", 1)
+            assert batch._storage.device == batch.device
+            assert batch.energy.device == torch.device("cuda", 1)
+
     def test_batch_with_system_only_storage(self):
         """Batch built with only system group: batch, ptr, num_nodes_list, etc. hit None branches."""
         system = UniformLevelStorage(
@@ -1120,6 +1143,115 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 2]
 
+    def test_index_select_with_int32_batch_ptr(self, device):
+        """A batch whose pointer was materialized before the device move still selects."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        batch = Batch.from_data_list(data)
+        _ = batch.batch_ptr
+        batch = batch.to(device)
+        assert batch.batch_ptr.dtype == torch.int32
+
+        sub = batch[torch.tensor([0, 2], device=device)]
+
+        assert sub.num_graphs == 2
+        assert sub.num_nodes_list == [2, 4]
+        torch.testing.assert_close(
+            sub.positions,
+            torch.cat([data[0].positions, data[2].positions]).to(device),
+        )
+
+    @pytest.mark.multigpu
+    def test_index_select_on_indexless_cuda_batch_off_the_current_device(self) -> None:
+        """A batch moved to a bare ``cuda`` selects with any GPU current."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+            sub = batch[torch.tensor([0, 2], device="cuda")]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert torch.cuda.current_device() == 1
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_move_records_the_storage_device_on_the_batch(self) -> None:
+        """A batch moved to a bare ``cuda`` keeps selecting once that GPU is no longer current."""
+        data = [
+            _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
+            _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
+            _atomic_data_with_edges_and_system(num_nodes=4, num_edges=1),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+        with torch.cuda.device(0):
+            sub = batch[torch.tensor([0, 2])]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert sub.device == torch.device("cuda", 1)
+            assert batch.index_select([1]).num_nodes_list == [3]
+            assert batch.edge_ptr.device == torch.device("cuda", 1)
+            assert batch.batch_idx.device == torch.device("cuda", 1)
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_construction_records_the_resolved_device(self) -> None:
+        """``from_data_list(device="cuda")`` records the GPU its tensors reached."""
+        data = [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data, device="cuda")
+
+        with torch.cuda.device(0):
+            assert batch[torch.tensor([1])].num_nodes_list == [3]
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_adopts_the_supplied_storage_device(self) -> None:
+        """A batch built around a storage takes that storage's GPU, not the current one."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        with torch.cuda.device(1):
+            storage = Batch.from_data_list(data).to("cuda")._storage
+
+        with torch.cuda.device(0):
+            batch = Batch(device="cuda", storage=storage)
+
+            assert batch.device == torch.device("cuda", 1)
+            index = torch.tensor([0, 2], device="cuda:1")
+            assert batch.index_select(index).num_nodes_list == [2, 4]
+
+    @pytest.mark.multigpu
+    def test_explicit_device_conflicting_with_the_storage_is_rejected(self) -> None:
+        """An indexed request for another GPU than the storage's raises."""
+        with torch.cuda.device(1):
+            storage = (
+                Batch.from_data_list([_minimal_atomic_data(2)]).to("cuda")._storage
+            )
+
+        with pytest.raises(ValueError, match="conflicts with the supplied storage"):
+            Batch(device="cuda:0", storage=storage)
+
+    def test_cuda_device_for_a_cpu_storage_is_rejected(self) -> None:
+        """A CPU storage is not relabelled by an indexed CUDA request."""
+        storage = Batch.from_data_list([_minimal_atomic_data(2)])._storage
+
+        with pytest.raises(ValueError, match="conflicts with the supplied storage"):
+            Batch(device="cuda:0", storage=storage)
+
     def test_index_select_with_edges_applies_edge_index_correction(self):
         """index_select on a batch with edges corrects neighbor_list offsets."""
         data_list = [
@@ -1286,6 +1418,19 @@ class TestBatchMutation:
         assert right.level_ptr("samples").tolist() == [0, 1]
         assert right.sample_values.tolist() == [[9.0]]
 
+    def test_append_cpu_batch_into_gpu_batch(self, gpu_device) -> None:
+        """Appending a CPU batch onto an accelerator batch moves the segment lengths."""
+        b1 = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        ).to(gpu_device)
+        b2 = Batch.from_data_list([_minimal_atomic_data(4)])
+
+        b1.append(b2)
+
+        assert b1.num_graphs == 3
+        assert b1.num_nodes_list == [2, 3, 4]
+        assert b1.positions.device.type == "cuda"
+
     def test_append_data(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
         batch.append_data([_minimal_atomic_data(3), _minimal_atomic_data(1)])
@@ -1322,6 +1467,37 @@ class TestBatchMutation:
             level="node",
         )
         assert batch["forces"].shape == (5, 3)
+
+    @pytest.mark.parametrize("skip_validation", [False, True])
+    def test_add_key_node_survives_attribute_reassignment(
+        self, skip_validation: bool
+    ) -> None:
+        """A node key added publicly stays at node level when reassigned."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)],
+            skip_validation=skip_validation,
+        )
+        batch.add_key(
+            "node_embeddings",
+            [torch.randn(2, 4), torch.randn(3, 4)],
+            level="node",
+        )
+
+        batch.node_embeddings = torch.ones(5, 4)
+
+        assert batch._storage._group_name_from_attr("node_embeddings") == "atoms"
+        assert "node_embeddings" not in (batch._system_group or {})
+        assert batch.node_embeddings.eq(1).all()
+
+    def test_attribute_write_follows_a_key_written_into_a_group(self) -> None:
+        """A key placed straight into a group is not re-routed to the system group."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        batch._atoms_group["node_embeddings"] = torch.zeros(5, 4)
+
+        batch.node_embeddings = torch.ones(5, 4)
+
+        assert batch._storage._group_name_from_attr("node_embeddings") == "atoms"
+        assert batch.node_embeddings.eq(1).all()
 
     def test_add_key_overwrite(self):
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
@@ -1946,6 +2122,17 @@ class TestBatchPutDefrag:
         assert hasattr(src_batch, "_copied_mask")
         assert src_batch._copied_mask.shape == (2,)
         assert src_batch._copied_mask.sum().item() == 0
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_put_rejects_a_source_on_another_device(self) -> None:
+        """A source on another device is refused instead of launching a kernel on it."""
+        buffer = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)]
+        ).to("cuda:0")
+        src_batch = Batch.from_data_list([_minimal_atomic_data(2)])
+
+        with pytest.raises(ValueError, match="put requires src_batch on"):
+            buffer.put(src_batch, torch.tensor([True]))
 
     def test_put_with_copied_mask_in_place(self):
         """put with copied_mask provided sets it to the combined fit mask (in place)."""

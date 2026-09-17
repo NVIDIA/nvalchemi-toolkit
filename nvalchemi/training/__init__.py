@@ -75,6 +75,7 @@ from nvalchemi.training.runtime import (
     configure_parallelism,
     freeze_unconfigured_models,
     move_to_devices,
+    rehome_optimizer_state,
 )
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
@@ -122,6 +123,7 @@ __all__ = [
     "load_checkpoint",
     "move_to_devices",
     "register_type_serializer",
+    "rehome_optimizer_state",
     "save_checkpoint",
     "setup_optimizers",
     "step_lr_schedulers",
