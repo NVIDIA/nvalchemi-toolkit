@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from nvalchemi.data import LevelSchema as PublicLevelSchema
 from nvalchemi.data.level_storage import (
     DEFAULT_ATTRIBUTE_MAP,
     DEFAULT_SEGMENTED_GROUPS,
@@ -42,6 +43,13 @@ class TestLevelSchema:
         assert schema.attr_to_group["positions"] == "atoms"
         assert schema.group_to_attrs["atoms"] == DEFAULT_ATTRIBUTE_MAP["atoms"]
         assert schema.segmented_groups == DEFAULT_SEGMENTED_GROUPS
+        assert schema.level_names == ("atoms", "edges", "system")
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.level_kind("edges") == "segmented"
+        assert schema.level_kind("system") == "uniform"
+
+    def test_public_import(self):
+        assert PublicLevelSchema is LevelSchema
 
     def test_custom_group_to_attrs(self):
         schema = LevelSchema(group_to_attrs={"nodes": {"x"}, "global": {"e"}})
@@ -49,12 +57,200 @@ class TestLevelSchema:
         assert schema.attr_to_group["e"] == "global"
         assert schema.group("x") == "nodes"
 
+    def test_constructor_copies_mutable_inputs(self):
+        groups = {"samples": {"value"}}
+        segmented = {"samples"}
+        dtypes = {"value": "float32"}
+        schema = LevelSchema(
+            group_to_attrs=groups,
+            segmented_groups=segmented,
+            dtypes=dtypes,
+        )
+
+        groups["samples"].add("other")
+        segmented.clear()
+        dtypes["value"] = "float64"
+
+        assert schema.group_to_attrs == {"samples": {"value"}}
+        assert schema.segmented_groups == {"samples"}
+        assert schema.dtypes == {"value": "float32"}
+
+    def test_custom_level_order(self):
+        schema = LevelSchema(
+            group_to_attrs={
+                "custom_b": {"b"},
+                "system": {"e"},
+                "atoms": {"x"},
+                "custom_a": {"a"},
+                "edges": {"ij"},
+            },
+            segmented_groups={"atoms", "edges"},
+        )
+        assert schema.level_names == (
+            "atoms",
+            "edges",
+            "system",
+            "custom_b",
+            "custom_a",
+        )
+
+    def test_custom_constructor_does_not_add_builtin_levels(self):
+        schema = LevelSchema(
+            group_to_attrs={"samples": {"value"}}, segmented_groups={"samples"}
+        )
+        assert schema.level_names == ("samples",)
+        with pytest.raises(KeyError, match="atoms"):
+            schema.level_kind("atoms")
+
+    def test_marker_only_group_is_not_registered_until_set(self):
+        schema = LevelSchema(
+            group_to_attrs={"system": {"e"}},
+            segmented_groups={"pending"},
+        )
+        assert schema.level_names == ("system",)
+
+        schema.set("value", "pending")
+
+        assert schema.level_names == ("system", "pending")
+        assert schema.level_kind("pending") == "segmented"
+
+    def test_add_uniform_and_segmented_levels(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.add_level("samples", segmented=True)
+
+        assert schema.level_names[-2:] == ("metadata", "samples")
+        assert schema.level_kind("metadata") == "uniform"
+        assert schema.level_kind("samples") == "segmented"
+        assert not schema.is_segmented_group("metadata")
+        assert schema.is_segmented_group("samples")
+
+    def test_add_level_identical_definition_is_idempotent(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        expected_names = schema.level_names
+
+        schema.add_level("samples", segmented=True)
+
+        assert schema.level_names == expected_names
+
+    def test_add_level_rejects_conflicting_kind(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+
+        with pytest.raises(ValueError, match="already registered as segmented"):
+            schema.add_level("samples", segmented=False)
+
+    @pytest.mark.parametrize("name", ["", "   "])
+    def test_add_level_rejects_empty_name(self, name):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="must not be empty"):
+            schema.add_level(name, segmented=True)
+
+    def test_add_level_rejects_non_string_name(self):
+        schema = LevelSchema()
+        with pytest.raises(TypeError, match="name must be a string"):
+            schema.add_level(1, segmented=True)
+
+    def test_add_level_rejects_non_boolean_segmented(self):
+        schema = LevelSchema()
+        with pytest.raises(TypeError, match="segmented must be a bool"):
+            schema.add_level("samples", segmented=1)
+
+    def test_add_product_levels(self):
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_level("augmented", segmented=True)
+
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.add_product_level(
+            "augmented_square", left="augmented", right="augmented"
+        )
+
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.level_kind("left_right") == "product"
+        assert schema.product_parents == {
+            "atom_atom": ("atoms", "atoms"),
+            "left_right": ("left_items", "right_items"),
+            "augmented_square": ("augmented", "augmented"),
+        }
+        assert schema.is_segmented_group("atom_atom")
+
+    def test_add_product_level_identical_definition_is_idempotent(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        expected_names = schema.level_names
+
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        assert schema.level_names == expected_names
+
+    def test_add_product_level_rejects_conflicting_definition(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("product", left="atoms", right="atoms")
+
+        with pytest.raises(ValueError, match="already registered with parents"):
+            schema.add_product_level("product", left="atoms", right="samples")
+
+    def test_add_product_level_rejects_missing_parent(self):
+        schema = LevelSchema()
+        with pytest.raises(KeyError, match="missing"):
+            schema.add_product_level("product", left="missing", right="atoms")
+
+    def test_add_product_level_rejects_uniform_parent(self):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="system.*segmented base level"):
+            schema.add_product_level("product", left="atoms", right="system")
+
+    def test_add_product_level_rejects_product_parent(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        with pytest.raises(ValueError, match="atom_atom.*segmented base level"):
+            schema.add_product_level("nested", left="atom_atom", right="atoms")
+
+    def test_add_product_level_rejects_self_reference(self):
+        schema = LevelSchema()
+        with pytest.raises(ValueError, match="cannot reference itself"):
+            schema.add_product_level("product", left="product", right="atoms")
+
+    @pytest.mark.parametrize(
+        ("keyword", "value", "error"),
+        [
+            ("name", " ", ValueError),
+            ("left", " ", ValueError),
+            ("right", 1, TypeError),
+        ],
+    )
+    def test_add_product_level_validates_names(self, keyword, value, error):
+        schema = LevelSchema()
+        arguments = {"name": "product", "left": "atoms", "right": "atoms"}
+        arguments[keyword] = value
+        with pytest.raises(error):
+            schema.add_product_level(**arguments)
+
+    def test_level_kind_raises_for_unknown_level(self):
+        schema = LevelSchema()
+        with pytest.raises(KeyError, match="not found"):
+            schema.level_kind("missing")
+
     def test_set_new_attr(self):
         schema = LevelSchema()
         schema.set("custom_attr", "atoms", dtype="float32", is_segmented=True)
         assert schema.attr_to_group["custom_attr"] == "atoms"
         assert schema.dtype("custom_attr") == "float32"
         assert schema.is_segmented_attr("custom_attr")
+
+    def test_set_unknown_group_defaults_to_uniform(self):
+        schema = LevelSchema()
+        schema.set("custom_attr", "custom")
+        schema.set("sample", "samples", is_segmented=True)
+
+        assert schema.level_names[-2:] == ("custom", "samples")
+        assert schema.level_kind("custom") == "uniform"
+        assert schema.level_kind("samples") == "segmented"
 
     def test_set_is_segmented_false_discards(self):
         """LevelSchema.set with is_segmented=False removes group from segmented_groups."""
@@ -100,6 +296,40 @@ class TestLevelSchema:
         schema.set("y", "atoms", dtype=torch.int64)
         assert schema.dtype("y") == "int64"
 
+    def test_set_validates_before_mutating(self):
+        schema = LevelSchema()
+        schema.set("value", "atoms", dtype="float32")
+        before = (
+            {name: attrs.copy() for name, attrs in schema.group_to_attrs.items()},
+            schema.attr_to_group.copy(),
+            schema.segmented_groups.copy(),
+            schema.dtypes.copy(),
+            schema.level_kinds.copy(),
+            schema.level_names,
+        )
+
+        with pytest.raises(ValueError, match="Unsupported torch dtype"):
+            schema.set("value", "system", dtype=torch.bfloat16)
+
+        after = (
+            {name: attrs.copy() for name, attrs in schema.group_to_attrs.items()},
+            schema.attr_to_group.copy(),
+            schema.segmented_groups.copy(),
+            schema.dtypes.copy(),
+            schema.level_kinds.copy(),
+            schema.level_names,
+        )
+        assert after == before
+
+    def test_set_keeps_legacy_permissive_inputs(self):
+        schema = LevelSchema()
+
+        schema.set("", "", dtype="not-a-dtype", is_segmented=1)
+
+        assert schema.attr_to_group[""] == ""
+        assert schema.dtypes[""] == "not-a-dtype"
+        assert schema.level_kind("") == "segmented"
+
     def test_group_raises_for_unknown_attr(self):
         schema = LevelSchema()
         with pytest.raises(KeyError, match="not found"):
@@ -122,10 +352,53 @@ class TestLevelSchema:
         assert not schema.is_segmented_group("g")
         schema.mark_group_segmented("g")
         assert schema.is_segmented_group("g")
+        assert schema.level_kind("g") == "segmented"
         schema.unmark_group_segmented("g")
         assert not schema.is_segmented_group("g")
+        assert schema.level_kind("g") == "uniform"
         with pytest.raises(KeyError):
             schema.unmark_group_segmented("g")
+
+    def test_unknown_segmented_marker_is_not_registered(self):
+        schema = LevelSchema(group_to_attrs={}, segmented_groups=set())
+        schema.mark_group_segmented("pending")
+        assert "pending" not in schema.level_names
+        with pytest.raises(KeyError, match="pending"):
+            schema.level_kind("pending")
+
+    def test_product_level_cannot_be_made_uniform(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.set("pair_features", "atoms")
+
+        with pytest.raises(ValueError, match="cannot be made uniform"):
+            schema.set("pair_features", "atom_atom", is_segmented=False)
+        assert schema.group("pair_features") == "atoms"
+        assert "pair_features" not in schema.group_to_attrs["atom_atom"]
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.is_segmented_group("atom_atom")
+
+        schema.set("pair_features", "atom_atom", is_segmented=True)
+        assert schema.group("pair_features") == "atom_atom"
+
+        with pytest.raises(ValueError, match="cannot be made uniform"):
+            schema.unmark_group_segmented("atom_atom")
+        assert schema.level_kind("atom_atom") == "product"
+        assert schema.is_segmented_group("atom_atom")
+
+    def test_product_parent_cannot_be_made_uniform(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        with pytest.raises(ValueError, match="parent of product level.*atom_atom"):
+            schema.set("positions", "atoms", is_segmented=False)
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.is_segmented_group("atoms")
+
+        with pytest.raises(ValueError, match="parent of product level.*atom_atom"):
+            schema.unmark_group_segmented("atoms")
+        assert schema.level_kind("atoms") == "segmented"
+        assert schema.is_segmented_group("atoms")
 
     def test_dtypes_must_match_attrs(self):
         with pytest.raises(ValueError, match="dtype keys must match"):
@@ -137,10 +410,24 @@ class TestLevelSchema:
     def test_clone_is_independent(self):
         schema = LevelSchema()
         schema.set("extra", "atoms")
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_samples", left="atoms", right="samples")
         cloned = schema.clone()
         cloned.set("another", "edges")
+        cloned.add_level("torsions", segmented=True)
+        cloned.add_product_level("torsion_square", left="torsions", right="torsions")
         assert "another" not in schema.attr_to_group
         assert "extra" in cloned.attr_to_group
+        assert cloned.level_kinds == schema.level_kinds | {
+            "torsions": "segmented",
+            "torsion_square": "product",
+        }
+        assert cloned.product_parents == schema.product_parents | {
+            "torsion_square": ("torsions", "torsions")
+        }
+        assert "torsions" not in schema.level_names
+        assert "torsion_square" not in schema.level_names
+        assert cloned.level_names[-2:] == ("torsions", "torsion_square")
 
 
 # -----------------------------------------------------------------------------
@@ -393,6 +680,99 @@ class TestUniformLevelStorage:
         assert copied_mask[2].item() is False
         assert dest["a"][2].item() == 1.0
 
+    def test_put_aligns_multiple_fields_to_same_slots(self):
+        """Every uniform field receives each source row in the same slot."""
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor([[1.0], [2.0], [3.0]]),
+                "b": torch.tensor([[10.0], [20.0], [30.0]]),
+            },
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={
+                "a": torch.tensor([[99.0], [0.0], [0.0], [0.0]]),
+                "b": torch.tensor([[999.0], [0.0], [0.0], [0.0]]),
+            },
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(3, dtype=torch.bool)
+        dest_mask = torch.tensor([True, False, False, False])
+
+        dest.put(
+            src,
+            torch.ones(3, dtype=torch.bool),
+            copied_mask=copied,
+            dest_mask=dest_mask,
+        )
+
+        assert copied.tolist() == [True, True, True]
+        assert dest_mask.tolist() == [True, True, True, True]
+        assert dest["a"].squeeze(1).tolist() == [99.0, 1.0, 2.0, 3.0]
+        assert dest["b"].squeeze(1).tolist() == [999.0, 10.0, 20.0, 30.0]
+
+    @pytest.mark.parametrize(
+        ("dtype", "values"),
+        [
+            (torch.bool, [True, False, True]),
+            (torch.float32, [1.0, 2.0, 3.0]),
+            (torch.float64, [1.0, 2.0, 3.0]),
+            (torch.int32, [1, 2, 3]),
+            (torch.int64, [1, 2, 3]),
+        ],
+    )
+    def test_put_and_defrag_support_all_buffer_dtypes(self, dtype, values):
+        src = UniformLevelStorage(
+            data={"value": torch.tensor(values, dtype=dtype).reshape(-1, 1)},
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"value": torch.zeros(3, 1, dtype=dtype)},
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(3, dtype=torch.bool)
+
+        dest.put(src, torch.tensor([True, False, True]), copied_mask=copied)
+
+        torch.testing.assert_close(dest["value"][:2, 0], src["value"][[0, 2], 0])
+        src.defrag(copied)
+        torch.testing.assert_close(
+            src["value"][:1, 0], torch.tensor([values[1]], dtype=dtype)
+        )
+
+    def test_put_rejects_dtypes_before_payload_or_mask_mutation(self):
+        src = UniformLevelStorage(
+            data={"value": torch.ones(2, 1, dtype=torch.float32)},
+            device="cpu",
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"value": torch.zeros(2, 1, dtype=torch.float64)},
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+        dest_mask = torch.zeros(2, dtype=torch.bool)
+
+        with pytest.raises(
+            ValueError,
+            match="Field 'value' has incompatible dtypes: torch.float64 vs torch.float32",
+        ):
+            dest.put(
+                src,
+                torch.ones(2, dtype=torch.bool),
+                copied_mask=copied,
+                dest_mask=dest_mask,
+            )
+
+        assert copied.tolist() == [False, False]
+        assert dest_mask.tolist() == [False, False]
+        assert dest["value"].eq(0).all()
+
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
         device = "cpu"
@@ -581,6 +961,122 @@ class TestSegmentedLevelStorage:
                 validate=True,
             )
 
+    def test_fieldless_metadata_uses_int32_pointer_without_wrapping(self):
+        storage = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[torch.iinfo(torch.int32).max, 0],
+            device="cpu",
+            validate=False,
+        )
+
+        assert storage.segment_lengths.dtype == torch.int32
+        assert storage.batch_ptr.dtype == torch.int32
+        assert storage.batch_ptr.tolist() == [
+            0,
+            torch.iinfo(torch.int32).max,
+            torch.iinfo(torch.int32).max,
+        ]
+        assert storage.clone().batch_ptr.tolist() == storage.batch_ptr.tolist()
+        assert storage.select(1).segment_lengths.tolist() == [0]
+
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            (
+                {"segment_lengths": [torch.iinfo(torch.int32).max + 1]},
+                "Segment length exceeds",
+            ),
+            (
+                {"segment_lengths": [torch.iinfo(torch.int32).max, 1]},
+                "Segment pointer exceeds",
+            ),
+            (
+                {
+                    "segment_lengths": [0],
+                    "batch_ptr": torch.tensor(
+                        [0, torch.iinfo(torch.int32).max + 1], dtype=torch.int64
+                    ),
+                },
+                "Supplied batch_ptr exceeds",
+            ),
+        ],
+    )
+    def test_segment_metadata_overflow_raises_before_int32_narrowing(
+        self, kwargs, match
+    ):
+        with pytest.raises(OverflowError, match=match):
+            SegmentedLevelStorage(data=None, device="cpu", validate=False, **kwargs)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"segment_lengths": [-1]}, "Segment lengths cannot be negative"),
+            (
+                {"segment_lengths": [0], "batch_ptr": torch.tensor([0, -1])},
+                "batch_ptr values cannot be negative",
+            ),
+        ],
+    )
+    def test_segment_metadata_rejects_negative_values_without_validation(
+        self, kwargs, match
+    ):
+        with pytest.raises(ValueError, match=match):
+            SegmentedLevelStorage(data=None, device="cpu", validate=False, **kwargs)
+
+    def test_fieldless_buffer_put_rejects_overflow_without_mutation(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[1],
+            device="cpu",
+            batch_ptr_capacity=4,
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[maximum],
+            device="cpu",
+            batch_ptr_capacity=4,
+            validate=False,
+        )
+        copied = torch.zeros(1, dtype=torch.bool)
+        fit = torch.ones(1, dtype=torch.bool)
+
+        destination.compute_put_per_system_fit_mask(
+            source, torch.tensor([True]), None, fit
+        )
+        assert fit.tolist() == [False]
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            destination.put(source, torch.tensor([True]), copied_mask=copied)
+
+        assert destination.segment_lengths.tolist() == [maximum]
+        assert destination.batch_ptr.tolist() == [0, maximum, maximum, maximum]
+        assert copied.tolist() == [False]
+
+    def test_fieldless_fit_accepts_zero_length_at_int32_boundary(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2, 0, 1],
+            device="cpu",
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[maximum - 2],
+            batch_ptr_capacity=6,
+            device="cpu",
+            validate=False,
+        )
+        fit = torch.zeros(3, dtype=torch.bool)
+
+        destination.compute_put_per_system_fit_mask(
+            source, torch.ones(3, dtype=torch.bool), None, fit
+        )
+
+        assert fit.tolist() == [True, True, False]
+
     def test_setitem_length_mismatch_raises(self):
         """_validate_setitem raises when value length != num_elements."""
         s = SegmentedLevelStorage(
@@ -662,6 +1158,31 @@ class TestSegmentedLevelStorage:
         assert len(sub) == 2
         assert sub.num_elements() == 2 + 6
 
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is unavailable"
+                ),
+            ),
+        ],
+    )
+    def test_empty_segment_selection_returns_without_pointer_indexing(self, device):
+        storage = SegmentedLevelStorage(
+            data={"x": torch.ones(3, 1, device=device)},
+            segment_lengths=[1, 2],
+            device=device,
+            validate=False,
+        )
+
+        selected = storage[torch.tensor([], dtype=torch.int64, device=device)]
+
+        assert len(selected) == 0
+        assert selected["x"].numel() == 0
+
     def test_batch_ptr_lazy(self):
         s = SegmentedLevelStorage(
             data={"x": torch.randn(5, 1)},
@@ -673,6 +1194,43 @@ class TestSegmentedLevelStorage:
         assert ptr.tolist() == [0, 2, 5]
         assert (s.batch_idx[:2] == 0).all()
         assert (s.batch_idx[2:5] == 1).all()
+
+    def test_concatenate_preserves_only_preallocated_pointer_capacity(self):
+        """Concatenation preserves allocated, but not merely cached, capacity."""
+        other = SegmentedLevelStorage(
+            data={"x": torch.tensor([[2.0], [3.0]])},
+            segment_lengths=[2],
+            device="cpu",
+            validate=False,
+        )
+        lazy = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        lazy.concatenate(other)
+        assert lazy.batch_ptr.tolist() == [0, 1, 3]
+
+        cached = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        _ = cached.batch_ptr
+        cached.concatenate(other)
+        assert cached.batch_ptr.tolist() == [0, 1, 3]
+
+        allocated = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[1],
+            batch_ptr_capacity=5,
+            device="cpu",
+            validate=False,
+        )
+        allocated.concatenate(other)
+        assert allocated.batch_ptr.tolist() == [0, 1, 3, 3, 3]
 
     def test_update_at(self):
         s = SegmentedLevelStorage(
@@ -702,6 +1260,30 @@ class TestSegmentedLevelStorage:
         assert len(s) == 4
         assert s.num_elements() == 5 + 4
         assert s.segment_lengths.tolist() == [2, 3, 1, 3]
+
+    def test_concatenate_prevalidates_metadata_before_payload_mutation(self):
+        """An overflowing append leaves the original payload and metadata intact."""
+        maximum = torch.iinfo(torch.int32).max
+        storage = SegmentedLevelStorage(
+            data={"x": torch.tensor([[1.0]])},
+            segment_lengths=[maximum],
+            device="cpu",
+            validate=False,
+        )
+        other = SegmentedLevelStorage(
+            data={"x": torch.tensor([[2.0]])},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            storage.concatenate(other)
+
+        assert storage.segment_lengths.tolist() == [maximum]
+        assert storage._batch_ptr is None
+        assert storage._batch_ptr_capacity is None
+        torch.testing.assert_close(storage["x"], torch.tensor([[1.0]]))
 
     def test_is_segmented_true(self):
         s = SegmentedLevelStorage(
@@ -838,6 +1420,123 @@ class TestSegmentedLevelStorage:
             src["x"][:2], torch.tensor([[2.0], [3.0]], device=device)
         )
 
+    @pytest.mark.parametrize(
+        ("dtype", "values"),
+        [
+            (torch.bool, [True, False, True]),
+            (torch.float32, [1.0, 2.0, 3.0]),
+            (torch.float64, [1.0, 2.0, 3.0]),
+            (torch.int32, [1, 2, 3]),
+            (torch.int64, [1, 2, 3]),
+        ],
+    )
+    def test_put_and_defrag_support_all_buffer_dtypes(self, dtype, values):
+        src = SegmentedLevelStorage(
+            data={"value": torch.tensor(values, dtype=dtype).reshape(-1, 1)},
+            segment_lengths=[1, 2],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={"value": torch.zeros(3, 1, dtype=dtype)},
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        dest.put(src, torch.tensor([True, False]), copied_mask=copied)
+
+        torch.testing.assert_close(dest["value"][:1], src["value"][:1])
+        assert dest.segment_lengths.tolist() == [1]
+        src.defrag(copied)
+        torch.testing.assert_close(
+            src["value"][:2, 0], torch.tensor(values[1:], dtype=dtype)
+        )
+        assert src.segment_lengths.tolist() == [2]
+
+    def test_put_keeps_multiple_segmented_fields_aligned(self):
+        src = SegmentedLevelStorage(
+            data={
+                "ids": torch.tensor([[11], [21], [22]], dtype=torch.int64),
+                "values": torch.tensor([[1.5], [2.5], [3.5]], dtype=torch.float64),
+            },
+            segment_lengths=[1, 2],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={
+                "ids": torch.zeros(3, 1, dtype=torch.int64),
+                "values": torch.zeros(3, 1, dtype=torch.float64),
+            },
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        dest.put(src, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [True, True]
+        assert dest.segment_lengths.tolist() == [1, 2]
+        torch.testing.assert_close(dest["ids"], src["ids"])
+        torch.testing.assert_close(dest["values"], src["values"])
+
+    def test_put_rejects_later_segmented_field_before_mutation(self):
+        src = SegmentedLevelStorage(
+            data={
+                "first": torch.tensor([[1.0], [2.0]]),
+                "mismatch": torch.tensor([[3.0], [4.0]]),
+            },
+            segment_lengths=[1, 1],
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={
+                "first": torch.zeros(2, 1),
+                "mismatch": torch.zeros(2, 1, dtype=torch.float64),
+            },
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        with pytest.raises(
+            ValueError, match="Field 'mismatch' has incompatible dtypes"
+        ):
+            dest.put(src, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False, False]
+        assert dest.segment_lengths.tolist() == []
+        assert dest["first"].eq(0).all()
+
+    def test_defrag_rejects_unsupported_dtype_before_compacting_first_field(self):
+        storage = SegmentedLevelStorage(
+            data={
+                "first": torch.tensor([[1.0], [2.0]]),
+                "unsupported": torch.tensor([[1.0], [2.0]], dtype=torch.float16),
+            },
+            segment_lengths=[1, 1],
+            device="cpu",
+            validate=False,
+        )
+        before = storage["first"].clone()
+
+        with pytest.raises(
+            ValueError,
+            match="Field 'unsupported' dtype torch.float16 is not supported by buffer kernels",
+        ):
+            storage.defrag(torch.tensor([True, False]))
+
+        torch.testing.assert_close(storage["first"], before)
+        assert storage.segment_lengths.tolist() == [1, 1]
+
     def test_compute_put_per_system_fit_mask(self):
         """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
         device = "cpu"
@@ -870,6 +1569,32 @@ class TestSegmentedLevelStorage:
         assert len(dest) == 3
         torch.testing.assert_close(dest["x"][10:12], src["x"][:2])
         torch.testing.assert_close(dest["x"][12:15], src["x"][2:5])
+
+    def test_payload_buffer_put_rejects_int32_overflow_before_copy(self):
+        maximum = torch.iinfo(torch.int32).max
+        source = SegmentedLevelStorage(
+            data={"x": torch.ones(1, 1)},
+            segment_lengths=[1],
+            device="cpu",
+            validate=False,
+        )
+        destination = SegmentedLevelStorage(
+            data={"x": torch.zeros(1, 1).expand(maximum, 1)},
+            segment_lengths=[maximum],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        source_mask = torch.tensor([True])
+        fit_mask = torch.ones(1, dtype=torch.bool)
+        destination.compute_put_per_system_fit_mask(source, source_mask, None, fit_mask)
+
+        assert fit_mask.tolist() == [False]
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            destination.put(source, source_mask)
+        assert destination.segment_lengths.tolist() == [maximum]
+        assert destination.batch_ptr.tolist() == [0, maximum, maximum, maximum]
+        assert not hasattr(source, "_copied_mask")
 
     def test_compute_put_per_system_fit_mask_no_batch_ptr_room(self):
         """compute_put_per_system_fit_mask zeros fit_mask when dest has no batch_ptr room."""
@@ -956,6 +1681,59 @@ class TestSegmentedLevelStorage:
         assert dest["x"][11].item() == 2.0
         assert len(dest) == 2
 
+    def test_fieldless_fit_put_and_defrag_use_segment_metadata(self):
+        src = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2, 3],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        source_mask = torch.tensor([True, False])
+        fit_mask = torch.zeros(2, dtype=torch.bool)
+
+        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.put(src, fit_mask)
+
+        assert fit_mask.tolist() == [True, False]
+        assert dest.segment_lengths.tolist() == [2]
+        assert dest.batch_ptr[:2].tolist() == [0, 2]
+        src.defrag()
+        assert src.segment_lengths.tolist() == [3]
+        assert src.batch_ptr[:2].tolist() == [0, 3]
+        assert dest.batch_ptr.shape[0] == 4
+
+    def test_fieldless_put_rejects_exactly_one_fieldless_storage(self):
+        fieldless = SegmentedLevelStorage(
+            data=None,
+            segment_lengths=[2],
+            batch_ptr_capacity=4,
+            device="cpu",
+            validate=False,
+        )
+        payload = SegmentedLevelStorage(
+            data={"x": torch.zeros(2, 1)},
+            segment_lengths=[2],
+            device="cpu",
+            validate=False,
+        )
+        with pytest.raises(ValueError, match="both source and destination"):
+            fieldless.put(payload, torch.ones(1, dtype=torch.bool))
+        with pytest.raises(ValueError, match="both source and destination"):
+            payload.compute_put_per_system_fit_mask(
+                fieldless,
+                torch.ones(1, dtype=torch.bool),
+                None,
+                torch.zeros(1, dtype=torch.bool),
+            )
+
 
 # -----------------------------------------------------------------------------
 # MultiLevelStorage
@@ -966,6 +1744,23 @@ class TestMultiLevelStorage:
     def test_empty_construction(self):
         m = MultiLevelStorage(attr_map=LevelSchema())
         assert len(m) == 0
+
+    def test_duplicate_attribute_error_identifies_cross_group_collision(self):
+        groups = {
+            "atoms": UniformLevelStorage(
+                data={"shared": torch.zeros(1, 1)},
+                device="cpu",
+                validate=False,
+            ),
+            "system": UniformLevelStorage(
+                data={"shared": torch.zeros(1, 1)},
+                device="cpu",
+                validate=False,
+            ),
+        }
+
+        with pytest.raises(ValueError, match="duplicated across storage groups"):
+            MultiLevelStorage(groups=groups, validate=True)
 
     def test_from_data_factory(self):
         data = {

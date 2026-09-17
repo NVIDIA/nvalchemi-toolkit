@@ -46,10 +46,12 @@ from torch.distributed import ProcessGroup, Work
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.level_storage import (
+    TORCH_DTYPE_MAP,
     LevelSchema,
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
+    _checked_segment_metadata,
 )
 
 # Edge-level keys whose values are node indices and therefore need
@@ -59,13 +61,59 @@ from nvalchemi.data.level_storage import (
 # all edge tensors are stored as (E, ...) and concatenated on dim 0.
 _INDEX_KEYS = frozenset({"neighbor_list"})
 _EXCLUDED_KEYS = frozenset({"batch_idx", "batch_ptr", "device", "dtype", "info"})
+_BUILTIN_LEVELS = frozenset({"atoms", "edges", "system"})
+_LEVEL_ALIASES = {
+    "atom": "atoms",
+    "node": "atoms",
+    "atoms": "atoms",
+    "edge": "edges",
+    "edges": "edges",
+    "system": "system",
+}
+_INT32_MAX = torch.iinfo(torch.int32).max
+_UNIFORM_BUFFER_DTYPES = frozenset(
+    {torch.bool, torch.float32, torch.float64, torch.int32, torch.int64}
+)
 
 
 _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
 
 
+def _canonical_schema_dtype(schema: LevelSchema, key: str) -> torch.dtype | str | None:
+    """Return the effective dtype for a schema field, preserving unknown names."""
+    declared = schema.dtypes.get(key)
+    if declared is None:
+        return None
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
+
+def _checked_product_lengths(
+    left_lengths: Sequence[int],
+    right_lengths: Sequence[int],
+    level_name: str,
+) -> list[int]:
+    """Return product cardinalities after checking int32 pointer limits."""
+    products: list[int] = []
+    total = 0
+    for left, right in zip(left_lengths, right_lengths, strict=True):
+        product = int(left) * int(right)
+        if product > _INT32_MAX:
+            raise OverflowError(
+                f"Product level '{level_name}' cardinality {product} exceeds "
+                f"int32 maximum ({_INT32_MAX})"
+            )
+        total += product
+        if total > _INT32_MAX:
+            raise OverflowError(
+                f"Product level '{level_name}' cumulative cardinality {total} "
+                f"exceeds int32 maximum ({_INT32_MAX})"
+            )
+        products.append(product)
+    return products
+
+
 def _build_batch_storage(
-    samples: Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]],
+    samples: Iterator[tuple[Iterator[tuple[str, Tensor]], int, int | None]],
     *,
     node_keys: frozenset[str] | set[str],
     edge_keys: frozenset[str] | set[str],
@@ -105,76 +153,374 @@ def _build_batch_storage(
     tuple[MultiLevelStorage, dict[str, set[str]]]
         The constructed storage and tracked key sets.
     """
-    node_tensors: dict[str, list[Tensor]] = defaultdict(list)
-    edge_tensors: dict[str, list[Tensor]] = defaultdict(list)
-    system_tensors: dict[str, list[Tensor]] = defaultdict(list)
-    node_counts: list[int] = []
-    edge_counts: list[int] = []
+    # Keep the first sample's field order in each group, while delaying all
+    # concatenation until cardinalities have been checked.  Besides producing
+    # clearer errors, this is important for product levels whose parent counts
+    # may be inferred from another custom level.
+    records: list[tuple[list[tuple[str, Tensor]], int, int | None]] = []
+
+    def _resolve_level(level: str) -> str:
+        resolved = _LEVEL_ALIASES.get(level)
+        if resolved is not None:
+            return resolved
+        if level in attr_map.level_kinds:
+            return level
+        raise ValueError(
+            f"Unknown field level '{level}'; expected 'atom', 'edge', 'system', "
+            "or a registered level"
+        )
+
+    classifications: dict[str, str | None] = {}
 
     def _classify(key: str) -> str | None:
+        if key in classifications:
+            return classifications[key]
         if key in node_keys:
-            return "atom"
-        if key in edge_keys:
-            return "edge"
-        if key in system_keys:
-            return "system"
-        if field_levels is not None and key in field_levels:
-            return field_levels[key]
-        return fallback_level
+            level = "atom"
+        elif key in edge_keys:
+            level = "edge"
+        elif key in system_keys:
+            level = "system"
+        elif field_levels is not None and key in field_levels:
+            resolved = _resolve_level(field_levels[key])
+            # Preserve explicit metadata-driven routing in the private schema
+            # carried by extracted AtomicData.  Legacy key sets still win and
+            # are intentionally not rewritten.
+            level_kind = attr_map.level_kind(resolved)
+            attr_map.set(key, resolved, is_segmented=level_kind != "uniform")
+            level = resolved
+        else:
+            try:
+                level = attr_map.group(key)
+            except KeyError:
+                level = fallback_level
+        classifications[key] = level
+        return level
 
     node_offset = 0
-    for key_value_pairs, n_nodes, n_edges in samples:
-        node_counts.append(n_nodes)
-        edge_counts.append(n_edges)
-        for key, value in key_value_pairs:
+    selected_keys: tuple[str, ...] | None = None
+    for sample_index, (key_value_pairs, n_nodes, n_edges) in enumerate(samples):
+        pairs = list(key_value_pairs)
+        if selected_keys is None:
+            selected_keys = tuple(key for key, _ in pairs)
+        values_by_key = dict(pairs)
+
+        # The legacy collator selects fields from the first sample.  Keep that
+        # ordering and selection for built-in fields, but reject a custom field
+        # that appears only in a later sample instead of silently dropping it.
+        for key, _ in pairs:
+            if key in selected_keys:
+                continue
+            level = _classify(key)
+            if (
+                level is not None
+                and _LEVEL_ALIASES.get(level, level) not in _BUILTIN_LEVELS
+            ):
+                raise ValueError(
+                    f"Custom field '{key}' in level "
+                    f"'{_LEVEL_ALIASES.get(level, level)}' appears only in "
+                    f"later sample {sample_index}"
+                )
+
+        sample_pairs: list[tuple[str, Tensor]] = []
+        for key in selected_keys:
+            if key not in values_by_key:
+                continue
+            value = values_by_key[key]
             level = _classify(key)
             if level is None:
                 continue
             value = value.to(device, non_blocking=True)
             if level == "atom":
-                node_tensors[key].append(value)
+                level = "atoms"
             elif level == "edge":
-                if key in _INDEX_KEYS:
-                    value = value + node_offset
-                edge_tensors[key].append(value)
-            else:
-                system_tensors[key].append(value)
+                level = "edges"
+            elif level == "system":
+                level = "system"
+            if level == "edges" and key in _INDEX_KEYS:
+                value = value + node_offset
+            sample_pairs.append((key, value))
+        records.append((sample_pairs, n_nodes, n_edges))
         node_offset += n_nodes
 
-    atoms_data = {k: torch.cat(v, dim=0) for k, v in node_tensors.items()}
-    edges_data = {k: torch.cat(v, dim=0) for k, v in edge_tensors.items()}
-    system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
+    num_samples = len(records)
+    grouped: dict[str, dict[str, list[Tensor]]] = defaultdict(lambda: defaultdict(list))
+    field_samples: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for sample_index, (pairs, _, _) in enumerate(records):
+        seen = set()
+        for key, value in pairs:
+            group_name = _classify(key)
+            if group_name is None:
+                continue
+            group_name = _LEVEL_ALIASES.get(group_name, group_name)
+            if key in seen:
+                raise ValueError(
+                    f"Field '{key}' appears more than once in sample {sample_index}"
+                )
+            seen.add(key)
+            grouped[group_name][key].append(value)
+            field_samples[(group_name, key)].append(sample_index)
+
+    # All fields selected from the first sample must be available in every
+    # sample.  The old hard-coded path eventually failed on inconsistent
+    # segment lengths; prevalidation gives the caller the offending field.
+    for group_name, fields in grouped.items():
+        for key, values in fields.items():
+            if len(values) != num_samples:
+                field_kind = (
+                    "Custom field" if group_name not in _BUILTIN_LEVELS else "Field"
+                )
+                present_samples = field_samples[(group_name, key)]
+                missing_samples = [
+                    index
+                    for index in range(num_samples)
+                    if index not in present_samples
+                ]
+                missing_location = (
+                    f"sample {missing_samples[0]}"
+                    if len(missing_samples) == 1
+                    else f"samples {missing_samples}"
+                )
+                raise ValueError(
+                    f"{field_kind} '{key}' in level '{group_name}' is missing from "
+                    f"{missing_location}"
+                )
+            if attr_map.level_kinds.get(group_name) != "product" and any(
+                value.ndim == 0 for value in values
+            ):
+                raise ValueError(
+                    f"Field '{key}' in level '{group_name}' must have a leading "
+                    "cardinality dimension"
+                )
+
+    # Custom fields own their dtype and trailing shape in the effective schema
+    # of this batch.  Normalize that schema from the first value only after all
+    # samples have been checked, so an input schema is never mutated and a
+    # rejected batch cannot leave partially updated metadata.
+    inferred_dtypes: list[tuple[str, str, bool, torch.dtype]] = []
+    for group_name, fields in grouped.items():
+        if group_name in _BUILTIN_LEVELS:
+            continue
+        kind = attr_map.level_kinds[group_name]
+        for key, values in fields.items():
+            first_value = values[0]
+            if any(value.dtype != first_value.dtype for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible dtypes: "
+                    f"{[value.dtype for value in values]}"
+                )
+            trailing_start = 2 if kind == "product" else 1
+            trailing_shape = first_value.shape[trailing_start:]
+            if any(
+                value.shape[trailing_start:] != trailing_shape for value in values[1:]
+            ):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible trailing shapes: "
+                    f"{[tuple(value.shape[trailing_start:]) for value in values]}"
+                )
+
+            declared_dtype = attr_map.dtypes.get(key)
+            if declared_dtype is not None:
+                try:
+                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has "
+                        f"unsupported declared dtype '{declared_dtype}'"
+                    ) from exc
+                if expected_dtype != first_value.dtype:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has dtype "
+                        f"{first_value.dtype}, expected declared dtype "
+                        f"{declared_dtype}"
+                    )
+
+            if declared_dtype is None:
+                inferred_dtypes.append(
+                    (key, group_name, kind != "uniform", first_value.dtype)
+                )
+
+    for key, group_name, is_segmented, dtype in inferred_dtypes:
+        attr_map.set(key, group_name, dtype=dtype, is_segmented=is_segmented)
+
+    level_counts: dict[str, list[int | None]] = {
+        "atoms": [record[1] for record in records],
+        # Without a neighbor_list, AtomicData intentionally reports zero
+        # edges.  Keep that cardinality unresolved here so a custom edge
+        # field, or a product using edges as a fieldless parent, can infer it
+        # locally without changing AtomicData's public behavior.
+        "edges": [count if count not in (None, 0) else None for _, _, count in records],
+    }
+    if "neighbor_list" in grouped.get("edges", {}):
+        level_counts["edges"] = [record[2] for record in records]
+    level_kinds = attr_map.level_kinds
+
+    # Infer ordinary segmented levels from their first field and validate all
+    # remaining fields against that cardinality.  Uniform levels have one row
+    # per graph, including custom ordinary levels.
+    for group_name, fields in grouped.items():
+        kind = level_kinds.get(group_name)
+        if kind is None:
+            # This is only reachable for a legacy fallback group.  Raw-dict
+            # fallback is system-level, which is registered by the default
+            # schema; retain a defensive error for custom callers.
+            raise ValueError(f"Level '{group_name}' is not registered in the schema")
+        if kind == "uniform":
+            for key, values in fields.items():
+                if any(value.shape[0] != 1 for value in values):
+                    raise ValueError(
+                        f"Uniform level '{group_name}' field '{key}' must have "
+                        "one row per graph"
+                    )
+            level_counts[group_name] = [1] * num_samples
+            continue
+        if kind == "segmented":
+            if (
+                group_name == "edges"
+                and "neighbor_list" not in fields
+                and not all(count is not None for count in level_counts["edges"])
+            ):
+                first_values = next(iter(fields.values()))
+                level_counts["edges"] = [int(value.shape[0]) for value in first_values]
+            if group_name in level_counts and all(
+                count is not None for count in level_counts[group_name]
+            ):
+                expected = [int(count) for count in level_counts[group_name]]
+            else:
+                first_values = next(iter(fields.values()))
+                expected = [int(value.shape[0]) for value in first_values]
+                level_counts[group_name] = expected
+            for key, values in fields.items():
+                actual = [int(value.shape[0]) for value in values]
+                if actual != expected:
+                    raise ValueError(
+                        f"Segmented level '{group_name}' field '{key}' has "
+                        f"cardinalities {actual}, expected {expected}"
+                    )
+
+    # Product fields arrive in their logical two-axis shape ``[L, R, ...]``.
+    # Infer each registered parent directly from those axes, validate all
+    # fields before flattening, and retain empty parent groups when needed for
+    # round-tripping.  Process products in schema order so shared parents are
+    # resolved deterministically.
+    product_groups = [
+        name
+        for name in attr_map.level_names
+        if level_kinds.get(name) == "product" and name in grouped
+    ]
+    for group_name in product_groups:
+        fields = grouped[group_name]
+        left, right = attr_map.product_parents[group_name]
+        first_values = next(iter(fields.values()))
+        if any(value.ndim < 2 for values in fields.values() for value in values):
+            raise ValueError(
+                f"Product level '{group_name}' fields must have rank >= 2 "
+                "with shape [left, right, ...]"
+            )
+
+        left_counts = [int(value.shape[0]) for value in first_values]
+        right_counts = [int(value.shape[1]) for value in first_values]
+        if left == right and left_counts != right_counts:
+            raise ValueError(
+                f"Self-product level '{group_name}' requires equal left and "
+                f"right cardinalities, got {left_counts} and {right_counts}"
+            )
+
+        for key, values in fields.items():
+            actual_left = [int(value.shape[0]) for value in values]
+            actual_right = [int(value.shape[1]) for value in values]
+            if actual_left != left_counts or actual_right != right_counts:
+                raise ValueError(
+                    f"Product level '{group_name}' field '{key}' has axes "
+                    f"{list(zip(actual_left, actual_right, strict=True))}, "
+                    f"expected {list(zip(left_counts, right_counts, strict=True))}"
+                )
+
+        def _known_counts(name: str) -> bool:
+            return name in level_counts and all(
+                count is not None for count in level_counts[name]
+            )
+
+        if _known_counts(left) and [int(c) for c in level_counts[left]] != left_counts:
+            raise ValueError(
+                f"Product level '{group_name}' left axis cardinalities "
+                f"{left_counts} do not match parent '{left}' cardinalities "
+                f"{level_counts[left]}"
+            )
+        if (
+            _known_counts(right)
+            and [int(c) for c in level_counts[right]] != right_counts
+        ):
+            raise ValueError(
+                f"Product level '{group_name}' right axis cardinalities "
+                f"{right_counts} do not match parent '{right}' cardinalities "
+                f"{level_counts[right]}"
+            )
+        if left == right:
+            level_counts[left] = left_counts
+        else:
+            level_counts[left] = left_counts
+            level_counts[right] = right_counts
+
+        for key, values in fields.items():
+            payload_shape = values[0].shape[2:]
+            for value in values:
+                if value.shape[2:] != payload_shape:
+                    raise ValueError(
+                        f"Product level '{group_name}' field '{key}' has "
+                        f"trailing shape {tuple(value.shape[2:])}, expected "
+                        f"{tuple(payload_shape)}"
+                    )
+
+        expected = _checked_product_lengths(left_counts, right_counts, group_name)
+        level_counts[group_name] = expected
+        for key, values in fields.items():
+            # Flatten only after both axes and payload shapes are validated.
+            fields[key] = [
+                value.reshape(value.shape[0] * value.shape[1], *value.shape[2:])
+                for value in values
+            ]
+
+    required_groups = set(grouped)
+    for group_name in tuple(required_groups):
+        if level_kinds.get(group_name) == "product":
+            left, right = attr_map.product_parents[group_name]
+            required_groups.update((left, right))
 
     groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
-    if atoms_data:
-        groups["atoms"] = SegmentedLevelStorage(
-            data=atoms_data,
-            device=device,
-            segment_lengths=node_counts,
-            validate=validate,
-            attr_map=attr_map,
-        )
-    if edges_data:
-        groups["edges"] = SegmentedLevelStorage(
-            data=edges_data,
-            device=device,
-            segment_lengths=edge_counts,
-            validate=validate,
-            attr_map=attr_map,
-        )
-    if system_data:
-        groups["system"] = UniformLevelStorage(
-            data=system_data,
-            device=device,
-            validate=validate,
-            attr_map=attr_map,
-        )
+    ordered_groups = [name for name in attr_map.level_names if name in required_groups]
+    for group_name in ordered_groups:
+        kind = level_kinds.get(group_name)
+        fields = grouped.get(group_name, {})
+        if kind == "uniform":
+            if not fields:
+                continue
+            data = {key: torch.cat(values, dim=0) for key, values in fields.items()}
+            groups[group_name] = UniformLevelStorage(
+                data=data,
+                device=device,
+                validate=validate,
+                attr_map=attr_map,
+            )
+        elif kind in {"segmented", "product"}:
+            data = {key: torch.cat(values, dim=0) for key, values in fields.items()}
+            groups[group_name] = SegmentedLevelStorage(
+                data=data or None,
+                device=device,
+                segment_lengths=level_counts[group_name],
+                validate=validate,
+                attr_map=attr_map,
+            )
+        else:
+            raise ValueError(f"Level '{group_name}' is not registered in the schema")
 
     storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=validate)
     tracked_keys = {
-        "node": set(node_tensors.keys()),
-        "edge": set(edge_tensors.keys()),
-        "system": set(system_tensors.keys()),
+        "node": set(grouped.get("atoms", {})),
+        "edge": set(grouped.get("edges", {})),
+        "system": set(grouped.get("system", {})),
     }
     return storage, tracked_keys
 
@@ -207,17 +553,185 @@ def set_transient(batch: "Batch", name: str, value: torch.Tensor) -> None:
     object.__setattr__(batch, name, value)
 
 
+def _complete_schema(schema: LevelSchema) -> LevelSchema:
+    """Add missing built-in levels to an independent schema copy."""
+    for level_name in ("atoms", "edges"):
+        if level_name not in schema.level_kinds:
+            schema.add_level(level_name, segmented=True)
+        elif schema.level_kind(level_name) != "segmented":
+            raise ValueError(f"Built-in level '{level_name}' must be segmented")
+    if "system" not in schema.level_kinds:
+        schema.add_level("system", segmented=False)
+    elif schema.level_kind("system") != "uniform":
+        raise ValueError("Built-in level 'system' must be uniform")
+    return schema
+
+
+def _effective_schema(
+    data_list: Sequence[AtomicData], attr_map: LevelSchema | None
+) -> LevelSchema:
+    """Return an independent schema for a new batch.
+
+    An explicitly supplied schema is authoritative.  Otherwise, a schema
+    carried privately by an ``AtomicData`` instance is used when available;
+    ordinary AtomicData instances fall back to the built-in schema.
+    """
+    if attr_map is not None:
+        schema = attr_map.clone()
+    else:
+        schema = None
+        for data in data_list:
+            candidate = getattr(data, "_level_schema", None)
+            if isinstance(candidate, LevelSchema):
+                schema = candidate.clone()
+                break
+        if schema is None:
+            schema = LevelSchema()
+
+    # A deliberately minimal custom schema need not repeat the built-in levels;
+    # add them only to this independent effective copy.  LevelSchema itself
+    # continues to preserve its explicit constructor topology.
+    return _complete_schema(schema)
+
+
+def _empty_effective_schema(
+    template: AtomicData | Batch | None,
+    attr_map: LevelSchema | None,
+) -> LevelSchema:
+    """Clone the schema source selected by :meth:`Batch.empty`.
+
+    Explicit schemas take precedence, followed by a ``Batch`` template,
+    private ``AtomicData`` metadata, and finally the default schema.
+    """
+    if attr_map is not None:
+        return _complete_schema(attr_map.clone())
+    if isinstance(template, Batch):
+        return _complete_schema(template._storage.attr_map.clone())
+    if isinstance(template, AtomicData):
+        candidate = getattr(template, "_level_schema", None)
+        if isinstance(candidate, LevelSchema):
+            return _complete_schema(candidate.clone())
+    return _complete_schema(LevelSchema())
+
+
+def _validate_level_capacities(
+    schema: LevelSchema,
+    level_capacities: dict[str, int] | None,
+) -> dict[str, int]:
+    """Validate and copy explicit custom level capacities."""
+    if level_capacities is None:
+        return {}
+    if not isinstance(level_capacities, dict):
+        raise TypeError("level_capacities must be a dictionary or None")
+
+    capacities: dict[str, int] = {}
+    for level_name, capacity in level_capacities.items():
+        if not isinstance(level_name, str) or level_name not in schema.level_kinds:
+            raise ValueError(f"Unknown level capacity entry '{level_name}'")
+        if level_name in _BUILTIN_LEVELS:
+            raise ValueError(
+                f"Capacity for built-in level '{level_name}' is controlled by "
+                "num_systems, num_nodes, or num_edges"
+            )
+        if isinstance(capacity, bool) or not isinstance(capacity, int):
+            raise TypeError(
+                f"Capacity for level '{level_name}' must be an integer, "
+                f"got {type(capacity).__name__}"
+            )
+        if capacity < 0:
+            raise ValueError(f"Capacity for level '{level_name}' must be non-negative")
+        capacities[level_name] = capacity
+    return capacities
+
+
+def _validate_required_level_capacities(
+    schema: LevelSchema,
+    template: Batch,
+    capacities: dict[str, int],
+) -> None:
+    """Require capacities for materialized custom payload groups."""
+    for level_name, group in template._storage.groups.items():
+        if level_name in _BUILTIN_LEVELS:
+            continue
+        kind = schema.level_kinds.get(level_name)
+        if kind not in {"segmented", "product"}:
+            continue
+        if list(group.keys()) and level_name not in capacities:
+            raise ValueError(
+                f"Missing capacity for payload-bearing custom level '{level_name}'"
+            )
+
+
+def _validate_atomic_data_level_capacities(
+    schema: LevelSchema,
+    template: AtomicData,
+    capacities: dict[str, int],
+) -> None:
+    """Require capacities for custom payload fields in an AtomicData template."""
+    required: set[str] = set()
+    for key, value in template.model_dump(exclude_none=True).items():
+        if not isinstance(value, Tensor):
+            continue
+        level_name = schema.attr_to_group.get(key)
+        if (
+            level_name is not None
+            and level_name not in _BUILTIN_LEVELS
+            and schema.level_kinds.get(level_name) in {"segmented", "product"}
+        ):
+            required.add(level_name)
+    for level_name in required:
+        if level_name not in capacities:
+            raise ValueError(
+                f"Missing capacity for payload-bearing custom level '{level_name}'"
+            )
+
+
+def _batch_graph_slot_capacity(batch: Batch) -> int:
+    """Return the reusable graph-slot capacity represented by *batch*."""
+    capacity = batch.num_graphs
+    for group in batch._storage.groups.values():
+        if isinstance(group, UniformLevelStorage):
+            capacity = max(capacity, group._data.shape[0])
+            continue
+        pointer_capacity = group._batch_ptr_capacity
+        if group._batch_ptr is not None:
+            pointer_capacity = group._batch_ptr.shape[0]
+        if pointer_capacity is not None:
+            capacity = max(capacity, max(pointer_capacity - 2, 0))
+        capacity = max(capacity, len(group))
+    return capacity
+
+
+def _transport_payload_tag_span(
+    group: UniformLevelStorage | SegmentedLevelStorage | None,
+) -> int:
+    """Return the tag space reserved for one level payload."""
+    return len(list(group.keys())) + 1 if group is not None else 1
+
+
+def _custom_transport_groups(
+    batch: Batch,
+) -> list[tuple[str, UniformLevelStorage | SegmentedLevelStorage]]:
+    """Return materialized custom groups in schema definition order."""
+    return [
+        (name, batch._storage.groups[name])
+        for name in batch._storage.attr_map.level_names
+        if name not in _BUILTIN_LEVELS and name in batch._storage.groups
+    ]
+
+
 class Batch(DataMixin):
     """Graph-aware batch built on :class:`MultiLevelStorage`.
 
-    Internally stores three attribute groups via an :class:`MultiLevelStorage`:
+    The three built-in attribute groups are:
 
     * ``"atoms"`` (:class:`SegmentedLevelStorage`) -- node-level tensors
     * ``"edges"`` (:class:`SegmentedLevelStorage`) -- edge-level tensors
     * ``"system"`` (:class:`UniformLevelStorage`) -- graph-level tensors
 
-    ``batch_idx``, ``batch_ptr``, ``num_nodes_list``, and ``num_edges_list`` are
-    derived lazily from the segmented groups.
+    A :class:`LevelSchema` can register additional uniform, segmented, and
+    product levels. ``batch_idx``, ``batch_ptr``, ``num_nodes_list``, and
+    ``num_edges_list`` remain aliases for the built-in atom and edge levels.
 
     Attributes
     ----------
@@ -323,6 +837,128 @@ class Batch(DataMixin):
         if atoms is None:
             return torch.zeros(1, dtype=torch.int32, device=self.device)
         return atoms.batch_ptr
+
+    @property
+    def level_keys(self) -> dict[str, set[str]]:
+        """Return fields for every level whose cardinality is resolvable.
+
+        The mapping follows the effective :class:`LevelSchema` order.  Empty
+        sets represent registered uniform levels, fieldless built-in levels,
+        or product levels whose segmented parents provide their cardinality.
+        Unmaterialized custom segmented levels are omitted because their
+        cardinality is unresolved.
+        """
+        result: dict[str, set[str]] = {}
+        for name in self._storage.attr_map.level_names:
+            group = self._storage.groups.get(name)
+            if group is not None:
+                result[name] = set(group.keys())
+                continue
+            try:
+                self.level_ptr(name)
+            except KeyError:
+                continue
+            result[name] = set()
+        return result
+
+    def level_ptr(self, name: str) -> Tensor:
+        """Return the cumulative per-graph pointer for a registered level.
+
+        Materialized segmented and product levels expose their storage
+        pointers.  Uniform levels have one row per graph and therefore use
+        ``arange(B + 1)``.  Missing built-in ``atoms`` and ``edges`` levels
+        are treated as fieldless zero-cardinality levels.  An unmaterialized
+        product can be resolved from its two segmented parent pointers.
+
+        Parameters
+        ----------
+        name : str
+            Registered level name.
+
+        Returns
+        -------
+        torch.Tensor
+            Cumulative element counts with length ``num_graphs + 1`` and
+            ``torch.int32`` dtype.
+
+        Raises
+        ------
+        OverflowError
+            If the level's graph count, per-graph product cardinality, or
+            cumulative cardinality exceeds the signed int32 pointer range.
+        KeyError
+            If *name* is not registered or its segmented cardinality cannot
+            be resolved from materialized data or resolved product parents.
+        """
+        schema = self._storage.attr_map
+        if name not in schema.level_kinds:
+            raise KeyError(f"Level '{name}' not found")
+
+        group = self._storage.groups.get(name)
+        if group is not None:
+            if isinstance(group, SegmentedLevelStorage):
+                return group.batch_ptr[: self.num_graphs + 1]
+            if self.num_graphs > _INT32_MAX:
+                raise OverflowError(
+                    f"Uniform level '{name}' graph count exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
+            return torch.arange(
+                self.num_graphs + 1, dtype=torch.int32, device=self.device
+            )
+
+        kind = schema.level_kind(name)
+        if kind == "uniform":
+            if self.num_graphs > _INT32_MAX:
+                raise OverflowError(
+                    f"Uniform level '{name}' graph count exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
+            return torch.arange(
+                self.num_graphs + 1, dtype=torch.int32, device=self.device
+            )
+
+        if name in _BUILTIN_LEVELS:
+            return torch.zeros(
+                self.num_graphs + 1, dtype=torch.int32, device=self.device
+            )
+
+        if kind == "product":
+            left, right = schema.product_parents[name]
+            try:
+                left_ptr = self.level_ptr(left)
+                right_ptr = self.level_ptr(right)
+            except KeyError as exc:
+                raise KeyError(
+                    f"Level '{name}' has unresolved parent cardinality"
+                ) from exc
+            left_lengths = left_ptr[1:] - left_ptr[:-1]
+            right_lengths = right_ptr[1:] - right_ptr[:-1]
+            product_lengths = left_lengths.to(torch.int64) * right_lengths.to(
+                torch.int64
+            )
+            if (
+                product_lengths.numel()
+                and int(product_lengths.max().item()) > _INT32_MAX
+            ):
+                raise OverflowError(
+                    f"Product level '{name}' cardinality exceeds int32 maximum "
+                    f"({_INT32_MAX})"
+                )
+            cumulative = torch.cumsum(product_lengths, dim=0, dtype=torch.int64)
+            if cumulative.numel() and int(cumulative[-1].item()) > _INT32_MAX:
+                raise OverflowError(
+                    f"Product level '{name}' cumulative cardinality exceeds "
+                    f"int32 maximum ({_INT32_MAX})"
+                )
+            return torch.cat(
+                [
+                    torch.zeros(1, dtype=torch.int32, device=self.device),
+                    cumulative.to(torch.int32),
+                ]
+            )
+
+        raise KeyError(f"Level '{name}' has unresolved segmented cardinality")
 
     @property
     def edge_ptr(self) -> Tensor:
@@ -433,13 +1069,15 @@ class Batch(DataMixin):
         skip_validation : bool
             If ``True``, skip shape validation for speed.
         attr_map : LevelSchema, optional
-            Attribute registry.  Defaults to ``LevelSchema()``.
+            Attribute registry. If omitted, reuse schema metadata carried by
+            an input object or fall back to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
         field_levels : dict[str, str], optional
-            Explicit per-field level map (``"atom"`` / ``"edge"`` /
-            ``"system"``), typically from :attr:`Reader.field_levels`.
-            Used to classify custom keys not in the data class key sets.
+            Explicit per-field level map. Values may be built-in aliases such
+            as ``"atom"``, ``"edge"``, and ``"system"``, or names registered
+            in *attr_map*. Used to classify keys absent from the data class key
+            sets.
 
         Returns
         -------
@@ -452,8 +1090,7 @@ class Batch(DataMixin):
             device = data_list[0].device
         device = torch.device(device) if isinstance(device, str) else device
 
-        if attr_map is None:
-            attr_map = LevelSchema()
+        attr_map = _effective_schema(data_list, attr_map)
 
         representative = data_list[0]
         data_cls = representative.__class__
@@ -462,23 +1099,18 @@ class Batch(DataMixin):
         system_key_set = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
-        # Iterate keys in dict (= pydantic field declaration) order so that
-        # downstream insertion order into ``node_tensors`` / ``atoms_data`` is
-        # deterministic across processes. Using ``set(...)`` here would
-        # iterate in PYTHONHASHSEED-dependent order, producing rank-divergent
-        # ``_atoms_group`` dicts that break collective issue ordering in DD.
-        actual_keys = [
-            k
-            for k in data_list[0].model_dump(exclude_none=True).keys()
-            if k not in excluded
-        ]
 
+        # Iterate keys in dict (= pydantic field declaration) order so that
+        # downstream insertion order into grouped storage is deterministic
+        # across processes. Using ``set(...)`` here would iterate in
+        # PYTHONHASHSEED-dependent order, producing rank-divergent group dicts
+        # that break collective issue ordering in DD.
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:
                 pairs = (
                     (key, value)
-                    for key in actual_keys
-                    if isinstance((value := getattr(data, key, None)), Tensor)
+                    for key, value in data.model_dump(exclude_none=True).items()
+                    if key not in excluded and isinstance(value, Tensor)
                 )
                 yield pairs, data.num_nodes, data.num_edges
 
@@ -526,13 +1158,14 @@ class Batch(DataMixin):
         device : torch.device | str, optional
             Target device.  Inferred from first dict if ``None``.
         attr_map : LevelSchema, optional
-            Attribute registry.  Defaults to ``LevelSchema()``.
+            Attribute registry. Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
         field_levels : dict[str, str], optional
-            Explicit per-field level map (``"atom"`` / ``"edge"`` /
-            ``"system"``), typically from :attr:`Reader.field_levels`.
-            Used to classify custom keys not in the default key sets.
+            Explicit per-field level map. Values may be built-in aliases such
+            as ``"atom"``, ``"edge"``, and ``"system"``, or names registered
+            in *attr_map*. Used to classify keys absent from the default key
+            sets.
 
         Returns
         -------
@@ -551,17 +1184,15 @@ class Batch(DataMixin):
                 device = torch.device("cpu")
         device = torch.device(device) if isinstance(device, str) else device
 
-        if attr_map is None:
-            attr_map = LevelSchema()
+        attr_map = _complete_schema(
+            attr_map.clone() if attr_map is not None else LevelSchema()
+        )
 
         node_key_set = AtomicData._default_node_keys
         edge_key_set = AtomicData._default_edge_keys
         system_key_set = AtomicData._default_system_keys
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
-        actual_keys = [
-            k for k in first if k not in excluded and isinstance(first[k], Tensor)
-        ]
 
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:
@@ -570,8 +1201,8 @@ class Batch(DataMixin):
                 n_edges = nl.shape[0] if isinstance(nl, Tensor) else 0
                 pairs = (
                     (key, value)
-                    for key in actual_keys
-                    if isinstance((value := data.get(key)), Tensor)
+                    for key, value in data.items()
+                    if key not in excluded and isinstance(value, Tensor)
                 )
                 yield pairs, n_nodes, n_edges
 
@@ -604,6 +1235,7 @@ class Batch(DataMixin):
         template: AtomicData | Batch | None = None,
         device: torch.device | str = "cpu",
         attr_map: LevelSchema | None = None,
+        level_capacities: dict[str, int] | None = None,
     ) -> Batch:
         """Construct an empty batch with pre-allocated capacity (zero graphs, fixed storage).
 
@@ -622,25 +1254,44 @@ class Batch(DataMixin):
             Total edge capacity across all graphs.
         template : AtomicData or Batch, optional
             Template for attribute keys and per-key shapes/dtypes. If ``None``,
-            a minimal :class:`AtomicData` with ``positions``, ``numbers``,
+            a minimal :class:`AtomicData` with ``positions``, ``atomic_numbers``,
             and ``energy`` is used.
         device : torch.device or str, optional
             Device for allocated tensors.
         attr_map : LevelSchema, optional
             Attribute registry; used when template is provided.
+        level_capacities : dict[str, int], optional
+            Explicit capacities for payload-bearing custom segmented and
+            product levels. Custom uniform levels use ``num_systems``;
+            fieldless segmented levels need no entry.
 
         Returns
         -------
         Batch
             Batch with ``num_graphs == 0`` and capacity for the given sizes.
+
+        Raises
+        ------
+        TypeError
+            If a custom capacity is not an integer.
+        ValueError
+            If a capacity is negative, names an unknown or built-in level, or
+            is missing for a payload-bearing custom segmented or product
+            level in the template.
         """
         if num_systems < 0 or num_nodes < 0 or num_edges < 0:
             raise ValueError(
                 "num_systems, num_nodes, and num_edges must be non-negative"
             )
         device = torch.device(device) if isinstance(device, str) else device
-        if attr_map is None:
-            attr_map = LevelSchema()
+        effective_schema = _empty_effective_schema(template, attr_map)
+        capacities = _validate_level_capacities(effective_schema, level_capacities)
+        if isinstance(template, AtomicData):
+            _validate_atomic_data_level_capacities(
+                effective_schema, template, capacities
+            )
+        elif isinstance(template, Batch):
+            _validate_required_level_capacities(effective_schema, template, capacities)
 
         if template is None:
             template = AtomicData(
@@ -649,16 +1300,28 @@ class Batch(DataMixin):
                 energy=torch.tensor([[0.0]]),
             )
         if isinstance(template, AtomicData):
-            ref = cls.from_data_list([template], device=device, attr_map=attr_map)
+            ref = cls.from_data_list(
+                [template], device=device, attr_map=effective_schema
+            )
         else:
             ref = template
 
         groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
-        for name, group in ref._storage.groups.items():
+        ordered_names = [
+            name for name in effective_schema.level_names if name in ref._storage.groups
+        ]
+        ordered_names.extend(
+            name for name in ref._storage.groups if name not in ordered_names
+        )
+        for name in ordered_names:
+            group = ref._storage.groups[name]
             keys = list(group.keys())
-            if not keys:
+            kind = effective_schema.level_kinds.get(name)
+            if kind is None:
+                raise ValueError(f"Level '{name}' is not registered in the schema")
+            if not keys and name in _BUILTIN_LEVELS:
                 continue
-            if name == "system":
+            if name == "system" or kind == "uniform":
                 data = {
                     k: torch.zeros(
                         (num_systems,) + group[k].shape[1:],
@@ -667,50 +1330,60 @@ class Batch(DataMixin):
                     )
                     for k in keys
                 }
-                storage = UniformLevelStorage(
-                    data=data, device=device, validate=False, attr_map=attr_map
-                )
+                if not data:
+                    # A fieldless uniform group is metadata-only but still
+                    # occupies one graph slot per system.
+                    storage = UniformLevelStorage(
+                        data=None,
+                        device=device,
+                        validate=False,
+                        attr_map=effective_schema,
+                    )
+                    storage._data = TensorDict(
+                        {}, batch_size=[num_systems], device=device
+                    )
+                else:
+                    storage = UniformLevelStorage(
+                        data=data,
+                        device=device,
+                        validate=False,
+                        attr_map=effective_schema,
+                    )
                 object.__setattr__(storage, "_num_kept", 0)
                 groups[name] = storage
-            elif name == "atoms":
-                data = {
-                    k: torch.zeros(
-                        (num_nodes,) + group[k].shape[1:],
-                        device=device,
-                        dtype=group[k].dtype,
-                    )
-                    for k in keys
-                }
-                groups[name] = SegmentedLevelStorage(
-                    data=data,
-                    segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
-                    device=device,
-                    batch_ptr_capacity=max(num_systems + 2, 2),
-                    validate=False,
-                    attr_map=attr_map,
-                )
             else:
+                if keys:
+                    if name == "atoms":
+                        data_capacity = num_nodes
+                    elif name == "edges":
+                        data_capacity = num_edges
+                    else:
+                        data_capacity = capacities[name]
+                else:
+                    data_capacity = 0
                 data = {
                     k: torch.zeros(
-                        (num_edges,) + group[k].shape[1:],
+                        (data_capacity,) + group[k].shape[1:],
                         device=device,
                         dtype=group[k].dtype,
                     )
                     for k in keys
                 }
                 groups[name] = SegmentedLevelStorage(
-                    data=data,
+                    data=data or None,
                     segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
                     device=device,
                     batch_ptr_capacity=max(num_systems + 2, 2),
                     validate=False,
-                    attr_map=attr_map,
+                    attr_map=effective_schema,
                 )
 
-        storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
+        storage = MultiLevelStorage(
+            groups=groups, attr_map=effective_schema, validate=False
+        )
         return cls._construct(
             device=device,
-            keys=ref.keys,
+            keys={k: v.copy() for k, v in ref.keys.items()} if ref.keys else None,
             storage=storage,
             data_class=ref._data_class,
         )
@@ -760,9 +1433,19 @@ class Batch(DataMixin):
                         dtype=torch.int32,
                         device=group.device,
                     )
+                    group._batch_ptr_capacity = batch_ptr_capacity
                 if hasattr(group, "_batch_idx"):
                     group._batch_idx = None
                 group._batch_ptr_np = None
+                group._segment_indices = None
+                if hasattr(group, "_num_segments"):
+                    object.__delattr__(group, "_num_segments")
+                if hasattr(group, "_num_elements_kept"):
+                    object.__delattr__(group, "_num_elements_kept")
+                if hasattr(group, "_copied_mask"):
+                    object.__delattr__(group, "_copied_mask")
+        if hasattr(self, "_copied_mask"):
+            object.__delattr__(self, "_copied_mask")
 
     # ------------------------------------------------------------------
     # Per-graph reconstruction
@@ -795,38 +1478,71 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         if atoms is not None:
             atoms._lazy_init_batch_ptr()
-            node_start = atoms._batch_ptr[idx].item()
-            node_end = atoms._batch_ptr[idx + 1].item()
-            for key, tensor in atoms.items():
-                data[key] = tensor[node_start:node_end]
+        node_offset = atoms._batch_ptr[idx] if atoms is not None else 0
 
-        edges = self._edges_group
-        if edges is not None and edges.num_elements() > 0:
-            edges._lazy_init_batch_ptr()
-            edge_start = edges._batch_ptr[idx].item()
-            edge_end = edges._batch_ptr[idx + 1].item()
-            node_offset = atoms._batch_ptr[idx] if atoms is not None else 0
-            for key, tensor in edges.items():
-                if key in _INDEX_KEYS:
-                    data[key] = tensor[edge_start:edge_end] - node_offset
-                else:
-                    data[key] = tensor[edge_start:edge_end]
-
-        system = self._system_group
-        if system is not None:
-            for key, tensor in system.items():
-                data[key] = tensor[idx].unsqueeze(0)
+        # Iterate in schema order, not the historical atoms/edges/system order.
+        # This preserves deterministic field order for custom ordinary and
+        # product levels while retaining the built-in neighbor-list correction.
+        for group_name in self._storage.attr_map.level_names:
+            group = self._storage.groups.get(group_name)
+            if group is None:
+                continue
+            if isinstance(group, SegmentedLevelStorage):
+                group._lazy_init_batch_ptr()
+                start = group._batch_ptr[idx].item()
+                end = group._batch_ptr[idx + 1].item()
+                product_shape: tuple[int, int] | None = None
+                if self._storage.attr_map.level_kind(group_name) == "product":
+                    left, right = self._storage.attr_map.product_parents[group_name]
+                    left_group = self._storage.groups.get(left)
+                    right_group = self._storage.groups.get(right)
+                    if not isinstance(
+                        left_group, SegmentedLevelStorage
+                    ) or not isinstance(right_group, SegmentedLevelStorage):
+                        raise RuntimeError(
+                            f"Product level '{group_name}' has missing segmented "
+                            "parent storage"
+                        )
+                    left_group._lazy_init_batch_ptr()
+                    right_group._lazy_init_batch_ptr()
+                    product_shape = (
+                        int(
+                            left_group._batch_ptr[idx + 1] - left_group._batch_ptr[idx]
+                        ),
+                        int(
+                            right_group._batch_ptr[idx + 1]
+                            - right_group._batch_ptr[idx]
+                        ),
+                    )
+                for key, tensor in group.items():
+                    value = tensor[start:end]
+                    if group_name == "edges" and key in _INDEX_KEYS:
+                        value = value - node_offset
+                    if product_shape is not None:
+                        value = value.reshape(*product_shape, *value.shape[1:])
+                    data[key] = value
+            else:
+                for key, tensor in group.items():
+                    data[key] = tensor[idx].unsqueeze(0)
 
         # Pass storage-group key sets so dynamically-added keys
         # (e.g. system_id) survive the round-trip through model_post_init.
         if atoms is not None:
             data["__node_keys__"] = set(atoms.keys())
-        if edges is not None and edges.num_elements() > 0:
+        edges = self._edges_group
+        if edges is not None:
             data["__edge_keys__"] = set(edges.keys())
+        system = self._system_group
         if system is not None:
             data["__system_keys__"] = set(system.keys())
 
-        return self._data_class(**data)
+        result = self._data_class(**data)
+        # Custom level definitions are intentionally private: they are needed
+        # for an immediate unbatch/rebatch cycle but are not AtomicData fields.
+        schema = self._storage.attr_map.clone()
+        if hasattr(result, "_level_schema"):
+            result._level_schema = schema
+        return result
 
     def to_data_list(self) -> list[AtomicData]:
         """Reconstruct all individual :class:`AtomicData` objects.
@@ -867,31 +1583,39 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         offset_diff: Tensor | None = None
         if atoms is not None:
-            new_atoms = atoms.select(idx_tensor)
             old_offsets = atoms.batch_ptr[idx_tensor]
+            new_atoms = atoms.select(idx_tensor)
             new_atoms._lazy_init_batch_ptr()
             new_offsets = new_atoms._batch_ptr[:-1]
             offset_diff = old_offsets - new_offsets
-            new_groups["atoms"] = new_atoms
 
-        edges = self._edges_group
-        if edges is not None:
-            new_edges = edges.select(idx_tensor)
-            if "neighbor_list" in new_edges and offset_diff is not None:
-                new_edges._lazy_init_batch_ptr()
-                ei = new_edges["neighbor_list"]
-                edge_batch_idx = new_edges.batch_idx
-                correction = offset_diff[edge_batch_idx]
-                new_edges._data["neighbor_list"] = ei - correction.unsqueeze(1)
-            new_groups["edges"] = new_edges
+        for group_name in self._storage.attr_map.level_names:
+            group = self._storage.groups.get(group_name)
+            if group is None:
+                continue
+            if isinstance(group, SegmentedLevelStorage):
+                new_group = group.select(idx_tensor)
+                if (
+                    group_name == "edges"
+                    and "neighbor_list" in new_group
+                    and offset_diff is not None
+                ):
+                    new_group._lazy_init_batch_ptr()
+                    edge_batch_idx = new_group.batch_idx
+                    correction = offset_diff[edge_batch_idx]
+                    new_group._data["neighbor_list"] = new_group[
+                        "neighbor_list"
+                    ] - correction.unsqueeze(1)
+            else:
+                new_group = group.select(idx_tensor)
+            new_groups[group_name] = new_group
 
-        system = self._system_group
-        if system is not None:
-            new_groups["system"] = system.select(idx_tensor)
-
+        new_schema = self._storage.attr_map.clone()
+        for group in new_groups.values():
+            group.attr_map = new_schema
         new_storage = MultiLevelStorage(
             groups=new_groups,
-            attr_map=self._storage.attr_map,
+            attr_map=new_schema,
             validate=False,
         )
         return Batch._construct(
@@ -911,29 +1635,34 @@ class Batch(DataMixin):
     ) -> None:
         """Put graphs where mask[i] is True from src_batch into this batch (buffer).
 
-        Computes per-level fit masks (system/atoms/edges), takes their logical_and
-        as the copy mask, then puts with that mask so all levels only copy systems
-        that fit in every level. Uses Warp buffer kernels; only float32 attributes
-        copied. If copied_mask is provided, it is updated with the copy mask for
+        Computes a fit mask for every materialized level and copies only graphs
+        that fit in all levels. Built-in and custom uniform payloads may use
+        ``bool``, ``float32``, ``float64``, ``int32``, or ``int64``. Materialized
+        custom segmented and product payloads must use ``torch.float32``. If
+        *copied_mask* is provided, it is updated with the combined copy mask for
         :meth:`defrag`.
 
         Parameters
         ----------
         src_batch : Batch
-            Source batch; must have same groups (atoms/edges/system).
+            Source batch. Custom schemas and materialized custom groups must
+            match the destination buffer.
         mask : Tensor
             (num_graphs,) bool, True = consider copying this graph.
         copied_mask : Tensor, optional
             (num_graphs,) bool; if provided, modified in place with the actual
             copy mask (fit in all levels). If None, stored on *src_batch*.
         dest_mask : Tensor, optional
-            For uniform (system) level: (len(self),) bool, True = slot occupied.
-            If None, system level treats all slots as empty.
+            Shared occupancy mask for uniform levels, with ``True`` denoting an
+            occupied destination slot. Occupied slots must form a dense prefix.
+            If ``None``, all slots are available.
         """
         device = self.device
         n = src_batch.num_graphs
         if mask.shape[0] != n:
             raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
+        self._validate_custom_put(src_batch)
+        self._prevalidate_buffer_put(src_batch)
         mask = mask.to(device=device, dtype=torch.bool)
         if copied_mask is not None:
             if copied_mask.shape[0] != n:
@@ -943,37 +1672,79 @@ class Batch(DataMixin):
             copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
             object.__setattr__(src_batch, "_copied_mask", copy_mask)
 
+        # Uniform groups all represent the same graph slots.  Snapshot the
+        # caller's occupancy before either group mutates it, so each fit and
+        # copy sees the same free slots.  The caller's mask is updated once
+        # after all uniform groups have copied.
+        uniform_dest_mask = (
+            dest_mask.to(device=device, dtype=torch.bool)
+            if dest_mask is not None
+            else None
+        )
+
         fit_mask = torch.ones(n, device=device, dtype=torch.bool)
-        system = self._system_group
-        src_system = src_batch._system_group
-        if system is not None and src_system is not None:
+
+        # Keep the historical built-in order for communication layouts, then
+        # process custom levels in schema order.
+        legacy_groups = ("system", "atoms", "edges")
+        custom_groups = tuple(
+            name
+            for name in self._storage.attr_map.level_names
+            if name not in _BUILTIN_LEVELS
+        )
+        fit_groups: list[tuple[str, Any, Any]] = []
+        for group_name in (*legacy_groups, *custom_groups):
+            dest_group = self._storage.groups.get(group_name)
+            src_group = src_batch._storage.groups.get(group_name)
+            if (
+                dest_group is not None
+                and src_group is not None
+                and not (
+                    isinstance(dest_group, UniformLevelStorage)
+                    and dest_group._data.is_empty()
+                    and src_group._data.is_empty()
+                )
+            ):
+                fit_groups.append((group_name, dest_group, src_group))
+
+        # Compute every fit before entering the copy phase so a rejected
+        # custom group cannot leave built-in data partially written.
+        for _, group, src_group in fit_groups:
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            system.compute_put_per_system_fit_mask(
-                src_system, mask, dest_mask, level_fit
+            group_dest_mask = uniform_dest_mask if not group.is_segmented() else None
+            group.compute_put_per_system_fit_mask(
+                src_group, mask, group_dest_mask, level_fit
             )
-            fit_mask.logical_and_(level_fit)
-        atoms = self._atoms_group
-        src_atoms = src_batch._atoms_group
-        if atoms is not None and src_atoms is not None:
-            level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            atoms.compute_put_per_system_fit_mask(src_atoms, mask, None, level_fit)
-            fit_mask.logical_and_(level_fit)
-        edges = self._edges_group
-        src_edges = src_batch._edges_group
-        if edges is not None and src_edges is not None:
-            level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            edges.compute_put_per_system_fit_mask(src_edges, mask, None, level_fit)
             fit_mask.logical_and_(level_fit)
         copy_mask.copy_(fit_mask)
 
-        if system is not None and src_system is not None:
-            system.put(
-                src_system, copy_mask, copied_mask=copy_mask, dest_mask=dest_mask
+        final_uniform_dest_mask: Tensor | None = None
+        for _, group, src_group in fit_groups:
+            if group.is_segmented():
+                group.put(src_group, copy_mask, copied_mask=copy_mask)
+            else:
+                group_dest_mask = (
+                    uniform_dest_mask.clone()
+                    if uniform_dest_mask is not None
+                    else torch.zeros(
+                        group._data.shape[0], device=device, dtype=torch.bool
+                    )
+                )
+                group.put(
+                    src_group,
+                    copy_mask,
+                    copied_mask=copy_mask,
+                    dest_mask=group_dest_mask,
+                )
+                if final_uniform_dest_mask is None:
+                    final_uniform_dest_mask = group_dest_mask
+
+        if dest_mask is not None and final_uniform_dest_mask is not None:
+            dest_mask.copy_(
+                final_uniform_dest_mask.to(
+                    device=dest_mask.device, dtype=dest_mask.dtype
+                )
             )
-        if atoms is not None and src_atoms is not None:
-            atoms.put(src_atoms, copy_mask, copied_mask=copy_mask)
-        if edges is not None and src_edges is not None:
-            edges.put(src_edges, copy_mask, copied_mask=copy_mask)
 
     def defrag(
         self,
@@ -981,9 +1752,10 @@ class Batch(DataMixin):
     ) -> Batch:
         """Defrag this batch in-place by removing graphs that were put.
 
-        Drops graphs where copied_mask[i] is True (e.g. from a prior
-        :meth:`put`). Uses Warp buffer kernels; one host sync per group to
-        trim. Only float32 attributes are compacted.
+        Drops graphs where ``copied_mask[i]`` is ``True`` from every
+        materialized level, including fieldless segmented metadata. Payloads
+        must use a buffer-kernel-supported dtype: ``bool``, ``float32``,
+        ``float64``, ``int32``, or ``int64``.
 
         Parameters
         ----------
@@ -999,15 +1771,19 @@ class Batch(DataMixin):
             copied_mask = getattr(self, "_copied_mask", None)
             if copied_mask is None:
                 raise ValueError("defrag requires copied_mask or a prior put")
-        system = self._system_group
-        if system is not None:
-            system.defrag(copied_mask=copied_mask)
-        atoms = self._atoms_group
-        if atoms is not None:
-            atoms.defrag(copied_mask=copied_mask)
-        edges = self._edges_group
-        if edges is not None:
-            edges.defrag(copied_mask=copied_mask)
+        self._prevalidate_buffer_defrag()
+        # Keep the historical built-in order, then compact each materialized
+        # custom level in schema order using the same graph mask.
+        legacy_groups = ("system", "atoms", "edges")
+        custom_groups = tuple(
+            name
+            for name in self._storage.attr_map.level_names
+            if name not in _BUILTIN_LEVELS
+        )
+        for group_name in (*legacy_groups, *custom_groups):
+            group = self._storage.groups.get(group_name)
+            if group is not None:
+                group.defrag(copied_mask=copied_mask)
         if hasattr(self, "_copied_mask"):
             object.__delattr__(self, "_copied_mask")
         return self
@@ -1163,6 +1939,267 @@ class Batch(DataMixin):
     # Mutation
     # ------------------------------------------------------------------
 
+    def _validate_custom_append(self, other: Batch) -> None:
+        """Validate custom append compatibility before any mutation."""
+        schema = self._storage.attr_map
+        other_schema = other._storage.attr_map
+
+        custom_names = tuple(
+            name for name in schema.level_names if name not in _BUILTIN_LEVELS
+        )
+        other_custom_names = tuple(
+            name for name in other_schema.level_names if name not in _BUILTIN_LEVELS
+        )
+        if schema.level_names != other_schema.level_names:
+            raise ValueError(
+                "Custom append requires identical schema level order: "
+                f"{schema.level_names} vs {other_schema.level_names}"
+            )
+        if custom_names != other_custom_names:
+            raise ValueError(
+                "Custom append requires identical custom level definitions: "
+                f"{custom_names} vs {other_custom_names}"
+            )
+
+        def _custom_resolution(
+            level_schema: LevelSchema,
+        ) -> dict[str, tuple[str, torch.dtype | str | None]]:
+            return {
+                key: (group, _canonical_schema_dtype(level_schema, key))
+                for key, group in level_schema.attr_to_group.items()
+                if group not in _BUILTIN_LEVELS
+            }
+
+        resolution = _custom_resolution(schema)
+        other_resolution = _custom_resolution(other_schema)
+        if resolution != other_resolution:
+            raise ValueError(
+                "Custom schema has incompatible resolved groups, dtypes, or field "
+                "sets: "
+                f"{resolution} vs {other_resolution}"
+            )
+
+        self_materialized = {
+            name for name in self._storage.groups if name not in _BUILTIN_LEVELS
+        }
+        other_materialized = {
+            name for name in other._storage.groups if name not in _BUILTIN_LEVELS
+        }
+        if self_materialized != other_materialized:
+            raise ValueError(
+                "Custom append requires identical materialized level sets: "
+                f"{self_materialized} vs {other_materialized}"
+            )
+
+        for name in custom_names:
+            definition = (
+                schema.level_kinds.get(name),
+                schema.product_parents.get(name),
+            )
+            other_definition = (
+                other_schema.level_kinds.get(name),
+                other_schema.product_parents.get(name),
+            )
+            if definition != other_definition:
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible definitions: "
+                    f"{definition} vs {other_definition}"
+                )
+
+            if name not in self_materialized:
+                continue
+
+            group = self._storage.groups[name]
+            other_group = other._storage.groups[name]
+            if type(group) is not type(other_group):
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible storage kinds: "
+                    f"{type(group).__name__} vs {type(other_group).__name__}"
+                )
+            fields = set(group.keys())
+            other_fields = set(other_group.keys())
+            if fields != other_fields:
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible field sets: "
+                    f"{fields} vs {other_fields}"
+                )
+
+            for field in fields:
+                value = group[field]
+                other_value = other_group[field]
+                if value.dtype != other_value.dtype:
+                    raise ValueError(
+                        f"Level '{name}' field '{field}' has incompatible buffer "
+                        f"dtypes: {value.dtype} vs {other_value.dtype}"
+                    )
+                if value.shape[1:] != other_value.shape[1:]:
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' has incompatible "
+                        f"trailing shapes: {value.shape[1:]} vs {other_value.shape[1:]}"
+                    )
+
+    def _validate_custom_put(self, other: Batch) -> None:
+        """Validate custom schema and storage layout before a buffer put."""
+        schema = self._storage.attr_map
+        other_schema = other._storage.attr_map
+        custom_names = tuple(
+            name for name in schema.level_names if name not in _BUILTIN_LEVELS
+        )
+        other_custom_names = tuple(
+            name for name in other_schema.level_names if name not in _BUILTIN_LEVELS
+        )
+        if custom_names != other_custom_names:
+            raise ValueError(
+                "Custom put requires identical schema level order: "
+                f"{custom_names} vs {other_custom_names}"
+            )
+
+        custom_resolution = {
+            key: (group, _canonical_schema_dtype(schema, key))
+            for key, group in schema.attr_to_group.items()
+            if group not in _BUILTIN_LEVELS
+        }
+        other_resolution = {
+            key: (group, _canonical_schema_dtype(other_schema, key))
+            for key, group in other_schema.attr_to_group.items()
+            if group not in _BUILTIN_LEVELS
+        }
+        if custom_resolution != other_resolution:
+            raise ValueError(
+                "Custom put requires identical resolved groups, dtypes, or fields"
+            )
+
+        self_materialized = {
+            name for name in self._storage.groups if name not in _BUILTIN_LEVELS
+        }
+        other_materialized = {
+            name for name in other._storage.groups if name not in _BUILTIN_LEVELS
+        }
+        if self_materialized != other_materialized:
+            raise ValueError(
+                "Custom put requires identical materialized level sets: "
+                f"{self_materialized} vs {other_materialized}"
+            )
+
+        for name in custom_names:
+            definition = (
+                schema.level_kinds.get(name),
+                schema.product_parents.get(name),
+            )
+            other_definition = (
+                other_schema.level_kinds.get(name),
+                other_schema.product_parents.get(name),
+            )
+            if definition != other_definition:
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible definitions: "
+                    f"{definition} vs {other_definition}"
+                )
+            if name not in self_materialized:
+                continue
+
+            group = self._storage.groups[name]
+            other_group = other._storage.groups[name]
+            if type(group) is not type(other_group):
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible storage kinds: "
+                    f"{type(group).__name__} vs {type(other_group).__name__}"
+                )
+            fields = set(group.keys())
+            other_fields = set(other_group.keys())
+            if fields != other_fields:
+                raise ValueError(
+                    f"Custom level '{name}' has incompatible fields: "
+                    f"{fields} vs {other_fields}"
+                )
+            for field in fields:
+                value = group[field]
+                other_value = other_group[field]
+                if value.dtype != other_value.dtype:
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' has incompatible "
+                        f"dtypes: {value.dtype} vs {other_value.dtype}"
+                    )
+                if value.shape[1:] != other_value.shape[1:]:
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' has incompatible "
+                        f"trailing shapes: {value.shape[1:]} vs "
+                        f"{other_value.shape[1:]}"
+                    )
+                kind = schema.level_kind(name)
+                if kind == "uniform" and value.dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' dtype {value.dtype} "
+                        "is not supported by uniform buffer kernels"
+                    )
+                if kind in {"segmented", "product"} and (
+                    value.dtype != torch.float32 or other_value.dtype != torch.float32
+                ):
+                    raise ValueError(
+                        f"Custom level '{name}' field '{field}' buffer payloads "
+                        "must use float32"
+                    )
+
+        # Preserve the existing built-in tolerance for missing groups and
+        # fields, but reject incompatible paired storage before any fit or copy
+        # can partially update the destination.
+        for name, group in self._storage.groups.items():
+            other_group = other._storage.groups.get(name)
+            if other_group is None:
+                continue
+            if type(group) is not type(other_group):
+                raise ValueError(
+                    f"Level '{name}' has incompatible storage kinds: "
+                    f"{type(group).__name__} vs {type(other_group).__name__}"
+                )
+            for field in set(group.keys()) & set(other_group.keys()):
+                value = group[field]
+                other_value = other_group[field]
+                if value.shape[1:] != other_value.shape[1:]:
+                    raise ValueError(
+                        f"Level '{name}' field '{field}' has incompatible trailing "
+                        f"shapes: {value.shape[1:]} vs {other_value.shape[1:]}"
+                    )
+
+    def _prevalidate_buffer_put(self, other: Batch) -> None:
+        """Validate every payload field before any batch buffer mutation."""
+        for level, dest_group in self._storage.groups.items():
+            source_group = other._storage.groups.get(level)
+            if source_group is None:
+                continue
+            if (
+                isinstance(dest_group, UniformLevelStorage)
+                and dest_group._data.is_empty()
+                and source_group._data.is_empty()
+            ):
+                continue
+            for field in dest_group.keys():
+                if field not in source_group:
+                    continue
+                dest_dtype = dest_group[field].dtype
+                source_dtype = source_group[field].dtype
+                if dest_dtype != source_dtype:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' has incompatible buffer "
+                        f"dtypes: {dest_dtype} vs {source_dtype}"
+                    )
+                if dest_dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' dtype {dest_dtype} is not "
+                        "supported by buffer kernels"
+                    )
+
+    def _prevalidate_buffer_defrag(self) -> None:
+        """Validate every payload field before compacting any batch level."""
+        for level, group in self._storage.groups.items():
+            for field in group.keys():
+                dtype = group[field].dtype
+                if dtype not in _UNIFORM_BUFFER_DTYPES:
+                    raise ValueError(
+                        f"Level '{level}' field '{field}' dtype {dtype} is not "
+                        "supported by buffer kernels"
+                    )
+
     def append(self, other: Batch) -> None:
         """Append another batch (in-place via concatenation).
 
@@ -1183,6 +2220,38 @@ class Batch(DataMixin):
                 "batch.append(batch.clone()) instead."
             )
 
+        self._validate_custom_append(other)
+
+        # Verify every segmented pointer that the append will extend before
+        # any payload or neighbor-list offset can mutate either batch.
+        for group_name, group in self._storage.groups.items():
+            other_group = other._storage.groups.get(group_name)
+            if not (
+                isinstance(group, SegmentedLevelStorage)
+                and isinstance(other_group, SegmentedLevelStorage)
+            ):
+                continue
+
+            group_fields = set(group.keys())
+            other_fields = set(other_group.keys())
+            both_fieldless = not group_fields and not other_fields
+            if not both_fieldless and not group_fields.intersection(other_fields):
+                # Segmented concatenate is a no-op without a shared payload.
+                continue
+            _checked_segment_metadata(
+                torch.cat(
+                    [
+                        group.segment_lengths.to(
+                            device=group.device, dtype=torch.int64
+                        ),
+                        other_group.segment_lengths.to(
+                            device=group.device, dtype=torch.int64
+                        ),
+                    ]
+                ),
+                group.device,
+            )
+
         atoms = self._atoms_group
         other_atoms = other._atoms_group
         saved_ei = None
@@ -1193,17 +2262,36 @@ class Batch(DataMixin):
                 saved_ei = other_edges._data["neighbor_list"]
                 other_edges._data["neighbor_list"] = saved_ei + total_nodes
 
-        n_other = other.num_graphs
-        for group_name, group in self._storage.groups.items():
-            other_group = other._storage.groups.get(group_name)
-            if other_group is not None:
-                group.concatenate(other_group)
-            else:
-                group.extend_for_appended_graphs(n_other)
-
-        # Restore other's neighbor_list to avoid mutating the input batch.
-        if saved_ei is not None:
-            other_edges._data["neighbor_list"] = saved_ei
+        try:
+            n_other = other.num_graphs
+            for group_name, group in self._storage.groups.items():
+                other_group = other._storage.groups.get(group_name)
+                if other_group is not None:
+                    if (
+                        isinstance(group, SegmentedLevelStorage)
+                        and isinstance(other_group, SegmentedLevelStorage)
+                        and not set(group.keys())
+                        and not set(other_group.keys())
+                    ):
+                        # Fieldless segmented levels retain per-graph
+                        # cardinality even without payload tensors.
+                        group._replace_segment_lengths(
+                            torch.cat(
+                                [
+                                    group.segment_lengths,
+                                    other_group.segment_lengths.to(group.device),
+                                ]
+                            )
+                        )
+                        continue
+                    group.concatenate(other_group)
+                else:
+                    group.extend_for_appended_graphs(n_other)
+        finally:
+            # Restore other's neighbor_list to avoid mutating the input batch,
+            # including when a non-custom legacy append fails mid-operation.
+            if saved_ei is not None:
+                other_edges._data["neighbor_list"] = saved_ei
 
     def append_data(
         self,
@@ -1229,6 +2317,7 @@ class Batch(DataMixin):
         other = Batch.from_data_list(
             data_list,
             device=self.device,
+            attr_map=self._storage.attr_map,
             exclude_keys=exclude_keys,
         )
         self.append(other)
@@ -1242,6 +2331,10 @@ class Batch(DataMixin):
     ) -> None:
         """Add a new key-value pair to the batch.
 
+        Registered custom level names are accepted in addition to the
+        built-in aliases. An unrecognized level retains the legacy behavior
+        of assigning the key to the atom level.
+
         Parameters
         ----------
         key : str
@@ -1249,7 +2342,7 @@ class Batch(DataMixin):
         values : list[Tensor]
             One value per graph.
         level : str
-            One of ``"node"``, ``"edge"``, ``"system"``.
+            Built-in alias or registered custom level name.
         overwrite : bool
             If ``True``, overwrite existing keys.
 
@@ -1257,7 +2350,10 @@ class Batch(DataMixin):
         ------
         ValueError
             If key exists and *overwrite* is ``False``, or if the number
-            of values does not match the batch size.
+            of values does not match the batch size, shape, or level
+            cardinality.
+        TypeError
+            If *level* is not a string or a value is not a tensor.
         """
         if key in self._storage and not overwrite:
             raise ValueError(
@@ -1269,28 +2365,259 @@ class Batch(DataMixin):
                 f"Number of values ({len(values)}) must match "
                 f"number of graphs in batch ({self.num_graphs})"
             )
+        if not values:
+            raise ValueError("Values must be non-empty")
 
         device = self.device
+        if not isinstance(level, str):
+            raise TypeError(f"level must be a string, got {type(level).__name__}")
+        group_name = _LEVEL_ALIASES.get(level, level)
+        if group_name not in self._storage.attr_map.level_kinds:
+            # Preserve the historical fallback for unknown levels.
+            group_name = "atoms"
+
+        existing_group_name = self._storage._group_name_from_attr(key)
+        if existing_group_name is not None and existing_group_name != group_name:
+            raise ValueError(
+                f"Key '{key}' already belongs to level '{existing_group_name}', "
+                f"not '{group_name}'"
+            )
+
+        schema = self._storage.attr_map.clone()
+        kind = schema.level_kind(group_name)
         values = [v.to(device) if isinstance(v, Tensor) else v for v in values]
 
-        group_name = {"node": "atoms", "edge": "edges", "system": "system"}.get(
-            level, "atoms"
+        def _validate_value(value: Any) -> Tensor:
+            if not isinstance(value, Tensor):
+                raise TypeError(
+                    f"Values for key '{key}' must be tensors, got "
+                    f"{type(value).__name__}"
+                )
+            if value.ndim == 0 and kind != "uniform":
+                raise ValueError(f"Values for key '{key}' need a leading dimension")
+            return value
+
+        values = [_validate_value(value) for value in values]
+        if group_name not in _BUILTIN_LEVELS:
+            first_dtype = values[0].dtype
+            if any(value.dtype != first_dtype for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible dtypes: "
+                    f"{[value.dtype for value in values]}"
+                )
+            declared_dtype = schema.dtypes.get(key)
+            if declared_dtype is not None:
+                try:
+                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has "
+                        f"unsupported declared dtype '{declared_dtype}'"
+                    ) from exc
+                if expected_dtype != first_dtype:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has dtype "
+                        f"{first_dtype}, expected declared dtype {declared_dtype}"
+                    )
+            trailing_start = 2 if kind == "product" else 1
+            first_shape = values[0].shape[trailing_start:]
+            if any(value.shape[trailing_start:] != first_shape for value in values[1:]):
+                raise ValueError(
+                    f"Custom field '{key}' in level '{group_name}' has "
+                    f"incompatible trailing shapes: "
+                    f"{[tuple(value.shape[trailing_start:]) for value in values]}"
+                )
+
+        schema.set(
+            key,
+            group_name,
+            dtype=(
+                values[0].dtype
+                if group_name in _BUILTIN_LEVELS or key not in schema.dtypes
+                else None
+            ),
+            is_segmented=kind != "uniform",
         )
         group = self._storage.groups.get(group_name)
-        if group is None:
+        if group is None and group_name in _BUILTIN_LEVELS:
             raise ValueError(f"Group '{group_name}' not found in batch")
 
-        if level == "system":
+        if kind == "uniform":
+            if any(value.ndim > 0 and value.shape[0] != 1 for value in values):
+                raise ValueError(
+                    f"Uniform level '{group_name}' field '{key}' must have one "
+                    "row per graph"
+                )
             # squeeze (1, *trailing) per-graph to (num_graphs, *trailing)
             squeezed = [
                 v.squeeze(0) if v.dim() >= 1 and v.shape[0] == 1 else v for v in values
             ]
-            group._data[key] = torch.stack(squeezed, dim=0)
+            new_data = torch.stack(squeezed, dim=0)
+            if group is None:
+                group = UniformLevelStorage(
+                    data={key: new_data},
+                    device=device,
+                    validate=False,
+                    attr_map=schema,
+                )
+                self._storage.groups[group_name] = group
+            else:
+                group._data[key] = new_data
         else:
-            group._data[key] = torch.cat(values, dim=0)
+            parents_to_materialize: list[tuple[str, list[int]]] = []
+            parent_counts: list[list[int] | None] = []
+            if kind == "product":
+                if any(value.ndim < 2 for value in values):
+                    raise ValueError(
+                        f"Product level '{group_name}' values must have rank >= 2 "
+                        "with shape [left, right, ...]"
+                    )
+                parent_names = schema.product_parents[group_name]
+
+                def _parent_cardinalities(name: str) -> list[int] | None:
+                    parent_group = self._storage.groups.get(name)
+                    if parent_group is not None:
+                        if not isinstance(parent_group, SegmentedLevelStorage):
+                            raise ValueError(
+                                f"Product parent '{name}' must use segmented storage"
+                            )
+                        return parent_group.segment_lengths[: self.num_graphs].tolist()
+                    if name == "atoms" and self._atoms_group is not None:
+                        return self.num_nodes_list
+                    if name == "edges" and self._edges_group is not None:
+                        return self.num_edges_list
+                    return None
+
+                parent_counts = [
+                    _parent_cardinalities(parent) for parent in parent_names
+                ]
+
+            if group is None:
+                if kind == "product":
+                    left_counts = [int(value.shape[0]) for value in values]
+                    right_counts = [int(value.shape[1]) for value in values]
+                else:
+                    expected = [int(value.shape[0]) for value in values]
+                group = None
+            else:
+                if not isinstance(group, SegmentedLevelStorage):
+                    raise ValueError(
+                        f"Level '{group_name}' is segmented but storage is not"
+                    )
+                expected = group.segment_lengths[: self.num_graphs].tolist()
+                if kind == "product":
+                    left_counts = [int(value.shape[0]) for value in values]
+                    right_counts = [int(value.shape[1]) for value in values]
+
+            if kind == "product":
+                if parent_names[0] == parent_names[1] and left_counts != right_counts:
+                    raise ValueError(
+                        f"Self-product level '{group_name}' requires equal left and "
+                        f"right cardinalities, got {left_counts} and {right_counts}"
+                    )
+                for axis, counts in enumerate((left_counts, right_counts)):
+                    known_counts = parent_counts[axis]
+                    if (
+                        known_counts is not None
+                        and [int(c) for c in known_counts] != counts
+                    ):
+                        raise ValueError(
+                            f"Product level '{group_name}' axis {axis} cardinalities "
+                            f"{counts} do not match parent '{parent_names[axis]}' "
+                            f"cardinalities {known_counts}"
+                        )
+                    parent_counts[axis] = counts
+                expected = _checked_product_lengths(
+                    left_counts, right_counts, group_name
+                )
+                if group is not None and expected != [
+                    int(count) for count in group.segment_lengths[: self.num_graphs]
+                ]:
+                    raise ValueError(
+                        f"Product level '{group_name}' cardinalities {expected} "
+                        f"do not match existing storage"
+                    )
+                payload_shape = values[0].shape[2:]
+                for value in values:
+                    if value.shape[2:] != payload_shape:
+                        raise ValueError(
+                            f"Product level '{group_name}' field '{key}' has "
+                            f"trailing shape {tuple(value.shape[2:])}, expected "
+                            f"{tuple(payload_shape)}"
+                        )
+                if group is None:
+                    for parent, counts in zip(parent_names, parent_counts, strict=True):
+                        if parent not in self._storage.groups:
+                            if not any(
+                                existing_parent == parent
+                                for existing_parent, _ in parents_to_materialize
+                            ):
+                                parents_to_materialize.append((parent, counts))
+                concatenated = torch.cat(
+                    [
+                        value.reshape(value.shape[0] * value.shape[1], *value.shape[2:])
+                        for value in values
+                    ],
+                    dim=0,
+                )
+            else:
+                actual = [int(value.shape[0]) for value in values]
+                if actual != expected:
+                    raise ValueError(
+                        f"Segmented level '{group_name}' field '{key}' has "
+                        f"cardinalities {actual}, expected {expected}"
+                    )
+                trailing = values[0].shape[1:]
+                if any(value.shape[1:] != trailing for value in values):
+                    raise ValueError(f"Field '{key}' has incompatible trailing shapes")
+                concatenated = torch.cat(values, dim=0)
+            if values:
+                if group is None:
+                    for parent, counts in parents_to_materialize:
+                        self._storage.groups[parent] = SegmentedLevelStorage(
+                            data=None,
+                            device=device,
+                            segment_lengths=counts,
+                            validate=False,
+                            attr_map=schema,
+                        )
+                    group = SegmentedLevelStorage(
+                        data={key: concatenated},
+                        device=device,
+                        segment_lengths=expected,
+                        validate=False,
+                        attr_map=schema,
+                    )
+                    self._storage.groups[group_name] = group
+                else:
+                    group._data[key] = concatenated
+
+        self._storage.attr_map = schema
+        groups = {
+            name: self._storage.groups[name]
+            for name in schema.level_names
+            if name in self._storage.groups
+        }
+        groups.update(
+            {
+                name: group
+                for name, group in self._storage.groups.items()
+                if name not in groups
+            }
+        )
+        self._storage.groups = groups
+        for storage_group in self._storage.groups.values():
+            storage_group.attr_map = schema
 
         if self.keys is not None:
-            self.keys[level].add(key)
+            legacy_level = {
+                "atoms": "node",
+                "edges": "edge",
+                "system": "system",
+            }.get(group_name)
+            if legacy_level is not None:
+                self.keys[legacy_level].add(key)
 
     # ------------------------------------------------------------------
     # DataMixin overrides (performance-critical)
@@ -1432,9 +2759,11 @@ class Batch(DataMixin):
     ) -> _BatchSendHandle:
         """Non-blocking send of this batch to *dst*.
 
-        Transmits a 3-int metadata header (``num_graphs``, ``num_nodes``,
-        ``num_edges``), per-group segment lengths for segmented groups,
-        and the bulk tensor data via ``TensorDict.isend()``.
+        Transmits the fixed metadata header and built-in level data first.
+        Materialized custom level segment lengths and tensor payloads follow
+        in schema order. A zero-graph batch sends only the metadata header.
+        The wire format does not negotiate custom layouts; the receiver must
+        provide a matching custom template as a caller precondition.
 
         Parameters
         ----------
@@ -1475,7 +2804,7 @@ class Batch(DataMixin):
         for name in ("atoms", "edges", "system"):
             grp = self._storage.groups.get(name)
             if grp is None:
-                tag_offset += 1
+                tag_offset += _transport_payload_tag_span(grp)
                 continue
             if isinstance(grp, SegmentedLevelStorage):
                 n = grp.num_elements()
@@ -1492,7 +2821,46 @@ class Batch(DataMixin):
                 handles.extend(result)
             else:
                 handles.append(result)
-            tag_offset += len(list(grp.keys())) + 1
+            tag_offset += _transport_payload_tag_span(grp)
+
+        custom_groups = _custom_transport_groups(self)
+        if custom_groups:
+            for _, custom_group in custom_groups:
+                if isinstance(custom_group, SegmentedLevelStorage):
+                    segment_lengths = custom_group.segment_lengths[
+                        : self.num_graphs
+                    ].contiguous()
+                    handles.append(
+                        dist.isend(
+                            segment_lengths,
+                            dst=dst,
+                            tag=tag + tag_offset,
+                            group=group,
+                        )
+                    )
+                    tag_offset += 1
+
+            for _, custom_group in custom_groups:
+                keys = list(custom_group.keys())
+                if not keys:
+                    tag_offset += _transport_payload_tag_span(custom_group)
+                    continue
+                n = (
+                    custom_group.num_elements()
+                    if isinstance(custom_group, SegmentedLevelStorage)
+                    else self.num_graphs
+                )
+                result = custom_group._data[:n].isend(
+                    dst=dst,
+                    init_tag=tag + tag_offset,
+                    group=group,
+                    return_early=True,
+                )
+                if isinstance(result, list):
+                    handles.extend(result)
+                else:
+                    handles.append(result)
+                tag_offset += _transport_payload_tag_span(custom_group)
 
         return _BatchSendHandle(handles)
 
@@ -1510,7 +2878,7 @@ class Batch(DataMixin):
 
         Posts non-blocking receives for the metadata header, then returns
         a :class:`_BatchRecvHandle` whose ``.wait()`` blocks until all
-        data arrives and reconstructs a :class:`Batch`.
+        data arrives and reconstructs a :class:`Batch` using *template*.
 
         Parameters
         ----------
@@ -1519,9 +2887,12 @@ class Batch(DataMixin):
         device : torch.device | str
             Device to receive tensors onto.
         template : Batch, optional
-            Template batch providing attribute keys, dtypes, and group
-            structure.  Required for the first receive; may be cached
-            by the caller for subsequent calls.
+            Template batch providing attribute keys, dtypes, group structure,
+            and custom level definitions. Required when receiving custom
+            levels and for the first structured receive. Its materialized
+            levels, field order, dtypes, and trailing shapes must match the
+            sender; callers may cache it for subsequent calls. No custom
+            layout negotiation occurs on the wire.
         tag : int
             Base message tag.
         group : ProcessGroup, optional
@@ -1557,6 +2928,8 @@ class Batch(DataMixin):
         """Blocking send to *dst*.
 
         Equivalent to ``self.isend(dst, tag=tag, group=group).wait()``.
+        When custom levels are present, the receiver must supply a matching
+        template; the wire format performs no custom layout negotiation.
 
         Parameters
         ----------
@@ -1590,7 +2963,11 @@ class Batch(DataMixin):
         device : torch.device | str
             Device to receive tensors onto.
         template : Batch, optional
-            Template batch.
+            Template batch providing attribute keys, dtypes, group structure,
+            and custom level definitions. Required when receiving custom
+            levels and must match the sender's materialized layout. This
+            matching template is a caller precondition; no custom layout
+            negotiation occurs on the wire.
         tag : int
             Base message tag.
         group : ProcessGroup, optional
@@ -1599,6 +2976,7 @@ class Batch(DataMixin):
         Returns
         -------
         Batch
+
         """
         return cls.irecv(
             src=src,
@@ -1615,7 +2993,7 @@ class Batch(DataMixin):
         *,
         device: torch.device | str | None = None,
     ) -> Batch:
-        """Create an empty batch (0 graphs) with the same schema as *batch*.
+        """Create an empty batch with the schema and capacities of *batch*.
 
         Parameters
         ----------
@@ -1627,15 +3005,29 @@ class Batch(DataMixin):
         Returns
         -------
         Batch
-            A batch with ``num_graphs == 0``.
+            A zero-graph batch preserving every materialized level and its
+            graph-slot or payload capacity.
         """
         dev = device if device is not None else batch.device
+        level_capacities: dict[str, int] = {}
+        for name, group in batch._storage.groups.items():
+            if name in _BUILTIN_LEVELS:
+                continue
+            if isinstance(group, SegmentedLevelStorage) and list(group.keys()):
+                level_capacities[name] = group._data.shape[0]
+
+        atoms = batch._storage.groups.get("atoms")
+        edges = batch._storage.groups.get("edges")
+        num_nodes = atoms._data.shape[0] if atoms is not None else 0
+        num_edges = edges._data.shape[0] if edges is not None else 0
         return cls.empty(
-            num_systems=0,
-            num_nodes=0,
-            num_edges=0,
+            num_systems=_batch_graph_slot_capacity(batch),
+            num_nodes=num_nodes,
+            num_edges=num_edges,
             template=batch,
             device=dev,
+            attr_map=batch._storage.attr_map,
+            level_capacities=level_capacities,
         )
 
 
@@ -1684,7 +3076,8 @@ class _BatchRecvHandle:
     device : torch.device
         Device to receive tensors onto.
     template : Batch | None
-        Template batch for attribute keys and dtypes.
+        Template batch for attribute keys, dtypes, group structure, and custom
+        level definitions.
     base_tag : int
         Base message tag (must match sender's *tag*).
     group : ProcessGroup | None
@@ -1718,6 +3111,7 @@ class _BatchRecvHandle:
         Batch
             The reconstructed batch.  If the sender sent a sentinel
             (0-graph batch), returns ``Batch.empty(...)`` with 0 capacity.
+
         """
         self._meta_handle.wait()
         num_graphs, num_nodes, num_edges = self._meta.tolist()
@@ -1735,6 +3129,14 @@ class _BatchRecvHandle:
                     num_edges=0,
                     template=self._template,
                     device=self._device,
+                    attr_map=self._template._storage.attr_map,
+                    level_capacities={
+                        name: 0
+                        for name, custom_group in _custom_transport_groups(
+                            self._template
+                        )
+                        if isinstance(custom_group, SegmentedLevelStorage)
+                    },
                 )
             return Batch(device=self._device)
 
@@ -1777,10 +3179,17 @@ class _BatchRecvHandle:
 
         groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
         attr_map = (
-            self._template._storage.attr_map
+            self._template._storage.attr_map.clone()
             if self._template is not None
             else LevelSchema()
         )
+        builtin_specs: list[
+            tuple[
+                str,
+                TensorDict | None,
+                Tensor | None,
+            ]
+        ] = []
 
         for name, capacity, seg_lens in [
             ("atoms", num_nodes, atoms_seg),
@@ -1793,16 +3202,13 @@ class _BatchRecvHandle:
                 else None
             )
             if template_grp is None:
-                tag_offset += (
-                    (len(list(template_grp.keys())) + 1)
-                    if template_grp is not None
-                    else 1
-                )
+                tag_offset += _transport_payload_tag_span(template_grp)
                 continue
 
             keys = list(template_grp.keys())
             if not keys:
-                tag_offset += 1
+                tag_offset += _transport_payload_tag_span(template_grp)
+                builtin_specs.append((name, None, seg_lens))
                 continue
 
             recv_data = {}
@@ -1826,31 +3232,143 @@ class _BatchRecvHandle:
                 handles.extend(td_handles)
             else:
                 handles.append(td_handles)
-            tag_offset += len(keys) + 1
+            tag_offset += _transport_payload_tag_span(template_grp)
+            builtin_specs.append((name, recv_td, seg_lens))
 
+        for h in handles:
+            if h is not None and hasattr(h, "wait"):
+                h.wait()
+
+        # Segment-length receives populate uninitialized tensors.  Construct
+        # segmented storage only after those receives complete, including
+        # fieldless built-in atoms/edges where no TensorDict I/O was needed.
+        for name, recv_td, seg_lens in builtin_specs:
             if name == "system":
-                storage = UniformLevelStorage(
-                    data={k: recv_td[k] for k in keys},
+                if recv_td is None:
+                    continue
+                groups[name] = UniformLevelStorage(
+                    data={key: recv_td[key] for key in recv_td.keys()},
                     device=self._device,
                     validate=False,
                     attr_map=attr_map,
                 )
-                groups[name] = storage
-            else:
-                if seg_lens is None:
-                    continue
-                storage = SegmentedLevelStorage(
-                    data={k: recv_td[k] for k in keys},
+            elif seg_lens is not None:
+                groups[name] = SegmentedLevelStorage(
+                    data=(
+                        {key: recv_td[key] for key in recv_td.keys()}
+                        if recv_td is not None
+                        else None
+                    ),
                     segment_lengths=seg_lens,
                     device=self._device,
                     validate=False,
                     attr_map=attr_map,
                 )
-                groups[name] = storage
 
-        for h in handles:
-            if h is not None and hasattr(h, "wait"):
-                h.wait()
+        custom_groups = (
+            _custom_transport_groups(self._template)
+            if self._template is not None
+            else []
+        )
+        if custom_groups:
+            control_handles: list[Work | list[Work] | int | None] = []
+            custom_segment_lengths: dict[str, Tensor] = {}
+            for name, custom_group in custom_groups:
+                if isinstance(custom_group, SegmentedLevelStorage):
+                    segment_lengths = torch.empty(
+                        num_graphs, dtype=torch.int32, device=self._device
+                    )
+                    custom_segment_lengths[name] = segment_lengths
+                    control_handles.append(
+                        dist.irecv(
+                            segment_lengths,
+                            src=self._src,
+                            tag=self._base_tag + tag_offset,
+                            group=self._group,
+                        )
+                    )
+                    tag_offset += 1
+
+            for handle in control_handles:
+                if handle is not None and hasattr(handle, "wait"):
+                    handle.wait()
+
+            custom_payload_handles: list[Work | list[Work] | int | None] = []
+            for name, template_group in custom_groups:
+                keys = list(template_group.keys())
+                kind = attr_map.level_kind(name)
+                if isinstance(template_group, SegmentedLevelStorage):
+                    segment_lengths = custom_segment_lengths[name]
+                    capacity = int(segment_lengths.sum().item())
+                else:
+                    segment_lengths = None
+                    capacity = num_graphs
+
+                if not keys:
+                    tag_offset += _transport_payload_tag_span(template_group)
+                    if kind == "uniform":
+                        storage = UniformLevelStorage(
+                            data=None,
+                            device=self._device,
+                            validate=False,
+                            attr_map=attr_map,
+                        )
+                        storage._data = TensorDict(
+                            {}, batch_size=[capacity], device=self._device
+                        )
+                    else:
+                        storage = SegmentedLevelStorage(
+                            data=None,
+                            segment_lengths=segment_lengths,
+                            device=self._device,
+                            validate=False,
+                            attr_map=attr_map,
+                        )
+                    groups[name] = storage
+                    continue
+
+                recv_data = {
+                    key: torch.empty(
+                        (capacity,) + template_group[key].shape[1:],
+                        dtype=template_group[key].dtype,
+                        device=self._device,
+                    )
+                    for key in keys
+                }
+                recv_td = TensorDict(
+                    recv_data, batch_size=[capacity], device=self._device
+                )
+                payload_handles = recv_td.irecv(
+                    src=self._src,
+                    init_tag=self._base_tag + tag_offset,
+                    group=self._group,
+                    return_premature=True,
+                )
+                if isinstance(payload_handles, list):
+                    custom_payload_handles.extend(payload_handles)
+                else:
+                    custom_payload_handles.append(payload_handles)
+                tag_offset += _transport_payload_tag_span(template_group)
+
+                if kind == "uniform":
+                    groups[name] = UniformLevelStorage(
+                        data={key: recv_td[key] for key in keys},
+                        device=self._device,
+                        validate=False,
+                        attr_map=attr_map,
+                    )
+                else:
+                    groups[name] = SegmentedLevelStorage(
+                        data={key: recv_td[key] for key in keys},
+                        segment_lengths=segment_lengths,
+                        device=self._device,
+                        validate=False,
+                        attr_map=attr_map,
+                    )
+
+            for handle in custom_payload_handles:
+                if handle is not None and hasattr(handle, "wait"):
+                    handle.wait()
 
         mls = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
         return Batch._construct(

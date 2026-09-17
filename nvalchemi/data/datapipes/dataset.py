@@ -42,6 +42,7 @@ import torch
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.backends.base import Reader
+from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.data.transforms import Compose
 
 if TYPE_CHECKING:
@@ -191,6 +192,10 @@ class _FusedBatchPrefetchResult:
         Exception if loading failed, or None.
     event : torch.cuda.Event | None
         CUDA event for stream synchronization, or None.
+    field_levels : dict[str, str] | None
+        Field classifications captured for this read, or None on error.
+    level_schema : LevelSchema | None
+        Independent level schema captured for this read, or None.
     """
 
     batch_splits: list[int]
@@ -199,6 +204,8 @@ class _FusedBatchPrefetchResult:
     metadata: list[dict[str, Any]] | None = None
     error: Exception | None = None
     event: torch.cuda.Event | None = None
+    field_levels: dict[str, str] | None = None
+    level_schema: LevelSchema | None = None
 
 
 @dataclass
@@ -367,7 +374,9 @@ class Dataset:
         self.target_device = target_device
 
         self.skip_validation = skip_validation
-        self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
+        self._reader_metadata_revision = getattr(reader, "_metadata_revision", None)
+        self._field_levels = dict(getattr(reader, "field_levels", {}) or {})
+        self._level_schema = getattr(reader, "level_schema", None)
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
@@ -440,12 +449,30 @@ class Dataset:
             for index in indices
         ]
 
+    def _snapshot_level_metadata(self) -> tuple[dict[str, str], LevelSchema | None]:
+        """Capture field classifications and an independent level schema."""
+        revision = getattr(self.reader, "_metadata_revision", None)
+        if revision is not None and revision != self._reader_metadata_revision:
+            self._field_levels = dict(getattr(self.reader, "field_levels", {}) or {})
+            self._level_schema = getattr(self.reader, "level_schema", None)
+            self._reader_metadata_revision = revision
+        return self._field_levels, self._level_schema
+
     def _to_atomic_samples(
         self,
         raw_samples: Sequence[tuple[dict[str, torch.Tensor], dict[str, Any]]],
+        level_schema: LevelSchema | None,
         stream: torch.cuda.Stream | None = None,
+        *,
+        attach_level_schema: bool = True,
     ) -> tuple[list[tuple[AtomicData, dict[str, Any]]], torch.cuda.Event | None]:
-        """Validate raw samples and transfer them to the target device."""
+        """Validate raw samples and transfer them to the target device.
+
+        ``attach_level_schema=False`` is used only by fused batch reads, whose
+        result carries the explicit schema into ``Batch`` construction. Direct
+        sample reads retain independent per-sample schema attachments so they
+        can be implicitly rebatched by callers.
+        """
         samples = [
             (AtomicData.model_validate(data_dict), metadata)
             for data_dict, metadata in raw_samples
@@ -464,11 +491,20 @@ class Dataset:
                         self._sample_transform(data, metadata)
                         for data, metadata in samples
                     ]
+                if attach_level_schema and level_schema is not None:
+                    for data, _metadata in samples:
+                        data._level_schema = level_schema.clone()
             event = torch.cuda.Event()
             event.record(stream)
         else:
             samples = [
-                self._finalize_on_device(data, metadata) for data, metadata in samples
+                self._finalize_on_device(
+                    data,
+                    metadata,
+                    level_schema,
+                    attach_level_schema=attach_level_schema,
+                )
+                for data, metadata in samples
             ]
 
         return samples, event
@@ -497,8 +533,9 @@ class Dataset:
         result = _PrefetchResult(index=index)
 
         try:
+            _, level_schema = self._snapshot_level_metadata()
             samples, event = self._to_atomic_samples(
-                self._read_raw_samples([index]), stream
+                self._read_raw_samples([index]), level_schema, stream
             )
             result.data = samples[0][0]
             result.metadata = samples[0][1]
@@ -587,6 +624,9 @@ class Dataset:
         result = _FusedBatchPrefetchResult(batch_splits=batch_splits, raw=raw)
 
         try:
+            field_levels, level_schema = self._snapshot_level_metadata()
+            result.field_levels = field_levels
+            result.level_schema = level_schema
             all_indices: list[int] = []
             for batch_indices in batch_index_lists:
                 all_indices.extend(batch_indices)
@@ -598,7 +638,12 @@ class Dataset:
                 result.data = raw_dicts
                 result.event = None
             else:
-                samples, event = self._to_atomic_samples(raw_samples, stream)
+                samples, event = self._to_atomic_samples(
+                    raw_samples,
+                    level_schema,
+                    stream,
+                    attach_level_schema=False,
+                )
                 result.data = [atomic_data for atomic_data, _ in samples]
                 result.metadata = [metadata for _, metadata in samples]
                 result.event = event
@@ -663,7 +708,8 @@ class Dataset:
                     Batch.from_raw_dicts(
                         batch_slice,
                         device=self.target_device,
-                        field_levels=self._field_levels,
+                        attr_map=result.level_schema,
+                        field_levels=result.field_levels,
                     )
                 )
             else:
@@ -671,7 +717,8 @@ class Dataset:
                     Batch.from_data_list(
                         batch_slice,
                         skip_validation=True,
-                        field_levels=self._field_levels,
+                        attr_map=result.level_schema,
+                        field_levels=result.field_levels,
                     )
                 )
         return batches
@@ -799,8 +846,9 @@ class Dataset:
             return result.data, result.metadata
 
         # Not prefetched, load synchronously through the reader batch path.
+        _, level_schema = self._snapshot_level_metadata()
         raw_samples = self._read_raw_samples([index])
-        samples, _ = self._to_atomic_samples(raw_samples)
+        samples, _ = self._to_atomic_samples(raw_samples, level_schema)
         return samples[0]
 
     def read_many(
@@ -818,8 +866,9 @@ class Dataset:
         list[tuple[AtomicData, dict[str, Any]]]
             Ordered ``(AtomicData, metadata)`` pairs.
         """
+        _, level_schema = self._snapshot_level_metadata()
         raw_samples = self._read_raw_samples(indices)
-        samples, _ = self._to_atomic_samples(raw_samples)
+        samples, _ = self._to_atomic_samples(raw_samples, level_schema)
         return samples
 
     def get_batch(self, indices: Sequence[int]) -> Batch:
@@ -851,7 +900,12 @@ class Dataset:
         return self.load_batches([indices])[0]
 
     def _finalize_on_device(
-        self, data: AtomicData, metadata: dict[str, Any]
+        self,
+        data: AtomicData,
+        metadata: dict[str, Any],
+        level_schema: LevelSchema | None,
+        *,
+        attach_level_schema: bool = True,
     ) -> tuple[AtomicData, dict[str, Any]]:
         """Move ``data`` to ``target_device`` and apply the transform pipeline.
 
@@ -867,6 +921,12 @@ class Dataset:
             Freshly constructed sample on the reader's (CPU) device.
         metadata : dict[str, Any]
             Per-sample metadata dict.
+        level_schema : LevelSchema | None
+            Schema captured with the reader operation that produced ``data``.
+        attach_level_schema : bool, default=True
+            Attach an independent schema clone to the returned sample. Fused
+            batch conversion disables this because it supplies the schema
+            explicitly to :class:`~nvalchemi.data.batch.Batch`.
 
         Returns
         -------
@@ -877,6 +937,8 @@ class Dataset:
             data = data.to(self.target_device, non_blocking=True)
         if self._sample_transform is not None:
             data, metadata = self._sample_transform(data, metadata)
+        if attach_level_schema and level_schema is not None:
+            data._level_schema = level_schema.clone()
         return data, metadata
 
     def __len__(self) -> int:
