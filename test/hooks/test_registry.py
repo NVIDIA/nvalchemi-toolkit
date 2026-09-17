@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,6 +49,14 @@ class TestHookRegistryMixin:
     def test_init_hooks_creates_empty_list(self):
         engine = _MinimalEngine()
         assert engine.hooks == []
+
+    def test_call_hooks_without_hooks_skips_context_build(self):
+        engine = _MinimalEngine()
+
+        with patch.object(engine, "_build_context") as build_context:
+            engine._call_hooks(_TestStage.A, MagicMock())
+
+        build_context.assert_not_called()
 
     def test_register_hook_appends_to_list(self):
         engine = _MinimalEngine()

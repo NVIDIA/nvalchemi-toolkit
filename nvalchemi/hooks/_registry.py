@@ -206,6 +206,9 @@ class HookRegistryMixin:
         **context_kwargs
             Workflow-specific fields forwarded to :meth:`_build_context`.
         """
+        if not self.hooks:
+            return
+
         ctx = self._build_context(batch, **context_kwargs)
         for hook in self.hooks:
             runs_on_stage = getattr(hook, "_runs_on_stage", None)
