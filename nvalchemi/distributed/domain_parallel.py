@@ -707,6 +707,8 @@ class DomainParallel(BaseDynamics):
         stage: DynamicsStage,
         batch: Batch,
         active_graph_mask: torch.Tensor | None = None,
+        *,
+        ignore_frequency: bool = False,
     ) -> None:
         """Invoke hooks respecting their ``HookScope``.
 
@@ -726,7 +728,7 @@ class DomainParallel(BaseDynamics):
             elif stage != hook.stage:
                 continue
 
-            if self.step_count % hook.frequency != 0:
+            if not ignore_frequency and self.step_count % hook.frequency != 0:
                 continue
 
             scope = getattr(hook, "scope", HookScope.LOCAL)

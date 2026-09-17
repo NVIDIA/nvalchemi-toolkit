@@ -112,7 +112,9 @@ within each dynamics step:
      - Only when the convergence hook detects converged samples.
 
 ``ON_ADMISSION`` fires once per run or managed batch replacement, before force
-priming. In :class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
+priming. It ignores a hook's step-based ``frequency``; for a multi-stage hook,
+the frequency continues to gate all other stages. In
+:class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
 ``_step_impl``, making it suitable for validation and shape-dependent setup.
 
 

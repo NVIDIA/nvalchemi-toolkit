@@ -1701,12 +1701,15 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         stage: DynamicsStage,
         batch: Batch,
         active_graph_mask: torch.Tensor | None = None,
+        *,
+        ignore_frequency: bool = False,
     ) -> None:
         """Execute hooks for the given stage with dynamics-specific tracking."""
         self.current_hook_stage = stage
         super()._call_hooks(
             stage,
             batch,
+            ignore_frequency=ignore_frequency,
             active_graph_mask=active_graph_mask,
         )
 
@@ -1730,6 +1733,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             DynamicsStage.ON_ADMISSION,
             batch,
             active_graph_mask,
+            ignore_frequency=True,
         )
         self._admission_initialized = True
 
@@ -3498,12 +3502,14 @@ class FusedStage(BaseDynamics):
             DynamicsStage.ON_ADMISSION,
             batch,
             status < self.exit_status,
+            ignore_frequency=True,
         )
         for status_code, dynamics in self.sub_stages:
             dynamics._call_hooks(
                 DynamicsStage.ON_ADMISSION,
                 batch,
                 status == status_code,
+                ignore_frequency=True,
             )
             dynamics._admission_initialized = True
 

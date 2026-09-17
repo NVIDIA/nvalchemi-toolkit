@@ -409,8 +409,10 @@ class TestPrimeForces:
         """Distributed stepping dispatches admission before force priming."""
         dp, _ = _make_dp()
         batch = _make_batch()
-        hook = _RecordingHook(stage=DynamicsStage.ON_ADMISSION)
+        # At step 1, a frequency-2 hook would be skipped without the admission bypass.
+        hook = _RecordingHook(stage=DynamicsStage.ON_ADMISSION, frequency=2)
         dp.register_hook(hook)
+        dp.step_count = 1
         dp._dist_model = MagicMock()
 
         with (

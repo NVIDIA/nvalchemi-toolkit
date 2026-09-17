@@ -57,7 +57,8 @@ class Hook(Protocol):
 ```
 
 A hook fires when `step_count % hook.frequency == 0` (so all hooks fire at
-step 0).
+step 0), except `ON_ADMISSION`, which fires once per admission regardless of
+frequency.
 
 **HookContext** — base snapshot shared by hook-enabled workflows:
 
@@ -116,6 +117,8 @@ ON_CONVERGE (8)   ← only if convergence detected
 changes such as refill or pipeline communication. In `FusedStage`, it runs
 outside compiled `_step_impl`, making it suitable for shape-dependent allocation
 and Python setup that per-step hooks cannot safely perform under `fullgraph=True`.
+It ignores the step-based frequency gate; a multi-stage hook's frequency still
+applies at its other stages.
 
 In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
 fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused

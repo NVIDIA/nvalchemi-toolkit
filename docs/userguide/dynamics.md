@@ -45,7 +45,10 @@ loop is broken into discrete stages, enumerated by
 When a batch is newly admitted, **ON_ADMISSION** hooks fire before force
 priming and before the first step. Admission is reset for every new `run()` and
 for managed membership changes such as inflight refill or pipeline communication.
-Repeated `step()` calls do not re-fire admission until it is reset.
+Repeated `step()` calls do not re-fire admission until it is reset. Because
+admission is an event rather than a recurring step stage, it ignores a hook's
+`frequency`; for a multi-stage hook, the frequency still applies at its other
+stages.
 
 Each step then proceeds through these stages in order:
 

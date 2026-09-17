@@ -1642,6 +1642,42 @@ class TestHookFrequencyGating:
         dynamics.run(batch)
         assert fired_at == [0, 3, 6]
 
+    def test_on_admission_ignores_frequency_across_runs(self) -> None:
+        """Every run fires admission while recurring stages remain gated."""
+        events: list[tuple[DynamicsStage, int]] = []
+
+        class _MultiStageHook:
+            stage = DynamicsStage.ON_ADMISSION
+            frequency = 2
+
+            def _runs_on_stage(self, stage: Enum) -> bool:
+                return stage in {
+                    DynamicsStage.ON_ADMISSION,
+                    DynamicsStage.AFTER_COMPUTE,
+                }
+
+            def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+                events.append((stage, ctx.step_count))
+
+        batch = create_simple_batch()
+        batch.velocities = torch.zeros(batch.num_nodes, 3)
+        dynamics = DemoDynamics(
+            model=self.model,
+            n_steps=1,
+            dt=1.0,
+            hooks=[_MultiStageHook()],
+        )
+
+        dynamics.run(batch)
+        dynamics.run(batch)
+
+        assert events == [
+            (DynamicsStage.ON_ADMISSION, 0),
+            (DynamicsStage.AFTER_COMPUTE, 0),
+            (DynamicsStage.AFTER_COMPUTE, 0),
+            (DynamicsStage.ON_ADMISSION, 1),
+        ]
+
     def test_invalid_frequency_raises(self) -> None:
         """register_hook should raise ValueError when frequency < 1."""
         hook = self._make_recording_hook(DynamicsStage.BEFORE_STEP, [], 0)

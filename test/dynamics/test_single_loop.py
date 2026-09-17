@@ -2052,6 +2052,27 @@ class TestFusedStageSubstageHooks:
         for hook in (substage1_before, substage1_after):
             assert hook.active_masks[0].tolist() == [False, True, False]
 
+    def test_admission_hooks_ignore_frequency_across_runs(self) -> None:
+        """Fused and sub-stage admission hooks fire for every run."""
+        dynamics0 = BaseDynamics(model=self.model)
+        dynamics1 = BaseDynamics(model=self.model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+        hooks = [
+            _TrackingHook(DynamicsStage.ON_ADMISSION, frequency=2) for _ in range(3)
+        ]
+        fused.register_hook(hooks[0])
+        dynamics0.register_hook(hooks[1])
+        dynamics1.register_hook(hooks[2])
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 1])
+
+        fused.run(batch, n_steps=1)
+        fused.run(batch, n_steps=1)
+
+        for hook in hooks:
+            assert hook.call_step_counts == [0, 1]
+
     @pytest.mark.parametrize(
         "stage",
         [
