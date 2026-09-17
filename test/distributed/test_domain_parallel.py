@@ -128,7 +128,11 @@ class TestInit:
         inner = DemoDynamics(model=model, n_steps=1, exit_status=3)
         config = DomainConfig(cutoff=3.0, skin=0.5)
 
-        dp = DomainParallel(dynamics=inner, config=config, exit_status=99)
+        with pytest.warns(
+            UserWarning,
+            match="overriding exit_status=99 with dynamics.exit_status=3",
+        ):
+            dp = DomainParallel(dynamics=inner, config=config, exit_status=99)
 
         assert dp.exit_status == inner.exit_status == 3
 
