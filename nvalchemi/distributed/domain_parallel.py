@@ -25,6 +25,7 @@ migration, and trajectory gather.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -87,6 +88,15 @@ class DomainParallel(BaseDynamics):
         config: DomainConfig,
         **kwargs: Any,
     ) -> None:
+        requested_exit_status = kwargs.get("exit_status", dynamics.exit_status)
+        if requested_exit_status != dynamics.exit_status:
+            warnings.warn(
+                "DomainParallel requires exit_status to match the wrapped dynamics; "
+                f"overriding exit_status={requested_exit_status!r} with "
+                f"dynamics.exit_status={dynamics.exit_status!r}.",
+                UserWarning,
+                stacklevel=2,
+            )
         kwargs["exit_status"] = dynamics.exit_status
         super().__init__(model=dynamics.model, **kwargs)
         self._dynamics: BaseDynamics = dynamics
