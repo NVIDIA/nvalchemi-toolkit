@@ -3509,21 +3509,6 @@ class FusedStage(BaseDynamics):
 
         self._admission_initialized = True
 
-    def _mark_reprime_entries(
-        self,
-        batch: Batch,
-        previous_status: torch.Tensor,
-    ) -> torch.Tensor:
-        """Mark graphs newly entering a sub-stage requiring force repriming."""
-        current_status = batch.status.view(-1)[: batch.num_graphs]
-        entered = torch.zeros_like(current_status, dtype=torch.bool)
-        for status_code in self.reprime_on_entry:
-            entered.logical_or_(
-                (previous_status != status_code) & (current_status == status_code)
-            )
-        batch.reprime_pending.view(-1)[: batch.num_graphs].logical_or_(entered)
-        return current_status.clone()
-
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
 
