@@ -2928,9 +2928,10 @@ class TestBatchIsendIrecvTagAlignment:
             mock_handle = MagicMock()
             return mock_handle
 
-        def capture_irecv_tag(*args, **kwargs):
+        def capture_irecv_tag(tensor, *args, **kwargs):
             if "tag" in kwargs:
                 recv_tags.append(kwargs["tag"])
+            tensor.zero_()
             mock_handle = MagicMock()
             return mock_handle
 
