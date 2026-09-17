@@ -383,8 +383,8 @@ class TestFusedStageInflight:
         assert not result.reprime_pending.any()
         assert hook.active_masks[-1].tolist() == [True, True]
 
-    def test_fused_pipeline_full_drain_resets_force_priming(self) -> None:
-        """A rebuilt FusedStage pipeline batch uses the full-prime path."""
+    def test_fused_pipeline_full_drain_resets_batch_initialization(self) -> None:
+        """A rebuilt FusedStage pipeline batch is admitted and fully primed."""
         dataset = MockDataset([(2, 0)] * 4)
         sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
         dynamics = _IncrementDynamics(model=self.model)
@@ -404,6 +404,7 @@ class TestFusedStageInflight:
         )
         stage.active_batch["status"] = torch.zeros(2, 1, dtype=torch.long)
         stepped_batch = stage.active_batch
+        stage._admission_initialized = True
         stage._forces_primed = True
         pipeline = DistributedPipeline(stages={0: stage, 1: stage})
 
@@ -431,10 +432,11 @@ class TestFusedStageInflight:
         assert getattr(stage.active_batch, "reprime_pending", None) is None
         assert getattr(stage.active_batch, "forces", None) is None
         assert getattr(stage.active_batch, "energy", None) is None
+        assert stage._admission_initialized is False
         assert stage._forces_primed is False
 
-    def test_base_pipeline_full_drain_resets_force_priming(self) -> None:
-        """A rebuilt BaseDynamics pipeline batch uses the full-prime path."""
+    def test_base_pipeline_full_drain_resets_batch_initialization(self) -> None:
+        """A rebuilt BaseDynamics pipeline batch is admitted and fully primed."""
         dataset = MockDataset([(2, 0)] * 4)
         sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
         stage = _IncrementDynamics(
@@ -452,6 +454,7 @@ class TestFusedStageInflight:
             sampler.build_initial_batch()
         )
         stepped_batch = stage.active_batch
+        stage._admission_initialized = True
         stage._forces_primed = True
         pipeline = DistributedPipeline(stages={0: stage, 1: stage})
 
@@ -479,6 +482,7 @@ class TestFusedStageInflight:
         assert getattr(stage.active_batch, "reprime_pending", None) is None
         assert getattr(stage.active_batch, "forces", None) is None
         assert getattr(stage.active_batch, "energy", None) is None
+        assert stage._admission_initialized is False
         assert stage._forces_primed is False
 
     def test_refill_clears_stale_last_converged(self) -> None:

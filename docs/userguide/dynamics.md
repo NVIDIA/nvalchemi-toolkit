@@ -138,9 +138,12 @@ Any keyword arguments accepted by `torch.compile` (e.g. `fullgraph`, `mode`,
 construction.
 
 ```{note}
-Not all hooks are graph-break-free under `fullgraph=True`. Per-step hooks that
-perform Python-side control flow (e.g. logging, I/O) will introduce graph breaks.
-If you need an unbroken graph, ensure those hooks use torch-compatible operations.
+Per-step hooks run inside the compiled `_step_impl` and must be compatible with
+`torch.compile`. Hooks that perform Python-side or data-dependent control flow
+(e.g. logging, I/O, or `NaNDetectorHook`) introduce graph breaks.
+`NeighborListHook` separately calls compiler-disabled helpers. Consequently, these
+hooks are not compatible with `fullgraph=True`. Use only torch-compatible per-step
+hooks when an unbroken graph is required.
 
 Use `DynamicsStage.ON_ADMISSION` for one-time validation, shape-dependent tensor
 allocation, and Python-side setup. `FusedStage` dispatches admission before force

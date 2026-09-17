@@ -3607,7 +3607,7 @@ class FusedStage(BaseDynamics):
         self._call_hooks(
             DynamicsStage.BEFORE_PRE_UPDATE,
             batch,
-            overall_active_graph_mask,
+            overall_update_graph_mask,
         )
         for (_, dynamics), update_graph_mask in zip(
             self.sub_stages, stage_update_masks, strict=True
@@ -3629,7 +3629,7 @@ class FusedStage(BaseDynamics):
         self._call_hooks(
             DynamicsStage.AFTER_PRE_UPDATE,
             batch,
-            overall_active_graph_mask,
+            overall_update_graph_mask,
         )
         # Phase 2 — shared forward pass at the updated positions.
         self._call_hooks(
@@ -3674,7 +3674,7 @@ class FusedStage(BaseDynamics):
         self._call_hooks(
             DynamicsStage.BEFORE_POST_UPDATE,
             batch,
-            overall_active_graph_mask,
+            overall_update_graph_mask,
         )
         for (_, dynamics), update_graph_mask in zip(
             self.sub_stages, stage_update_masks, strict=True
@@ -3693,7 +3693,7 @@ class FusedStage(BaseDynamics):
         self._call_hooks(
             DynamicsStage.AFTER_POST_UPDATE,
             batch,
-            overall_active_graph_mask,
+            overall_update_graph_mask,
         )
 
         # Snapshot before hook and counter migration so both are reported
@@ -4766,7 +4766,8 @@ class DistributedPipeline:
                     if stage.active_batch is not None:
                         if stage.active_batch.device != stage.device:
                             stage.active_batch = stage.active_batch.to(stage.device)
-                        # Request force priming for the new batch on its first step.
+                        # Run one-time admission and force priming for the new batch.
+                        stage._admission_initialized = False
                         stage._forces_primed = False
                     else:
                         if self.debug_mode:

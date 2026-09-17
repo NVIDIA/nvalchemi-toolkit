@@ -1895,7 +1895,7 @@ class _TrackingHook:
 
 
 class _OrderedHook:
-    """Minimal hook that appends its label to a shared call sequence."""
+    """Minimal hook that records its label and active graph mask."""
 
     def __init__(
         self,
@@ -1907,10 +1907,13 @@ class _OrderedHook:
         self.frequency = 1
         self.label = label
         self.calls = calls
+        self.active_masks: list[torch.Tensor] = []
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
-        """Record this hook's label."""
+        """Record this hook's label and active graph mask."""
+        assert ctx.active_graph_mask is not None
         self.calls.append(self.label)
+        self.active_masks.append(ctx.active_graph_mask.clone())
 
 
 # -----------------------------------------------------------------------------
@@ -1978,6 +1981,77 @@ class TestFusedStageSubstageHooks:
             expected = ["substage0", "substage1", "fused"]
         assert events == expected
 
+    def test_force_priming_brackets_compute_hooks_before_first_step(self) -> None:
+        """Initial force priming runs the nested compute-hook lifecycle once."""
+        events: list[str] = []
+
+        dynamics0 = BaseDynamics(model=self.model)
+        dynamics1 = BaseDynamics(model=self.model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        fused_before = _OrderedHook(
+            DynamicsStage.BEFORE_COMPUTE, "fused-before-compute", events
+        )
+        substage0_before = _OrderedHook(
+            DynamicsStage.BEFORE_COMPUTE, "substage0-before-compute", events
+        )
+        substage1_before = _OrderedHook(
+            DynamicsStage.BEFORE_COMPUTE, "substage1-before-compute", events
+        )
+        substage0_after = _OrderedHook(
+            DynamicsStage.AFTER_COMPUTE, "substage0-after-compute", events
+        )
+        substage1_after = _OrderedHook(
+            DynamicsStage.AFTER_COMPUTE, "substage1-after-compute", events
+        )
+        fused_after = _OrderedHook(
+            DynamicsStage.AFTER_COMPUTE, "fused-after-compute", events
+        )
+
+        fused.register_hook(fused_before)
+        dynamics0.register_hook(substage0_before)
+        dynamics1.register_hook(substage1_before)
+        dynamics0.register_hook(substage0_after)
+        dynamics1.register_hook(substage1_after)
+        fused.register_hook(fused_after)
+        fused.register_hook(
+            _OrderedHook(DynamicsStage.BEFORE_STEP, "before-step", events)
+        )
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 1, fused.exit_status])
+        batch.fmax = torch.tensor([0.1, 0.1, 0.1])
+
+        original_compute = fused.compute
+
+        def recording_compute(batch: Batch) -> Any:
+            events.append("compute")
+            return original_compute(batch)
+
+        with patch.object(
+            fused, "compute", side_effect=recording_compute
+        ) as compute_spy:
+            fused.step(batch)
+
+        compute_events = [
+            "fused-before-compute",
+            "substage0-before-compute",
+            "substage1-before-compute",
+            "compute",
+            "substage0-after-compute",
+            "substage1-after-compute",
+            "fused-after-compute",
+        ]
+        assert events == compute_events + ["before-step"] + compute_events
+        assert compute_spy.call_count == 2
+
+        for hook in (fused_before, fused_after):
+            assert hook.active_masks[0].tolist() == [True, True, False]
+        for hook in (substage0_before, substage0_after):
+            assert hook.active_masks[0].tolist() == [True, False, False]
+        for hook in (substage1_before, substage1_after):
+            assert hook.active_masks[0].tolist() == [False, True, False]
+
     @pytest.mark.parametrize(
         "stage",
         [
@@ -1987,10 +2061,10 @@ class TestFusedStageSubstageHooks:
             DynamicsStage.AFTER_POST_UPDATE,
         ],
     )
-    def test_fused_update_hooks_receive_overall_active_mask(
+    def test_fused_update_hooks_receive_overall_update_mask(
         self, stage: DynamicsStage
     ) -> None:
-        """Fused update hooks receive one mask spanning all active substages."""
+        """Fused update hooks receive one mask spanning update-eligible graphs."""
 
         class _MaskCapture:
             frequency = 1
@@ -2016,6 +2090,45 @@ class TestFusedStageSubstageHooks:
 
         assert len(hook.masks) == 1
         assert hook.masks[0].tolist() == [True, True, False]
+
+    @pytest.mark.parametrize(
+        "stage",
+        [
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            DynamicsStage.AFTER_PRE_UPDATE,
+            DynamicsStage.BEFORE_POST_UPDATE,
+            DynamicsStage.AFTER_POST_UPDATE,
+        ],
+    )
+    def test_fused_update_hooks_exclude_reprime_pending_graphs(
+        self, stage: DynamicsStage
+    ) -> None:
+        """Fused update hooks exclude graphs sitting out for force repriming."""
+        events: list[str] = []
+        dynamics0 = BaseDynamics(model=self.model, n_steps=1)
+        dynamics1 = BaseDynamics(model=self.model)
+        fused = FusedStage(
+            sub_stages=[(0, dynamics0), (1, dynamics1)],
+            reprime_on_entry={1},
+        )
+        update_hook = _OrderedHook(stage, "update", events)
+        compute_hook = _OrderedHook(DynamicsStage.AFTER_COMPUTE, "compute", events)
+        fused.register_hook(update_hook)
+        fused.register_hook(compute_hook)
+
+        batch = create_batch_with_status(n_graphs=1)
+        batch.status = torch.tensor([0])
+
+        fused.step(batch)
+
+        assert batch.status.item() == 1
+        assert batch.reprime_pending.item()
+        assert update_hook.active_masks[-1].tolist() == [True]
+
+        fused.step(batch)
+
+        assert update_hook.active_masks[-1].tolist() == [False]
+        assert compute_hook.active_masks[-1].tolist() == [True]
 
     def test_substage_after_step_hooks_fire(self) -> None:
         """AFTER_STEP hooks on each substage should fire once per step.

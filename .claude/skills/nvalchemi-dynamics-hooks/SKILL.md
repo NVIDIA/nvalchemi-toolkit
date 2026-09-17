@@ -119,21 +119,25 @@ and Python setup that per-step hooks cannot safely perform under `fullgraph=True
 
 In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
 fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
-`AFTER_*` hooks run after it. This includes the pre-update and post-update
-boundaries. Fused hooks receive the overall active mask. The mask passed to a
-sub-stage hook depends on the boundary:
+`AFTER_*` hooks run after it. Every hook receives `ctx.active_graph_mask` for
+the graphs participating at that boundary. Fused-level masks span all
+participating sub-stages; sub-stage masks are further restricted to graphs
+owned by that sub-stage.
 
-- `BEFORE_STEP`, `BEFORE_COMPUTE`, `AFTER_COMPUTE`, and `AFTER_STEP` receive
-  the sub-stage's status mask captured at the start of the fused step. This
-  includes graphs with `reprime_pending` so compute-boundary hooks can prepare
-  and observe their refreshed model outputs.
+During a force-reprime iteration, a graph participates in the step and shared
+compute but skips both integrator updates. Therefore:
+
+- `BEFORE_STEP`, `BEFORE_COMPUTE`, `AFTER_COMPUTE`, and `AFTER_STEP` include
+  reprime-pending graphs.
 - `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
-  `AFTER_POST_UPDATE` receive the narrower update-eligibility mask: the
-  sub-stage status mask with `reprime_pending` graphs excluded. The same mask
-  brackets both integrator updates, even though force computation clears
-  `reprime_pending` before the post-update boundary.
-- `ON_CONVERGE` receives that sub-stage's convergence mask and remains
-  sub-stage-only because convergence is evaluated independently per sub-stage.
+  `AFTER_POST_UPDATE` exclude them, at both the fused and sub-stage level.
+
+Update masks are intentionally fixed at step start, so clearing
+`reprime_pending` after compute enables integrator updates on the next
+iteration without enabling post-update in the current one.
+
+`ON_CONVERGE` remains sub-stage-only because convergence is evaluated
+independently per sub-stage.
 
 ---
 
