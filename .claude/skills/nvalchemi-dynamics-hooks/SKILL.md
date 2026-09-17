@@ -164,6 +164,13 @@ MaxForceClampHook(
 
 **BiasedPotentialHook** — add an external bias potential for enhanced sampling.
 
+> **Deprecated.** Use `nvalchemi.enhanced_sampling` (`ConservativeBias`) for new
+> biases: it derives forces and stress from one energy definition by autograd.
+> A `bias_fn` bias contributes no stress, so it is invisible to an NPT/NPH
+> barostat — safe under NVE/NVT, silently wrong under a barostat. This hook
+> stays functional until the enhanced-sampling runner ships, and constructing
+> it emits a `DeprecationWarning`.
+
 ```python
 def my_bias(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
     """Return (bias_energy [B, 1], bias_forces [V, 3])."""
