@@ -2016,8 +2016,8 @@ class Batch(DataMixin):
                     f"Custom level '{name}' has incompatible storage kinds: "
                     f"{type(group).__name__} vs {type(other_group).__name__}"
                 )
-            fields = self.level_keys.get(name, set())
-            other_fields = other.level_keys.get(name, set())
+            fields = set(group.keys())
+            other_fields = set(other_group.keys())
             if fields != other_fields:
                 raise ValueError(
                     f"Custom level '{name}' has incompatible field sets: "
