@@ -98,8 +98,15 @@ Dynamics engines pass {py:class}`~nvalchemi.hooks.DynamicsContext`, which adds:
 | `converged_mask` | `torch.Tensor \| None` | Samples that converged at the current hook stage |
 | `active_graph_mask` | `torch.Tensor \| None` | Systems active for the current fused or sub-stage dispatch |
 
-Hooks should respect `active_graph_mask` when set to preserve
-{py:class}`~nvalchemi.dynamics.base.FusedStage` correctness.
+Mutating hooks must restrict their selection to `active_graph_mask` when it is
+set. For node-level mutations, combine the hook's selection with
+`ctx.active_graph_mask[batch.batch_idx]`; for graph-level mutations, combine it
+with `ctx.active_graph_mask`. Otherwise, a hook registered on a fused sub-stage
+can mutate graphs owned by another sub-stage or graphs sitting out an integrator
+update during force repriming. Read-only observation hooks may instead inspect
+the full batch deliberately. For example, the `StatusSnapshotHook` in
+{doc}`/examples/intermediate/01_multistage_pipeline` reads every graph to report
+the global status distribution.
 
 Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 

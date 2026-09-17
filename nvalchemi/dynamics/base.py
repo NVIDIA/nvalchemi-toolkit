@@ -1872,7 +1872,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     # ------------------------------------------------------------------
 
     def _save_state_fields(self) -> dict[str, torch.Tensor]:
-        """Clone tensor-valued integrator state, preserving each field's shape."""
+        """Clone all integrator state fields, preserving each field's shape."""
         state = getattr(self, "_state", None)
         if state is None:
             return {}
@@ -1986,8 +1986,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Calls :meth:`_init_state` the first time this method is invoked
         (i.e. when ``self._state`` does not yet exist).  Subsequent calls
         are no-ops.  This is invoked automatically at the start of
-        :meth:`step` and :meth:`masked_update` so that concrete subclasses
-        never need to call it explicitly.
+        :meth:`step`, :meth:`_masked_pre_update`, and
+        :meth:`_masked_post_update` so that concrete subclasses never need to
+        call it explicitly.
 
         Parameters
         ----------
@@ -2182,14 +2183,15 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Execute a single dynamics step with the full hook-wrapped sequence.
 
         The step proceeds as follows:
-        1. Prime required model outputs once, before the first integration step
-        2. BEFORE_STEP hooks
-        3. BEFORE_PRE_UPDATE hooks -> pre_update() -> AFTER_PRE_UPDATE hooks
-        4. BEFORE_COMPUTE hooks -> compute() -> AFTER_COMPUTE hooks
-        5. BEFORE_POST_UPDATE hooks -> post_update() -> AFTER_POST_UPDATE hooks
-        6. AFTER_STEP hooks
-        7. Check convergence and fire ON_CONVERGE hooks if any samples converged
-        8. Increment step_count
+        1. Fire ON_ADMISSION hooks once for a newly admitted batch
+        2. Prime required model outputs once, before the first integration step
+        3. BEFORE_STEP hooks
+        4. BEFORE_PRE_UPDATE hooks -> pre_update() -> AFTER_PRE_UPDATE hooks
+        5. BEFORE_COMPUTE hooks -> compute() -> AFTER_COMPUTE hooks
+        6. BEFORE_POST_UPDATE hooks -> post_update() -> AFTER_POST_UPDATE hooks
+        7. AFTER_STEP hooks
+        8. Check convergence and fire ON_CONVERGE hooks if any samples converged
+        9. Increment step_count
 
         Compute hooks run for every model evaluation. On the first call to
         ``step()``, initial force priming evaluates the model before

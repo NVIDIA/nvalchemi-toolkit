@@ -7,6 +7,9 @@
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
+- Add `DynamicsStage.ON_ADMISSION` to `BaseDynamics`, enabling hooks to
+  initialize per-system state once when a batch is admitted, before force
+  priming and outside compiled fused steps.
 - `FusedStage(reprime_on_entry=...)` — status codes whose newly entering
   graphs skip one integrator update so the shared compute and target-stage
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
@@ -14,10 +17,13 @@
 
 ### Fixed
 
-- **Dynamics hook lifecycle** — add `ON_ADMISSION` for one-time batch setup
-  before force priming and outside compiled fused steps. Fused stages now fire
-  shared step and compute hooks at both fused and sub-stage levels with
-  consistent nesting.
+- **Dynamics hook lifecycle** — fused-level hooks now fire at the
+  `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
+  `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
+  fire. Fused-level `AFTER_COMPUTE` hooks now run after the sub-stage loop
+  instead of before it. Existing workarounds that register the same hook at
+  both fused and sub-stage levels will therefore invoke it twice at each
+  matching boundary and should remove the duplicate registration.
 - **`FusedStage` force priming** — a dynamics instance's own adaptive
   optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.

@@ -109,7 +109,8 @@ within each dynamics step:
      - Very end of the step, after all operations.
    * - ``ON_CONVERGE``
      - 8
-     - Only when the convergence hook detects converged samples.
+     - After convergence evaluation. ``BaseDynamics.step()`` calls registered
+       hooks only when samples converge; fused sub-stages call them every step.
 
 ``ON_ADMISSION`` fires once per run or managed batch replacement, before force
 priming. It ignores a hook's step-based ``frequency``; for a multi-stage hook,
@@ -346,7 +347,10 @@ admission hooks in sub-stage order.
 At every ``BEFORE_*`` boundary, the fused-stage hooks fire before the sub-stage
 hooks. At every ``AFTER_*`` boundary, the sub-stage hooks fire before the
 fused-stage hooks. Only ``ON_CONVERGE`` remains sub-stage-only because
-convergence is evaluated independently for each sub-stage.
+convergence is evaluated independently for each sub-stage. Registered
+``ON_CONVERGE`` hooks on a fused sub-stage run every step and must inspect
+``ctx.converged_mask`` to determine which samples, if any, converged.
+``BaseDynamics.step()`` calls these hooks only when convergence is detected.
 
 Register a cross-stage constraint once on the fused stage when it should apply
 to every active system, regardless of its current sub-stage:
