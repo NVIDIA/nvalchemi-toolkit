@@ -3720,7 +3720,7 @@ class FusedStage(BaseDynamics):
             # update at the start of this iteration. Force priming clears
             # reprime_pending after compute, but must not count as a stage update.
             active = (
-                overall_update_graph_mask
+                stage_update_masks[i]
                 & ~batch.reprime_pending.view(-1)[: batch.num_graphs]
                 & (migration_status == status_code)
             )
