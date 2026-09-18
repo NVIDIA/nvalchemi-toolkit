@@ -26,8 +26,8 @@ from nvalchemi.data.datapipes import (
     InMemoryDataset,
     Reader,
 )
-from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.data.group_layout import GroupLayout
+from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.data.transforms import Compose
 
 __all__ = [
