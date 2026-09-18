@@ -384,7 +384,24 @@ def _select_groups(
     selected_group_idx = layout.selected_group_idx(group_mask)
 
     if not torch.any(graph_mask):
-        selected = type(batch).empty_like(batch)
+        # Empty group selections must be tight; empty_like preserves buffer capacity.
+        empty_idx = torch.empty(0, dtype=torch.int32, device=batch.device)
+        storage = batch._storage.select(empty_idx)
+        # Rebind every selected level to one cloned schema, as index_select does.
+        schema = batch._storage.attr_map.clone()
+        storage.attr_map = schema
+        for group in storage.groups.values():
+            group.attr_map = schema
+        selected = type(batch)._construct(
+            device=batch.device,
+            keys=(
+                {name: fields.copy() for name, fields in batch.keys.items()}
+                if batch.keys
+                else None
+            ),
+            storage=storage,
+            data_class=batch._data_class,
+        )
         _ = selected.group_layout
         return selected
 
