@@ -18,10 +18,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 from torch.utils.data import DataLoader
+
+_ModelT = TypeVar("_ModelT", bound=torch.nn.Module)
 
 __all__ = [
     "configure_dataloader",
@@ -30,6 +32,7 @@ __all__ = [
     "move_to_devices",
     "rehome_optimizer_state",
     "train_configured_models",
+    "unwrap_model",
 ]
 
 
@@ -307,3 +310,28 @@ def rehome_optimizer_state(optimizer: torch.optim.Optimizer) -> None:
                 ):
                     continue
                 state[key] = _rehome_value(value, param.device)
+
+
+def unwrap_model(model: _ModelT) -> _ModelT:
+    """Return the module a parallelism wrapper owns, or the model itself.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        A model as a strategy holds it, wrapped or bare.
+
+    Returns
+    -------
+    torch.nn.Module
+        The wrapped module, or ``model`` unchanged when nothing wraps it.
+
+    Notes
+    -----
+    A wrapper is recognized by the ``module`` attribute it publishes rather
+    than by its class, so a hand-rolled or FSDP wrapper unwraps exactly as a
+    :class:`~torch.nn.parallel.DistributedDataParallel` replica does. The
+    return type is the argument's own, because a wrapper is a runtime
+    substitution behind the type a caller declared.
+    """
+    module = getattr(model, "module", None)
+    return model if module is None else module

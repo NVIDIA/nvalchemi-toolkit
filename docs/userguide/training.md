@@ -277,6 +277,15 @@ by `training_fn`, while `target_key="teacher_energy"` names the target returned 
 assembler with the configured loss, predictions, batch, and current workflow, then
 passes the resulting target mapping into `loss_fn`.
 
+```{tip}
+The two seams above are the general mechanism, shown here on a student-teacher
+forward pass. For distillation specifically, you do not need them:
+{py:class}`~nvalchemi.training.distillation.DistillationStrategy` scores the
+teacher into `teacher_*` batch fields that any built-in loss term reads through
+its ordinary `target_key`, and it can label a dataset once instead of running the
+teacher every epoch. See {ref}`distillation_guide`.
+```
+
 ```{warning}
 Having `training_fn` and `loss_target_assembler` as a mere callable that's
 passed into `TrainingStrategy` was

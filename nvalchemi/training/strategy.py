@@ -382,8 +382,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     target. Every ``optimizer_configs`` key must name a model present in
     ``models``, and each entry must contain at least one
     :class:`OptimizerConfig`. ``devices`` must have length ``1`` or
-    ``len(models)``; named-model :meth:`run` currently supports a single shared
-    device only.
+    ``len(models)``; named-model :meth:`run` stages one batch on ``devices[0]``,
+    so a per-model list has to name one device throughout, compared as written
+    (an index-less ``cuda`` is distinct from ``cuda:0``), and one naming
+    distinct devices is refused.
 
     Use :meth:`to_spec_dict` / :meth:`from_spec_dict` for JSON-based save/load.
     Optimizer configs, loss specs, devices, importable training functions, and
@@ -487,8 +489,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     devices: list[torch.device] = Field(
         default_factory=lambda: [torch.device("cpu")],
         description=(
-            "One device shared by all models, or one device per model for helper "
-            "placement. Named-model ``run`` currently supports one device only."
+            "One device shared by all models, or one entry per model naming "
+            "that same device; named-model ``run`` stages its batch on the "
+            "first, so distinct names (an index-less 'cuda' among them) are "
+            "refused at run time."
         ),
     )
     distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
@@ -1014,13 +1018,25 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         return self.active_dataloader
 
     def _validate_runtime_devices(self) -> None:
-        """Raise for runtime device layouts that cannot be executed."""
-        if not self.single_model_input and len(self.devices) > 1:
+        """Raise for runtime device layouts that cannot be executed.
+
+        ``training_fn(models, batch)`` is handed one batch staged on
+        ``devices[0]``, so a per-model list is accepted only while it names one
+        device throughout. Names are compared as written: an index-less
+        ``cuda`` resolves to the process's current device, which a
+        data-parallel rank sets to its own, so ``[cuda, cuda:0]`` is a
+        cross-device layout on every rank but the first.
+        """
+        distinct = {str(device) for device in self.devices}
+        if not self.single_model_input and len(distinct) > 1:
             raise ValueError(
-                "Named-model training with multiple devices is unsupported: "
-                "training_fn(models, batch) receives one batch on one device. "
-                "Use a single shared device or pass models=model for "
-                "single-model behavior."
+                "Named-model training across distinct devices is unsupported: "
+                "training_fn(models, batch) receives one batch on devices[0], so "
+                f"a model on another device cannot read it; got {sorted(distinct)!r}. "
+                "Name one device for every model, spelled the same way each time "
+                "— an index-less 'cuda' resolves to this process's current "
+                "device, so it is not read as 'cuda:0' — or pass models=model "
+                "for single-model behavior."
             )
 
     def _setup_runtime_optimizers(
@@ -1403,9 +1419,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Raises
         ------
         ValueError
-            If named-model training is configured with multiple devices, or if
-            the dataloader produces no batches before the configured target
-            step count is reached.
+            If named-model training is configured with more than one distinct
+            device, or if the dataloader produces no batches before the
+            configured target step count is reached.
         """
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self

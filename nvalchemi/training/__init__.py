@@ -76,6 +76,7 @@ from nvalchemi.training.runtime import (
     freeze_unconfigured_models,
     move_to_devices,
     rehome_optimizer_state,
+    unwrap_model,
 )
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
@@ -128,5 +129,6 @@ __all__ = [
     "setup_optimizers",
     "step_lr_schedulers",
     "step_optimizers",
+    "unwrap_model",
     "zero_gradients",
 ]
