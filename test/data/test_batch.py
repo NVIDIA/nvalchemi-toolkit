@@ -1316,6 +1316,232 @@ class TestBatchIndexing:
 
 
 # -----------------------------------------------------------------------------
+# Public schema transfer and extension
+# -----------------------------------------------------------------------------
+class TestBatchSchemaExtension:
+    """Public-contract tests for post-construction schema registration."""
+
+    @staticmethod
+    def _schema_state(schema: LevelSchema) -> tuple:
+        """Return public schema state suitable for atomicity assertions."""
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+        )
+
+    def test_get_level_schema_returns_a_defensive_copy(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+
+        exposed = batch.get_level_schema()
+        exposed.add_level("samples", segmented=True)
+        exposed.set("sample_values", "samples", dtype="float32")
+
+        assert "samples" not in batch.get_level_schema().level_names
+        assert "sample_values" not in batch.get_level_schema().attr_to_group
+
+    def test_extension_is_owned_and_batches_remain_isolated(self):
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = Batch.from_data_list([_minimal_atomic_data(3)])
+
+        first.extend_level_schema(extension)
+        second.extend_level_schema(extension)
+        extension.add_level("extension_only", segmented=True)
+        first.add_level("first_only", segmented=False)
+
+        assert "extension_only" not in first.get_level_schema().level_names
+        assert "extension_only" not in second.get_level_schema().level_names
+        assert "first_only" in first.get_level_schema().level_names
+        assert "first_only" not in second.get_level_schema().level_names
+
+    def test_transfer_then_materialize_product_level(self):
+        source_schema = LevelSchema()
+        source_schema.add_level("samples", segmented=True)
+        source_schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        source_schema.set("hessian_blocks", "atom_atom", dtype="float32")
+        source_data = _minimal_atomic_data(1)
+        source_data.hessian_blocks = torch.zeros(1, 1, 3, 3)
+        source = Batch.from_data_list([source_data], attr_map=source_schema)
+        destination = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        )
+        before = destination.model_dump()
+
+        destination.extend_level_schema(source.get_level_schema())
+
+        assert destination.get_level_schema().level_names[-2:] == (
+            "samples",
+            "atom_atom",
+        )
+        assert destination.get_level_schema().group("hessian_blocks") == "atom_atom"
+        assert destination.get_level_schema().dtype("hessian_blocks") == "float32"
+        after = destination.model_dump()
+        assert after.keys() == before.keys()
+        for key, value in before.items():
+            if isinstance(value, torch.Tensor):
+                torch.testing.assert_close(after[key], value)
+            else:
+                assert after[key] == value
+
+        destination.add_key(
+            "hessian_blocks",
+            [torch.zeros(2, 2, 3, 3), torch.ones(3, 3, 3, 3)],
+            level="atom_atom",
+        )
+
+        assert destination.hessian_blocks.shape == (13, 3, 3)
+        assert destination.level_ptr("atom_atom").tolist() == [0, 4, 13]
+        assert destination.get_data(0).hessian_blocks.shape == (2, 2, 3, 3)
+        assert destination.get_data(1).hessian_blocks.shape == (3, 3, 3, 3)
+
+    def test_identical_extension_is_idempotent_and_dtype_aliases_match(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float")
+
+        batch.extend_level_schema(extension)
+        first_state = self._schema_state(batch.get_level_schema())
+        batch.extend_level_schema(extension)
+        assert self._schema_state(batch.get_level_schema()) == first_state
+
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        assert batch.get_level_schema().level_names.count("atom_atom") == 1
+        assert batch.get_level_schema().dtype("custom_values") == "float32"
+
+    def test_level_kind_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=False)
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(ValueError, match="already registered as segmented"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    def test_product_parent_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        batch.add_level("other", segmented=True)
+        batch.add_product_level("pairs", left="atoms", right="samples")
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        extension.add_level("other", segmented=True)
+        extension.add_product_level("pairs", left="atoms", right="other")
+        before = self._schema_state(batch.get_level_schema())
+        extension_before = self._schema_state(extension)
+
+        with pytest.raises(ValueError, match="already registered with parents"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        assert self._schema_state(extension) == extension_before
+
+    def test_field_owner_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key("custom_values", [torch.ones(2, 1)], level="node")
+        extension = LevelSchema()
+        extension.set("custom_values", "system", dtype="float32")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="already assigned to level 'atoms'"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_declared_dtype_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float64")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="incompatible declared dtypes"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_extension_rejects_non_schema_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(TypeError, match="schema must be a LevelSchema"):
+            batch.extend_level_schema({})  # type: ignore[arg-type]
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "get_level_schema",
+            "extend_level_schema",
+            "add_level",
+            "add_product_level",
+        ],
+    )
+    def test_api_name_collision_remains_available_by_item(self, field_name):
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key(
+            field_name,
+            [torch.tensor([[1.0]]), torch.tensor([[2.0]])],
+            level="system",
+        )
+
+        torch.testing.assert_close(batch[field_name], torch.tensor([[1.0], [2.0]]))
+        assert field_name in batch
+        assert field_name in {key for key, _ in batch}
+        assert field_name in batch.model_dump()
+        assert callable(getattr(batch, field_name))
+
+        torch.testing.assert_close(batch.clone()[field_name], batch[field_name])
+        torch.testing.assert_close(
+            batch.index_select([1])[field_name], torch.tensor([[2.0]])
+        )
+
+    def test_extended_schema_survives_public_batch_lifecycle(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        derived = [
+            batch.clone(),
+            batch.to("cpu"),
+            batch.index_select([1]),
+            Batch.from_data_list([batch.get_data(0)]),
+            Batch.from_data_list(batch.to_data_list()),
+        ]
+
+        for result in derived:
+            assert result.get_level_schema().level_kind("samples") == "segmented"
+            assert result.get_level_schema().product_parents["atom_atom"] == (
+                "atoms",
+                "atoms",
+            )
+
+
+# -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
 class TestBatchMutation:

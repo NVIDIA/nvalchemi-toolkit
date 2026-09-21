@@ -229,6 +229,40 @@ custom field:
 All three routes record field ownership in the batch-owned schema. The explicit
 `field_levels` form is useful when the input objects should remain unchanged.
 
+### Extending an existing Batch schema
+
+An already-created {py:class}`~nvalchemi.data.Batch` can copy level declarations
+from another batch or register additional levels directly:
+
+```python
+destination.extend_level_schema(source.get_level_schema())
+destination.add_product_level(
+    "atom_atom",
+    left="atoms",
+    right="atoms",
+)
+```
+
+{py:meth}`~nvalchemi.data.Batch.get_level_schema` returns a defensive copy, so
+changing the returned {py:class}`~nvalchemi.data.LevelSchema` does not modify the
+source batch. Calling the method makes the copy explicit; there is no public
+no-copy option. Schema extension copies declarations only; it does not copy tensor
+data, allocate storage groups, or create placeholder fields. Materialize a field
+separately with {py:meth}`~nvalchemi.data.Batch.add_key` after its level has been
+registered.
+
+The names `get_level_schema`, `extend_level_schema`, `add_level`, and
+`add_product_level` are reserved for the `Batch` API during attribute-style access.
+Custom tensor fields may still use those names, but access them through item syntax:
+
+```python
+batch["get_level_schema"]
+batch["add_product_level"]
+```
+
+Attribute syntax such as `batch.get_level_schema()` and
+`batch.add_product_level(...)` always resolves to the corresponding `Batch` API.
+
 ### Storing a Hessian
 
 An atom-by-atom Hessian can use a separate product level whose left and right parents

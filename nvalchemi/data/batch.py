@@ -2005,6 +2005,119 @@ class Batch(DataMixin):
         del self._storage[key]
 
     # ------------------------------------------------------------------
+    # Schema access and mutation
+    # ------------------------------------------------------------------
+
+    def get_level_schema(self) -> LevelSchema:
+        """Return an independent copy of this batch's level schema.
+
+        The returned schema may be inspected or modified without changing the
+        batch. Use :meth:`extend_level_schema` to add declarations back to an
+        existing batch.
+
+        ``get_level_schema`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name remains
+        available as ``batch["get_level_schema"]``.
+
+        Returns
+        -------
+        LevelSchema
+            Defensive copy of the batch-owned schema.
+        """
+        return self._storage.attr_map.clone()
+
+    def _install_level_schema(self, schema: LevelSchema) -> None:
+        """Install one owned schema across the batch and its storage groups."""
+        ordered_groups = {
+            name: self._storage.groups[name]
+            for name in schema.level_names
+            if name in self._storage.groups
+        }
+        ordered_groups.update(
+            {
+                name: group
+                for name, group in self._storage.groups.items()
+                if name not in ordered_groups
+            }
+        )
+        self._storage.attr_map = schema
+        self._storage.groups = ordered_groups
+        for group in self._storage.groups.values():
+            group.attr_map = schema
+
+    def extend_level_schema(self, schema: LevelSchema) -> None:
+        """Add schema declarations atomically without materializing storage.
+
+        Existing declarations must be compatible. New ordinary levels,
+        product levels, field ownership, and declared dtypes are copied into
+        one batch-owned schema only after the complete merge validates.
+
+        ``extend_level_schema`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name
+        remains available as ``batch["extend_level_schema"]``.
+
+        Parameters
+        ----------
+        schema : LevelSchema
+            Schema declarations to add.
+
+        Raises
+        ------
+        TypeError
+            If *schema* is not a :class:`LevelSchema`.
+        ValueError
+            If a declaration conflicts with the batch's existing schema.
+        """
+        if not isinstance(schema, LevelSchema):
+            raise TypeError("schema must be a LevelSchema")
+        candidate = self._storage.attr_map._merged_with(schema)
+        self._install_level_schema(candidate)
+
+    def add_level(self, name: str, *, segmented: bool) -> None:
+        """Register an ordinary uniform or segmented level on this batch.
+
+        Registration changes schema metadata only. It does not allocate a
+        storage group or create tensor fields.
+
+        ``add_level`` is reserved for this public API during attribute-style
+        access. A custom tensor field with the same name remains available as
+        ``batch["add_level"]``.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+        segmented : bool
+            Whether the level has variable per-system cardinality.
+        """
+        candidate = self._storage.attr_map.clone()
+        candidate.add_level(name, segmented=segmented)
+        self._install_level_schema(candidate)
+
+    def add_product_level(self, name: str, *, left: str, right: str) -> None:
+        """Register an ordered product of two segmented levels on this batch.
+
+        Registration changes schema metadata only. It does not allocate a
+        storage group or create tensor fields.
+
+        ``add_product_level`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name
+        remains available as ``batch["add_product_level"]``.
+
+        Parameters
+        ----------
+        name : str
+            Name of the product level.
+        left : str
+            Registered segmented level for the left entity axis.
+        right : str
+            Registered segmented level for the right entity axis.
+        """
+        candidate = self._storage.attr_map.clone()
+        candidate.add_product_level(name, left=left, right=right)
+        self._install_level_schema(candidate)
+
+    # ------------------------------------------------------------------
     # Mutation
     # ------------------------------------------------------------------
 
@@ -2662,22 +2775,7 @@ class Batch(DataMixin):
                 else:
                     group._data[key] = concatenated
 
-        self._storage.attr_map = schema
-        groups = {
-            name: self._storage.groups[name]
-            for name in schema.level_names
-            if name in self._storage.groups
-        }
-        groups.update(
-            {
-                name: group
-                for name, group in self._storage.groups.items()
-                if name not in groups
-            }
-        )
-        self._storage.groups = groups
-        for storage_group in self._storage.groups.values():
-            storage_group.attr_map = schema
+        self._install_level_schema(schema)
 
         if self.keys is not None:
             legacy_level = {
