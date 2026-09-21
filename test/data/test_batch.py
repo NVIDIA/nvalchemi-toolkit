@@ -1542,6 +1542,287 @@ class TestBatchSchemaExtension:
 
 
 # -----------------------------------------------------------------------------
+class TestBatchEmptyFieldInsertion:
+    """Public-contract tests for adding typed fields to zero-graph batches."""
+
+    @staticmethod
+    def _metadata_state(batch: Batch) -> tuple:
+        """Return public schema and field state for atomicity assertions."""
+        schema = batch.get_level_schema()
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+            tuple(batch.model_dump()),
+        )
+
+    def test_adds_empty_uniform_segmented_and_product_fields(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_level("metadata", segmented=False)
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("sample_pairs", left="samples", right="samples")
+
+        batch.add_key(
+            "metadata_values",
+            [],
+            level="metadata",
+            dtype=torch.int64,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "sample_values",
+            [],
+            level="samples",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+        batch.add_key(
+            "pair_values",
+            [],
+            level="sample_pairs",
+            dtype=torch.float64,
+            payload_shape=(3, 3),
+        )
+
+        assert batch.metadata_values.shape == (0, 2)
+        assert batch.sample_values.shape == (0, 4)
+        assert batch.pair_values.shape == (0, 3, 3)
+        assert batch.level_ptr("metadata").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("sample_pairs").tolist() == [0]
+        schema = batch.get_level_schema()
+        assert schema.dtype("metadata_values") == "int64"
+        assert schema.dtype("sample_values") == "float32"
+        assert schema.dtype("pair_values") == "float64"
+
+    def test_preserves_existing_builtin_buffer_capacities(self):
+        batch = Batch.empty(num_systems=4, num_nodes=10, num_edges=0)
+
+        batch.add_key(
+            "node_features",
+            [],
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "system_tags",
+            [],
+            level="system",
+            dtype=torch.int64,
+            payload_shape=(),
+        )
+
+        assert batch.num_graphs == 0
+        assert batch.node_features.shape == (10, 2)
+        assert batch.system_tags.shape == (4,)
+        assert batch.system_capacity == 4
+
+    def test_materializes_missing_empty_product_parents(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+
+        batch.add_key(
+            "pair_values",
+            [],
+            level="atom_sample",
+            dtype=torch.float32,
+            payload_shape=(1,),
+        )
+
+        assert batch.level_ptr("atoms").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("atom_sample").tolist() == [0]
+        assert batch.pair_values.shape == (0, 1)
+
+    def test_empty_product_survives_lifecycle_and_append(self):
+        empty = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        empty.add_product_level("atom_atom", left="atoms", right="atoms")
+        empty.add_key(
+            "hessian",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        for derived in (empty.clone(), empty.cpu()):
+            assert derived.hessian.shape == (0, 3, 3)
+            assert derived.level_ptr("atom_atom").tolist() == [0]
+            assert derived.get_level_schema().group("hessian") == "atom_atom"
+        assert empty.model_dump()["hessian"].shape == (0, 3, 3)
+
+        populated = Batch.from_data_list(
+            [_minimal_atomic_data(2)],
+            attr_map=empty.get_level_schema(),
+        )
+        values = torch.arange(36, dtype=torch.float32).reshape(2, 2, 3, 3)
+        populated.add_key(
+            "hessian",
+            [values],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        empty.append(populated)
+        rebuilt = Batch.from_data_list(empty.to_data_list())
+
+        assert empty.num_nodes_list == [2]
+        assert empty.level_ptr("atom_atom").tolist() == [0, 4]
+        torch.testing.assert_close(empty.get_data(0).hessian, values)
+        torch.testing.assert_close(rebuilt.get_data(0).hessian, values)
+
+    def test_empty_overwrite_replaces_payload_shape(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            overwrite=True,
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+
+        assert batch.values.shape == (0, 2)
+        assert batch.get_level_schema().dtype("values") == "float32"
+
+    def test_nonempty_values_accept_matching_hints(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        values = [torch.zeros(2, 4), torch.ones(3, 4)]
+
+        batch.add_key(
+            "features",
+            values,
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+
+        assert batch.features.shape == (5, 4)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "error", "message"),
+        [
+            ({"payload_shape": (3, 3)}, ValueError, "both dtype and payload_shape"),
+            ({"dtype": torch.float32}, ValueError, "both dtype and payload_shape"),
+            (
+                {"dtype": "float32", "payload_shape": (3, 3)},
+                TypeError,
+                "dtype must be a torch.dtype",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": [3, 3]},
+                TypeError,
+                "payload_shape must be a tuple",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (True, 3)},
+                TypeError,
+                "non-negative integers",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (-1, 3)},
+                ValueError,
+                "dimensions must be non-negative",
+            ),
+            (
+                {"dtype": torch.bfloat16, "payload_shape": (3, 3)},
+                ValueError,
+                "Unsupported torch dtype",
+            ),
+        ],
+    )
+    def test_invalid_empty_metadata_is_atomic(self, kwargs, error, message):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        before = self._metadata_state(batch)
+
+        with pytest.raises(error, match=message):
+            batch.add_key("hessian", [], level="atom_atom", **kwargs)
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_values_reject_nonempty_batch_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="Number of values"):
+            batch.add_key(
+                "features",
+                [],
+                level="node",
+                dtype=torch.float32,
+                payload_shape=(4,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+    @pytest.mark.parametrize(
+        ("dtype", "payload_shape", "message"),
+        [
+            (torch.float64, (4,), "must have dtype"),
+            (torch.float32, (5,), "must have payload shape"),
+        ],
+    )
+    def test_nonempty_hint_mismatch_is_atomic(self, dtype, payload_shape, message):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match=message):
+            batch.add_key(
+                "features",
+                [torch.zeros(2, 4)],
+                level="node",
+                dtype=dtype,
+                payload_shape=payload_shape,
+            )
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_declared_custom_dtype_mismatch_is_atomic(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            batch.add_key(
+                "sample_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+
+# -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
 class TestBatchMutation:

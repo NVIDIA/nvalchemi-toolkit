@@ -263,6 +263,37 @@ batch["add_product_level"]
 Attribute syntax such as `batch.get_level_schema()` and
 `batch.add_product_level(...)` always resolves to the corresponding `Batch` API.
 
+### Adding fields to a zero-graph Batch
+
+A zero-graph batch has no per-system tensors from which `add_key()` can infer a
+field's dtype or trailing payload shape. Supply both explicitly when materializing
+such a field:
+
+```python
+empty_batch.add_product_level(
+    "atom_atom",
+    left="atoms",
+    right="atoms",
+)
+empty_batch.add_key(
+    "pair_blocks",
+    [],
+    level="atom_atom",
+    dtype=torch.float32,
+    payload_shape=(3, 3),
+)
+
+print(empty_batch.pair_blocks.shape)  # torch.Size([0, 3, 3])
+print(empty_batch.level_ptr("atom_atom").tolist())  # [0]
+```
+
+`payload_shape` contains only dimensions not owned by the level. Uniform levels
+own the graph axis, segmented levels own one cardinality axis, and product levels
+own two parent-cardinality axes. Existing pre-allocated group capacity is retained;
+a newly materialized group starts with zero capacity. For non-empty values these
+keywords are optional consistency checks, and ordinary shape and dtype inference
+remains unchanged.
+
 ### Storing a Hessian
 
 An atom-by-atom Hessian can use a separate product level whose left and right parents
