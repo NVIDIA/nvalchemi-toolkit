@@ -491,7 +491,7 @@ class NEBForceHook:
             else ctx.active_graph_mask[batch.batch_idx.long()]
         )
         active_fixed_nodes = active_nodes & workspace.fixed_node_mask
-        stats = self.energy_stats_hook.get_stats()
+        stats = self.energy_stats_hook.get_stats(ctx)
         # Copy to `batch.physical_forces` before computation
         torch.where(
             active_nodes.unsqueeze(-1),

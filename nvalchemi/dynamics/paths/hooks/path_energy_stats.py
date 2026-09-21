@@ -59,7 +59,10 @@ class PathEnergyStatsHook:
     at :attr:`DynamicsStage.AFTER_COMPUTE`.
 
     Downstream hooks should call :meth:`get_stats` after this hook has run for the
-    current evaluation. Correct values depend on hook registration order.
+    current evaluation. In eager execution, :meth:`get_stats` raises if the
+    energy tensor has changed since the statistics were refreshed. This check is
+    skipped during compilation because tensor mutation versions are private eager
+    metadata, so compiled hooks must still be registered in execution order.
 
     The hook prepares its own int32 path offsets during ``ON_ADMISSION`` so it
     can be used independently of path-force hooks.
@@ -73,6 +76,7 @@ class PathEnergyStatsHook:
         """Initialize an unprepared path-energy statistics hook."""
         self._stats: PathEnergyStats | None = None
         self._path_ptr: Tensor
+        self._energy_update_token: tuple[Tensor, int, int] | None = None
 
     def _runs_on_stage(self, stage: Enum) -> bool:
         """Return whether to prepare or refresh path-energy statistics."""
@@ -91,6 +95,7 @@ class PathEnergyStatsHook:
         """
         batch = ctx.batch
         validate_paths(batch)
+        self._energy_update_token = None
         num_paths = batch.group_layout.num_groups
         dtype = batch.positions.dtype
         device = batch.device
@@ -105,8 +110,24 @@ class PathEnergyStatsHook:
         )
         self._path_ptr = batch.group_layout.group_ptr.to(torch.int32).contiguous()
 
-    def get_stats(self) -> PathEnergyStats:
+    @staticmethod
+    def _get_energy_update_token(ctx: DynamicsContext) -> tuple[Tensor, int, int]:
+        """Identify the current energy tensor and its latest in-place update."""
+        energy = ctx.batch.energy
+        if torch.is_inference(energy):
+            raise RuntimeError(
+                "PathEnergyStatsHook cannot validate freshness for an inference "
+                "tensor because inference tensors do not track mutation versions"
+            )
+        return energy, energy._version, ctx.step_count
+
+    def get_stats(self, ctx: DynamicsContext) -> PathEnergyStats:
         """Return statistics computed for the current energy evaluation.
+
+        Parameters
+        ----------
+        ctx : DynamicsContext
+            Context containing the energy tensor whose statistics are needed.
 
         Returns
         -------
@@ -116,12 +137,30 @@ class PathEnergyStatsHook:
         Raises
         ------
         RuntimeError
-            If the hook has not prepared its buffers at ``ON_ADMISSION``.
+            If the hook has not prepared its buffers at ``ON_ADMISSION``, has
+            not refreshed them for the current energy tensor update, or cannot
+            validate an inference tensor's mutation version.
         """
         if self._stats is None:
             raise RuntimeError(
                 "PathEnergyStatsHook must run at ON_ADMISSION before get_stats"
             )
+        if not torch.compiler.is_compiling():
+            current_energy, current_version, current_step = (
+                self._get_energy_update_token(ctx)
+            )
+            token = self._energy_update_token
+            if (
+                token is None
+                or token[0] is not current_energy
+                or token[1] != current_version
+                or token[2] != current_step
+            ):
+                raise RuntimeError(
+                    "PathEnergyStatsHook statistics are stale for the current "
+                    "energy evaluation; register and run PathEnergyStatsHook "
+                    "before its consumers at AFTER_COMPUTE"
+                )
         return self._stats
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
@@ -151,3 +190,7 @@ class PathEnergyStatsHook:
             stats.highest_interior_energy,
             stats.highest_interior_image_idx,
         )
+        # Tensor mutation versions are private eager metadata. Reading them while
+        # compiling creates guards and prevents stable CUDA-graph replay.
+        if not torch.compiler.is_compiling():
+            self._energy_update_token = self._get_energy_update_token(ctx)

@@ -76,7 +76,7 @@ class TestPathEnergyStatsHook:
 
         hook(ctx, DynamicsStage.ON_ADMISSION)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
-        stats = hook.get_stats()
+        stats = hook.get_stats(ctx)
 
         assert torch.equal(
             stats.endpoint_reference_energy,
@@ -122,7 +122,8 @@ class TestPathEnergyStatsHook:
             compiled(ctx, DynamicsStage.AFTER_COMPUTE)
             torch.cuda.synchronize()
 
-            stats = hook.get_stats()
+            stats = hook._stats
+            assert stats is not None
             assert stats.endpoint_reference_energy.tolist() == [2.0]
             assert stats.highest_interior_energy.tolist() == [5.0]
             assert stats.highest_interior_image_idx.tolist() == [2]
@@ -141,7 +142,7 @@ class TestPathEnergyStatsHook:
         )
         hook(ctx, DynamicsStage.ON_ADMISSION)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
-        stats = hook.get_stats()
+        stats = hook.get_stats(ctx)
         pointers = (
             stats.endpoint_reference_energy.data_ptr(),
             stats.highest_interior_energy.data_ptr(),
@@ -151,7 +152,7 @@ class TestPathEnergyStatsHook:
         batch.energy.copy_(torch.tensor([[3.0], [1.0], [5.0], [2.0]]))
         ctx.step_count = 1
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
-        refreshed = hook.get_stats()
+        refreshed = hook.get_stats(ctx)
 
         assert pointers == (
             refreshed.endpoint_reference_energy.data_ptr(),
@@ -162,11 +163,51 @@ class TestPathEnergyStatsHook:
         assert refreshed.highest_interior_energy.tolist() == [5.0]
         assert refreshed.highest_interior_image_idx.tolist() == [2]
 
-    def test_rejects_access_before_admission(self) -> None:
+    def test_rejects_access_before_admission(self, path: Batch) -> None:
         hook = PathEnergyStatsHook()
 
         with pytest.raises(RuntimeError, match="ON_ADMISSION"):
-            hook.get_stats()
+            hook.get_stats(DynamicsContext(batch=path))
+
+    def test_rejects_access_before_energy_refresh(self, path: Batch) -> None:
+        hook = PathEnergyStatsHook()
+        ctx = DynamicsContext(batch=path)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+
+        with pytest.raises(RuntimeError, match="stale"):
+            hook.get_stats(ctx)
+
+    def test_rejects_access_after_in_place_energy_update(self, path: Batch) -> None:
+        hook = PathEnergyStatsHook()
+        ctx = DynamicsContext(batch=path, step_count=0)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        path.energy.copy_(torch.zeros_like(path.energy))
+
+        with pytest.raises(RuntimeError, match="stale"):
+            hook.get_stats(ctx)
+
+    def test_rejects_access_after_step_advances(self, path: Batch) -> None:
+        hook = PathEnergyStatsHook()
+        ctx = DynamicsContext(batch=path, step_count=0)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        ctx.step_count = 1
+
+        with pytest.raises(RuntimeError, match="stale"):
+            hook.get_stats(ctx)
+
+    def test_rejects_inference_energy_tensor(self, path: Batch) -> None:
+        hook = PathEnergyStatsHook()
+        ctx = DynamicsContext(batch=path)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        with torch.inference_mode():
+            path.energy = path.energy.clone()
+
+        with pytest.raises(RuntimeError, match="inference tensors"):
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
 
 _DIAGNOSTIC_ENERGIES = [3.0, 8.0, 5.0, 4.0, 2.0, 3.0, 7.0, 6.0, 1.0]
