@@ -152,8 +152,8 @@ class NEBForceHook:
     fixed_atom_indices : mapping of int to sequence of int, optional
         Image-local atom indices that must remain fixed in every image of each
         keyed path. Keys are zero-based path indices; omitted paths have no
-        additional fixed atoms. Atoms in fixed
-        endpoint images are added automatically.
+        additional fixed atoms. All three Cartesian components of every selected
+        atom are fixed. Atoms in fixed endpoint images are added automatically.
 
     Attributes
     ----------
@@ -164,6 +164,11 @@ class NEBForceHook:
         Always ``1``. NEB forces must be refreshed after every model-force
         evaluation.
 
+    Notes
+    -----
+    Component-level constraints, such as fixing only one Cartesian axis, are
+    not supported.
+    
     Examples
     --------
     Use the registered improved-tangent method with a constant spring::
@@ -517,6 +522,7 @@ class NEBForceHook:
             effective_forces=workspace.effective_forces,
             link_lengths=workspace.link_lengths,
         )
+        workspace.effective_forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
         # Expand packed link lengths into the per-image field. Terminal entries
         # are initialized to zero on admission and are not modified here.
         batch.forward_link_length.index_copy_(
