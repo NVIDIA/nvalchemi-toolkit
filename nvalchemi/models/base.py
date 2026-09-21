@@ -31,11 +31,16 @@ from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._derivatives import (
     HessianOperator,
+    _attach_hessian_blocks,
+    _dense_hessian_blocks,
     _DerivativeGraph,
     _DerivativeOperation,
     _DerivativeRequest,
     _DerivativeStrategy,
+    _position_gradient,
     _prepare_derivative_graph,
+    _validate_dense_hessian_inputs,
+    _validate_dense_hessian_storage,
     _validate_hessian_vector,
 )
 
@@ -625,6 +630,80 @@ class BaseModelMixin(abc.ABC):
         """
         context = self._prepare_derivative_graph(batch, operation="hvp")
         return HessianOperator(context)
+
+    def compute_hessian(
+        self,
+        batch: Batch,
+        *,
+        strategy: Literal["vmap", "loop"] = "vmap",
+        row_chunk_size: int | None = None,
+    ) -> Batch:
+        """Materialize the dense position Hessian on a batch in place.
+
+        The model evaluates an independent snapshot, then attaches or replaces
+        ``batch["hessian"]`` on the ``atoms x atoms`` product level. Callers
+        that need an independent result should clone the batch first.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to update after successful materialization.
+        strategy : {"vmap", "loop"}, optional
+            Whether each row chunk uses batched vector-Jacobian products or
+            evaluates one row at a time. Defaults to ``"vmap"``.
+        row_chunk_size : int, optional
+            Maximum number of Cartesian Hessian rows evaluated together for
+            each system. ``None`` evaluates every row of one system together.
+
+        Returns
+        -------
+        Batch
+            The same object supplied as *batch*, with a detached canonical
+            ``hessian`` field.
+
+        Raises
+        ------
+        TypeError
+            If *batch* or an argument has the wrong type.
+        ValueError
+            If tensor layout, storage declarations, strategy, or chunk size is
+            incompatible with dense Hessian materialization.
+        NotImplementedError
+            If this wrapper or execution context has not been qualified for
+            the requested dense strategy.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        positions, num_nodes = _validate_dense_hessian_inputs(
+            batch,
+            strategy,
+            row_chunk_size,
+        )
+        _validate_dense_hessian_storage(
+            batch,
+            dtype=positions.dtype,
+            num_nodes=num_nodes,
+        )
+
+        with self._prepare_derivative_graph(
+            batch,
+            operation="dense_hessian",
+            strategy=strategy,
+        ) as graph:
+            gradient = _position_gradient(graph)
+            blocks = _dense_hessian_blocks(
+                graph,
+                gradient,
+                num_nodes,
+                strategy=strategy,
+                row_chunk_size=row_chunk_size,
+            )
+
+        with torch.inference_mode(False):
+            staging = batch.clone()
+            _attach_hessian_blocks(staging, blocks, dtype=positions.dtype)
+            _attach_hessian_blocks(batch, blocks, dtype=positions.dtype)
+        return batch
 
     def hessian_vector_product(
         self,

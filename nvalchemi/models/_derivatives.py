@@ -27,6 +27,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import Batch
+from nvalchemi.data.level_storage import TORCH_DTYPE_MAP
 
 if TYPE_CHECKING:
     from nvalchemi.models.base import BaseModelMixin
@@ -122,26 +123,240 @@ def _position_gradient(graph: _DerivativeGraph) -> Tensor:
     return gradient
 
 
+def _gradient_vector_product(
+    outputs: Tensor,
+    positions: Tensor,
+    grad_outputs: Tensor,
+    *,
+    is_grads_batched: bool,
+) -> Tensor:
+    """Differentiate a gradient view against positions for one or many seeds."""
+    with torch.inference_mode(False), torch.enable_grad():
+        if not outputs.requires_grad:
+            shape = (
+                (grad_outputs.shape[0], *positions.shape)
+                if is_grads_batched
+                else positions.shape
+            )
+            return positions.new_zeros(shape)
+        product = torch.autograd.grad(
+            outputs,
+            positions,
+            grad_outputs=grad_outputs.detach(),
+            create_graph=False,
+            retain_graph=True,
+            allow_unused=True,
+            is_grads_batched=is_grads_batched,
+        )[0]
+        if product is None:
+            shape = (
+                (grad_outputs.shape[0], *positions.shape)
+                if is_grads_batched
+                else positions.shape
+            )
+            return positions.new_zeros(shape)
+        return product.detach()
+
+
 def _hessian_vector_product(
     gradient: Tensor,
     positions: Tensor,
     vector: Tensor,
 ) -> Tensor:
     """Evaluate one HVP while retaining the graph for subsequent products."""
+    return _gradient_vector_product(
+        gradient,
+        positions,
+        vector,
+        is_grads_batched=False,
+    )
+
+
+def _validate_dense_hessian_inputs(
+    batch: Batch,
+    strategy: Any,
+    row_chunk_size: Any,
+) -> tuple[Tensor, list[int]]:
+    """Validate dense-Hessian arguments before capability or model execution."""
+    if not isinstance(batch, Batch):
+        raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+    if strategy not in ("loop", "vmap"):
+        raise ValueError(f"strategy must be 'loop' or 'vmap', got {strategy!r}")
+    if row_chunk_size is not None:
+        if not isinstance(row_chunk_size, int) or isinstance(row_chunk_size, bool):
+            raise TypeError("row_chunk_size must be a positive integer or None")
+        if row_chunk_size <= 0:
+            raise ValueError("row_chunk_size must be positive")
+
+    positions = getattr(batch, "positions", None)
+    if not isinstance(positions, Tensor):
+        raise RuntimeError("Dense Hessians require tensor positions")
+    if not positions.is_floating_point():
+        raise TypeError(
+            "Dense Hessian positions must have a floating-point dtype, "
+            f"got {positions.dtype}"
+        )
+    if positions.ndim != 2 or positions.shape[1] != 3:
+        raise ValueError(
+            "Dense Hessian positions must have shape [total_atoms, 3], "
+            f"got {tuple(positions.shape)}"
+        )
+
+    atomic_numbers = getattr(batch, "atomic_numbers", None)
+    if not isinstance(atomic_numbers, Tensor):
+        raise RuntimeError("Dense Hessians require tensor atomic_numbers")
+    if atomic_numbers.ndim != 1:
+        raise ValueError(
+            "Dense Hessian atomic_numbers must have shape [total_atoms], "
+            f"got {tuple(atomic_numbers.shape)}"
+        )
+
+    num_nodes = batch.num_nodes_list
+    expected_atoms = sum(num_nodes)
+    if positions.shape[0] != expected_atoms:
+        raise ValueError(
+            "Dense Hessian positions length must match active atom segmentation "
+            f"{expected_atoms}, got {positions.shape[0]}"
+        )
+    if atomic_numbers.shape[0] != expected_atoms:
+        raise ValueError(
+            "Dense Hessian atomic_numbers length must match active atom "
+            f"segmentation {expected_atoms}, got {atomic_numbers.shape[0]}"
+        )
+    return positions, num_nodes
+
+
+def _validate_dense_hessian_storage(
+    batch: Batch,
+    *,
+    dtype: torch.dtype,
+    num_nodes: list[int],
+) -> None:
+    """Preflight canonical product storage without mutating the batch."""
+    schema = batch.get_level_schema()
+    schema.add_product_level("atom_atom", left="atoms", right="atoms")
+
+    field_group = schema.attr_to_group.get("hessian")
+    if field_group is not None and field_group != "atom_atom":
+        raise ValueError(
+            f"Field 'hessian' must belong to level 'atom_atom', not '{field_group}'"
+        )
+    declared_dtype = schema.dtypes.get("hessian")
+    if declared_dtype is not None:
+        try:
+            expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
+        except KeyError as exc:
+            raise ValueError(
+                f"Field 'hessian' has unsupported declared dtype '{declared_dtype}'"
+            ) from exc
+        if expected_dtype != dtype:
+            raise ValueError(
+                f"Field 'hessian' has declared dtype {declared_dtype}, expected {dtype}"
+            )
+
+    if "hessian" not in batch:
+        return
+    hessian = batch["hessian"]
+    expected_shape = (sum(count * count for count in num_nodes), 3, 3)
+    if tuple(hessian.shape) != expected_shape:
+        raise ValueError(
+            f"Existing 'hessian' field must have shape {expected_shape}, "
+            f"got {tuple(hessian.shape)}"
+        )
+    if hessian.dtype != dtype:
+        raise ValueError(
+            f"Existing 'hessian' field must have dtype {dtype}, got {hessian.dtype}"
+        )
+
+
+def _dense_hessian_blocks(
+    graph: _DerivativeGraph,
+    gradient: Tensor,
+    num_nodes: list[int],
+    *,
+    strategy: _DerivativeStrategy,
+    row_chunk_size: int | None,
+) -> list[Tensor]:
+    """Materialize detached within-system Hessian blocks from one graph."""
+    blocks: list[Tensor] = []
+    atom_start = 0
     with torch.inference_mode(False), torch.enable_grad():
-        if not gradient.requires_grad:
-            return torch.zeros_like(positions)
-        product = torch.autograd.grad(
-            gradient,
-            positions,
-            grad_outputs=vector.detach(),
-            create_graph=False,
-            retain_graph=True,
-            allow_unused=True,
-        )[0]
-        if product is None:
-            return torch.zeros_like(positions)
-        return product.detach()
+        for atom_count in num_nodes:
+            atom_stop = atom_start + atom_count
+            row_count = 3 * atom_count
+            if row_count == 0:
+                blocks.append(graph.positions.new_empty((0, 0, 3, 3)).detach())
+                atom_start = atom_stop
+                continue
+
+            local_gradient = gradient[atom_start:atom_stop]
+            chunk_size = row_count if row_chunk_size is None else row_chunk_size
+            row_chunks: list[Tensor] = []
+            for row_start in range(0, row_count, chunk_size):
+                row_stop = min(row_start + chunk_size, row_count)
+                if strategy == "vmap":
+                    rows = torch.arange(
+                        row_start,
+                        row_stop,
+                        device=graph.positions.device,
+                    )
+                    seeds = graph.positions.new_zeros(
+                        (row_stop - row_start, atom_count, 3)
+                    )
+                    seeds[
+                        torch.arange(rows.shape[0], device=rows.device),
+                        torch.div(rows, 3, rounding_mode="floor"),
+                        torch.remainder(rows, 3),
+                    ] = 1
+                    products = _gradient_vector_product(
+                        local_gradient,
+                        graph.positions,
+                        seeds,
+                        is_grads_batched=True,
+                    )
+                    row_chunks.append(products[:, atom_start:atom_stop].clone())
+                else:
+                    loop_rows: list[Tensor] = []
+                    for row in range(row_start, row_stop):
+                        seed = torch.zeros_like(local_gradient)
+                        seed.reshape(-1)[row] = 1
+                        product = _gradient_vector_product(
+                            local_gradient,
+                            graph.positions,
+                            seed,
+                            is_grads_batched=False,
+                        )
+                        loop_rows.append(product[atom_start:atom_stop].clone())
+                    row_chunks.append(torch.stack(loop_rows, dim=0))
+
+            rows = torch.cat(row_chunks, dim=0)
+            block = (
+                rows.reshape(atom_count, 3, atom_count, 3)
+                .permute(0, 2, 1, 3)
+                .contiguous()
+                .detach()
+            )
+            blocks.append(block)
+            atom_start = atom_stop
+    return blocks
+
+
+def _attach_hessian_blocks(
+    batch: Batch,
+    blocks: list[Tensor],
+    *,
+    dtype: torch.dtype,
+) -> None:
+    """Attach canonical blocks through public Batch schema and field APIs."""
+    batch.add_product_level("atom_atom", left="atoms", right="atoms")
+    batch.add_key(
+        "hessian",
+        blocks,
+        level="atom_atom",
+        overwrite=True,
+        dtype=dtype,
+        payload_shape=(3, 3),
+    )
 
 
 class HessianOperator:

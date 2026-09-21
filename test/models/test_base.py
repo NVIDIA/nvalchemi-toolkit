@@ -117,16 +117,46 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
 
         if self.output_kind == "disconnected":
             return {"energy": self.scale.square().expand(data.num_graphs, 1)}
-        if self.output_kind == "linear":
+        if self.output_kind == "coupled":
+            energies = []
+            start = 0
+            for atom_count in data.num_nodes_list:
+                stop = start + atom_count
+                coordinates = data.positions[start:stop].reshape(-1)
+                matrix = _coupled_hessian_matrix(
+                    atom_count,
+                    dtype=data.positions.dtype,
+                    device=data.positions.device,
+                )
+                energies.append(0.5 * self.scale * coordinates @ matrix @ coordinates)
+                start = stop
+            energy = (
+                torch.stack(energies).reshape(-1, 1)
+                if energies
+                else data.positions.sum().expand(0, 1)
+            )
+        elif self.output_kind == "second_derivative_raise":
+            energies = []
+            start = 0
+            for atom_count in data.num_nodes_list:
+                stop = start + atom_count
+                energies.append(
+                    self.scale
+                    * _RaiseOnSecondDerivative.apply(data.positions[start:stop])
+                )
+                start = stop
+            energy = torch.stack(energies).reshape(-1, 1)
+        elif self.output_kind == "linear":
             node_energy = self.scale * data.positions.sum(dim=-1, keepdim=True)
         else:
             node_energy = self.scale * data.positions.square().sum(dim=-1, keepdim=True)
-        energy = torch.zeros(
-            data.num_graphs,
-            1,
-            dtype=data.positions.dtype,
-            device=data.positions.device,
-        ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
+        if self.output_kind not in {"coupled", "second_derivative_raise"}:
+            energy = torch.zeros(
+                data.num_graphs,
+                1,
+                dtype=data.positions.dtype,
+                device=data.positions.device,
+            ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
 
         if self.output_kind == "wrong_shape":
             energy = energy.squeeze(-1)
@@ -173,6 +203,67 @@ class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
             f"'{request.operation}' for execution='{request.execution}', "
             f"mode='{request.mode}', strategy='{strategy}': test capability rejection"
         )
+
+
+class _LoopOnlyQuadraticDerivativeWrapper(_QualifiedQuadraticDerivativeWrapper):
+    """Test wrapper that deliberately leaves vectorized dense rows unqualified."""
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        if request.operation == "dense_hessian" and request.strategy == "vmap":
+            self.seen_requests.append(request)
+            raise NotImplementedError(
+                "test wrapper supports dense strategy='loop' only"
+            )
+        super()._validate_derivative_request(request)
+
+
+class _RaiseOnSecondDerivative(torch.autograd.Function):
+    """Quadratic energy whose first gradient exists but second derivative fails."""
+
+    @staticmethod
+    def forward(ctx, positions):
+        ctx.save_for_backward(positions)
+        return positions.square().sum()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        (positions,) = ctx.saved_tensors
+        return 2 * _RaiseDuringBackward.apply(positions) * grad_output
+
+
+class _RaiseDuringBackward(torch.autograd.Function):
+    """Identity used to inject a failure during dense-row differentiation."""
+
+    @staticmethod
+    def forward(ctx, value):
+        return value
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        raise LookupError("injected dense row failure")
+
+
+def _coupled_hessian_matrix(
+    atom_count: int,
+    *,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Return a symmetric matrix with cross-atom and cross-axis entries."""
+    dimension = 3 * atom_count
+    if dimension == 0:
+        return torch.empty((0, 0), dtype=dtype, device=device)
+    values = torch.arange(
+        1,
+        dimension * dimension + 1,
+        dtype=dtype,
+        device=device,
+    ).reshape(dimension, dimension)
+    return (values + values.T) / (dimension * dimension) + torch.eye(
+        dimension,
+        dtype=dtype,
+        device=device,
+    )
 
 
 def _make_derivative_batch(
@@ -1127,6 +1218,437 @@ for name in ('aimnet', 'mace', 'fairchem'):
             capture_output=True,
             text=True,
         )
+
+
+# ===========================================================================
+# Dense Hessian materialization
+# ===========================================================================
+
+
+class TestDenseHessian:
+    """Tests for canonical in-place dense Hessian materialization."""
+
+    @staticmethod
+    def _expected_blocks(batch: Batch) -> list[torch.Tensor]:
+        return [
+            _coupled_hessian_matrix(
+                atom_count,
+                dtype=batch.positions.dtype,
+                device=batch.positions.device,
+            )
+            .reshape(atom_count, 3, atom_count, 3)
+            .permute(0, 2, 1, 3)
+            .contiguous()
+            for atom_count in batch.num_nodes_list
+        ]
+
+    @staticmethod
+    def _snapshot(batch: Batch):
+        schema = batch.get_level_schema()
+        schema_state = (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            {name: attrs.copy() for name, attrs in schema.group_to_attrs.items()},
+            schema.dtypes.copy(),
+        )
+        tensors = {key: value.clone() for key, value in batch}
+        return schema_state, tensors
+
+    @staticmethod
+    def _assert_snapshot(batch: Batch, snapshot) -> None:
+        schema_state, tensors = snapshot
+        schema = batch.get_level_schema()
+        assert (
+            schema.level_names,
+            schema.level_kinds,
+            schema.product_parents,
+            schema.group_to_attrs,
+            schema.dtypes,
+        ) == schema_state
+        assert {key for key, _ in batch} == set(tensors)
+        for key, value in tensors.items():
+            torch.testing.assert_close(batch[key], value)
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("strategy", ["loop", "vmap"])
+    def test_materializes_analytical_mixed_system_blocks(self, dtype, strategy):
+        batch = _make_derivative_batch(1, 3, dtype=dtype)
+        model = _QualifiedQuadraticDerivativeWrapper().to(dtype=dtype)
+        model.output_kind = "coupled"
+        expected = self._expected_blocks(batch)
+
+        result = model.compute_hessian(batch, strategy=strategy)
+
+        assert result is batch
+        assert model.forward_calls == 1
+        assert batch.get_level_schema().product_parents["atom_atom"] == (
+            "atoms",
+            "atoms",
+        )
+        assert batch.get_level_schema().attr_to_group["hessian"] == "atom_atom"
+        assert batch.hessian.shape == (10, 3, 3)
+        assert batch.level_ptr("atom_atom").tolist() == [0, 1, 10]
+        assert not batch.hessian.requires_grad
+        assert batch.hessian.grad_fn is None
+        for index, expected_block in enumerate(expected):
+            actual = batch.get_data(index).hessian
+            torch.testing.assert_close(actual, expected_block)
+            torch.testing.assert_close(actual, actual.permute(1, 0, 3, 2))
+
+    @pytest.mark.parametrize("row_chunk_size", [None, 1, 4, 64])
+    def test_chunk_sizes_and_strategies_agree(self, row_chunk_size):
+        source = _make_derivative_batch(2, 3, dtype=torch.float64)
+        loop_batch = source.clone()
+        vmap_batch = source.clone()
+        loop_model = _QualifiedQuadraticDerivativeWrapper().to(dtype=torch.float64)
+        vmap_model = _QualifiedQuadraticDerivativeWrapper().to(dtype=torch.float64)
+        loop_model.output_kind = "coupled"
+        vmap_model.output_kind = "coupled"
+
+        loop_model.compute_hessian(
+            loop_batch,
+            strategy="loop",
+            row_chunk_size=row_chunk_size,
+        )
+        vmap_model.compute_hessian(
+            vmap_batch,
+            strategy="vmap",
+            row_chunk_size=row_chunk_size,
+        )
+
+        torch.testing.assert_close(loop_batch.hessian, vmap_batch.hessian)
+        assert loop_model.forward_calls == 1
+        assert vmap_model.forward_calls == 1
+
+    def test_stored_block_contraction_matches_hvp(self):
+        batch = _make_derivative_batch(2, 3, dtype=torch.float64)
+        model = _QualifiedQuadraticDerivativeWrapper().to(dtype=torch.float64)
+        model.output_kind = "coupled"
+        vector = torch.randn_like(batch.positions)
+
+        product = model.hessian_vector_product(batch, vector)
+        model.compute_hessian(batch, strategy="vmap", row_chunk_size=4)
+
+        start = 0
+        for index, atom_count in enumerate(batch.num_nodes_list):
+            stop = start + atom_count
+            block_product = torch.einsum(
+                "abij,bj->ai",
+                batch.get_data(index).hessian,
+                vector[start:stop],
+            )
+            torch.testing.assert_close(block_product, product[start:stop])
+            start = stop
+
+    def test_linear_energy_and_empty_systems_produce_zero_blocks(self):
+        batch = _make_derivative_batch(0, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "linear"
+
+        model.compute_hessian(batch, strategy="vmap")
+
+        assert batch.get_data(0).hessian.shape == (0, 0, 3, 3)
+        torch.testing.assert_close(
+            batch.get_data(1).hessian,
+            torch.zeros(2, 2, 3, 3),
+        )
+
+    def test_zero_graph_batch_materializes_empty_canonical_field(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "coupled"
+
+        result = model.compute_hessian(batch)
+
+        assert result is batch
+        assert batch.hessian.shape == (0, 3, 3)
+        assert batch.level_ptr("atom_atom").tolist() == [0]
+
+    def test_repeated_calls_replace_hessian_and_preserve_other_fields(self):
+        batch = _make_derivative_batch(2, 1)
+        batch.add_key(
+            "marker",
+            [torch.arange(2), torch.arange(1)],
+            level="atoms",
+        )
+        marker = batch.marker.clone()
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        model.compute_hessian(batch, strategy="loop")
+        first = batch.hessian.clone()
+        model.scale.data.fill_(2)
+        model.compute_hessian(batch, strategy="vmap")
+
+        torch.testing.assert_close(batch.hessian, 2 * first)
+        torch.testing.assert_close(batch.marker, marker)
+        assert model.forward_calls == 2
+
+    def test_explicit_clone_provides_nonmutating_use(self):
+        batch = _make_derivative_batch(2, 3)
+        original_schema = batch.get_level_schema()
+        result = batch.clone()
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        returned = model.compute_hessian(result)
+
+        assert returned is result
+        assert "hessian" not in batch
+        assert "atom_atom" not in original_schema.level_names
+        assert "hessian" in result
+
+    def test_canonical_field_survives_batch_lifecycle(self):
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "coupled"
+        model.compute_hessian(batch)
+
+        cloned = batch.clone()
+        selected = batch.index_select([1, 0])
+        rebatched = Batch.from_data_list(batch.to_data_list())
+
+        torch.testing.assert_close(cloned.hessian, batch.hessian)
+        torch.testing.assert_close(
+            selected.get_data(0).hessian,
+            batch.get_data(1).hessian,
+        )
+        torch.testing.assert_close(rebatched.hessian, batch.hessian)
+        assert cloned.level_ptr("atom_atom").tolist() == [0, 1, 5]
+
+    @pytest.mark.parametrize(
+        ("strategy", "row_chunk_size", "error", "message"),
+        [
+            ("unknown", None, ValueError, "strategy must be"),
+            ("loop", True, TypeError, "positive integer or None"),
+            ("loop", 1.5, TypeError, "positive integer or None"),
+            ("vmap", 0, ValueError, "must be positive"),
+            ("vmap", -1, ValueError, "must be positive"),
+        ],
+    )
+    def test_invalid_arguments_fail_before_capability_or_forward(
+        self,
+        strategy,
+        row_chunk_size,
+        error,
+        message,
+    ):
+        batch = _make_derivative_batch(2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        snapshot = self._snapshot(batch)
+
+        with pytest.raises(error, match=message):
+            model.compute_hessian(
+                batch,
+                strategy=strategy,
+                row_chunk_size=row_chunk_size,
+            )
+
+        assert model.seen_requests == []
+        assert model.forward_calls == 0
+        self._assert_snapshot(batch, snapshot)
+
+    def test_invalid_batch_layout_fails_before_forward(self):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        batch = _make_derivative_batch(2)
+        batch["positions"] = torch.zeros(2, 4)
+
+        with pytest.raises(ValueError, match=r"shape \[total_atoms, 3\]"):
+            model.compute_hessian(batch)
+
+        assert model.forward_calls == 0
+
+    @pytest.mark.parametrize("case", ["atomic_rank", "capacity"])
+    def test_invalid_packed_lengths_fail_before_forward(self, case):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        if case == "capacity":
+            batch = Batch.empty(num_systems=2, num_nodes=4, num_edges=0)
+        else:
+            batch = _make_derivative_batch(2)
+            if case == "atomic_rank":
+                batch["atomic_numbers"] = torch.ones((2, 1), dtype=torch.long)
+
+        with pytest.raises(ValueError):
+            model.compute_hessian(batch)
+
+        assert model.forward_calls == 0
+
+    def test_non_batch_fails_before_capability_validation(self):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with pytest.raises(TypeError, match="batch must be a Batch"):
+            model.compute_hessian(object())
+
+        assert model.seen_requests == []
+        assert model.forward_calls == 0
+
+    @pytest.mark.parametrize(
+        "conflict",
+        ["level", "parents", "owner", "dtype", "shape"],
+    )
+    def test_incompatible_canonical_storage_fails_before_forward(self, conflict):
+        batch = _make_derivative_batch(2, 1)
+        if conflict == "level":
+            batch.add_level("atom_atom", segmented=True)
+        elif conflict == "parents":
+            batch.add_product_level("atom_atom", left="edges", right="atoms")
+        elif conflict == "owner":
+            batch.add_key(
+                "hessian",
+                [torch.zeros(2, 3, 3), torch.zeros(1, 3, 3)],
+                level="atoms",
+            )
+        else:
+            batch.add_product_level("atom_atom", left="atoms", right="atoms")
+            if conflict == "dtype":
+                values = [
+                    torch.zeros(2, 2, 3, 3, dtype=torch.float64),
+                    torch.zeros(1, 1, 3, 3, dtype=torch.float64),
+                ]
+            else:
+                values = [torch.zeros(2, 2, 2, 3), torch.zeros(1, 1, 2, 3)]
+            batch.add_key("hessian", values, level="atom_atom")
+        snapshot = self._snapshot(batch)
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with pytest.raises(ValueError):
+            model.compute_hessian(batch)
+
+        assert model.forward_calls == 0
+        self._assert_snapshot(batch, snapshot)
+
+    @pytest.mark.parametrize(
+        ("output_kind", "strategy", "error", "message"),
+        [
+            (
+                "raise",
+                "loop",
+                LookupError,
+                "injected derivative forward failure",
+            ),
+            (
+                "disconnected",
+                "loop",
+                RuntimeError,
+                "not connected to the position leaf",
+            ),
+            (
+                "second_derivative_raise",
+                "loop",
+                LookupError,
+                "injected dense row failure",
+            ),
+            (
+                "second_derivative_raise",
+                "vmap",
+                LookupError,
+                "injected dense row failure",
+            ),
+        ],
+    )
+    def test_derivative_failures_leave_batch_unchanged(
+        self,
+        output_kind,
+        strategy,
+        error,
+        message,
+    ):
+        batch = _make_derivative_batch(2, 1)
+        snapshot = self._snapshot(batch)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = output_kind
+
+        with pytest.raises(error, match=message):
+            model.compute_hessian(batch, strategy=strategy, row_chunk_size=1)
+
+        self._assert_snapshot(batch, snapshot)
+
+    def test_preserves_caller_and_model_runtime_state(self):
+        positions = torch.randn(3, 3, requires_grad=True) * 2
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=positions,
+                    atomic_numbers=torch.ones(3, dtype=torch.long),
+                )
+            ]
+        )
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.eval()
+        parameter_grad = torch.tensor(7.0)
+        model.scale.grad = parameter_grad
+        active_outputs = {"energy", "custom"}
+        gradient_keys = {"cell"}
+        model.model_config.active_outputs = active_outputs
+        model.model_config.gradient_keys = gradient_keys
+        original_positions = batch.positions.clone()
+        position_grad_fn = type(batch.positions.grad_fn)
+
+        result = model.compute_hessian(batch)
+
+        assert result is batch
+        torch.testing.assert_close(batch.positions, original_positions)
+        assert type(batch.positions.grad_fn) is position_grad_fn
+        assert batch.positions.requires_grad
+        assert model.scale.grad is parameter_grad
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+        assert model.training is False
+
+    @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
+    def test_restores_outer_autograd_mode(self, outer_mode):
+        batch = _make_derivative_batch(2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
+
+        with context:
+            expected_grad = torch.is_grad_enabled()
+            expected_inference = torch.is_inference_mode_enabled()
+            model.compute_hessian(batch)
+            assert torch.is_grad_enabled() is expected_grad
+            assert torch.is_inference_mode_enabled() is expected_inference
+            assert not batch.hessian.is_inference()
+
+    @pytest.mark.parametrize("context_kind", ["base", "distributed", "compiled"])
+    def test_capability_rejection_occurs_before_forward(self, context_kind):
+        batch = _make_derivative_batch(2)
+        if context_kind == "base":
+            model = _QuadraticDerivativeWrapperBase()
+        else:
+            model = _QualifiedQuadraticDerivativeWrapper()
+        if context_kind == "distributed":
+            model._dist_ctx = object()
+        elif context_kind == "compiled":
+            model.derivative_mode = "compiled"
+        snapshot = self._snapshot(batch)
+
+        with pytest.raises(NotImplementedError):
+            model.compute_hessian(batch)
+
+        assert model.forward_calls == 0
+        self._assert_snapshot(batch, snapshot)
+
+    def test_vmap_rejection_does_not_fall_back_to_loop(self):
+        batch = _make_derivative_batch(2)
+        model = _LoopOnlyQuadraticDerivativeWrapper()
+
+        with pytest.raises(NotImplementedError, match="strategy='loop' only"):
+            model.compute_hessian(batch, strategy="vmap")
+
+        assert model.forward_calls == 0
+        model.compute_hessian(batch, strategy="loop")
+        assert model.forward_calls == 1
+
+    def test_pipeline_remains_unqualified(self):
+        batch = _make_derivative_batch(2)
+        left = _QualifiedQuadraticDerivativeWrapper()
+        right = _QualifiedQuadraticDerivativeWrapper()
+        pipeline = left + right
+
+        with pytest.raises(NotImplementedError, match="PipelineModelWrapper"):
+            pipeline.compute_hessian(batch)
+
+        assert left.forward_calls == 0
+        assert right.forward_calls == 0
 
 
 # ===========================================================================
