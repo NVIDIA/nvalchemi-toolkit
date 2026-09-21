@@ -211,8 +211,9 @@ orchestrator that folds a conditioning input through heterogeneous stages
 (generators, dynamics engines, or any `Batch -> Batch` callable):
 
 ```python
-pipe = gen_a | gen_b | optimizer
+pipe = gen_a | gen_b | optimizer      # optimizer: a dynamics engine or FusedStage
 out = pipe(cond)
+out = pipe(cond, stage_kwargs=[None, None, {"n_steps": 200}])
 for batch in pipe.stream(conds):
     ...
 ```
@@ -221,9 +222,24 @@ Pipelines are 1→1 per stage: a filter may shrink a batch, nothing fans out,
 and should a stage ever yield a zero-graph batch the remaining stages are
 skipped for that item (a defensive contract — no current `Batch` operation
 produces one). Each `AtomisticGenerator` stage keeps its own hooks and
-context. `pipe.compile(**kwargs)` compiles each `AtomisticGenerator` stage's
-generating function, and `with pipe:` runs the fold on one CUDA stream shared
-by all stages — sequential stages serialize on it with no cross-stream sync.
+context.
+
+The fold duck-types its stages: a stage with a `run` method — a dynamics
+engine or a fused stage — is driven to completion with
+`stage.run(batch, **kwargs)`, so its own hooks fire inside its loop; any
+other stage is called as `stage(batch, **kwargs)`. Per-call options are
+addressed to stages with `stage_kwargs`: a single mapping stretches across
+every stage (for homogeneous pipelines), or a list of one mapping (or
+`None`) per stage, length-checked at entry. A dynamics stage must carry its
+own exit criterion (convergence or `n_steps`); the fold offers no step
+budget of its own.
+
+`pipe.compile(**kwargs)` compiles each `AtomisticGenerator` stage's
+generating function, and `with pipe:` runs the fold on one CUDA stream
+shared by every stage that follows the `_stream` convention — generator
+stages, and dynamics engines or fused stages, which honor a pre-set stream
+when their session is entered — so sequential stages serialize on it with
+no cross-stream sync.
 
 For construction-time validation, every generator stage declares the batch
 fields it reads and carries — `consumes_fields` / `produces_fields`, set on
