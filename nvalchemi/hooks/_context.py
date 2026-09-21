@@ -197,8 +197,10 @@ class GenerationContext(HookContext):
         any container the materialization callable understands.
     accepted_mask : torch.Tensor | None
         Boolean mask recording which of the call's candidates were accepted,
-        written by filtering hooks or the materialization callable. ``None``
-        when acceptance has not been recorded for this dispatch. Mirrors the
+        written by filtering hooks. The materialization callable never sees
+        this context; it signals total rejection by returning a zero-graph
+        ``Batch``. ``None`` when acceptance has not been recorded for this
+        dispatch. Mirrors the
         :attr:`~nvalchemi.hooks.DynamicsContext.converged_mask` convention so
         acceptance-aware reporting and resampling loops have a stable
         channel.
