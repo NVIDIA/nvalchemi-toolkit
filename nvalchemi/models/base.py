@@ -18,15 +18,24 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
+from collections.abc import Mapping
+from contextlib import AbstractContextManager
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import (
+    _DerivativeGraph,
+    _DerivativeOperation,
+    _DerivativeRequest,
+    _DerivativeStrategy,
+    _prepare_derivative_graph,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.distributed.config import StrategyKind
@@ -499,6 +508,95 @@ class BaseModelMixin(abc.ABC):
             Default: empty set (all derivatives come from autograd).
         """
         return set()
+
+    # ------------------------------------------------------------------
+    # Derivative graph preparation
+    # ------------------------------------------------------------------
+
+    def _derivative_execution_mode(self) -> Literal["eager", "compiled"]:
+        """Return the execution mode used for derivative capability checks."""
+        return "eager"
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Reject second-order derivatives until a wrapper is qualified.
+
+        Parameters
+        ----------
+        request : _DerivativeRequest
+            Contextual derivative request to validate.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, unless a qualified wrapper overrides this method.
+        """
+        strategy = request.strategy if request.strategy is not None else "none"
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support derivative operation "
+            f"'{request.operation}' for execution='{request.execution}', "
+            f"mode='{request.mode}', strategy='{strategy}': the wrapper has not "
+            "been qualified for second-order derivatives"
+        )
+
+    def _derivative_energy(self, data: Batch) -> torch.Tensor:
+        """Run the ordinary wrapper path and return connected system energies.
+
+        Parameters
+        ----------
+        data : Batch
+            Independent working batch configured for position gradients.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-system energy tensor. Graph validation is handled by the shared
+            derivative preparation boundary.
+
+        Raises
+        ------
+        RuntimeError
+            If the ordinary wrapper output does not contain an energy value.
+        """
+        output = self(data)  # type: ignore[operator]
+        if not isinstance(output, Mapping) or output.get("energy") is None:
+            raise RuntimeError(
+                f"{type(self).__name__} derivative evaluation did not return energy"
+            )
+        return output["energy"]
+
+    def _prepare_derivative_graph(
+        self,
+        batch: Batch,
+        *,
+        operation: _DerivativeOperation,
+        strategy: _DerivativeStrategy | None = None,
+    ) -> AbstractContextManager[_DerivativeGraph]:
+        """Prepare an independent graph-connected energy evaluation.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to snapshot without mutation.
+        operation : {"hvp", "dense_hessian"}
+            Derivative operation requiring the graph.
+        strategy : {"loop", "vmap"} | None, optional
+            Dense-Hessian execution strategy. HVP requests require ``None``.
+
+        Returns
+        -------
+        contextlib.AbstractContextManager[_DerivativeGraph]
+            Context yielding independent working data, a position leaf, and
+            connected per-system energy.
+        """
+        if not isinstance(batch, Batch):
+            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+        request = _DerivativeRequest(
+            operation=operation,
+            execution="distributed" if self._dist_ctx is not None else "local",
+            mode=self._derivative_execution_mode(),
+            strategy=strategy,
+        )
+        return _prepare_derivative_graph(self, batch, request)
 
     def set_config(self, key: str, value: Any) -> None:
         """Set a mutable field on :attr:`model_config`.

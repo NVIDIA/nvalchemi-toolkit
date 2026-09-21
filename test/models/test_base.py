@@ -19,6 +19,10 @@ Target: >=85% coverage on nvalchemi/models/base.py.
 
 from __future__ import annotations
 
+import gc
+import subprocess
+import sys
+import weakref
 from collections import OrderedDict
 
 import pytest
@@ -26,6 +30,7 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import _DerivativeRequest
 from nvalchemi.models._utils import (
     autograd_forces,
     autograd_forces_and_stresses,
@@ -69,6 +74,97 @@ def simple_batch():
 def demo_model():
     """A DemoModelWrapper instance with default config."""
     return DemoModelWrapper(DemoModel())
+
+
+class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
+    """Small analytical wrapper used to exercise derivative graph preparation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self.model_config = ModelConfig(outputs=frozenset({"energy"}))
+        self.forward_calls = 0
+        self.seen_requests: list[_DerivativeRequest] = []
+        self.observed_active_outputs: set[str] | None = None
+        self.observed_gradient_keys: set[str] | None = None
+        self.derivative_mode = "eager"
+        self.output_kind = "valid"
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def _derivative_execution_mode(self):
+        return self.derivative_mode
+
+    def forward(self, data: Batch):
+        self.forward_calls += 1
+        self.observed_active_outputs = self.model_config.active_outputs
+        self.observed_gradient_keys = self.model_config.gradient_keys
+
+        if self.output_kind == "raise":
+            raise LookupError("injected derivative forward failure")
+        if self.output_kind == "missing":
+            return {}
+        if self.output_kind == "non_tensor":
+            return {"energy": 1.0}
+
+        node_energy = self.scale * data.positions.square().sum(dim=-1, keepdim=True)
+        energy = torch.zeros(
+            data.num_graphs,
+            1,
+            dtype=data.positions.dtype,
+            device=data.positions.device,
+        ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
+
+        if self.output_kind == "wrong_shape":
+            energy = energy.squeeze(-1)
+        elif self.output_kind == "wrong_device":
+            energy = torch.empty(
+                data.num_graphs,
+                1,
+                device="meta",
+                requires_grad=True,
+            )
+        elif self.output_kind == "non_floating":
+            energy = torch.zeros(
+                data.num_graphs,
+                1,
+                dtype=torch.int64,
+                device=data.positions.device,
+            )
+        elif self.output_kind == "detached":
+            energy = energy.detach()
+        return {"energy": energy}
+
+
+class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
+    """Test wrapper accepting only local eager derivative requests."""
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        self.seen_requests.append(request)
+        supported = (
+            request.execution == "local"
+            and request.mode == "eager"
+            and (
+                (request.operation == "hvp" and request.strategy is None)
+                or (
+                    request.operation == "dense_hessian"
+                    and request.strategy in {"loop", "vmap"}
+                )
+            )
+        )
+        if supported:
+            return
+        strategy = request.strategy if request.strategy is not None else "none"
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support derivative operation "
+            f"'{request.operation}' for execution='{request.execution}', "
+            f"mode='{request.mode}', strategy='{strategy}': test capability rejection"
+        )
 
 
 # ===========================================================================
@@ -256,6 +352,377 @@ class TestNeighborListFormat:
 
     def test_matrix_value(self):
         assert NeighborListFormat.MATRIX == "matrix"
+
+
+# ===========================================================================
+# Derivative graph preparation
+# ===========================================================================
+
+
+class TestDerivativeGraphPreparation:
+    """Tests for independent, graph-connected derivative inputs."""
+
+    def test_yields_independent_batch_position_leaf_and_connected_energy(
+        self, simple_batch
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        original_positions = simple_batch.positions.clone()
+        original_numbers = simple_batch.atomic_numbers.clone()
+        original_schema = simple_batch.get_level_schema()
+
+        with model._prepare_derivative_graph(simple_batch, operation="hvp") as graph:
+            assert graph.data is not simple_batch
+            assert graph.positions is graph.data.positions
+            assert graph.positions.is_leaf
+            assert graph.positions.requires_grad
+            assert graph.positions.data_ptr() != simple_batch.positions.data_ptr()
+            assert graph.energy.shape == (simple_batch.num_graphs, 1)
+            gradient = torch.autograd.grad(
+                graph.energy.sum(), graph.positions, create_graph=True
+            )[0]
+            torch.testing.assert_close(gradient, 2 * graph.positions)
+
+            assert (
+                graph.data.get_level_schema().level_names == original_schema.level_names
+            )
+            assert (
+                graph.data.get_level_schema().attr_to_group
+                == original_schema.attr_to_group
+            )
+            graph.data.add_level("working_only", segmented=False)
+            graph.data.atomic_numbers[0] = 99
+            with torch.no_grad():
+                graph.data.positions[0, 0] = 123.0
+
+        torch.testing.assert_close(simple_batch.positions, original_positions)
+        torch.testing.assert_close(simple_batch.atomic_numbers, original_numbers)
+        assert "working_only" not in simple_batch.get_level_schema().level_names
+
+    @pytest.mark.parametrize("with_history", [False, True])
+    def test_preserves_caller_autograd_state(self, with_history):
+        positions = torch.randn(3, 3, requires_grad=with_history)
+        if with_history:
+            positions = positions * 2.0
+        data = AtomicData(
+            positions=positions,
+            atomic_numbers=torch.tensor([1, 6, 8]),
+        )
+        batch = Batch.from_data_list([data])
+        original_positions = batch.positions.clone()
+        original_requires_grad = batch.positions.requires_grad
+        original_grad_fn_type = type(batch.positions.grad_fn)
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with model._prepare_derivative_graph(batch, operation="hvp") as graph:
+            assert graph.positions.is_leaf
+            assert graph.positions.requires_grad
+
+        assert batch.positions.requires_grad is original_requires_grad
+        assert type(batch.positions.grad_fn) is original_grad_fn_type
+        torch.testing.assert_close(batch.positions, original_positions)
+
+    def test_preserves_supplied_neighbor_topology(self):
+        data = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.tensor([1, 6, 8]),
+            neighbor_list=torch.tensor([[0, 1], [1, 2]], dtype=torch.long),
+        )
+        batch = Batch.from_data_list([data])
+        original_neighbors = batch.neighbor_list.clone()
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with model._prepare_derivative_graph(batch, operation="hvp") as graph:
+            torch.testing.assert_close(graph.data.neighbor_list, original_neighbors)
+            assert graph.data.neighbor_list.data_ptr() != batch.neighbor_list.data_ptr()
+            graph.data.neighbor_list[0, 0] = 2
+
+        torch.testing.assert_close(batch.neighbor_list, original_neighbors)
+
+    @pytest.mark.parametrize("training", [False, True])
+    def test_restores_runtime_config_before_yield_and_preserves_mode(
+        self, simple_batch, training
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.train(training)
+        active_outputs = {"energy", "custom"}
+        gradient_keys = {"cell"}
+        model.model_config.active_outputs = active_outputs
+        model.model_config.gradient_keys = gradient_keys
+
+        with model._prepare_derivative_graph(simple_batch, operation="hvp") as graph:
+            assert graph.energy.requires_grad
+            assert model.observed_active_outputs == {"energy"}
+            assert model.observed_gradient_keys == {"positions"}
+            assert model.model_config.active_outputs is active_outputs
+            assert model.model_config.gradient_keys is gradient_keys
+            assert model.training is training
+
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+        assert model.training is training
+
+    def test_forward_failure_restores_state_and_propagates(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "raise"
+        model.eval()
+        active_outputs = {"custom"}
+        gradient_keys = {"cell"}
+        model.model_config.active_outputs = active_outputs
+        model.model_config.gradient_keys = gradient_keys
+        original_positions = simple_batch.positions.clone()
+
+        with pytest.raises(LookupError, match="injected derivative forward failure"):
+            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
+                pass
+
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+        assert model.training is False
+        torch.testing.assert_close(simple_batch.positions, original_positions)
+
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_preserves_parameter_autograd_state(self, simple_batch, requires_grad):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.scale.requires_grad_(requires_grad)
+        original_grad = torch.tensor(7.0)
+        model.scale.grad = original_grad
+
+        with model._prepare_derivative_graph(simple_batch, operation="hvp") as graph:
+            assert graph.energy.requires_grad
+
+        assert model.scale.requires_grad is requires_grad
+        assert model.scale.grad is original_grad
+
+    def test_prepares_inside_no_grad_and_restores_state_before_yield(
+        self, simple_batch
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with torch.no_grad():
+            assert not torch.is_grad_enabled()
+            with model._prepare_derivative_graph(
+                simple_batch, operation="hvp"
+            ) as graph:
+                assert not torch.is_grad_enabled()
+                assert graph.energy.requires_grad
+            assert not torch.is_grad_enabled()
+
+    def test_prepares_inside_inference_mode_and_restores_state_before_yield(
+        self, simple_batch
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with torch.inference_mode():
+            assert torch.is_inference_mode_enabled()
+            with model._prepare_derivative_graph(
+                simple_batch, operation="hvp"
+            ) as graph:
+                assert torch.is_inference_mode_enabled()
+                assert not graph.positions.is_inference()
+                assert graph.energy.requires_grad
+            assert torch.is_inference_mode_enabled()
+
+    def test_context_does_not_leave_graph_state_on_wrapper(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with model._prepare_derivative_graph(simple_batch, operation="hvp") as graph:
+            working_ref = weakref.ref(graph.data)
+            assert working_ref() is graph.data
+
+        del graph
+        gc.collect()
+        assert working_ref() is None
+        assert not hasattr(model, "_derivative_graph")
+
+    @pytest.mark.parametrize(
+        ("output_kind", "message"),
+        [
+            ("missing", "did not return energy"),
+            ("non_tensor", "must be a torch.Tensor"),
+            ("wrong_shape", "must have shape"),
+            ("wrong_device", "must be on the positions device"),
+            ("non_floating", "must have a floating-point dtype"),
+            ("detached", "must retain a graph"),
+        ],
+    )
+    def test_rejects_invalid_energy_contract(self, simple_batch, output_kind, message):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = output_kind
+        active_outputs = model.model_config.active_outputs
+        gradient_keys = model.model_config.gradient_keys
+
+        with pytest.raises(RuntimeError, match=message):
+            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
+                pass
+
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+
+    def test_private_imports_do_not_load_optional_model_packages(self):
+        code = """
+import sys
+import nvalchemi.models.base
+import nvalchemi.models._derivatives
+for name in ('aimnet', 'mace', 'fairchem'):
+    assert name not in sys.modules, name
+"""
+        subprocess.run(  # noqa: S603
+            [sys.executable, "-c", code],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+class TestDerivativeCapability:
+    """Tests for contextual derivative capability preflight."""
+
+    def test_unqualified_wrapper_fails_before_forward(self, simple_batch):
+        model = _QuadraticDerivativeWrapperBase()
+
+        with pytest.raises(
+            NotImplementedError,
+            match=(
+                "_QuadraticDerivativeWrapperBase.*operation 'hvp'.*"
+                "execution='local'.*mode='eager'.*strategy='none'"
+            ),
+        ):
+            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
+                pass
+
+        assert model.forward_calls == 0
+
+    @pytest.mark.parametrize(
+        ("operation", "strategy"),
+        [
+            ("hvp", None),
+            ("dense_hessian", "loop"),
+            ("dense_hessian", "vmap"),
+        ],
+    )
+    def test_supported_local_eager_requests_reach_forward(
+        self, simple_batch, operation, strategy
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with model._prepare_derivative_graph(
+            simple_batch,
+            operation=operation,
+            strategy=strategy,
+        ):
+            pass
+
+        assert model.forward_calls == 1
+        request = model.seen_requests[-1]
+        assert request.operation == operation
+        assert request.strategy == strategy
+        assert request.execution == "local"
+        assert request.mode == "eager"
+
+    def test_distributed_request_fails_before_forward(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model._dist_ctx = object()
+
+        with pytest.raises(NotImplementedError, match="execution='distributed'"):
+            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
+                pass
+
+        assert model.forward_calls == 0
+
+    def test_compiled_request_fails_before_forward(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.derivative_mode = "compiled"
+
+        with pytest.raises(NotImplementedError, match="mode='compiled'"):
+            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
+                pass
+
+        assert model.forward_calls == 0
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            (
+                {
+                    "operation": "unknown",
+                    "execution": "local",
+                    "mode": "eager",
+                    "strategy": None,
+                },
+                "operation must be",
+            ),
+            (
+                {
+                    "operation": "hvp",
+                    "execution": "unknown",
+                    "mode": "eager",
+                    "strategy": None,
+                },
+                "execution must be",
+            ),
+            (
+                {
+                    "operation": "hvp",
+                    "execution": "local",
+                    "mode": "unknown",
+                    "strategy": None,
+                },
+                "mode must be",
+            ),
+            (
+                {
+                    "operation": "hvp",
+                    "execution": "local",
+                    "mode": "eager",
+                    "strategy": "unknown",
+                },
+                "strategy must be",
+            ),
+            (
+                {
+                    "operation": "hvp",
+                    "execution": "local",
+                    "mode": "eager",
+                    "strategy": "loop",
+                },
+                "HVP requests must not specify",
+            ),
+            (
+                {
+                    "operation": "dense_hessian",
+                    "execution": "local",
+                    "mode": "eager",
+                    "strategy": None,
+                },
+                "Dense-Hessian requests must specify",
+            ),
+        ],
+    )
+    def test_request_validation_rejects_malformed_context(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            _DerivativeRequest(**kwargs)
+
+    def test_malformed_request_fails_before_forward(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with pytest.raises(ValueError, match="HVP requests must not specify"):
+            model._prepare_derivative_graph(
+                simple_batch,
+                operation="hvp",
+                strategy="loop",
+            )
+
+        assert model.seen_requests == []
+        assert model.forward_calls == 0
+
+    def test_non_batch_input_fails_before_capability_or_forward(self):
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        with pytest.raises(TypeError, match="batch must be a Batch"):
+            model._prepare_derivative_graph(object(), operation="hvp")
+
+        assert model.seen_requests == []
+        assert model.forward_calls == 0
 
 
 # ===========================================================================
