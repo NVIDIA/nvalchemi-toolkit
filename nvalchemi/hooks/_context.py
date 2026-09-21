@@ -25,7 +25,7 @@ from torch.nn import ModuleDict
 from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
-    from tensordict import TensorDict, TensorDictBase
+    from tensordict import TensorDict
 
     from nvalchemi.data.batch import Batch
     from nvalchemi.models.base import BaseModelMixin
@@ -162,13 +162,14 @@ class GenerationContext(HookContext):
 
     Attributes
     ----------
-    batch : Batch | TensorDict | None
+    batch : Batch | None
         The single canonical batch for this call. At call start it holds
         ``inputs`` when they are a :class:`~nvalchemi.data.Batch` (``None``
         otherwise); when a ``batch_mapping`` is set, materialization replaces
         it with the generated :class:`~nvalchemi.data.Batch` before
         ``AFTER_GENERATE`` hooks fire; from ``AFTER_GENERATE`` on it always
-        holds a ``Batch``.
+        holds a ``Batch``. The raw sample in whatever container the
+        generating function produced lives on :attr:`sample`, not here.
         The input for the current call — at call start, exactly what was
         passed to :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample`: a
         tensor container (``Batch``, ``TensorDict``, ...) with text or other
@@ -203,7 +204,7 @@ class GenerationContext(HookContext):
         channel.
     """
 
-    batch: Batch | TensorDictBase | None = None
+    batch: Batch | None = None
     inputs: Any = None
     intermediates: dict[str, Any] = field(default_factory=dict)
     step_count: int = 0
