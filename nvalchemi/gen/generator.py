@@ -396,14 +396,16 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         default=None,
         description=(
             "Batch fields the input carries (empty = unconditional). "
-            "Defaults from generator_func.consumes_fields when available."
+            "Defaults from generator_func.consumes_fields when available. "
+            "Checked against the (conditioned) inputs on every call."
         ),
     )
     produces_fields: frozenset[str] | None = Field(
         default=None,
         description=(
             "Batch fields the output carries (written or forwarded). "
-            "Defaults from generator_func.produces_fields when available."
+            "Defaults from generator_func.produces_fields when available. "
+            "Checked against the materialized batch before each return."
         ),
     )
     num_samples: int = Field(
@@ -851,6 +853,24 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 self._call_hooks(GenerationStage.BEFORE_CONDITION, None)
                 ctx.inputs = condition(ctx.inputs, num_samples=n_draws, rng=rng)
                 self._call_hooks(GenerationStage.AFTER_CONDITION, None)
+            if self.consumes_fields:
+                if ctx.inputs is None or not hasattr(ctx.inputs, "__contains__"):
+                    raise TypeError(
+                        "AtomisticGenerator declares consumes_fields="
+                        f"{sorted(self.consumes_fields)}, but the call's inputs "
+                        f"({type(ctx.inputs).__name__}) are not a "
+                        "field-addressable container (Batch or TensorDict). Pass "
+                        "inputs carrying those fields, or fix the declaration."
+                    )
+                missing = [
+                    f for f in sorted(self.consumes_fields) if f not in ctx.inputs
+                ]
+                if missing:
+                    raise ValueError(
+                        "AtomisticGenerator declares consumes_fields but the "
+                        f"call's inputs lack {missing}. Provide the fields in the "
+                        "inputs or in the condition step, or fix the declaration."
+                    )
             with (
                 torch.cuda.stream(self._stream)
                 if self._stream is not None
@@ -902,6 +922,15 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     "AFTER_GENERATE hooks must leave ctx.batch a Batch, got "
                     f"{type(batch).__name__}."
                 )
+            if self.produces_fields:
+                missing = [f for f in sorted(self.produces_fields) if f not in batch]
+                if missing:
+                    raise ValueError(
+                        "AtomisticGenerator declares produces_fields but the "
+                        f"returned batch lacks {missing}. Add the fields in the "
+                        "generating function or batch_mapping, or fix the "
+                        "declaration."
+                    )
             return batch
         finally:
             self._ctx = None

@@ -39,7 +39,7 @@ from pydantic import ValidationError
 from tensordict import TensorDict
 from torch import nn
 
-from nvalchemi.data import Batch
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel, make_demo_gan_generate
@@ -1291,3 +1291,96 @@ class TestSession:
             )
         gen_b.sample(make_batch(num_graphs=1), rng=torch.Generator().manual_seed(99))
         assert torch.equal(recon_a.samples[0]["x1"], recon_b.samples[0]["x1"])
+
+
+class TestCallTimeFieldValidation:
+    """``consumes_fields`` / ``produces_fields`` are enforced inside ``sample``."""
+
+    def test_consumes_fields_missing_raises(self) -> None:
+        """Inputs lacking a declared field fail before the function runs."""
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            consumes_fields=frozenset({"positions", "cell"}),
+        )
+        with pytest.raises(ValueError, match="cell"):
+            gen(make_batch())  # carries positions and atomic_numbers, no cell
+
+    def test_consumes_fields_present_passes(self) -> None:
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            consumes_fields=frozenset({"positions", "atomic_numbers"}),
+        )
+        out = gen(make_batch())
+        assert out["x1"].shape[0] == 2
+
+    def test_consumes_fields_checked_after_conditioning(self) -> None:
+        """A condition step that adds the field satisfies the check."""
+
+        def add_cell(inputs: Batch, *, num_samples: int, rng=None) -> Batch:
+            inputs.cell = torch.zeros(inputs.num_graphs, 3, 3)
+            return inputs
+
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            condition_func=add_cell,
+            consumes_fields=frozenset({"cell"}),
+        )
+        out = gen(make_batch())
+        assert out["x1"].shape[0] == 2
+
+    def test_consumes_fields_none_inputs_raise_type_error(self) -> None:
+        """Declared consumers cannot run on empty or non-container inputs."""
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            consumes_fields=frozenset({"positions"}),
+        )
+        with pytest.raises(TypeError, match="field-addressable"):
+            gen(None)
+
+    def test_undeclared_consumes_skips_check(self) -> None:
+        """consumes_fields=None never inspects the inputs."""
+        gen = AtomisticGenerator(generator_func=trivial_generate)
+        out = gen("a composition string")  # not a container at all
+        assert out["x1"].shape[0] == 1
+
+    def test_produces_fields_missing_raises(self) -> None:
+        """A materialized batch lacking a declared field fails at return."""
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            batch_mapping=zeros_to_batch,
+            produces_fields=frozenset({"positions", "cell"}),
+        )
+        with pytest.raises(ValueError, match="cell"):
+            gen(make_batch())
+
+    def test_produces_fields_checked_after_hooks(self) -> None:
+        """A hook that drops a declared field trips the return-time check."""
+
+        class _FieldDropper:
+            def __init__(self) -> None:
+                self.stage = GenerationStage.AFTER_GENERATE
+                self.frequency = 1
+
+            def __call__(self, ctx, stage) -> None:
+                # positions-only batch: atomic_numbers dropped
+                ctx.batch = Batch.from_data_list(
+                    [AtomicData(positions=torch.zeros(2, 3))]
+                )
+
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            batch_mapping=zeros_to_batch,
+            produces_fields=frozenset({"atomic_numbers"}),
+            hooks=[_FieldDropper()],
+        )
+        with pytest.raises(ValueError, match="atomic_numbers"):
+            gen(make_batch())
+
+    def test_unmapped_passthrough_skips_produces_check(self) -> None:
+        """No mapping, no Batch: produces_fields is not enforced on raw samples."""
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            produces_fields=frozenset({"cell"}),
+        )
+        out = gen(make_batch())
+        assert out["x1"].shape[0] == 2
