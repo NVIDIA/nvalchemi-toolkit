@@ -278,7 +278,7 @@ class TestNEBForceHook:
 
     @pytest.mark.parametrize(
         "active_graph_mask",
-        [None, [True] * 4, [True, True, False, True]],
+        [None, [True] * 4, [True, True, False, False]],
     )
     def test_masks_physical_forces_and_publishes_effective_forces(
         self, monkeypatch, active_graph_mask: list[bool] | None
@@ -334,10 +334,14 @@ class TestNEBForceHook:
         expected_physical.masked_fill_(
             (active_nodes & workspace.fixed_node_mask).unsqueeze(-1), 0
         )
+        expected_effective = torch.full_like(workspace.effective_forces, 7.0)
+        expected_effective.masked_fill_(
+            (active_nodes & workspace.fixed_node_mask).unsqueeze(-1), 0
+        )
         assert torch.equal(batch.physical_forces, expected_physical)
         assert torch.equal(seen["physical_forces"], expected_physical)
-        assert torch.equal(batch.forces, workspace.effective_forces)
-        assert torch.all(batch.forces == 7.0)
+        assert torch.equal(workspace.effective_forces, expected_effective)
+        assert torch.equal(batch.forces, expected_effective)
         assert torch.allclose(seen["spring_constants"], torch.full((3,), 0.2))
         assert seen["image_ptr"] is workspace.image_ptr
         assert seen["path_ptr"] is workspace.path_ptr
