@@ -22,6 +22,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
+import torch._dynamo as dynamo
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
@@ -113,6 +114,34 @@ class TestClimbingImageSelection:
         self._update_selection(hook, force_hook, ctx, admit=False)
 
         assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1]
+
+    def test_compiled_fixed_selection_does_not_recompile(self) -> None:
+        """Compiled selection keeps its Python fast-path guard unchanged."""
+        batch = _bands([0.0, 2.0, 1.0, 0.0], [0] * 4)
+        hook, force_hook = _selection_hooks("fixed")
+        ctx = DynamicsContext(batch=batch, active_graph_mask=None)
+
+        hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        force_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        def select() -> None:
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        previous_error_on_recompile = dynamo.config.error_on_recompile
+        dynamo.reset()
+        dynamo.config.error_on_recompile = True
+        compiled = torch.compile(select, backend="eager", fullgraph=True)
+        try:
+            compiled()
+            compiled()
+        finally:
+            dynamo.config.error_on_recompile = previous_error_on_recompile
+            dynamo.reset()
+
+        assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1]
+        assert hook._fixed_selection_complete is False
 
     def test_fixed_selection_replaces_stale_climber_on_initialization(self) -> None:
         """The first fixed selection replaces any pre-existing climber."""

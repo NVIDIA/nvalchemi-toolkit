@@ -207,5 +207,9 @@ class ClimbingImageSelectionHook:
 
         if self.selection == "fixed":
             self._initialized_graphs.logical_or_(active_mask)
-            if ctx.active_graph_mask is None and self.status_code is None:
+            if (
+                ctx.active_graph_mask is None
+                and self.status_code is None
+                and not torch.compiler.is_compiling()
+            ):
                 self._fixed_selection_complete = True
