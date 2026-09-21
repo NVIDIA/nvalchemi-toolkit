@@ -116,8 +116,9 @@ hook's edit is visible to later steps and hooks. The context carries:
 - `batch` — the materialized batch once a `batch_mapping` has run (and the
   call's inputs when they were a `Batch`),
 - `accepted_mask` — which of the call's candidates were accepted, written by
-  filtering hooks or the materialization callable (mirroring the dynamics
-  `converged_mask` convention),
+  filtering hooks (the materialization callable never sees the context; it
+  signals total rejection by returning a zero-graph `Batch`), mirroring the
+  dynamics `converged_mask` convention,
 - `intermediates` — scratch space for hook-to-hook state within one call,
 - `step_count` — which generation call this is; drives `frequency` gating.
 
@@ -333,7 +334,7 @@ synthetic-structure source usable standalone or as a pipeline stage.
 
 Wire the procedure into the driver and everything from the first half applies
 unchanged — here with a filter hook that drops structures whose largest
-displacement from the mean exceeds a threshold:
+displacement from its per-graph centroid exceeds a threshold:
 
 ```python
 from nvalchemi.gen import AtomisticGenerator, GenerationStage
@@ -346,9 +347,19 @@ class MaxDisplacementFilter:
         self.frequency = 1
 
     def __call__(self, ctx, stage) -> None:
-        centered = ctx.batch.positions - ctx.batch.positions.mean(dim=0)
-        keep = centered.norm(dim=-1).max(dim=-1).values <= self.threshold
-        ctx.batch = ctx.batch[keep]  # filtering is graph-level subsetting
+        batch = ctx.batch
+        # positions are flattened across graphs; index each atom to its graph
+        counts = batch.num_nodes_per_graph
+        idx = torch.repeat_interleave(
+            torch.arange(batch.num_graphs, device=batch.positions.device), counts
+        )
+        centroid = torch.zeros(batch.num_graphs, 3, device=batch.positions.device)
+        centroid.index_add_(0, idx, batch.positions)
+        centroid = centroid / counts[:, None]
+        disp = (batch.positions - centroid[idx]).norm(dim=-1)
+        max_disp = torch.zeros(batch.num_graphs, device=batch.positions.device)
+        max_disp.scatter_reduce_(0, idx, disp, reduce="amax")
+        ctx.batch = batch[max_disp <= self.threshold]  # graph-level subsetting
 
 
 gen = AtomisticGenerator(
@@ -547,9 +558,14 @@ A VAE samples a latent from the prior and decodes it — same shape as the
 GAN, one line different:
 
 ```python
-def vae_generate(inputs=None, *, num_samples=1, rng=None, model=None, **kwargs):
-    z = torch.randn(num_samples, model.latent_dim, generator=rng)
-    return TensorDict({"x1": model.decode(z)}, batch_size=[num_samples])
+def make_vae_generate(model):
+    """Bind the model in a factory: the generating function owns it."""
+
+    def vae_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
+        z = torch.randn(num_samples, model.latent_dim, generator=rng)
+        return TensorDict({"x1": model.decode(z)}, batch_size=[num_samples])
+
+    return vae_generate
 ```
 
 ## What's next
