@@ -104,7 +104,8 @@ def register_neb_method(
     Parameters
     ----------
     name : str
-        Stable method name used for kernel selection and caching.
+        Stable method name used for kernel selection and caching. The only
+        built-in method is ``"improved_tangent"``.
     tangent_fn, force_fn, climbing_force_fn : wp.Function
         Warp device functions implementing the Gram-statistics kernel contracts.
 

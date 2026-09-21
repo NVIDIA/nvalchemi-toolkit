@@ -35,3 +35,8 @@ Planned toolkit-ops locations
 """
 
 from __future__ import annotations
+
+from nvalchemi.dynamics.paths.neb._ops.registry import register_neb_method
+from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
+
+__all__ = ["neb_forces", "register_neb_method"]

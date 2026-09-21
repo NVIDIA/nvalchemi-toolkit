@@ -373,7 +373,9 @@ def stored_tangent_neb_forces(
     method : str, optional
         User-facing NEB formulation identifier.
     tangent_buffer : torch.Tensor, shape (num_atoms, 3), optional
-        Reusable tangent scratch. Allocated when omitted.
+        Reusable tangent scratch. Caller-provided writable buffers
+        (``tangent_buffer``, ``effective_forces``, and ``link_lengths``) must
+        not overlap inputs or one another. Allocated when omitted.
     effective_forces : torch.Tensor, shape (num_atoms, 3), optional
         Reusable effective-force output. Allocated when omitted.
     link_lengths : torch.Tensor, shape (num_images - num_paths,), optional
@@ -487,7 +489,9 @@ def gram_stats_neb_forces(
     method : str, optional
         User-facing NEB formulation identifier.
     effective_forces : torch.Tensor, shape (num_atoms, 3), optional
-        Reusable effective-force output. Allocated when omitted.
+        Reusable effective-force output. Caller-provided ``effective_forces``
+        and ``link_lengths`` must not overlap inputs or one another. Allocated
+        when omitted.
     link_lengths : torch.Tensor, shape (num_images - num_paths,), optional
         Reusable link-length output. Allocated when omitted.
 
@@ -552,12 +556,14 @@ def neb_forces(
     candidate_shifts: torch.Tensor,
     *,
     method: str = "improved_tangent",
-    tangent_buffer: torch.Tensor | None = None,
+    vector_scratch: torch.Tensor | None = None,
     effective_forces: torch.Tensor | None = None,
     link_lengths: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute effective NEB forces, dispatching to the strategy for `method`
-    registered in the NEB method registry.
+    """Compute effective NEB forces for the public NEB dynamics API.
+
+    This adapter supports the built-in ``"improved_tangent"`` method and
+    dispatches custom methods through the NEB method registry.
 
     Parameters
     ----------
@@ -590,15 +596,36 @@ def neb_forces(
     candidate_shifts : torch.Tensor, shape (num_paths, 26, 3)
         Fixed-capacity nonzero Cartesian candidate translations for each path.
     method : str, optional
-        User-facing NEB formulation identifier; selects the underlying
-        storage strategy (stored-tangent or Gram-stats).
-    tangent_buffer : torch.Tensor, shape (num_atoms, 3), optional
-        Reusable tangent scratch, only used by stored-tangent methods.
-        Allocated when omitted.
+        Registered NEB formulation name. ``"improved_tangent"`` is built in.
+        Any user-defined method should use the exact name passed to
+        :func:`register_neb_method`.
+    vector_scratch : torch.Tensor, shape (num_atoms, 3), optional
+        Reusable per-atom vector scratch for stored-tangent methods;
+        Gram-statistics methods reject it. Caller-provided writable buffers
+        (``vector_scratch``, ``effective_forces``, and ``link_lengths``) must
+        not overlap inputs or one another. Allocated when required and omitted.
     effective_forces : torch.Tensor, shape (num_atoms, 3), optional
         Reusable effective-force output. Allocated when omitted.
     link_lengths : torch.Tensor, shape (num_images - num_paths,), optional
         Reusable link-length output. Allocated when omitted.
+
+    Notes
+    -----
+    Direct CUDA graph capture requires a warmup launch for Warp JIT and a
+    matching Warp stream installed before capture::
+
+        neb_forces(...)  # warm up
+        stream = torch.cuda.Stream()
+        with (
+            torch.cuda.stream(stream),
+            wp.ScopedStream(wp.stream_from_torch(stream)),
+        ):
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, stream=stream):
+                neb_forces(...)
+        graph.replay()
+
+    Current dynamics workflows do not support this explicit capture yet.
 
     Returns
     -------
@@ -629,11 +656,13 @@ def neb_forces(
         return stored_tangent_neb_forces(
             *common_args,
             method=method,
-            tangent_buffer=tangent_buffer,
+            tangent_buffer=vector_scratch,
             effective_forces=effective_forces,
             link_lengths=link_lengths,
         )
     if isinstance(spec, _GramStatsMethod):
+        if vector_scratch is not None:
+            raise ValueError("Gram-statistics NEB methods do not accept vector_scratch")
         return gram_stats_neb_forces(
             *common_args,
             method=method,

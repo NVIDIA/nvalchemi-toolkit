@@ -22,6 +22,71 @@ import torch
 from nvalchemi.dynamics.paths._ops.torch_paths import path_energy_stats
 
 
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("pointer-rank", "must be one-dimensional"),
+        ("energy-dtype", "image_energies must have dtype"),
+        ("pointer-dtype", "path_ptr must have dtype int32"),
+        ("energy-layout", "must be contiguous"),
+    ],
+)
+def test_path_energy_stats_rejects_invalid_inputs(case: str, match: str) -> None:
+    energies = torch.tensor([0.0, 1.0, 0.0, 2.0, 3.0, 2.0])
+    path_ptr = torch.tensor([0, 3, 6], dtype=torch.int32)
+    if case == "pointer-rank":
+        path_ptr = path_ptr.unsqueeze(0)
+    elif case == "energy-dtype":
+        energies = energies.to(torch.int64)
+    elif case == "pointer-dtype":
+        path_ptr = path_ptr.to(torch.int64)
+    else:
+        energies = torch.zeros(12)[::2]
+
+    with pytest.raises(ValueError, match=match):
+        path_energy_stats(
+            energies,
+            path_ptr,
+            torch.empty(2),
+            torch.empty(2),
+            torch.empty(2, dtype=torch.int32),
+        )
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("float-shape", "endpoint_reference_energy must have shape"),
+        ("float-layout", "endpoint_reference_energy must match"),
+        ("index-shape", "highest_interior_image_idx must have shape"),
+        ("index-dtype", "highest_interior_image_idx must be contiguous int32"),
+    ],
+)
+def test_path_energy_stats_rejects_invalid_outputs(case: str, match: str) -> None:
+    energies = torch.tensor([0.0, 1.0, 0.0, 2.0, 3.0, 2.0])
+    path_ptr = torch.tensor([0, 3, 6], dtype=torch.int32)
+    endpoint_reference = torch.empty(2)
+    interior_energy = torch.empty(2)
+    interior_idx = torch.empty(2, dtype=torch.int32)
+    if case == "float-shape":
+        endpoint_reference = endpoint_reference[:-1]
+    elif case == "float-layout":
+        endpoint_reference = torch.empty(4)[::2]
+    elif case == "index-shape":
+        interior_idx = interior_idx[:-1]
+    else:
+        interior_idx = interior_idx.to(torch.int64)
+
+    with pytest.raises(ValueError, match=match):
+        path_energy_stats(
+            energies,
+            path_ptr,
+            endpoint_reference,
+            interior_energy,
+            interior_idx,
+        )
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_path_energy_stats_matches_expected_values(
