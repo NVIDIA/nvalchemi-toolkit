@@ -20,21 +20,20 @@ MLIP/energy-oriented (energy, forces, stress, neighbor lists, autograd,
 pipeline composition), a generative model owns a family-specific sampling
 procedure (a diffusion sampler's loop, a GAN decoder pass, a packing or
 population loop) and shares none of that energy machinery. The two are
-therefore kept
-this mixin, not ``BaseModelMixin``.
+kept separate: a generative model builds on this mixin, not
+``BaseModelMixin``.
 
 Two pieces live here:
 
 * :class:`GenerativeModelConfig` — a pydantic config schema describing a
   generative model's capability surface: variable-atom support, batch-field
   declarations, and prediction-output keys. It is set as ``self.model_config``
-  in a wrapper's ``__init__`, mirroring the ``BaseModelMixin`` pattern (the
+  in a wrapper's ``__init__``, mirroring the ``BaseModelMixin`` pattern (the
   config lives with the model, not on the
   :class:`~nvalchemi.gen.generator.AtomisticGenerator`).
 * :class:`GenerativeModelMixin` — the model mixin providing
-  ``forward`` (raw output), ``adapt_output`` (raw -> :class:`ModelOutputs`),
-  and ``condition`` (the training contract), plus the documented optional
-  ``to_batch`` helper. It owns no scheduler, sampler, or guidance.
+  ``forward`` (raw output) and ``adapt_output`` (raw -> :class:`ModelOutputs`).
+  It owns no conditioning, scheduler, sampler, or guidance.
 """
 
 from __future__ import annotations
@@ -163,33 +162,17 @@ class GenerativeModelMixin(abc.ABC):
 
     The mixin provides defaults for:
 
-    - :meth:`adapt_output` — maps raw output to :class:`ModelOutputs`, keyed
+    - :meth:`adapt_output`: maps raw output to :class:`ModelOutputs`, keyed
       by :attr:`GenerativeModelConfig.prediction_outputs` (defaulting to
       ``{"flow"}``).
-    - :meth:`adapt_output` — maps raw output to :class:`ModelOutputs`, keyed
-      by :attr:`GenerativeModelConfig.prediction_outputs` (defaulting to
-      ``{"flow"}`).
 
-    ``forward`` / :meth:`adapt_output` are the required **training contract**;
-    the :class:`~nvalchemi.gen.generator.AtomisticGenerator` never reads them.
-    ``to_batch`` is a **delegation target for procedures**: a generating
-    function (a :class:`~nvalchemi.gen.generator.GeneratingFunction`) that
-    owns the model may call ``to_batch`` to materialize its raw sample
-    into a :class:`~nvalchemi.data.Batch`. Conditioning is the procedure's
-    own — a model that wants a shared ingest helper defines its own
-    ``condition``; this mixin provides none (tiling a batch is two lines of
-    indexing, and anything richer is use-case-specific):
-
-    - ``to_batch(sample, cond_batch=None) -> Batch`` — map the raw sample into
-      a :class:`Batch`. The sample is whatever container the generating
-      function produced: a :class:`~tensordict.TensorDict` for tensor-native
-      families (e.g. the denoised endpoint under ``"x1"``), otherwise any
-      container this method understands. ``cond_batch``
-      is ``None`` for unconditional generation. With its default, the method
-      matches the driver's
-      :data:`~nvalchemi.gen.generator.MaterializationFunction` signature and
-      can serve as ``batch_mapping`` directly. The base does not provide
-      ``to_batch``; define it on subclasses as needed.
+    ``forward`` / :meth:`adapt_output` are the model-side contract: the
+    :class:`~nvalchemi.gen.generator.AtomisticGenerator` never reads them;
+    the generating function calls them. Materialization and conditioning
+    belong to the procedure, so the mixin defines neither. A model may define
+    a ``to_batch(sample, cond_batch=None) -> Batch`` helper for its
+    generating function to call (the demos do); nothing in the framework
+    looks for it.
 
     Classes using this mixin do not own the generation process: that lives
     with the :class:`~nvalchemi.gen.generator.GeneratingFunction` (driven by

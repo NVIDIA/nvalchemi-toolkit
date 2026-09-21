@@ -167,9 +167,8 @@ class GenerationContext(HookContext):
         ``inputs`` when they are a :class:`~nvalchemi.data.Batch` (``None``
         otherwise); when a ``batch_mapping`` is set, materialization replaces
         it with the generated :class:`~nvalchemi.data.Batch` before
-        ``AFTER_GENERATE`` hooks fire. The type admits
-        from ``AFTER_GENERATE`` on it always holds a ``Batch``.
-    inputs : Any
+        ``AFTER_GENERATE`` hooks fire; from ``AFTER_GENERATE`` on it always
+        holds a ``Batch``.
         The input for the current call — at call start, exactly what was
         passed to :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample`: a
         tensor container (``Batch``, ``TensorDict``, ...) with text or other

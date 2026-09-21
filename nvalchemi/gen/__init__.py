@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Toolkit-level generative API surface.
+"""Generative inference for atomistic models.
 
-This package provides the abstract
-:class:`~nvalchemi.gen.generator.AtomisticGenerator` inference driver — a fixed
-generate → map pipeline with lifecycle hooks
+This package provides the
+:class:`~nvalchemi.gen.generator.AtomisticGenerator` inference driver: a
+fixed generate → map pipeline with lifecycle hooks
 (:class:`~nvalchemi.gen.stages.GenerationStage`,
-:class:`~nvalchemi.hooks.GenerationContext`) — plus sequential
-composition via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
+:class:`~nvalchemi.hooks.GenerationContext`), plus sequential composition
+via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
 """
 
 from __future__ import annotations

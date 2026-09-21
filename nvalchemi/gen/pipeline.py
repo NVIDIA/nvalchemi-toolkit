@@ -94,7 +94,7 @@ class GenerationPipeline(BaseModel):
     or defaulted from the generating function's attributes); construction
     raises otherwise. For each adjacent AtomisticGenerator → AtomisticGenerator link,
     the downstream stage's ``consumes_fields`` must be covered by the upstream
-    stage's
+    stage's ``produces_fields``: the dynamics link contract
     (AIMNet2 ``charges`` → Ewald) applied to generation. Authors of custom
     ``batch_mapping`` callables own keeping their stage's declaration in sync
     with what the callable actually writes. Non-AtomisticGenerator stages carry no
