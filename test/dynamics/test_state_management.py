@@ -973,3 +973,21 @@ class TestFusedStageStateSyncInflight:
         assert not hasattr(fire, "_state")
         assert not hasattr(lang, "_state")
         assert fused.done is True
+
+
+class TestPresetStreamSession:
+    """The session honors a pre-set ``_stream`` (the pipeline sharing convention)."""
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_enter_with_preset_stream_keeps_it(self):
+        """No new stream is created when one is set before entry."""
+        from nvalchemi.dynamics.demo import DemoDynamics
+
+        dyn = DemoDynamics(model=_make_model().to("cuda"), n_steps=1, dt=0.5)
+        shared = torch.cuda.Stream()
+        dyn._stream = shared
+        with dyn:
+            assert dyn._stream is shared
+            # current_stream() builds a fresh wrapper per call; compare handles
+            assert torch.cuda.current_stream().cuda_stream == shared.cuda_stream
+        assert dyn._stream is None

@@ -25,8 +25,14 @@
   (built via `Batch.empty`) to signal total rejection; pipelines
   short-circuit the remaining stages for that item, and zero-graph
   *selection* still raises `IndexError`. Sequential composition via
-  `gen_a | gen_b` (`GenerationPipeline`, with construction-time
-  field-contract validation). Generating functions own their
+  `gen_a | gen_b | optimizer` (`GenerationPipeline`, with
+  construction-time field-contract validation): stages with a `run`
+  method — dynamics engines and fused stages — are driven to completion
+  inside the fold (their hooks fire in their own loop), other stages are
+  plain `Batch -> Batch` calls, and per-call options are addressed to
+  stages with `stage_kwargs` (a single mapping broadcasts; a per-stage
+  list is length-checked). Dynamics stages carry their own exit criteria
+  (convergence or `n_steps`). Generating functions own their
   model (when there is one) and declare their own field contracts; models
   publish a four-field frozen `GenerativeModelConfig`.
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and

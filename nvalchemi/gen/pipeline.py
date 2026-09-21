@@ -61,7 +61,7 @@ Semantics:
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import torch
@@ -108,10 +108,17 @@ class GenerationPipeline(BaseModel):
     **Sessions and compile.** ``GenerationPipeline`` is a context manager:
     entry creates one dedicated CUDA stream (when the first
     :class:`~nvalchemi.gen.generator.AtomisticGenerator` stage's resolved device
-    is CUDA) and shares it with every AtomisticGenerator stage that has
-    ``dedicated_stream`` set, then enters each AtomisticGenerator stage's own
-    session (session RNG, lazy compile, context-manager hooks).
-    Non-AtomisticGenerator stages manage their own contexts.
+    is CUDA) and shares it with every stage that follows the ``_stream``
+    convention — AtomisticGenerator stages with ``dedicated_stream`` set,
+    and any other stage that accepts a pre-set stream (dynamics engines and
+    fused stages honor it) — then enters each stage's own session.
+
+    **Stage calling convention.** A stage with a ``run`` method (a dynamics
+    engine or a fused stage) is driven to completion with
+    ``stage.run(batch, **kwargs)`` — its own hooks fire inside its loop.
+    Any other stage is called as ``stage(batch, **kwargs)``. A dynamics
+    stage must carry its own exit criterion (convergence or ``n_steps``);
+    the fold offers no step budget of its own.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -125,7 +132,7 @@ class GenerationPipeline(BaseModel):
 
     @model_validator(mode="after")
     def _validate_links(self) -> GenerationPipeline:
-        """Validate declarations and adjacent AtomisticGenerator→AtomisticGenerator links.
+        """Validate declarations and adjacent AtomisticGenerator stages.
 
         Returns
         -------
@@ -135,8 +142,8 @@ class GenerationPipeline(BaseModel):
         Raises
         ------
         ValueError
-            If a AtomisticGenerator stage lacks field declarations, or a stage's
-            ``consumes_fields`` are not covered by the immediately
+            If an AtomisticGenerator stage lacks field declarations, or a
+            stage's ``consumes_fields`` are not covered by the immediately
             upstream AtomisticGenerator's ``produces_fields``.
         """
         for index, stage in enumerate(self.stages):
@@ -236,6 +243,12 @@ class GenerationPipeline(BaseModel):
                 if stage.dedicated_stream:
                     stage._stream = self._stream
                 stage.__enter__()
+            elif hasattr(stage, "__enter__"):
+                # Offer the shared stream to any stage that follows the
+                # ``_stream`` convention (dynamics engines, fused stages).
+                if hasattr(stage, "_stream"):
+                    stage._stream = self._stream
+                stage.__enter__()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -249,12 +262,21 @@ class GenerationPipeline(BaseModel):
         for stage in self.stages:
             if isinstance(stage, AtomisticGenerator):
                 stage.__exit__(exc_type, exc_val, exc_tb)
+            elif hasattr(stage, "__exit__"):
+                stage.__exit__(exc_type, exc_val, exc_tb)
         if self._stream_ctx is not None:
             self._stream_ctx.__exit__(exc_type, exc_val, exc_tb)
         self._stream = None
         self._stream_ctx = None
 
-    def __call__(self, inputs: Any = None, **kwargs: Any) -> Any:
+    def __call__(
+        self,
+        inputs: Any = None,
+        *,
+        stage_kwargs: Mapping[str, Any]
+        | Sequence[Mapping[str, Any] | None]
+        | None = None,
+    ) -> Any:
         """Fold ``inputs`` through the stages.
 
         Parameters
@@ -263,9 +285,14 @@ class GenerationPipeline(BaseModel):
             Input for the first stage (a
             :class:`~nvalchemi.data.Batch`, another tensor container, or
             ``None``).
-        **kwargs
-            Per-call options forwarded to every stage (e.g. generator
-            function options).
+        stage_kwargs
+            Per-call keyword arguments addressed to stages: a single mapping
+            stretches across every stage (for homogeneous pipelines), or a
+            sequence of one mapping (or ``None``) per stage — its length
+            must match the number of stages. Generator stages accept their
+            usual call options (``num_samples``, ``rng``, generating-function
+            options); a stage with a ``run`` method is driven with
+            ``stage.run(batch, **kwargs)`` (e.g. ``{"n_steps": 200}``).
 
         Returns
         -------
@@ -275,12 +302,34 @@ class GenerationPipeline(BaseModel):
             sample). Should a stage ever yield a zero-graph batch, remaining
             stages are skipped and it is returned as-is (defensive; no
             current :class:`~nvalchemi.data.Batch` path produces one).
+
+        Raises
+        ------
+        ValueError
+            If ``stage_kwargs`` is a sequence whose length differs from the
+            number of stages.
         """
+        if stage_kwargs is None:
+            per_stage: list[dict[str, Any]] = [{} for _ in self.stages]
+        elif isinstance(stage_kwargs, Mapping):
+            # Copy per stage: stages may pop keys from their kwargs.
+            per_stage = [dict(stage_kwargs) for _ in self.stages]
+        else:
+            if len(stage_kwargs) != len(self.stages):
+                raise ValueError(
+                    f"stage_kwargs must have one entry per stage "
+                    f"({len(self.stages)}), got {len(stage_kwargs)}."
+                )
+            per_stage = [{} if kw is None else dict(kw) for kw in stage_kwargs]
         result: Any = inputs
-        for stage in self.stages:
+        for stage, kwargs in zip(self.stages, per_stage, strict=True):
             if isinstance(result, Batch) and result.num_graphs == 0:
                 break
-            result = stage(result, **kwargs)
+            if hasattr(stage, "run"):
+                # duck: a dynamics engine or fused stage drives its own loop
+                result = stage.run(result, **kwargs)
+            else:
+                result = stage(result, **kwargs)
         return result
 
     def stream(
@@ -288,7 +337,9 @@ class GenerationPipeline(BaseModel):
         inputs: Any = None,
         *,
         max_batches: int | None = None,
-        **kwargs: Any,
+        stage_kwargs: Mapping[str, Any]
+        | Sequence[Mapping[str, Any] | None]
+        | None = None,
     ) -> Iterator[Any]:
         """Stream pipeline outputs, mirroring :meth:`AtomisticGenerator.stream`.
 
@@ -300,8 +351,9 @@ class GenerationPipeline(BaseModel):
             Iterable of inputs, or ``None`` for repeated unconditional draws.
         max_batches
             Cap on batches yielded (``None`` means unbounded).
-        **kwargs
-            Per-call options forwarded to :meth:`__call__`.
+        stage_kwargs
+            Per-call options addressed to stages, forwarded to
+            :meth:`__call__` on every fold.
 
         Yields
         ------
@@ -313,7 +365,7 @@ class GenerationPipeline(BaseModel):
         for index, item in enumerate(inputs):
             if max_batches is not None and index >= max_batches:
                 return
-            yield self(item, **kwargs)
+            yield self(item, stage_kwargs=stage_kwargs)
 
     def __or__(self, other: Any) -> GenerationPipeline:
         """Append a stage, returning a new pipeline.

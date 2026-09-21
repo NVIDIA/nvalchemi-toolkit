@@ -424,3 +424,212 @@ class TestPipelineSessionAndCompile:
             assert gen_b._stream is None
             out = pipe(make_batch(num_graphs=1).to("cuda"))
             assert out.num_graphs == 1
+
+
+# ---------------------------------------------------------------------------
+# Run-having stages (dynamics engines, fused stages) and per-stage kwargs
+# ---------------------------------------------------------------------------
+
+
+def _dynamics_batch(num_graphs: int = 2) -> Batch:
+    """A minimal integrable batch (forces/energies pre-allocated)."""
+    from nvalchemi.data import AtomicData
+
+    batch = Batch.from_data_list(
+        [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.randn(2, 3),
+            )
+            for _ in range(num_graphs)
+        ]
+    )
+    batch.forces = torch.zeros(batch.num_nodes, 3)
+    batch.energies = torch.zeros(batch.num_graphs, 1)
+    return batch
+
+
+def _to_cuda(batch: Batch) -> Batch:
+    """Move the generated batch onto the CUDA device (test-local mapping)."""
+    return batch.to("cuda")
+
+
+class _RunRecorder:
+    """Duck-typed run-having stage that records the kwargs it receives."""
+
+    def __init__(self) -> None:
+        """Record nothing yet."""
+        self.calls: list[dict] = []
+
+    def run(self, batch: Batch, **kwargs) -> Batch:
+        """Record the call and pass the batch through."""
+        self.calls.append(kwargs)
+        return batch
+
+
+class TestDynamicsStages:
+    """Stages with a ``run`` method are driven by it (engines, fused stages)."""
+
+    def test_run_takes_precedence_over_call(self) -> None:
+        """A stage with both ``__call__`` and ``run`` is driven by ``run()``."""
+
+        class _Both(_RunRecorder):
+            def __call__(self, batch):
+                raise AssertionError("__call__ must not fire on a run-having stage")
+
+        engine = _Both()
+        pipe = _generator() | engine
+        out = pipe(make_batch(num_graphs=1))
+        assert len(engine.calls) == 1
+        assert isinstance(out, Batch)
+
+    def test_optimizer_stage_runs_to_completion(self) -> None:
+        """``gen | optimizer``: the fold drives the engine's own loop."""
+        from nvalchemi.dynamics.demo import DemoDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+        from nvalchemi.models.gen import demo_nonparametric_generation
+
+        gen = AtomisticGenerator(
+            generator_func=demo_nonparametric_generation,
+            consumes_fields=frozenset(),
+            produces_fields=frozenset({"positions", "atomic_numbers"}),
+        )
+        engine = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=3, dt=0.5)
+        pipe = gen | engine
+        out = pipe(None)
+        assert isinstance(out, Batch)
+        assert out.num_graphs == 1
+        # run() integrated the trajectory; a bare one-step __call__ would leave
+        # velocities untouched
+        assert not torch.allclose(out.velocities, torch.zeros_like(out.velocities))
+
+
+class TestStageKwargs:
+    """Per-call options addressed to stages: broadcast or per-stage."""
+
+    def test_single_mapping_stretches(self) -> None:
+        """One mapping applies to every stage."""
+        seen: list[dict] = []
+
+        class _Probe:
+            def __call__(self, batch: Batch, **kwargs) -> Batch:
+                seen.append(kwargs)
+                return batch
+
+        pipe = _generator() | _Probe()
+        out = pipe(None, stage_kwargs={"num_samples": 3})
+        assert out.num_graphs == 3  # the generator received num_samples
+        assert seen == [{"num_samples": 3}]  # and so did the callable stage
+
+    def test_per_stage_list(self) -> None:
+        """A list addresses kwargs per stage; dynamics get their own channel."""
+        engine = _RunRecorder()
+        pipe = _generator() | engine
+        out = pipe(None, stage_kwargs=[{"num_samples": 2}, {"n_steps": 7}])
+        assert out.num_graphs == 2
+        assert engine.calls == [{"n_steps": 7}]
+
+    def test_none_entries_mean_no_kwargs(self) -> None:
+        """``None`` entries pass no kwargs to that stage."""
+        engine = _RunRecorder()
+        pipe = _generator() | engine
+        pipe(None, stage_kwargs=[None, None])
+        assert engine.calls == [{}]
+
+    def test_length_mismatch_raises(self) -> None:
+        """A per-stage list must match the stage count."""
+        pipe = _generator() | _RunRecorder()
+        with pytest.raises(ValueError, match="one entry per stage"):
+            pipe(None, stage_kwargs=[{}])
+
+    def test_broadcast_into_run_stage_is_loud(self) -> None:
+        """A run-stage with a strict signature fails loudly on a misaddressed kwarg."""
+
+        class _StrictRun:
+            def run(self, batch: Batch) -> Batch:
+                return batch
+
+        pipe = _generator() | _StrictRun()
+        with pytest.raises(TypeError, match="run"):
+            pipe(None, stage_kwargs={"num_samples": 2})
+
+
+class TestDuckTypedSessions:
+    """Context-manager stages are entered inside a pipeline session."""
+
+    def test_context_manager_stage_entered(self) -> None:
+        """A stage with ``__enter__``/``__exit__`` is entered and exited."""
+        entered: list[bool] = []
+        exited: list[bool] = []
+
+        class _Managed:
+            _stream = None
+
+            def __enter__(self):
+                entered.append(True)
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                exited.append(True)
+
+            def __call__(self, batch: Batch) -> Batch:
+                return batch
+
+        stage = _Managed()
+        pipe = _generator() | stage
+        with pipe:
+            assert entered == [True]
+        assert exited == [True]
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="No CUDA device available."
+    )
+    def test_shared_stream_passes_to_duck_stage(self) -> None:
+        """A stage with a ``_stream`` slot runs on the pipeline's stream."""
+
+        class _Managed:
+            _stream = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+            def __call__(self, batch: Batch) -> Batch:
+                return batch
+
+        stage = _Managed()
+        pipe = _generator(device="cuda") | stage
+        with pipe:
+            assert pipe._stream is not None
+            assert stage._stream is pipe._stream
+            out = pipe(make_batch(num_graphs=1).to("cuda"))
+            assert out.num_graphs == 1
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="No CUDA device available."
+    )
+    def test_dynamics_engine_shares_the_pipeline_stream(self) -> None:
+        """``BaseDynamics.__enter__`` honors the pre-set shared stream."""
+        from nvalchemi.dynamics.demo import DemoDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+        from nvalchemi.models.gen import demo_nonparametric_generation
+
+        gen = AtomisticGenerator(
+            generator_func=demo_nonparametric_generation,
+            batch_mapping=_to_cuda,
+            consumes_fields=frozenset(),
+            produces_fields=frozenset({"positions", "atomic_numbers"}),
+            device="cuda",
+        )
+        engine = DemoDynamics(
+            model=DemoModelWrapper(DemoModel().to("cuda")), n_steps=1, dt=0.5
+        )
+        pipe = gen | engine
+        with pipe:
+            assert engine._stream is pipe._stream
+            assert engine._stream is not None
+            out = pipe(None)
+            assert isinstance(out, Batch)
+            assert out.positions.device.type == "cuda"
