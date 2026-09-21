@@ -167,7 +167,7 @@ class TestAtomisticGeneratorDirectSerialization:
         assert isinstance(hook, ScaleSampleHook)
         assert hook.factor == 3.0
         assert hook.stage is GenerationStage.AFTER_GENERATE
-        assert rebuilt().num_graphs == 2
+        assert rebuilt(make_batch()).num_graphs == 2
 
     def test_dict_round_trip(self) -> None:
         """``model_dump()`` (dict mode) round-trips the same as JSON."""
