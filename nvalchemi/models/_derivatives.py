@@ -18,9 +18,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import torch
 from torch import Tensor
@@ -76,6 +77,170 @@ class _DerivativeGraph:
     data: Batch
     positions: Tensor
     energy: Tensor
+
+
+def _validate_hessian_vector(vector: Any, positions: Tensor) -> Tensor:
+    """Validate one position-space vector against a reference tensor."""
+    if not isinstance(vector, Tensor):
+        raise TypeError(
+            f"Hessian vector must be a torch.Tensor, got {type(vector).__name__}"
+        )
+    if not vector.is_floating_point():
+        raise TypeError(
+            f"Hessian vector must have a floating-point dtype, got {vector.dtype}"
+        )
+    if vector.shape != positions.shape:
+        raise ValueError(
+            "Hessian vector must have the same shape as positions "
+            f"{tuple(positions.shape)}, got {tuple(vector.shape)}"
+        )
+    if vector.dtype != positions.dtype:
+        raise ValueError(
+            "Hessian vector must have the same dtype as positions "
+            f"{positions.dtype}, got {vector.dtype}"
+        )
+    if vector.device != positions.device:
+        raise ValueError(
+            "Hessian vector must be on the same device as positions "
+            f"{positions.device}, got {vector.device}"
+        )
+    return vector
+
+
+def _position_gradient(graph: _DerivativeGraph) -> Tensor:
+    """Construct the retained first position derivative for an HVP graph."""
+    with torch.inference_mode(False), torch.enable_grad():
+        gradient = torch.autograd.grad(
+            graph.energy.sum(),
+            graph.positions,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
+    if gradient is None:
+        raise RuntimeError("Derivative energy is not connected to the position leaf")
+    return gradient
+
+
+def _hessian_vector_product(
+    gradient: Tensor,
+    positions: Tensor,
+    vector: Tensor,
+) -> Tensor:
+    """Evaluate one HVP while retaining the graph for subsequent products."""
+    with torch.inference_mode(False), torch.enable_grad():
+        if not gradient.requires_grad:
+            return torch.zeros_like(positions)
+        product = torch.autograd.grad(
+            gradient,
+            positions,
+            grad_outputs=vector.detach(),
+            create_graph=False,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
+        if product is None:
+            return torch.zeros_like(positions)
+        return product.detach()
+
+
+class HessianOperator:
+    """Matrix-free position Hessian retained at one fixed model snapshot.
+
+    Instances are created by
+    :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`. The operator
+    is immediately active and must be closed explicitly or used as a context
+    manager to release its private autograd graph.
+    """
+
+    def __init__(
+        self,
+        context: AbstractContextManager[_DerivativeGraph],
+    ) -> None:
+        """Enter a prepared derivative context and retain its first gradient."""
+        self._context: AbstractContextManager[_DerivativeGraph] | None = context
+        self._graph: _DerivativeGraph | None = None
+        self._gradient: Tensor | None = None
+        self._closed = True
+
+        try:
+            graph = context.__enter__()
+        except BaseException:
+            self._context = None
+            raise
+
+        try:
+            gradient = _position_gradient(graph)
+        except BaseException as exc:
+            try:
+                context.__exit__(type(exc), exc, exc.__traceback__)
+            finally:
+                self._context = None
+            raise
+
+        self._graph = graph
+        self._gradient = gradient
+        self._closed = False
+
+    def matvec(self, vector: Tensor) -> Tensor:
+        """Multiply the retained position Hessian by one position-space vector.
+
+        Parameters
+        ----------
+        vector : torch.Tensor
+            Floating tensor matching the prepared positions in shape, dtype,
+            and device.
+
+        Returns
+        -------
+        torch.Tensor
+            Detached Hessian-vector product aligned with the prepared positions.
+
+        Raises
+        ------
+        RuntimeError
+            If the operator has been closed.
+        TypeError
+            If the vector is not a floating-point tensor.
+        ValueError
+            If shape, dtype, or device does not match the prepared positions.
+        """
+        if self._closed:
+            raise RuntimeError("HessianOperator is closed")
+        graph = self._graph
+        gradient = self._gradient
+        if graph is None or gradient is None:
+            raise RuntimeError("HessianOperator has no active derivative graph")
+        validated = _validate_hessian_vector(vector, graph.positions)
+        return _hessian_vector_product(gradient, graph.positions, validated)
+
+    def close(self) -> None:
+        """Release the retained derivative graph; repeated calls are harmless."""
+        if self._closed:
+            return
+
+        context = self._context
+        self._closed = True
+        self._gradient = None
+        self._graph = None
+        self._context = None
+        if context is not None:
+            context.__exit__(None, None, None)
+
+    def __enter__(self) -> Self:
+        """Return this active operator without rebuilding its graph."""
+        if self._closed:
+            raise RuntimeError("HessianOperator is closed")
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the operator without suppressing an active exception."""
+        self.close()
 
 
 def _detach_batch_tensors(batch: Batch) -> None:

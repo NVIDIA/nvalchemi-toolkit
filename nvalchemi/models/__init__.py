@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from nvalchemi.models._derivatives import HessianOperator
     from nvalchemi.models.aimnet2 import AIMNet2Wrapper
     from nvalchemi.models.demo import DemoModelWrapper
     from nvalchemi.models.dftd3 import DFTD3ModelWrapper
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
     from nvalchemi.models.uma import UMAWrapper
 
 __all__ = [
+    "HessianOperator",
     "DemoModelWrapper",
     "DFTD3ModelWrapper",
     "EwaldModelWrapper",
@@ -50,7 +52,11 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy import to handle missing optional model implementations."""
-    if name == "AIMNet2Wrapper":
+    if name == "HessianOperator":
+        from nvalchemi.models._derivatives import HessianOperator
+
+        return HessianOperator
+    elif name == "AIMNet2Wrapper":
         from nvalchemi.models.aimnet2 import AIMNet2Wrapper
 
         return AIMNet2Wrapper

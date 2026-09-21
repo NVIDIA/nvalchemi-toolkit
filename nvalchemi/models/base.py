@@ -30,11 +30,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._derivatives import (
+    HessianOperator,
     _DerivativeGraph,
     _DerivativeOperation,
     _DerivativeRequest,
     _DerivativeStrategy,
     _prepare_derivative_graph,
+    _validate_hessian_vector,
 )
 
 if TYPE_CHECKING:
@@ -597,6 +599,77 @@ class BaseModelMixin(abc.ABC):
             strategy=strategy,
         )
         return _prepare_derivative_graph(self, batch, request)
+
+    def prepare_hessian(self, batch: Batch) -> HessianOperator:
+        """Prepare an immediately active matrix-free position Hessian.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to snapshot for repeated Hessian-vector products.
+
+        Returns
+        -------
+        HessianOperator
+            Operator retaining one private derivative graph. Close it explicitly
+            or use it as a context manager.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch`.
+        NotImplementedError
+            If this wrapper or execution context has not been qualified for HVPs.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        context = self._prepare_derivative_graph(batch, operation="hvp")
+        return HessianOperator(context)
+
+    def hessian_vector_product(
+        self,
+        batch: Batch,
+        vectors: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute a detached position Hessian-vector product.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to evaluate without mutation.
+        vectors : torch.Tensor
+            One vector with the same shape, dtype, and device as
+            ``batch.positions``.
+
+        Returns
+        -------
+        torch.Tensor
+            Detached Hessian-vector product aligned with ``batch.positions``.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch` or ``vectors`` is not a
+            floating-point tensor.
+        ValueError
+            If vector shape, dtype, or device does not match positions.
+        NotImplementedError
+            If this wrapper or execution context has not been qualified for HVPs.
+        """
+        if not isinstance(batch, Batch):
+            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+        positions = getattr(batch, "positions", None)
+        if not isinstance(positions, torch.Tensor):
+            raise RuntimeError("Hessian-vector products require tensor positions")
+        if not positions.is_floating_point():
+            raise TypeError(
+                "Hessian-vector product positions must have a floating-point dtype, "
+                f"got {positions.dtype}"
+            )
+        _validate_hessian_vector(vectors, positions)
+
+        with self.prepare_hessian(batch) as operator:
+            return operator.matvec(vectors)
 
     def set_config(self, key: str, value: Any) -> None:
         """Set a mutable field on :attr:`model_config`.

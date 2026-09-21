@@ -30,6 +30,7 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models import HessianOperator
 from nvalchemi.models._derivatives import _DerivativeRequest
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -89,6 +90,7 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
         self.observed_gradient_keys: set[str] | None = None
         self.derivative_mode = "eager"
         self.output_kind = "valid"
+        self.working_batch_ref = None
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -102,6 +104,7 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
 
     def forward(self, data: Batch):
         self.forward_calls += 1
+        self.working_batch_ref = weakref.ref(data)
         self.observed_active_outputs = self.model_config.active_outputs
         self.observed_gradient_keys = self.model_config.gradient_keys
 
@@ -112,7 +115,12 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
         if self.output_kind == "non_tensor":
             return {"energy": 1.0}
 
-        node_energy = self.scale * data.positions.square().sum(dim=-1, keepdim=True)
+        if self.output_kind == "disconnected":
+            return {"energy": self.scale.square().expand(data.num_graphs, 1)}
+        if self.output_kind == "linear":
+            node_energy = self.scale * data.positions.sum(dim=-1, keepdim=True)
+        else:
+            node_energy = self.scale * data.positions.square().sum(dim=-1, keepdim=True)
         energy = torch.zeros(
             data.num_graphs,
             1,
@@ -165,6 +173,22 @@ class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
             f"'{request.operation}' for execution='{request.execution}', "
             f"mode='{request.mode}', strategy='{strategy}': test capability rejection"
         )
+
+
+def _make_derivative_batch(
+    *sizes: int,
+    dtype: torch.dtype = torch.float32,
+) -> Batch:
+    """Build a mixed-size batch for derivative API tests."""
+    return Batch.from_data_list(
+        [
+            AtomicData(
+                positions=torch.randn(size, 3, dtype=dtype),
+                atomic_numbers=torch.ones(size, dtype=torch.long),
+            )
+            for size in sizes
+        ]
+    )
 
 
 # ===========================================================================
@@ -723,6 +747,386 @@ class TestDerivativeCapability:
 
         assert model.seen_requests == []
         assert model.forward_calls == 0
+
+
+# ===========================================================================
+# Hessian-vector products
+# ===========================================================================
+
+
+class TestHessianVectorProduct:
+    """Tests for the one-shot matrix-free Hessian API."""
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    def test_quadratic_hvp_matches_analytical_result(self, dtype):
+        batch = _make_derivative_batch(2, 3, dtype=dtype)
+        model = _QualifiedQuadraticDerivativeWrapper().to(dtype=dtype)
+        vector = torch.randn_like(batch.positions)
+
+        result = model.hessian_vector_product(batch, vector)
+
+        torch.testing.assert_close(result, 2 * vector)
+        assert result.shape == batch.positions.shape
+        assert result.dtype == batch.positions.dtype
+        assert result.device == batch.positions.device
+        assert not result.requires_grad
+        assert result.grad_fn is None
+        assert model.forward_calls == 1
+
+    def test_hvp_matches_finite_difference_force_jacobian(self):
+        batch = _make_derivative_batch(2, 3, dtype=torch.float64)
+        model = _QualifiedQuadraticDerivativeWrapper().to(dtype=torch.float64)
+        vector = torch.randn_like(batch.positions)
+        epsilon = 1e-6
+
+        product = model.hessian_vector_product(batch, vector)
+
+        def evaluate_forces(positions):
+            working = batch.clone()
+            position_leaf = positions.detach().clone().requires_grad_(True)
+            working["positions"] = position_leaf
+            with torch.enable_grad():
+                energy = model(working)["energy"]
+                return -torch.autograd.grad(energy.sum(), position_leaf)[0]
+
+        force_plus = evaluate_forces(batch.positions + epsilon * vector)
+        force_minus = evaluate_forces(batch.positions - epsilon * vector)
+        force_jacobian_vector = (force_plus - force_minus) / (2 * epsilon)
+
+        torch.testing.assert_close(
+            force_jacobian_vector,
+            -product,
+            rtol=1e-8,
+            atol=1e-8,
+        )
+
+    def test_zero_vector_and_linear_energy_have_zero_hvp(self):
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+
+        quadratic = model.hessian_vector_product(
+            batch,
+            torch.zeros_like(batch.positions),
+        )
+        model.output_kind = "linear"
+        linear = model.hessian_vector_product(
+            batch,
+            torch.randn_like(batch.positions),
+        )
+
+        torch.testing.assert_close(quadratic, torch.zeros_like(batch.positions))
+        torch.testing.assert_close(linear, torch.zeros_like(batch.positions))
+
+    def test_mixed_systems_have_no_cross_system_response(self):
+        batch = _make_derivative_batch(2, 3)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.zeros_like(batch.positions)
+        vector[:2] = torch.randn(2, 3)
+
+        result = model.hessian_vector_product(batch, vector)
+
+        torch.testing.assert_close(result[:2], 2 * vector[:2])
+        torch.testing.assert_close(result[2:], torch.zeros_like(result[2:]))
+
+    def test_accepts_noncontiguous_vector(self):
+        batch = _make_derivative_batch(2, 3)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.randn(3, batch.positions.shape[0]).T
+        assert not vector.is_contiguous()
+
+        result = model.hessian_vector_product(batch, vector)
+
+        torch.testing.assert_close(result, 2 * vector)
+
+    @pytest.mark.parametrize(
+        ("case", "error", "message"),
+        [
+            ("non_tensor", TypeError, "must be a torch.Tensor"),
+            ("integer", TypeError, "floating-point dtype"),
+            ("wrong_shape", ValueError, "same shape"),
+            ("wrong_layout", ValueError, "same shape"),
+            ("wrong_dtype", ValueError, "same dtype"),
+            ("wrong_device", ValueError, "same device"),
+        ],
+    )
+    def test_invalid_vectors_fail_before_forward(self, case, error, message):
+        batch = _make_derivative_batch(2, 3)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        if case == "non_tensor":
+            vector = object()
+        elif case == "integer":
+            vector = torch.ones_like(batch.positions, dtype=torch.int64)
+        elif case == "wrong_shape":
+            vector = torch.ones(batch.positions.shape[0] - 1, 3)
+        elif case == "wrong_layout":
+            vector = torch.ones(3, batch.positions.shape[0])
+        elif case == "wrong_dtype":
+            vector = torch.ones_like(batch.positions, dtype=torch.float64)
+        else:
+            vector = torch.ones_like(batch.positions, device="meta")
+
+        with pytest.raises(error, match=message):
+            model.hessian_vector_product(batch, vector)
+
+        assert model.seen_requests == []
+        assert model.forward_calls == 0
+
+    def test_preserves_caller_vector_batch_and_parameter_state(self):
+        positions = torch.randn(3, 3, requires_grad=True) * 2
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=positions,
+                    atomic_numbers=torch.ones(3, dtype=torch.long),
+                )
+            ]
+        )
+        vector = torch.randn_like(batch.positions, requires_grad=True) * 3
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.eval()
+        parameter_grad = torch.tensor(7.0)
+        model.scale.grad = parameter_grad
+        active_outputs = {"energy", "custom"}
+        gradient_keys = {"cell"}
+        model.model_config.active_outputs = active_outputs
+        model.model_config.gradient_keys = gradient_keys
+        original_positions = batch.positions.clone()
+        original_vector = vector.clone()
+        positions_grad_fn = type(batch.positions.grad_fn)
+        vector_grad_fn = type(vector.grad_fn)
+
+        result = model.hessian_vector_product(batch, vector)
+
+        torch.testing.assert_close(result, 2 * vector)
+        torch.testing.assert_close(batch.positions, original_positions)
+        torch.testing.assert_close(vector, original_vector)
+        assert type(batch.positions.grad_fn) is positions_grad_fn
+        assert batch.positions.requires_grad
+        assert type(vector.grad_fn) is vector_grad_fn
+        assert vector.requires_grad
+        assert model.scale.grad is parameter_grad
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+        assert model.training is False
+
+    @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
+    def test_hvp_restores_outer_autograd_mode(self, outer_mode):
+        batch = _make_derivative_batch(2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.randn_like(batch.positions)
+        context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
+
+        with context:
+            expected_grad = torch.is_grad_enabled()
+            expected_inference = torch.is_inference_mode_enabled()
+            result = model.hessian_vector_product(batch, vector)
+            assert torch.is_grad_enabled() is expected_grad
+            assert torch.is_inference_mode_enabled() is expected_inference
+            assert not result.is_inference()
+
+        torch.testing.assert_close(result, 2 * vector)
+
+    @pytest.mark.parametrize("context_kind", ["base", "distributed", "compiled"])
+    def test_capability_rejection_occurs_before_forward(
+        self, simple_batch, context_kind
+    ):
+        if context_kind == "base":
+            model = _QuadraticDerivativeWrapperBase()
+        else:
+            model = _QualifiedQuadraticDerivativeWrapper()
+        if context_kind == "distributed":
+            model._dist_ctx = object()
+        elif context_kind == "compiled":
+            model.derivative_mode = "compiled"
+
+        with pytest.raises(NotImplementedError):
+            model.hessian_vector_product(
+                simple_batch,
+                torch.ones_like(simple_batch.positions),
+            )
+
+        assert model.forward_calls == 0
+
+    def test_pipeline_remains_unqualified(self, simple_batch):
+        left = _QualifiedQuadraticDerivativeWrapper()
+        right = _QualifiedQuadraticDerivativeWrapper()
+        pipeline = left + right
+
+        with pytest.raises(NotImplementedError, match="PipelineModelWrapper"):
+            pipeline.hessian_vector_product(
+                simple_batch,
+                torch.ones_like(simple_batch.positions),
+            )
+
+        assert left.forward_calls == 0
+        assert right.forward_calls == 0
+
+
+class TestHessianOperator:
+    """Tests for retained-graph HVP execution and cleanup."""
+
+    def test_is_immediately_active_and_reuses_one_forward(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        first = torch.randn_like(simple_batch.positions)
+        second = torch.randn_like(simple_batch.positions)
+
+        operator = model.prepare_hessian(simple_batch)
+        assert isinstance(operator, HessianOperator)
+        assert model.forward_calls == 1
+        assert operator.__enter__() is operator
+        assert operator.__enter__() is operator
+
+        first_result = operator.matvec(first)
+        second_result = operator.matvec(second)
+
+        torch.testing.assert_close(first_result, 2 * first)
+        torch.testing.assert_close(second_result, 2 * second)
+        assert model.forward_calls == 1
+        operator.close()
+
+    def test_prepared_results_match_independent_one_shot_calls(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        first = torch.randn_like(simple_batch.positions)
+        second = torch.randn_like(simple_batch.positions)
+
+        with model.prepare_hessian(simple_batch) as operator:
+            prepared_first = operator.matvec(first)
+            prepared_second = operator.matvec(second)
+        assert model.forward_calls == 1
+
+        one_shot_first = model.hessian_vector_product(simple_batch, first)
+        one_shot_second = model.hessian_vector_product(simple_batch, second)
+
+        torch.testing.assert_close(prepared_first, one_shot_first)
+        torch.testing.assert_close(prepared_second, one_shot_second)
+        assert model.forward_calls == 3
+
+    def test_close_is_idempotent_and_terminal(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        operator = model.prepare_hessian(simple_batch)
+        operator.close()
+        operator.close()
+
+        with pytest.raises(RuntimeError, match="HessianOperator is closed"):
+            operator.matvec(torch.ones_like(simple_batch.positions))
+        with pytest.raises(RuntimeError, match="HessianOperator is closed"):
+            operator.__enter__()
+
+    def test_context_exit_closes_after_success_and_exception(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        operator = model.prepare_hessian(simple_batch)
+        with operator:
+            operator.matvec(torch.ones_like(simple_batch.positions))
+        with pytest.raises(RuntimeError, match="HessianOperator is closed"):
+            operator.matvec(torch.ones_like(simple_batch.positions))
+
+        failing = model.prepare_hessian(simple_batch)
+        with pytest.raises(LookupError, match="body failure"):
+            with failing:
+                raise LookupError("body failure")
+        with pytest.raises(RuntimeError, match="HessianOperator is closed"):
+            failing.__enter__()
+
+    @pytest.mark.parametrize("close_kind", ["explicit", "context", "exception"])
+    def test_close_releases_private_working_batch(self, simple_batch, close_kind):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        operator = model.prepare_hessian(simple_batch)
+        working_ref = model.working_batch_ref
+        assert working_ref is not None
+        assert working_ref() is not None
+
+        if close_kind == "explicit":
+            operator.close()
+        elif close_kind == "context":
+            with operator:
+                pass
+        else:
+            with pytest.raises(LookupError, match="body failure"):
+                with operator:
+                    raise LookupError("body failure")
+
+        gc.collect()
+        assert working_ref() is None
+
+    def test_invalid_matvec_leaves_operator_active(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        operator = model.prepare_hessian(simple_batch)
+
+        with pytest.raises(ValueError, match="same shape"):
+            operator.matvec(torch.ones(1, 3))
+
+        result = operator.matvec(torch.ones_like(simple_batch.positions))
+        torch.testing.assert_close(
+            result,
+            2 * torch.ones_like(simple_batch.positions),
+        )
+        assert model.forward_calls == 1
+        operator.close()
+
+    def test_disconnected_energy_fails_preparation_and_releases_graph(
+        self, simple_batch
+    ):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "disconnected"
+        active_outputs = model.model_config.active_outputs
+        gradient_keys = model.model_config.gradient_keys
+
+        with pytest.raises(RuntimeError, match="not connected to the position leaf"):
+            model.prepare_hessian(simple_batch)
+
+        working_ref = model.working_batch_ref
+        assert working_ref is not None
+        gc.collect()
+        assert working_ref() is None
+        assert model.model_config.active_outputs is active_outputs
+        assert model.model_config.gradient_keys is gradient_keys
+
+    def test_forward_failure_propagates_without_operator_state(self, simple_batch):
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "raise"
+
+        with pytest.raises(LookupError, match="injected derivative forward failure"):
+            model.prepare_hessian(simple_batch)
+
+        assert model.working_batch_ref is not None
+        gc.collect()
+        assert model.working_batch_ref() is None
+        assert not hasattr(model, "_hessian_operator")
+
+    @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
+    def test_operator_restores_outer_autograd_mode(self, outer_mode):
+        batch = _make_derivative_batch(2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.randn_like(batch.positions)
+        context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
+
+        with context:
+            expected_grad = torch.is_grad_enabled()
+            expected_inference = torch.is_inference_mode_enabled()
+            operator = model.prepare_hessian(batch)
+            assert torch.is_grad_enabled() is expected_grad
+            assert torch.is_inference_mode_enabled() is expected_inference
+            result = operator.matvec(vector)
+            assert torch.is_grad_enabled() is expected_grad
+            assert torch.is_inference_mode_enabled() is expected_inference
+            operator.close()
+
+        torch.testing.assert_close(result, 2 * vector)
+
+    def test_public_import_does_not_load_optional_model_packages(self):
+        code = """
+import sys
+from nvalchemi.models import HessianOperator
+assert HessianOperator.__name__ == 'HessianOperator'
+for name in ('aimnet', 'mace', 'fairchem'):
+    assert name not in sys.modules, name
+"""
+        subprocess.run(  # noqa: S603
+            [sys.executable, "-c", code],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 # ===========================================================================
