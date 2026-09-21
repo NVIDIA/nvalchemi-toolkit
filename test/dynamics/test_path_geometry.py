@@ -85,6 +85,34 @@ def test_skewed_cell_returns_shortest_cartesian_displacement(
     torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-6)
 
 
+def test_skewed_cell_ties_preserve_seed_then_candidate_order() -> None:
+    """Exact ties keep the seed or the first preparation-time candidate."""
+    cell = torch.tensor(
+        [[[1.0, 0.0, 0.0], [0.5, 1.0, 0.0], [0.0, 0.0, 0.0]]],
+        dtype=torch.float64,
+    )
+    pbc = torch.tensor([[True, True, False]])
+    graph_idx = torch.zeros(2, dtype=torch.long)
+    displacement = torch.tensor(
+        [
+            [0.5, 0.0, 0.0],
+            [0.75, 0.5, 0.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    actual = minimum_image_displacement(displacement, graph_idx, cell, pbc)
+
+    expected = torch.tensor(
+        [
+            [0.5, 0.0, 0.0],
+            [-0.25, 0.5, 0.0],
+        ],
+        dtype=torch.float64,
+    )
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+
 def test_prepared_mic_uses_fixed_minkowski_neighbor_capacity() -> None:
     """General rank-two and rank-three cells use 8 and 26 neighbors."""
     cells = torch.tensor(

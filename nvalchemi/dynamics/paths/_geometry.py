@@ -651,13 +651,23 @@ def minimum_image_displacement(
 
     # Search all neighboring cells; for a Minkowski-reduced rank-2 or rank-3
     # basis, these 8 or 26 shifts are guaranteed to include the minimum image.
-    for shift_index in range(prepared.max_candidate_count):
-        shift = prepared.candidate_shifts[:, shift_index].index_select(0, graph_idx)
-        candidate = wrapped_periodic + shift
-        candidate_sq = torch.sum(candidate.square(), dim=-1)
-        improve = (shift_index < candidate_count) & (candidate_sq < best_sq)
-        best = torch.where(improve[:, None], candidate, best)
-        best_sq = torch.where(improve, candidate_sq, best_sq)
+    shifts = prepared.candidate_shifts[:, : prepared.max_candidate_count].index_select(
+        0, graph_idx
+    )
+    candidates = wrapped_periodic[:, None, :] + shifts
+    candidate_sq = torch.sum(candidates.square(), dim=-1)
+    shift_index = torch.arange(prepared.max_candidate_count, device=graph_idx.device)
+    candidate_sq = candidate_sq.masked_fill(
+        shift_index[None, :] >= candidate_count[:, None], torch.inf
+    )
+    min_index = torch.argmin(candidate_sq, dim=1)
+    best_candidate = torch.gather(
+        candidates,
+        1,
+        min_index[:, None, None].expand(-1, 1, candidates.shape[-1]),
+    ).squeeze(1)
+    best_candidate_sq = torch.gather(candidate_sq, 1, min_index[:, None]).squeeze(1)
+    best = torch.where((best_candidate_sq < best_sq)[:, None], best_candidate, best)
     return torch.where((mode != _MIC_NONE)[:, None], residual + best, displacement)
 
 
