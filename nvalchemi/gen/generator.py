@@ -169,7 +169,14 @@ MaterializationFunction: TypeAlias = Callable[[SampleT], Batch]
 """Map a raw sample of type ``SampleT`` to a :class:`~nvalchemi.data.Batch`.
 
 The mapping takes the sample alone: any conditioning has already happened on
-the inputs before generation, so no conditioning batch is passed in.
+the inputs before generation, so no conditioning batch is passed in. The
+sample is therefore expected to be self-describing — the generating
+function was called with the conditioned inputs, so anything the mapping
+needs (cell parameters, conditioning metadata, a per-candidate condition
+index for tracing through filtering) must be emitted as part of the sample
+by the function. Hooks at ``BEFORE_MAPPING`` see the sample (and the inputs
+via ``ctx.batch`` when they were a :class:`~nvalchemi.data.Batch`), and
+``ctx.accepted_mask`` records which candidates survived filtering.
 """
 
 
