@@ -196,7 +196,7 @@ class ClimbingImageSelectionHook:
         force_mode.masked_fill_(climbing_mask, REGULAR_NEB)
 
         # Mark the selected image for each path
-        stats = self.energy_stats_hook.get_stats()
+        stats = self.energy_stats_hook.get_stats(ctx)
         selected_images = stats.highest_interior_image_idx.long()
         selected_graph_mask = torch.zeros_like(force_mode, dtype=torch.bool)
         selected_graph_mask.scatter_(

@@ -226,7 +226,7 @@ class PathDiagnosticsHook:
             )
 
         batch = ctx.batch
-        stats = self.energy_stats_hook.get_stats()
+        stats = self.energy_stats_hook.get_stats(ctx)
         link_lengths = getattr(batch, "forward_link_length", None)
         if not isinstance(link_lengths, Tensor):
             raise RuntimeError(
