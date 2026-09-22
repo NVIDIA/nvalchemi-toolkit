@@ -410,7 +410,7 @@ class TestRankResolution:
 
 class TestPrimeForces:
     def test_distributed_step_initializes_admission_before_priming(self) -> None:
-        """Distributed stepping dispatches admission before force priming."""
+        """Initialize admission and safely publish mixed-dtype model outputs."""
         dp, _ = _make_dp()
         batch = _make_batch()
         # At step 1, a frequency-2 hook would be skipped without the admission bypass.
@@ -426,6 +426,35 @@ class TestPrimeForces:
             dp.step(batch)
 
         assert len(hook.calls) == 1
+
+        data = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6], dtype=torch.long),
+                positions=torch.randn(1, 3),
+            )
+            for _ in range(2)
+        ]
+        distributed_batch = Batch.from_data_list(data)
+        distributed_batch.forces = torch.zeros(distributed_batch.num_nodes, 3)
+        distributed_batch.energy = torch.tensor([[-11.0], [-13.0]], dtype=torch.float32)
+        active_graph_mask = torch.tensor([True, False])
+        dp._sharded_batch = MagicMock()
+        dp._dist_model = MagicMock(
+            return_value={
+                "energy": torch.tensor([[1.25], [2.5]], dtype=torch.float64),
+                "forces": torch.ones(distributed_batch.num_nodes, 3),
+            }
+        )
+        dp._composite = True
+
+        dp._distributed_compute(distributed_batch, active_graph_mask)
+
+        assert distributed_batch.energy.dtype == torch.float32
+        torch.testing.assert_close(
+            distributed_batch.energy,
+            torch.tensor([[1.25], [-13.0]], dtype=torch.float32),
+        )
+        assert dp._dynamics._last_outputs["energy"].dtype == torch.float64
 
     def test_prime_forces_not_called_in_single_process(self) -> None:
         """No ``_dist_model`` means step() short-circuits to inner

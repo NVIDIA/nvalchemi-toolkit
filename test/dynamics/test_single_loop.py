@@ -490,15 +490,18 @@ class TestFusedStage:
         assert model.forward_count == 1
 
     def test_masked_updates_correct_indices(self) -> None:
-        """FusedStage should dispatch updates to correct dynamics engines."""
+        """Dispatch updates and publish mixed-dtype outputs to active rows."""
+        self.model.double()
         dynamics0 = TrackingDynamics(model=self.model)
         dynamics1 = TrackingDynamics(model=self.model)
 
         fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
 
         batch = create_batch_with_status(n_graphs=4)
-        batch.status = torch.tensor([0, 1, 0, 1])
+        batch.status = torch.tensor([0, 1, 0, 2])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1, 0.1])
+        batch.energy.fill_(-13.0)
+        active_graph_mask = batch.status < fused.exit_status
 
         fused.step(batch)
 
@@ -509,8 +512,20 @@ class TestFusedStage:
 
         # dynamics1 should get mask for indices 1, 3
         assert len(dynamics1.updated_masks) == 1
-        expected_mask1 = torch.tensor([False, True, False, True])
+        expected_mask1 = torch.tensor([False, True, False, False])
         assert torch.equal(dynamics1.updated_masks[0], expected_mask1)
+
+        assert fused._last_outputs is not None
+        assert fused._last_outputs["energy"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            fused._last_outputs["energy"][active_graph_mask].to(batch.energy.dtype),
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -13.0),
+        )
 
     def test_reprime_on_entry_delays_only_transitioning_samples(self) -> None:
         """New samples wait one iteration for force repriming while other samples continue."""
