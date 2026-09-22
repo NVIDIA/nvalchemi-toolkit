@@ -110,16 +110,17 @@ node, and group cardinalities (`graph_rank`, `node_to_group`, `group_ptr`,
 `num_graphs_per_group`), plus mask/broadcast helpers `reduce_all`,
 `reduce_any`, `broadcast`, `graph_mask`, and `selected_group_idx`. The cache
 invalidates automatically when `group_idx` is reassigned or graph membership
-mutates (selection, `zero`, `put`, `defrag`, ...). The derived metadata is a
-snapshot taken when `group_layout` is first accessed. In-place changes such as
+mutates (selection, `zero`, `defrag`, ...). The derived metadata is a snapshot
+taken when `group_layout` is first accessed. In-place changes such as
 `batch.group_idx[3] = 2` cannot be detected; call
 `batch.set_group_layout(batch.group_idx)` afterward to validate the new grouping
 and rebuild the cached layout. A selection that leaves group numbering
 non-dense must be repaired with
 {py:meth}`~nvalchemi.data.batch.Batch.normalize_group_idx` before
 `group_layout` is accessed again. `append()` requires both batches grouped or
-both ungrouped and rebases labels, while `append_data()` is rejected on a
-grouped batch.
+both ungrouped and rebases labels. `put()` rejects a grouped source or
+destination because graph-level buffer masks can split logical groups, while
+`append_data()` is rejected on a grouped batch.
 
 ### Indexing and selection
 

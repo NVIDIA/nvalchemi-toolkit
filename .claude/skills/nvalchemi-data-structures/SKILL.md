@@ -250,9 +250,10 @@ labels per graph, normalized to dense zero-based IDs); read the derived
 `group_ptr`, `num_graphs_per_group`, and mask/broadcast helpers `reduce_all`,
 `reduce_any`, `broadcast`, `graph_mask`, `selected_group_idx`). The cache
 invalidates automatically whenever `group_idx` changes or graph membership
-mutates (`zero`, `put`, `defrag`, etc.). `append()` requires both batches
-grouped or both ungrouped and rebases labels; `append_data()` is rejected on a
-grouped batch.
+mutates (`zero`, `defrag`, etc.). `append()` requires both batches grouped
+or both ungrouped and rebases labels. `put()` rejects a grouped source or
+destination because graph-level buffer masks can split logical groups;
+`append_data()` is also rejected on a grouped batch.
 
 ### Pre-allocated buffer operations
 
