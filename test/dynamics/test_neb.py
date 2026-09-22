@@ -408,11 +408,11 @@ class TestNEBConfiguration:
             model=_model(),
             climbing=ClimbingImageConfig(),
         )
-        strategy._convergence_hook = ConvergenceHook(
+        strategy.convergence_hook = ConvergenceHook(
             criteria={"key": "energy", "threshold": 0.2},
             by_group=True,
         )
-        strategy._regular_convergence_hook = ConvergenceHook.from_fmax(
+        strategy.regular_convergence_hook = ConvergenceHook.from_fmax(
             0.5,
             by_group=True,
         )
@@ -420,10 +420,10 @@ class TestNEBConfiguration:
         spec = json.loads(json.dumps(strategy.to_spec_dict()))
         restored = NEB.from_spec_dict(spec, model=strategy.model)
 
-        assert restored._convergence_hook is not None
-        assert restored._convergence_hook.criteria[0].key == "energy"
-        assert restored._regular_convergence_hook is not None
-        assert restored._regular_convergence_hook.criteria[0].threshold == 0.5
+        assert restored.convergence_hook is not None
+        assert restored.convergence_hook.criteria[0].key == "energy"
+        assert restored.regular_convergence_hook is not None
+        assert restored.regular_convergence_hook.criteria[0].threshold == 0.5
 
     def test_regular_convergence_hook_overrides_preliminary_stage(self) -> None:
         final = ConvergenceHook(
@@ -435,8 +435,8 @@ class TestNEBConfiguration:
             model=_model(),
             climbing=ClimbingImageConfig(),
         )
-        strategy._convergence_hook = final
-        strategy._regular_convergence_hook = regular
+        strategy.convergence_hook = final
+        strategy.regular_convergence_hook = regular
         engine = strategy.build_engine()
 
         regular_hook = engine.sub_stages[0][1].convergence_hook
@@ -450,8 +450,8 @@ class TestNEBConfiguration:
     def test_shared_override_template_is_copied_for_each_stage(self) -> None:
         template = ConvergenceHook.from_fmax(0.1, by_group=True)
         strategy = NEB(model=_model(), climbing=ClimbingImageConfig())
-        strategy._regular_convergence_hook = template
-        strategy._convergence_hook = template
+        strategy.regular_convergence_hook = template
+        strategy.convergence_hook = template
 
         engine = strategy.build_engine()
         regular_hook = engine.sub_stages[0][1].convergence_hook
