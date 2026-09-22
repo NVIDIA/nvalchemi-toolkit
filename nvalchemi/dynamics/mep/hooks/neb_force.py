@@ -76,8 +76,8 @@ class _NEBWorkspace:
         Per-atom output force buffer, shape ``(num_atoms, 3)``.
     link_lengths : Tensor
         Per-link distance buffer, shape ``(num_images - num_paths,)``.
-    tangent_buffer : Tensor
-        Per-atom tangent scratch buffer, shape ``(num_atoms, 3)``.
+    vector_scratch : Tensor
+        Per-atom vector scratch buffer, shape ``(num_atoms, 3)``.
     """
 
     image_ptr: Tensor
@@ -92,7 +92,7 @@ class _NEBWorkspace:
     mic: PreparedMIC
     effective_forces: Tensor
     link_lengths: Tensor
-    tangent_buffer: Tensor
+    vector_scratch: Tensor
 
 
 def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
@@ -129,12 +129,13 @@ def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
 class NEBForceHook:
     """Configure optimizer-facing forces for nudged elastic band dynamics.
 
-    The hook prepares structural state at :attr:`DynamicsStage.ON_ADMISSION`,
+    The hook prepares structural state at :attr:`DynamicsStage.ON_ADMISSION` and
     publishes the combined endpoint and user-fixed node mask for a
-    :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`, then updates spring
-    constants before replacing physical forces with the selected NEB force
-    formulation at :attr:`DynamicsStage.AFTER_COMPUTE`. Energy extrema and
-    image force modes are derived from hooks registered before this hook.
+    :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`. At
+    :attr:`DynamicsStage.AFTER_COMPUTE`, it refreshes the spring constants and
+    then replaces physical forces with the selected NEB force formulation.
+    Energy extrema and image force modes come from hooks registered before this
+    hook.
 
     Parameters
     ----------
@@ -450,7 +451,7 @@ class NEBForceHook:
             mic=prepared_mic,
             effective_forces=torch.empty_like(batch.positions),
             link_lengths=torch.empty(n_links, dtype=dtype, device=device),
-            tangent_buffer=torch.empty_like(batch.positions),
+            vector_scratch=torch.empty_like(batch.positions),
             image_ptr=image_ptr,
             path_ptr=path_ptr,
             image_path_idx=image_path_idx,
@@ -518,7 +519,7 @@ class NEBForceHook:
             mic_candidate_count=workspace.mic.candidate_count,
             candidate_shifts=workspace.mic.candidate_shifts,
             method=method_name,
-            tangent_buffer=workspace.tangent_buffer,
+            vector_scratch=workspace.vector_scratch,
             effective_forces=workspace.effective_forces,
             link_lengths=workspace.link_lengths,
         )
@@ -530,9 +531,15 @@ class NEBForceHook:
             workspace.link_source_image_idx,
             workspace.link_lengths,
         )
-        # Restore NEB forces for inactive graphs too: the shared model forward
-        # overwrites their force rows even though the optimizer does not update them.
-        batch.forces.copy_(workspace.effective_forces)
+        # Publish only the rows owned by this hook dispatch. Model evaluation
+        # preserves inactive rows, so other sub-stages and graduated paths retain
+        # their previously published effective forces.
+        torch.where(
+            active_nodes.unsqueeze(-1),
+            workspace.effective_forces,
+            batch.forces,
+            out=batch.forces,
+        )
 
         # Newly entered paths skip both optimizer updates while these NEB forces
         # are primed. Reset their carried velocity before the first real update.

@@ -340,8 +340,13 @@ class TestNEBForceHook:
         )
         assert torch.equal(batch.physical_forces, expected_physical)
         assert torch.equal(seen["physical_forces"], expected_physical)
+        expected_published = torch.where(
+            active_nodes.unsqueeze(-1),
+            expected_effective,
+            model_forces,
+        )
         assert torch.equal(workspace.effective_forces, expected_effective)
-        assert torch.equal(batch.forces, expected_effective)
+        assert torch.equal(batch.forces, expected_published)
         assert torch.allclose(seen["spring_constants"], torch.full((3,), 0.2))
         assert seen["image_ptr"] is workspace.image_ptr
         assert seen["path_ptr"] is workspace.path_ptr
