@@ -64,7 +64,7 @@ import warnings
 from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 from torch import nn
@@ -72,6 +72,10 @@ from torch import nn
 from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import (
+    _DerivativeRequest,
+    _reject_derivative_request,
+)
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -541,6 +545,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> None:
         super().__init__()
         self.model = model
+        self._derivative_mode: Literal["eager", "compiled"] = "eager"
         self._checkpoint_spec = reconstruction_spec
 
         # e3nn's ``Irrep.__len__`` raises under TorchDynamo guard-building, so
@@ -661,6 +666,46 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             cached = base.with_adapters(*refresh, *halo_conv)
             self._dist_spec_cache = cached
         return cached
+
+    # ------------------------------------------------------------------
+    # Derivative qualification
+    # ------------------------------------------------------------------
+
+    def _derivative_execution_mode(self) -> Literal["eager", "compiled"]:
+        """Return the execution mode selected at wrapper construction."""
+        return self._derivative_mode
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Validate the local eager plain-MACE second-order capability."""
+        if request.execution != "local":
+            _reject_derivative_request(
+                self,
+                request,
+                "distributed second-order derivatives are not supported",
+            )
+        if request.mode != "eager":
+            _reject_derivative_request(
+                self,
+                request,
+                "compiled second-order derivatives are not supported",
+            )
+        if (
+            _mace_uses_cueq(self.model)
+            and request.operation == "dense_hessian"
+            and request.strategy == "vmap"
+        ):
+            # cuEq double backward works for one direction at a time, so HVPs
+            # and dense ``loop`` are supported.  Dense ``vmap`` introduces a
+            # separate Hessian-row batch even for one physical system, but
+            # ``cuequivariance::uniform_1d`` has no vmap batching rule and
+            # PyTorch cannot generate a fallback for this operator.
+            _reject_derivative_request(
+                self,
+                request,
+                "cuEquivariance operator cuequivariance::uniform_1d does not "
+                "provide the batching rule required by dense strategy='vmap'; "
+                "use strategy='loop'",
+            )
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -1132,6 +1177,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             **compile_kwargs,
         )
         wrapper = cls(model, reconstruction_spec=checkpoint_spec)
+        if compile_model:
+            wrapper._derivative_mode = "compiled"
         wrapper.eval()
         return wrapper
 

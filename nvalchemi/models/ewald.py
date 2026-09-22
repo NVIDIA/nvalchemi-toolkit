@@ -63,6 +63,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import _DerivativeRequest, _reject_derivative_request
 from nvalchemi.models._utils import (
     autograd_forces_and_stresses,
     cell_cache_needs_update,
@@ -413,6 +414,37 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         self._dist_ctx = None
         self._n_global_atoms = None
         self.invalidate_cache()
+
+    # ------------------------------------------------------------------
+    # Derivative qualification
+    # ------------------------------------------------------------------
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Validate Ewald's local eager differentiable-energy capability."""
+        if request.execution != "local":
+            _reject_derivative_request(
+                self,
+                request,
+                "distributed second-order derivatives are not supported",
+            )
+        if request.mode != "eager":
+            _reject_derivative_request(
+                self,
+                request,
+                "compiled second-order derivatives are not supported",
+            )
+        if self.hybrid_forces:
+            _reject_derivative_request(
+                self,
+                request,
+                "Ewald second-order derivatives require hybrid_forces=False",
+            )
+        if self.slab_correction:
+            _reject_derivative_request(
+                self,
+                request,
+                "Ewald second-order derivatives do not support slab_correction=True",
+            )
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:

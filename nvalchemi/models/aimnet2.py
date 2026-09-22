@@ -56,7 +56,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from torch import nn
@@ -71,6 +71,10 @@ from nvalchemi.distributed.helpers import (
     refresh_neighbors,
     system_sum,
     to_local,
+)
+from nvalchemi.models._derivatives import (
+    _DerivativeRequest,
+    _reject_derivative_request,
 )
 from nvalchemi.models._utils import (
     autograd_forces_and_stresses,
@@ -219,6 +223,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 
         super().__init__()
         self.model = model
+        self._derivative_mode: Literal["eager", "compiled"] = (
+            "compiled" if compile_model else "eager"
+        )
         calculator_train = model.training if train is None else train
 
         # Build a calculator for its pad/unpad utilities and its own
@@ -374,6 +381,29 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             ``DistributedModel(..., compile=True)``.
         """
         return _aimnet2_halo_spec()
+
+    # ------------------------------------------------------------------
+    # Derivative qualification
+    # ------------------------------------------------------------------
+
+    def _derivative_execution_mode(self) -> Literal["eager", "compiled"]:
+        """Return the execution mode selected at wrapper construction."""
+        return self._derivative_mode
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Validate the local eager second-order AIMNet2 capability."""
+        if request.execution != "local":
+            _reject_derivative_request(
+                self,
+                request,
+                "distributed second-order derivatives are not supported",
+            )
+        if request.mode != "eager":
+            _reject_derivative_request(
+                self,
+                request,
+                "compiled second-order derivatives are not supported",
+            )
 
     # ------------------------------------------------------------------
     # BaseModelMixin required properties

@@ -21,7 +21,7 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, Self
 
 import torch
 from torch import Tensor
@@ -36,6 +36,31 @@ _DerivativeOperation = Literal["hvp", "dense_hessian"]
 _DerivativeStrategy = Literal["loop", "vmap"]
 _DerivativeExecutionKind = Literal["local", "distributed"]
 _DerivativeExecutionMode = Literal["eager", "compiled"]
+
+
+def _reject_derivative_request(
+    model: object,
+    request: _DerivativeRequest,
+    reason: str,
+) -> NoReturn:
+    """Raise the common contextual error for an unsupported derivative.
+
+    Parameters
+    ----------
+    model : object
+        Wrapper rejecting the request.  Its class name is included in the
+        public error to identify the unsupported model boundary.
+    request : _DerivativeRequest
+        Context and operation being rejected.
+    reason : str
+        Configuration-specific explanation of the rejection.
+    """
+    strategy = request.strategy if request.strategy is not None else "none"
+    raise NotImplementedError(
+        f"{type(model).__name__} does not support derivative operation "
+        f"'{request.operation}' for execution='{request.execution}', "
+        f"mode='{request.mode}', strategy='{strategy}': {reason}"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +164,24 @@ def _gradient_vector_product(
                 else positions.shape
             )
             return positions.new_zeros(shape)
+
+        if is_grads_batched:
+
+            def _single_product(seed: Tensor) -> Tensor:
+                product = torch.autograd.grad(
+                    outputs,
+                    positions,
+                    grad_outputs=seed,
+                    create_graph=False,
+                    retain_graph=True,
+                    allow_unused=True,
+                )[0]
+                if product is None:
+                    return positions.new_zeros(positions.shape)
+                return product
+
+            return torch.vmap(_single_product)(grad_outputs.detach()).detach()
+
         product = torch.autograd.grad(
             outputs,
             positions,
@@ -146,7 +189,6 @@ def _gradient_vector_product(
             create_graph=False,
             retain_graph=True,
             allow_unused=True,
-            is_grads_batched=is_grads_batched,
         )[0]
         if product is None:
             shape = (

@@ -39,6 +39,7 @@ from nvalchemi.models._derivatives import (
     _DerivativeStrategy,
     _position_gradient,
     _prepare_derivative_graph,
+    _reject_derivative_request,
     _validate_dense_hessian_inputs,
     _validate_dense_hessian_storage,
     _validate_hessian_vector,
@@ -537,12 +538,10 @@ class BaseModelMixin(abc.ABC):
         NotImplementedError
             Always, unless a qualified wrapper overrides this method.
         """
-        strategy = request.strategy if request.strategy is not None else "none"
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support derivative operation "
-            f"'{request.operation}' for execution='{request.execution}', "
-            f"mode='{request.mode}', strategy='{strategy}': the wrapper has not "
-            "been qualified for second-order derivatives"
+        _reject_derivative_request(
+            self,
+            request,
+            "the wrapper has not been qualified for second-order derivatives",
         )
 
     def _derivative_energy(self, data: Batch) -> torch.Tensor:

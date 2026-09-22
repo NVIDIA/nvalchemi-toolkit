@@ -105,6 +105,7 @@ class MockMACEModel(torch.nn.Module):
         self._param.weight.data.fill_(1.0)
         self._hidden_dim = hidden_dim
         self.training_flags: list[bool] = []
+        self.compute_force_flags: list[bool] = []
 
     def forward(
         self,
@@ -116,6 +117,7 @@ class MockMACEModel(torch.nn.Module):
         training: bool = False,
     ) -> dict:
         self.training_flags.append(training)
+        self.compute_force_flags.append(compute_force)
         positions = data_dict["positions"]  # [N, 3]
         batch = data_dict["batch"].long()  # [N]
         N = positions.shape[0]
@@ -171,6 +173,7 @@ class TrainableMockMACEModel(torch.nn.Module):
         self.scale = torch.nn.Parameter(torch.tensor(1.0))
         self._hidden_dim = hidden_dim
         self.training_flags: list[bool] = []
+        self.compute_force_flags: list[bool] = []
 
     def forward(
         self,
@@ -183,6 +186,7 @@ class TrainableMockMACEModel(torch.nn.Module):
     ) -> dict:
         del compute_stress, compute_displacement
         self.training_flags.append(training)
+        self.compute_force_flags.append(compute_force)
         positions = data_dict["positions"]
         batch = data_dict["batch"].long()
         num_graphs = int(batch.max().item()) + 1
@@ -1006,6 +1010,27 @@ class TestFromCheckpointErrors:
         assert load_map_locations == [torch.device("cpu")]
         assert to_devices == [torch.device("cpu")]
 
+    def test_compiled_factory_rejects_derivatives_before_forward(
+        self, monkeypatch, mock_model, single_batch
+    ):
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+        monkeypatch.setattr("torch.compile", lambda model, **kwargs: model)
+        wrapper = MACEWrapper.from_checkpoint("medium", compile_model=True)
+        monkeypatch.setattr(
+            wrapper,
+            "forward",
+            lambda *_args, **_kwargs: pytest.fail("compiled derivative forward ran"),
+        )
+
+        with pytest.raises(NotImplementedError, match="mode='compiled'"):
+            wrapper.hessian_vector_product(
+                single_batch, torch.randn_like(single_batch.positions)
+            )
+
     def test_cueq_conversion_uses_active_cuda_context(self, monkeypatch, mock_model):
         """Explicit CUDA indices are preserved via the active CUDA context."""
         import sys
@@ -1216,6 +1241,199 @@ def real_wrapper_cpu():
         )
     except Exception as e:
         pytest.skip(f"Could not load MACE checkpoint (network unavailable?): {e}")
+
+
+@pytest.fixture(scope="session")
+def real_derivative_wrapper_cpu():
+    """Load the MACE-MP checkpoint in float64 for derivative qualification."""
+    try:
+        return MACEWrapper.from_checkpoint(
+            "small-0b", device=torch.device("cpu"), dtype=torch.float64
+        )
+    except Exception as exc:
+        pytest.skip(f"Could not load MACE derivative checkpoint: {exc}")
+
+
+@pytest.fixture(scope="session")
+def real_derivative_wrapper_cueq_cuda():
+    """Load a CUDA cuEquivariance MACE checkpoint for derivative qualification."""
+    pytest.importorskip(
+        "cuequivariance", reason="cuEquivariance is required for this qualification"
+    )
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for cuEquivariance derivative qualification")
+    try:
+        return MACEWrapper.from_checkpoint(
+            "small-0b",
+            device=torch.device("cuda"),
+            dtype=torch.float32,
+            enable_cueq=True,
+        )
+    except Exception as exc:
+        pytest.skip(f"Could not load cuEquivariance MACE checkpoint: {exc}")
+
+
+def _pbc_water_batch_float64() -> Batch:
+    """Return the fixed-topology PBC water fixture in float64."""
+    data = _make_pbc_water()
+    data.positions = data.positions.to(torch.float64)
+    data.cell = data.cell.to(torch.float64)
+    data.neighbor_list_shifts = data.neighbor_list_shifts.to(torch.float64)
+    return Batch.from_data_list([data])
+
+
+def _fixed_topology_force_finite_difference(
+    model,
+    batch: Batch,
+    vector: torch.Tensor,
+    eps: float = 1e-4,
+) -> torch.Tensor:
+    """Estimate ``H @ vector`` from forces without rebuilding neighbors."""
+    original_outputs = model.model_config.active_outputs
+    positions = batch.positions.detach().clone()
+    plus = batch.clone()
+    minus = batch.clone()
+    plus.positions = positions + eps * vector
+    minus.positions = positions - eps * vector
+    model.model_config.active_outputs = {"energy", "forces"}
+    try:
+        force_plus = model(plus)["forces"].detach()
+        force_minus = model(minus)["forces"].detach()
+    finally:
+        model.model_config.active_outputs = original_outputs
+    return -(force_plus - force_minus) / (2.0 * eps)
+
+
+class TestMACEDerivatives:
+    """Mock preflight and real eager MACE derivative qualification."""
+
+    def test_mock_hvp_requests_energy_only(self, wrapper, single_batch):
+        wrapper.hessian_vector_product(
+            single_batch, torch.randn_like(single_batch.positions)
+        )
+
+        assert wrapper.model.compute_force_flags[-1] is False
+
+    def test_mock_cueq_accepts_hvp_and_dense_loop(
+        self, wrapper, single_batch, monkeypatch
+    ):
+        monkeypatch.setattr("nvalchemi.models.mace._mace_uses_cueq", lambda _: True)
+        vector = torch.randn_like(single_batch.positions)
+
+        hvp = wrapper.hessian_vector_product(single_batch, vector)
+        result = wrapper.compute_hessian(single_batch.clone(), strategy="loop")
+
+        assert hvp.shape == vector.shape
+        assert result.hessian.shape == (9, 3, 3)
+
+    def test_mock_cueq_vmap_rejection_is_pre_forward(
+        self, wrapper, single_batch, monkeypatch
+    ):
+        monkeypatch.setattr("nvalchemi.models.mace._mace_uses_cueq", lambda _: True)
+        monkeypatch.setattr(
+            wrapper,
+            "forward",
+            lambda *_args, **_kwargs: pytest.fail("cuEq derivative forward ran"),
+        )
+
+        with pytest.raises(
+            NotImplementedError,
+            match="cuequivariance::uniform_1d.*strategy='vmap'",
+        ):
+            wrapper.compute_hessian(single_batch, strategy="vmap")
+
+    def test_real_hvp_matches_fixed_topology_force_fd(
+        self, real_derivative_wrapper_cpu
+    ):
+        model = real_derivative_wrapper_cpu
+        batch = _water_batch(dtype=torch.float64)
+        vector = torch.randn_like(batch.positions)
+
+        hvp = model.hessian_vector_product(batch, vector)
+        finite_difference = _fixed_topology_force_finite_difference(
+            model, batch, vector
+        )
+
+        torch.testing.assert_close(hvp, finite_difference, rtol=5e-4, atol=5e-6)
+
+    def test_real_dense_loop_vmap_contraction_and_symmetry(
+        self, real_derivative_wrapper_cpu
+    ):
+        model = real_derivative_wrapper_cpu
+        batch = _water_batch(dtype=torch.float64)
+        vector = torch.randn_like(batch.positions)
+        loop_batch = batch.clone()
+        vmap_batch = batch.clone()
+
+        model.compute_hessian(loop_batch, strategy="loop", row_chunk_size=2)
+        model.compute_hessian(vmap_batch, strategy="vmap", row_chunk_size=2)
+        torch.testing.assert_close(
+            loop_batch.hessian,
+            vmap_batch.hessian,
+            rtol=2e-6,
+            atol=2e-8,
+        )
+        dense = vmap_batch.hessian.reshape(3, 3, 3, 3)
+        contraction = torch.einsum("abij,bj->ai", dense, vector)
+        hvp = model.hessian_vector_product(batch, vector)
+        torch.testing.assert_close(contraction, hvp, rtol=5e-4, atol=5e-6)
+        torch.testing.assert_close(
+            dense, dense.permute(1, 0, 3, 2), rtol=2e-6, atol=2e-8
+        )
+
+    def test_real_pbc_hvp_is_finite(self, real_derivative_wrapper_cpu):
+        model = real_derivative_wrapper_cpu
+        batch = _pbc_water_batch_float64()
+        vector = torch.randn_like(batch.positions)
+
+        hvp = model.hessian_vector_product(batch, vector)
+
+        assert torch.isfinite(hvp).all()
+
+    @pytest.mark.requires_cueq
+    def test_real_cueq_hvp_matches_fixed_topology_force_fd(
+        self, real_derivative_wrapper_cueq_cuda
+    ):
+        model = real_derivative_wrapper_cueq_cuda
+        batch = _water_batch(dtype=torch.float32, device="cuda")
+        vector = torch.tensor(
+            [[0.3, -0.2, 0.1], [-0.4, 0.5, -0.6], [0.7, -0.8, 0.9]],
+            device="cuda",
+        )
+        vector = vector / vector.norm()
+
+        hvp = model.hessian_vector_product(batch, vector)
+        finite_difference = _fixed_topology_force_finite_difference(
+            model, batch, vector, eps=2e-3
+        )
+
+        torch.testing.assert_close(hvp, finite_difference, rtol=2e-2, atol=5e-3)
+
+    @pytest.mark.requires_cueq
+    def test_real_cueq_dense_loop_contraction_and_symmetry(
+        self, real_derivative_wrapper_cueq_cuda
+    ):
+        model = real_derivative_wrapper_cueq_cuda
+        batch = _water_batch(dtype=torch.float32, device="cuda")
+        vector = torch.tensor(
+            [[0.3, -0.2, 0.1], [-0.4, 0.5, -0.6], [0.7, -0.8, 0.9]],
+            device="cuda",
+        )
+        vector = vector / vector.norm()
+        result = batch.clone()
+
+        model.compute_hessian(result, strategy="loop", row_chunk_size=2)
+
+        dense = result.hessian.reshape(3, 3, 3, 3)
+        contraction = torch.einsum("abij,bj->ai", dense, vector)
+        hvp = model.hessian_vector_product(batch, vector)
+        torch.testing.assert_close(contraction, hvp, rtol=5e-4, atol=1e-4)
+        torch.testing.assert_close(
+            dense,
+            dense.permute(1, 0, 3, 2),
+            rtol=5e-4,
+            atol=1e-4,
+        )
 
 
 @pytest.mark.slow
