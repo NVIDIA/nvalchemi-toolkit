@@ -41,10 +41,10 @@ Semantics:
 * **Empty batches short-circuit** (defensive contract): should a stage ever
   yield a zero-graph batch, remaining stages are skipped for that item and
   the empty batch is returned as-is. No shipped path currently produces one.
-* **Mapping-less generators are terminal-only**: an AtomisticGenerator without a
-  ``batch_mapping`` yields its raw sample (not necessarily a
-  :class:`~nvalchemi.data.Batch`), so it can only be the last stage — every
-  upstream stage must produce a ``Batch``.
+* **Non-``Batch`` outputs are terminal-only**: a generating function returning
+  a non-``Batch`` container passes it through raw, so such a stage can only
+  be last (or feed plain callables); a dynamics stage fed a non-``Batch``
+  raises ``TypeError`` at the boundary (skipped under ``torch.compile``).
 * **Per-stage hooks**: each :class:`~nvalchemi.gen.generator.AtomisticGenerator`
   stage keeps its own hooks and
   :class:`~nvalchemi.hooks.GenerationContext`; the pipeline passes only
@@ -73,6 +73,7 @@ from pydantic import (
 )
 
 from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.gen.generator import AtomisticGenerator
 
 __all__ = ["GenerationPipeline"]
@@ -96,8 +97,8 @@ class GenerationPipeline(BaseModel):
     the downstream stage's ``consumes_fields`` must be covered by the upstream
     stage's ``produces_fields``: the dynamics link contract
     (AIMNet2 ``charges`` → Ewald) applied to generation. Authors of custom
-    ``batch_mapping`` callables own keeping their stage's declaration in sync
-    with what the callable actually writes. Non-AtomisticGenerator stages carry no
+    generating functions own keeping their stage's declaration in sync with
+    what the function actually writes. Non-AtomisticGenerator stages carry no
     declarations and are not validated (their outputs are unknown at
     construction).
 
@@ -325,6 +326,18 @@ class GenerationPipeline(BaseModel):
         for stage, kwargs in zip(self.stages, per_stage, strict=True):
             if isinstance(result, Batch) and result.num_graphs == 0:
                 break
+            if (
+                not torch.compiler.is_compiling()
+                and not isinstance(result, Batch)
+                and isinstance(stage, BaseDynamics)
+            ):
+                raise TypeError(
+                    f"Pipeline stage {type(stage).__name__} runs dynamics and "
+                    f"requires a Batch input, but the previous stage produced "
+                    f"{type(result).__name__}. A generating function feeding "
+                    "dynamics must return a Batch (the documented output "
+                    "contract); adjust the previous stage to return one."
+                )
             if hasattr(stage, "run"):
                 # duck: a dynamics engine or fused stage drives its own loop
                 result = stage.run(result, **kwargs)

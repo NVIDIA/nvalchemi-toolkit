@@ -26,8 +26,8 @@ declarations, a ``condition`` tiling helper, and ``to_spec`` (factory kwargs
 captured via :func:`~nvalchemi.training.create_model_spec`), so they slot
 into the driver's defaults chain and the spec machinery.
 :func:`demo_nonparametric_generation` is a plain function returning a
-:class:`~nvalchemi.data.Batch` directly — it works as a ``generator_func``
-with no ``batch_mapping``.
+:class:`~nvalchemi.data.Batch` directly, taking the driver's ``Batch``
+path (hooks, device and field checks).
 """
 
 from __future__ import annotations
@@ -235,7 +235,7 @@ class _DemoGANGenerate:
         -------
         Batch
             One point-cloud graph per draw — already a ``Batch``, so the
-            driver needs no ``batch_mapping``.
+            driver takes the ``Batch`` path.
         """
         del kwargs
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
@@ -407,7 +407,7 @@ class _DemoDiffusionGenerate:
         -------
         Batch
             One point-cloud graph per draw — already a ``Batch``, so the
-            driver needs no ``batch_mapping``.
+            driver takes the ``Batch`` path.
         """
         num_steps = kwargs.pop("num_steps", self.num_steps)
         sigma_max = kwargs.pop("sigma_max", self.sigma_max)

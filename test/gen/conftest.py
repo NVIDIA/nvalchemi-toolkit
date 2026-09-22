@@ -15,7 +15,7 @@
 """Shared helpers for the generative API test suite.
 
 Mirrors the dynamics/training convention: dummy-data builders and trivial
-generating/materialization functions live in a per-suite ``conftest.py`` and
+generating functions live in a per-suite ``conftest.py`` and
 are imported by the test modules (``from test.gen.conftest import
 make_batch``) instead of being redefined per module.
 """
@@ -90,8 +90,8 @@ def trivial_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
 def batch_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     """A minimal generating function returning a :class:`Batch` directly.
 
-    Exercises the driver's raw passthrough: no ``batch_mapping`` is needed
-    when the function already returns a ``Batch``.
+    Exercises the driver's Batch path: the function returns a ``Batch``
+    directly, so ``AFTER_GENERATE`` hooks and the device/field checks apply.
 
     Parameters
     ----------
@@ -112,38 +112,6 @@ def batch_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     del rng, kwargs
     n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
     return make_batch(n)
-
-
-def zeros_to_batch(sample: TensorDict) -> Batch:
-    """Materialization building a fresh batch sized like the sample.
-
-    Parameters
-    ----------
-    sample
-        Sample TensorDict; its leading size sets the graph count.
-
-    Returns
-    -------
-    Batch
-        ``sample.batch_size[0]`` dummy graphs.
-    """
-    return make_batch(sample.batch_size[0])
-
-
-def passthrough_mapping(sample) -> Batch:
-    """Materialization returning the sample unchanged (already a ``Batch``).
-
-    Parameters
-    ----------
-    sample
-        The raw sample, already a :class:`Batch`.
-
-    Returns
-    -------
-    Batch
-        ``sample``, unchanged.
-    """
-    return sample
 
 
 def tile_condition(inputs, *, num_samples=None, rng=None):
@@ -168,7 +136,7 @@ def tile_condition(inputs, *, num_samples=None, rng=None):
 
 
 class DeviceAwareGenerate:
-    """Generating function object carrying ``device`` and materializing there.
+    """Generating function object carrying ``device`` and building batches there.
 
     Exercises the driver's device defaults chain, session stream creation,
     and the device-residency check on any host: the object declares a device

@@ -33,9 +33,7 @@ from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel, make_demo_gan_generate
 from test.gen.conftest import (
     make_batch,
-    passthrough_mapping,
     trivial_generate,
-    zeros_to_batch,
 )
 
 
@@ -67,7 +65,6 @@ def _generator(
     """
     return AtomisticGenerator(
         generator_func=make_demo_gan_generate(DemoGANModel().to(device)),
-        batch_mapping=passthrough_mapping,
         consumes_fields=frozenset() if consumes is None else consumes,
         produces_fields=frozenset() if produces is None else produces,
         hooks=hooks or [],
@@ -184,12 +181,12 @@ class TestFoldAndStream:
             pipe(make_batch(num_graphs=2))
 
     def test_zero_graph_materialization_short_circuits(self) -> None:
-        """A stage materializing zero graphs skips the remaining stages."""
+        """A stage returning zero graphs skips the remaining stages."""
         calls: list = []
 
-        def _empty_recon(sample) -> Batch:
-            """Materialize to an explicitly empty batch (total rejection)."""
-            del sample
+        def _empty_generate(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch:
+            """Return an explicitly empty batch (total rejection)."""
+            del inputs, num_samples, rng, kwargs
             return Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
 
         class _Mark:
@@ -201,8 +198,7 @@ class TestFoldAndStream:
                 calls.append(True)
 
         gen_empty = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=_empty_recon,
+            generator_func=_empty_generate,
             consumes_fields=frozenset(),
             produces_fields=frozenset(),
         )
@@ -268,7 +264,6 @@ class TestMappinglessStages:
         )
         downstream = AtomisticGenerator(
             generator_func=_spy,
-            batch_mapping=passthrough_mapping,
             consumes_fields=frozenset(),
             produces_fields=frozenset(),
         )
@@ -286,7 +281,6 @@ class TestFieldContractValidation:
         """A AtomisticGenerator with no declaration source is rejected in a pipeline."""
         undeclared = AtomisticGenerator(
             generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
         )
         with pytest.raises(ValueError, match="declares neither"):
             GenerationPipeline(stages=[_generator(), undeclared])
@@ -502,6 +496,21 @@ class TestDynamicsStages:
         # run() integrated the trajectory; a bare one-step __call__ would leave
         # velocities untouched
         assert not torch.allclose(out.velocities, torch.zeros_like(out.velocities))
+
+    def test_non_batch_before_dynamics_raises(self) -> None:
+        """A non-Batch output feeding a dynamics stage raises TypeError."""
+        from nvalchemi.dynamics.demo import DemoDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,  # returns a TensorDict, not a Batch
+            consumes_fields=frozenset(),
+            produces_fields=frozenset(),
+        )
+        engine = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+        pipe = gen | engine
+        with pytest.raises(TypeError, match="must return a Batch"):
+            pipe(None)
 
 
 class TestStageKwargs:

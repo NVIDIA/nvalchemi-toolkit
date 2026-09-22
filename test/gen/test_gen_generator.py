@@ -15,12 +15,12 @@
 """Structural tests for the generative API.
 
 Covers the abstract :class:`~nvalchemi.gen.generator.AtomisticGenerator`
-with its fixed (optional condition →) generate → materialize core and
+with its fixed (optional condition →) generate core and
 :class:`~nvalchemi.gen.stages.GenerationStage` hooks: the function-owns-model
 contract, the optional condition step (resolution order, stage firing
 policy, pass-through without a provider), the defaults chain (driver
-argument > function attribute > module default), ``batch_mapping``
-materialization vs raw-sample passthrough, device validation / dedicated
+argument > function attribute > module default), the ``Batch`` path vs
+raw-sample passthrough, device validation / dedicated
 streams / the device-residency check, hook firing order / frequency gating /
 mutation-by-replacement / filter-by-subsetting, ``stream()`` semantics, the
 ``sample()``/``__call__`` sugar split, the ``torch.compile`` surface, and
@@ -47,9 +47,7 @@ from test.gen.conftest import (
     DeviceAwareGenerate,
     batch_generate,
     make_batch,
-    passthrough_mapping,
     trivial_generate,
-    zeros_to_batch,
 )
 
 
@@ -80,60 +78,19 @@ def _rng_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     )
 
 
-class _CaptureRecon:
-    """Materialization that records the raw sample TensorDict it receives."""
-
-    def __init__(self, device: str | torch.device | None = None) -> None:
-        self.samples: list[TensorDict] = []
-        self.device = device
-
-    def __call__(self, sample: TensorDict) -> Batch:
-        """Record ``sample`` and return a batch sized like it.
-
-        Parameters
-        ----------
-        sample
-            Sample TensorDict to record.
-
-        Returns
-        -------
-        Batch
-            Dummy graphs matching the sample's leading size, moved to
-            ``self.device`` when one was supplied (so device-resolved
-            generators satisfy the driver's residency check).
-        """
-        self.samples.append(sample)
-        out = make_batch(sample.batch_size[0])
-        return out.to(self.device) if self.device is not None else out
-
-
 class TestBaseGenerator:
     """Core :class:`AtomisticGenerator` tests."""
 
     def test_unconditional_generate_returns_batch(self) -> None:
-        """A free generating function + ``batch_mapping`` yields a batch."""
+        """A function returning a ``Batch`` yields it directly."""
         sentinel = make_batch(num_graphs=1)
 
-        def recon(sample: TensorDict) -> Batch:
-            """Materialization override returning a sentinel batch.
-
-            Parameters
-            ----------
-            sample
-                Ignored.
-
-            Returns
-            -------
-            Batch
-                ``sentinel``.
-            """
-            del sample
+        def _generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
+            """Return the sentinel batch directly."""
+            del inputs, num_samples, rng, kwargs
             return sentinel
 
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=recon,
-        )
+        gen = AtomisticGenerator(generator_func=_generate)
         assert gen() is sentinel
 
     def test_conditional_generate_via_factory(self, device: str) -> None:
@@ -153,42 +110,40 @@ class TestBaseGenerator:
         with pytest.raises(ValidationError):
             AtomisticGenerator(generator_func=None)
 
-    def test_batch_returned_raw_without_mapping(self) -> None:
-        """A function returning a ``Batch`` needs no mapping: raw passthrough."""
+    def test_batch_returned_on_batch_path(self) -> None:
+        """A function returning a ``Batch`` takes the Batch path: it comes
+        back as produced."""
         gen = AtomisticGenerator(generator_func=batch_generate)
         out = gen(num_samples=3)
         assert isinstance(out, Batch)
         assert out.num_graphs == 3
 
-    def test_batch_mapping_runs_after_generate(self) -> None:
-        """``batch_mapping`` is applied after the generating function."""
-        calls: list[str] = []
+    def test_batch_output_fires_after_generate(self) -> None:
+        """A ``Batch`` returned by the function fires ``AFTER_GENERATE``."""
+        seen: list = []
 
-        def _generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
-            """Record generation, then emit a zeros sample."""
-            calls.append("generate")
-            return trivial_generate(inputs, num_samples=num_samples, rng=rng, **kwargs)
+        class _Recorder:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
 
-        def _mapping(sample) -> Batch:
-            """Record materialization."""
-            calls.append("mapping")
-            return zeros_to_batch(sample)
+            def __call__(self, ctx, stage) -> None:
+                """Record the batch at this stage."""
+                seen.append(ctx.batch)
 
-        gen = AtomisticGenerator(generator_func=_generate, batch_mapping=_mapping)
-        gen()
-        assert calls == ["generate", "mapping"]
+        gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_Recorder()])
+        out = gen(num_samples=2)
+        assert len(seen) == 1
+        assert out is seen[0]
 
-    def test_no_mapping_returns_raw_sample(self) -> None:
-        """Without ``batch_mapping``, ``sample()`` returns the raw output as-is."""
+    def test_raw_sample_passthrough(self) -> None:
+        """A non-``Batch`` output comes back untouched (raw passthrough)."""
         gen = AtomisticGenerator(generator_func=trivial_generate)
         out = gen(num_samples=2)
         assert isinstance(out, TensorDict)
         assert out.batch_size[0] == 2
 
-    def test_no_mapping_fires_only_before_mapping(self) -> None:
-        """Without ``batch_mapping``: ``BEFORE_MAPPING`` fires, ``AFTER_GENERATE``
-        does not, and no construction warning is raised for BEFORE_MAPPING-only
-        hooks."""
+    def test_raw_sample_fires_only_before_mapping(self) -> None:
+        """Raw (non-Batch) sample: BEFORE_MAPPING fires, AFTER_GENERATE does not."""
 
         class _Recorder:
             def __init__(self, stage: GenerationStage, log: list) -> None:
@@ -211,10 +166,9 @@ class TestBaseGenerator:
         assert isinstance(out, TensorDict)
         assert log == [GenerationStage.BEFORE_MAPPING]
 
-    def test_after_generate_hook_without_mapping_warns_at_construction(self) -> None:
-        """``batch_mapping=None`` + an ``AFTER_GENERATE`` hook warns once, at
-        construction; the hook then never fires and no per-call warning is
-        raised."""
+    def test_after_generate_hook_skipped_for_raw_samples(self) -> None:
+        """An ``AFTER_GENERATE`` hook on a raw-sample generator never fires;
+        no construction warning is raised either."""
 
         class _Hook:
             stage = GenerationStage.AFTER_GENERATE
@@ -228,17 +182,16 @@ class TestBaseGenerator:
                 self.fired = True
 
         hook = _Hook()
-        with pytest.warns(UserWarning, match="batch_mapping"):
-            gen = AtomisticGenerator(generator_func=trivial_generate, hooks=[hook])
         with warnings.catch_warnings():
-            warnings.simplefilter("error")  # the warning is construction-time only
+            warnings.simplefilter("error")  # no warning at all now
+            gen = AtomisticGenerator(generator_func=trivial_generate, hooks=[hook])
             out = gen(num_samples=1)
         assert isinstance(out, TensorDict)
         assert not hook.fired
 
-    def test_before_mapping_hook_can_replace_sample_without_mapping(self) -> None:
-        """``BEFORE_MAPPING`` fires even without a mapping; its replacement is
-        what ``sample()`` returns."""
+    def test_before_mapping_hook_replaces_raw_sample(self) -> None:
+        """``BEFORE_MAPPING`` fires on the raw sample; its replacement is what
+        ``sample()`` returns."""
         replacement = TensorDict({"x1": torch.ones(2, 1, 3)}, batch_size=[2])
 
         class _SwapSample:
@@ -269,34 +222,33 @@ class TestBaseGenerator:
         assert gen(num_samples=2).num_graphs == 2
         assert seen == [4, 2]
 
-    def test_materialization_must_return_batch(self) -> None:
-        """A ``batch_mapping`` returning a non-Batch raises ``TypeError``."""
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=lambda sample: sample,
-        )
-        with pytest.raises(TypeError, match="not a Batch"):
+    def test_after_generate_hooks_must_leave_batch(self) -> None:
+        """An ``AFTER_GENERATE`` hook leaving a non-Batch ``ctx.batch`` raises."""
+
+        class _Break:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
+
+            def __call__(self, ctx, stage) -> None:
+                """Corrupt the batch."""
+                ctx.batch = "nope"
+
+        gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_Break()])
+        with pytest.raises(TypeError, match="AFTER_GENERATE"):
             gen()
 
     def test_non_tensordict_sample_flows_through(self) -> None:
-        """A generating function may return any container the mapping understands."""
+        """A generating function may return any container; non-``Batch``
+        outputs pass through untouched."""
 
         def _compact_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
             """Return a plain dict as a compact stand-in sample container."""
             del inputs, rng, kwargs
             return {"rows": torch.zeros(num_samples, 2)}
 
-        def _compact_recon(sample) -> Batch:
-            """Materialize a dict sample: one graph per row."""
-            return make_batch(sample["rows"].shape[0])
-
-        gen = AtomisticGenerator(
-            generator_func=_compact_generate,
-            batch_mapping=_compact_recon,
-        )
+        gen = AtomisticGenerator(generator_func=_compact_generate)
         out = gen(num_samples=3)
-        assert isinstance(out, Batch)
-        assert out.num_graphs == 3
+        assert out["rows"].shape == (3, 2)
 
     def test_field_declarations_default_from_function(self) -> None:
         """``consumes_fields``/``produces_fields`` default from the function."""
@@ -315,10 +267,7 @@ class TestBaseGenerator:
 
     def test_field_declarations_none_without_attributes(self) -> None:
         """A function with no declarations leaves them undeclared (``None``)."""
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
-        )
+        gen = AtomisticGenerator(generator_func=batch_generate)
         assert gen.consumes_fields is None
         assert gen.produces_fields is None
 
@@ -335,15 +284,14 @@ class TestBaseGenerator:
                 seen.append((ctx.model, ctx.workflow))
 
         gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
+            generator_func=batch_generate,
             hooks=[_Probe()],
         )
         gen()
         model, workflow = seen[0]
         assert model is None
         assert workflow is gen
-        assert workflow.generator_func is trivial_generate
+        assert workflow.generator_func is batch_generate
 
 
 class TestDefaultsChain:
@@ -362,9 +310,7 @@ class TestDefaultsChain:
 
     def test_device_unresolved_without_sources(self) -> None:
         """No ``device`` field and no function attribute resolves to ``None``."""
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate, batch_mapping=zeros_to_batch
-        )
+        gen = AtomisticGenerator(generator_func=batch_generate)
         assert gen._infer_device() is None
 
 
@@ -419,40 +365,46 @@ class _OffDeviceGenerate:
         return make_batch(num_samples)
 
 
+class _OffDeviceRawGenerate:
+    """Claims CUDA via the attribute; produces a CPU-resident TensorDict."""
+
+    device = torch.device("cuda:0")
+
+    def __call__(self, inputs=None, *, num_samples=1, rng=None, **kwargs):
+        """Return a CPU TensorDict regardless of the declared device."""
+        del inputs, rng, kwargs
+        return TensorDict(
+            {"x1": torch.zeros(num_samples, 1, 3)}, batch_size=[num_samples]
+        )
+
+
 class TestDeviceResidency:
-    """The post-materialization device-residency check (mapping path only)."""
+    """The device-residency check on returned ``Batch`` outputs."""
 
     def test_residency_check_fires_on_mismatch(self) -> None:
-        """A mapping materializing off the resolved device raises ``ValueError``."""
-        gen = AtomisticGenerator(
-            generator_func=_OffDeviceGenerate(), batch_mapping=passthrough_mapping
-        )
-        with pytest.raises(ValueError, match="materialized the batch on device"):
+        """A function returning a ``Batch`` on the wrong device raises."""
+        gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
+        with pytest.raises(ValueError, match="lives on device"):
             gen()
 
     def test_residency_check_passes_on_match(self) -> None:
-        """A mapping materializing on the resolved device passes."""
-        gen = AtomisticGenerator(
-            generator_func=DeviceAwareGenerate("cpu"),
-            batch_mapping=passthrough_mapping,
-        )
+        """A function returning a ``Batch`` on the resolved device passes."""
+        gen = AtomisticGenerator(generator_func=DeviceAwareGenerate("cpu"))
         out = gen(num_samples=2)
         assert out.num_graphs == 2
         assert out["positions"].device.type == "cpu"
 
-    def test_residency_check_skipped_without_mapping(self) -> None:
-        """No ``batch_mapping``, no residency check: off-device output passes
-        through as-is."""
-        gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
+    def test_residency_check_skipped_for_non_batch(self) -> None:
+        """A non-``Batch`` output skips the residency check, even with a
+        device pinned via the function's attribute."""
+        gen = AtomisticGenerator(generator_func=_OffDeviceRawGenerate())
         out = gen()
-        assert out["positions"].device.type == "cpu"
+        assert out["x1"].device.type == "cpu"
 
     def test_residency_check_skipped_under_compile(self, monkeypatch) -> None:
         """The check is skipped while ``torch.compiler.is_compiling()`` is true."""
         monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
-        gen = AtomisticGenerator(
-            generator_func=_OffDeviceGenerate(), batch_mapping=passthrough_mapping
-        )
+        gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
         assert gen().num_graphs == 1
 
 
@@ -470,11 +422,10 @@ class TestGenerationHooks:
         Returns
         -------
         AtomisticGenerator
-            A zeros-generating generator.
+            A batch-generating generator.
         """
         return AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
+            generator_func=batch_generate,
             hooks=hooks,
         )
 
@@ -518,7 +469,7 @@ class TestGenerationHooks:
         assert log == [0, 2]
 
     def test_hook_mutation_replaces_batch(self) -> None:
-        """An ``AFTER_GENERATE`` hook replaces the materialized batch."""
+        """An ``AFTER_GENERATE`` hook replaces the generated batch."""
         sentinel = make_batch(num_graphs=1)
 
         class _Swap:
@@ -570,7 +521,6 @@ class TestGenerationHooks:
 
         gen = AtomisticGenerator(
             generator_func=DeviceAwareGenerate(device),
-            batch_mapping=passthrough_mapping,
             hooks=[_KeepFirst()],
         )
         out = gen(make_batch(num_graphs=3).to(device))
@@ -598,9 +548,10 @@ class TestGenerationHooks:
         with pytest.raises(IndexError, match="Index is empty"):
             gen(make_batch(num_graphs=3))
 
-    def test_before_mapping_hook_sees_pre_materialization_state(self) -> None:
+    def test_before_mapping_hook_sees_raw_sample_state(self) -> None:
         """At BEFORE_MAPPING, ``ctx.sample`` holds the raw sample, ``ctx.batch``
-        the inputs (when they were a batch)."""
+        the inputs (when they were a batch); a raw sample is returned as the
+        same object the hook saw."""
 
         class _Observe:
             stage = GenerationStage.BEFORE_MAPPING
@@ -618,39 +569,46 @@ class TestGenerationHooks:
                 self.inputs = ctx.inputs
 
         probe = _Observe()
-        capture = _CaptureRecon()
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            batch_mapping=capture,
             hooks=[probe],
         )
         cond = make_batch(num_graphs=3)
-        gen(cond)
+        out = gen(cond)
         assert probe.inputs is cond
         assert probe.batch is cond  # inputs were a Batch
-        assert probe.sample is capture.samples[0]  # materialization saw it as-is
+        assert out is probe.sample  # the raw sample passed through as-is
 
-    def test_before_mapping_hook_replaces_sample(self) -> None:
-        """A BEFORE_MAPPING hook's replacement is what materialization receives."""
-        replacement = TensorDict({"x1": torch.ones(2, 1, 3)}, batch_size=[2])
+    def test_before_mapping_hook_replacement_can_take_batch_path(self) -> None:
+        """A BEFORE_MAPPING hook replacing the raw sample with a ``Batch``
+        routes the call onto the Batch path: AFTER_GENERATE fires and the
+        replacement batch is returned."""
+        replacement = make_batch(num_graphs=2)
+        fired: list = []
 
         class _SwapSample:
             stage = GenerationStage.BEFORE_MAPPING
             frequency = 1
 
             def __call__(self, ctx, stage) -> None:
-                """Replace the raw sample outright."""
+                """Replace the raw sample with a Batch."""
                 ctx.sample = replacement
 
-        capture = _CaptureRecon()
+        class _After:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
+
+            def __call__(self, ctx, stage) -> None:
+                """Record firing."""
+                fired.append(stage)
+
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            batch_mapping=capture,
-            hooks=[_SwapSample()],
+            hooks=[_SwapSample(), _After()],
         )
         out = gen(make_batch(num_graphs=3))
-        assert capture.samples[0] is replacement
-        assert out.num_graphs == 2
+        assert out is replacement
+        assert fired == [GenerationStage.AFTER_GENERATE]
 
     def test_before_mapping_string_stage_coerced(self) -> None:
         """A string ``"BEFORE_MAPPING"`` stage is coerced at construction."""
@@ -672,18 +630,15 @@ class TestGenerationHooks:
         gen()
         assert hook.fired
 
-    def test_zero_graph_materialization_returned(self) -> None:
-        """A mapping returning a zero-graph ``Batch`` signals total rejection."""
+    def test_zero_graph_batch_returned(self) -> None:
+        """A function returning a zero-graph ``Batch`` signals total rejection."""
 
-        def _empty_recon(sample) -> Batch:
-            """Materialize to an explicitly empty batch."""
-            del sample
+        def _empty_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
+            """Return an explicitly empty batch."""
+            del inputs, num_samples, rng, kwargs
             return Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
 
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=_empty_recon,
-        )
+        gen = AtomisticGenerator(generator_func=_empty_generate)
         out = gen(make_batch(num_graphs=3))
         assert isinstance(out, Batch)
         assert out.num_graphs == 0
@@ -697,9 +652,7 @@ class TestGenerationHooks:
 
             def __call__(self, ctx, stage) -> None:
                 """Accept every draw."""
-                ctx.accepted_mask = torch.ones(
-                    ctx.sample.batch_size[0], dtype=torch.bool
-                )
+                ctx.accepted_mask = torch.ones(ctx.sample.num_graphs, dtype=torch.bool)
 
         seen: list = []
 
@@ -856,7 +809,6 @@ class TestConditioning:
 
         gen = AtomisticGenerator(
             generator_func=_capture_generate,
-            batch_mapping=passthrough_mapping,
             hooks=[_Recorder(stage) for stage in GenerationStage],
         )
         source = make_batch(num_graphs=2)
@@ -870,7 +822,7 @@ class TestConditioning:
 
     def test_function_condition_attribute_runs_before_generation(self) -> None:
         """A function object's ``condition`` runs between the condition
-        stages, ahead of generation and mapping."""
+        stages, ahead of generation."""
         fired: list = []
 
         class _Recorder:
@@ -884,7 +836,6 @@ class TestConditioning:
 
         gen = AtomisticGenerator(
             generator_func=_TiledGenerate(),
-            batch_mapping=passthrough_mapping,
             hooks=[_Recorder(stage) for stage in GenerationStage],
         )
         out = gen(make_batch(num_graphs=2), num_samples=3)
@@ -940,7 +891,6 @@ class TestConditioning:
 
         gen = AtomisticGenerator(
             generator_func=_TiledGenerate(),
-            batch_mapping=passthrough_mapping,
             hooks=[_SwapInputs()],
         )
         out = gen(make_batch(num_graphs=3))
@@ -961,7 +911,6 @@ class TestConditioning:
 
         gen = AtomisticGenerator(
             generator_func=_TiledGenerate(),
-            batch_mapping=passthrough_mapping,
             hooks=[_Probe()],
         )
         gen(make_batch(num_graphs=2), num_samples=3)
@@ -985,7 +934,6 @@ class TestStreaming:
             A factory-backed demo generator (extra kwargs forwarded).
         """
         kwargs.setdefault("generator_func", make_demo_gan_generate(DemoGANModel()))
-        kwargs.setdefault("batch_mapping", passthrough_mapping)
         return AtomisticGenerator(**kwargs)
 
     def test_stream_caps_with_max_batches(self) -> None:
@@ -1026,19 +974,14 @@ class TestStreaming:
 
     def test_seed_makes_streams_reproducible(self) -> None:
         """Two generators with the same ``seed`` produce identical streams."""
-        recon_a, recon_b = _CaptureRecon(), _CaptureRecon()
-        gen_a = self._generator(
-            generator_func=_rng_generate, batch_mapping=recon_a, seed=7
-        )
-        gen_b = self._generator(
-            generator_func=_rng_generate, batch_mapping=recon_b, seed=7
-        )
-        list(gen_a.stream(max_batches=2))
-        list(gen_b.stream(max_batches=2))
-        for sample_a, sample_b in zip(recon_a.samples, recon_b.samples):
+        gen_a = self._generator(generator_func=_rng_generate, seed=7)
+        gen_b = self._generator(generator_func=_rng_generate, seed=7)
+        out_a = list(gen_a.stream(max_batches=2))
+        out_b = list(gen_b.stream(max_batches=2))
+        for sample_a, sample_b in zip(out_a, out_b):
             assert torch.equal(sample_a["x1"], sample_b["x1"])
         # Per-draw seeds (seed + step_count) make consecutive draws differ.
-        assert not torch.equal(recon_a.samples[0]["x1"], recon_a.samples[1]["x1"])
+        assert not torch.equal(out_a[0]["x1"], out_a[1]["x1"])
 
 
 class TestSampleSugar:
@@ -1046,21 +989,12 @@ class TestSampleSugar:
 
     def test_call_matches_sample(self) -> None:
         """``__call__`` and ``sample`` produce identical behavior."""
-        capture_a, capture_b = _CaptureRecon(), _CaptureRecon()
-        gen_a = AtomisticGenerator(
-            generator_func=_rng_generate,
-            batch_mapping=capture_a,
-            seed=5,
-        )
-        gen_b = AtomisticGenerator(
-            generator_func=_rng_generate,
-            batch_mapping=capture_b,
-            seed=5,
-        )
+        gen_a = AtomisticGenerator(generator_func=_rng_generate, seed=5)
+        gen_b = AtomisticGenerator(generator_func=_rng_generate, seed=5)
         out_a = gen_a(make_batch(num_graphs=2))
         out_b = gen_b.sample(make_batch(num_graphs=2))
-        assert out_a.num_graphs == out_b.num_graphs
-        assert torch.equal(capture_a.samples[0]["x1"], capture_b.samples[0]["x1"])
+        assert out_a.batch_size == out_b.batch_size
+        assert torch.equal(out_a["x1"], out_b["x1"])
 
     def test_sample_runs_full_dispatch(self) -> None:
         """With a condition provider set, ``sample()`` fires every stage in order."""
@@ -1078,7 +1012,6 @@ class TestSampleSugar:
         log: list = []
         gen = AtomisticGenerator(
             generator_func=_TiledGenerate(),
-            batch_mapping=passthrough_mapping,
             hooks=[_Recorder(stage, log) for stage in GenerationStage],
         )
         gen.sample()
@@ -1133,9 +1066,7 @@ class TestCompile:
 
     def test_compile_wraps_plain_function(self) -> None:
         """``compile()`` targets a plain module-level function as-is."""
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate, batch_mapping=zeros_to_batch
-        )
+        gen = AtomisticGenerator(generator_func=batch_generate)
         gen.compile(backend="eager")
         assert gen._compiled_generate is not None
         assert gen(make_batch(num_graphs=2)).num_graphs == 2
@@ -1192,10 +1123,9 @@ class TestSession:
         Returns
         -------
         AtomisticGenerator
-            RNG-drawing generator with a capture recon.
+            RNG-drawing generator.
         """
         kwargs.setdefault("generator_func", _rng_generate)
-        kwargs.setdefault("batch_mapping", _CaptureRecon())
         return AtomisticGenerator(**kwargs)
 
     def test_session_stream_matches_resolved_device(self, device: str) -> None:
@@ -1264,33 +1194,36 @@ class TestSession:
 
     def test_session_rng_reproducible_and_advancing(self, device: str) -> None:
         """Same seed → identical sessions; draws advance within a session."""
-        recon_a = _CaptureRecon(device=device)
-        recon_b = _CaptureRecon(device=device)
-        gen_a = self._generator(batch_mapping=recon_a, seed=11, device=device)
-        gen_b = self._generator(batch_mapping=recon_b, seed=11, device=device)
+        gen_a = self._generator(seed=11, device=device)
+        gen_b = self._generator(seed=11, device=device)
         with gen_a:
-            gen_a.sample(make_batch(num_graphs=1).to(device))
-            gen_a.sample(make_batch(num_graphs=1).to(device))
+            out_a = [
+                gen_a.sample(make_batch(num_graphs=1).to(device)),
+                gen_a.sample(make_batch(num_graphs=1).to(device)),
+            ]
         with gen_b:
-            gen_b.sample(make_batch(num_graphs=1).to(device))
-            gen_b.sample(make_batch(num_graphs=1).to(device))
-        for sa, sb in zip(recon_a.samples, recon_b.samples):
-            assert torch.equal(sa["x1"], sb["x1"])
-        assert not torch.equal(recon_a.samples[0]["x1"], recon_a.samples[1]["x1"])
+            out_b = [
+                gen_b.sample(make_batch(num_graphs=1).to(device)),
+                gen_b.sample(make_batch(num_graphs=1).to(device)),
+            ]
+        for sample_a, sample_b in zip(out_a, out_b):
+            assert torch.equal(sample_a["x1"], sample_b["x1"])
+        assert not torch.equal(out_a[0]["x1"], out_a[1]["x1"])
         # Session RNG is dropped on exit.
         assert gen_a._session_rng is None
 
     def test_rng_kwarg_overrides_session_rng(self) -> None:
         """A per-call ``rng=`` wins over the session generator."""
-        recon_a, recon_b = _CaptureRecon(), _CaptureRecon()
-        gen_a = self._generator(batch_mapping=recon_a, seed=11)
-        gen_b = self._generator(batch_mapping=recon_b)  # no seed, no session
+        gen_a = self._generator(seed=11)
+        gen_b = self._generator()  # no seed, no session
         with gen_a:
-            gen_a.sample(
+            out_a = gen_a.sample(
                 make_batch(num_graphs=1), rng=torch.Generator().manual_seed(99)
             )
-        gen_b.sample(make_batch(num_graphs=1), rng=torch.Generator().manual_seed(99))
-        assert torch.equal(recon_a.samples[0]["x1"], recon_b.samples[0]["x1"])
+        out_b = gen_b.sample(
+            make_batch(num_graphs=1), rng=torch.Generator().manual_seed(99)
+        )
+        assert torch.equal(out_a["x1"], out_b["x1"])
 
 
 class TestCallTimeFieldValidation:
@@ -1344,10 +1277,9 @@ class TestCallTimeFieldValidation:
         assert out["x1"].shape[0] == 1
 
     def test_produces_fields_missing_raises(self) -> None:
-        """A materialized batch lacking a declared field fails at return."""
+        """A returned batch lacking a declared field fails at return."""
         gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
+            generator_func=batch_generate,
             produces_fields=frozenset({"positions", "cell"}),
         )
         with pytest.raises(ValueError, match="cell"):
@@ -1368,16 +1300,15 @@ class TestCallTimeFieldValidation:
                 )
 
         gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
+            generator_func=batch_generate,
             produces_fields=frozenset({"atomic_numbers"}),
             hooks=[_FieldDropper()],
         )
         with pytest.raises(ValueError, match="atomic_numbers"):
             gen(make_batch())
 
-    def test_unmapped_passthrough_skips_produces_check(self) -> None:
-        """No mapping, no Batch: produces_fields is not enforced on raw samples."""
+    def test_raw_passthrough_skips_produces_check(self) -> None:
+        """A non-``Batch`` (raw) sample skips the ``produces_fields`` check."""
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
             produces_fields=frozenset({"cell"}),

@@ -16,10 +16,10 @@
 
 ``AtomisticGenerator`` (the *driver* throughout this module) wraps your generation
 code — a function, or a callable object holding the trained model — and runs
-a fixed pipeline per call: optionally condition the inputs, generate,
-optionally map the raw sample to a :class:`~nvalchemi.data.Batch`. Any
-sampling procedure works (diffusion, flow matching, GANs, VAEs, search
-loops); the callable owns the model and does the sampling.
+a fixed pipeline per call: optionally condition the inputs, generate, and
+return a :class:`~nvalchemi.data.Batch`. Any sampling procedure works
+(diffusion, flow matching, GANs, VAEs, search loops); the callable owns the
+model and does the sampling.
 
 The pipeline per :meth:`AtomisticGenerator.sample` looks like::
 
@@ -30,9 +30,11 @@ The pipeline per :meth:`AtomisticGenerator.sample` looks like::
     # generation and mapping:
     ctx.sample = generator_func(ctx.inputs, num_samples=..., rng=...)
     BEFORE_MAPPING     hooks  (filtering = replacing ctx.sample)
-    ctx.batch = batch_mapping(ctx.sample)      # only when batch_mapping set
-    AFTER_GENERATE     hooks  (filtering = subsetting ctx.batch)
-    return ctx.batch      # or ctx.sample as-is when no batch_mapping
+    if isinstance(ctx.sample, Batch):   # the Batch path:
+        ctx.batch = ctx.sample
+        AFTER_GENERATE hooks (filtering = subsetting ctx.batch)
+        return ctx.batch
+    return ctx.sample      # any other container passes through as-is
 
 Conditioning is optional: pass ``condition_func``, or set a ``condition``
 attribute on the generating function, to transform inputs before generation.
@@ -64,30 +66,26 @@ wins, then the generating function's attribute, then the module default.
 * device: ``device`` > ``generator_func.device`` > ``None`` (no stream, no
   device-residency check, CPU session RNG).
 
-Materialization is optional: supply ``batch_mapping`` to map the raw sample
-(a :class:`~tensordict.TensorDict` for tensor-native families, or any other
-container) to a :class:`~nvalchemi.data.Batch` — a non-``Batch`` result
-raises ``TypeError``. With no ``batch_mapping``, ``sample()`` returns the raw
-sample, and ``AFTER_GENERATE`` hooks do not fire.
+Materialization is the function's own, and the output contract is a
+:class:`~nvalchemi.data.Batch`: the driver fires the ``AFTER_GENERATE``
+hooks on it, validates it, and pipelines compose it (including driving
+dynamics). A function may return any other container, but then
+``sample()`` passes it through untouched: no ``AFTER_GENERATE`` hooks, and
+no feeding dynamics stages.
 
 Examples
 --------
-A GAN, one forward pass, with a complete mapping::
+A GAN, one forward pass, returning a batch directly::
 
     def gan_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
         z = torch.randn(num_samples, latent_dim, generator=rng)
-        return TensorDict({"x1": decode(z)}, batch_size=[num_samples])
-
-    def to_batch(sample):
+        positions = decode(z).reshape(num_samples, num_atoms, 3)
         numbers = torch.full((num_atoms,), 6)
         return Batch.from_data_list(
-            [
-                AtomicData(positions=positions, atomic_numbers=numbers)
-                for positions in sample["x1"]
-            ]
+            [AtomicData(positions=x, atomic_numbers=numbers) for x in positions]
         )
 
-    gan = AtomisticGenerator(generator_func=gan_generate, batch_mapping=to_batch)
+    gan = AtomisticGenerator(generator_func=gan_generate)
 
 Model-owning procedures — a callable object carries the model (plus
 ``device`` and field declarations the driver reads as defaults); module-level
@@ -126,15 +124,12 @@ from __future__ import annotations
 
 import inspect
 import itertools
-import warnings
 from collections.abc import Iterator
 from contextlib import nullcontext
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Protocol,
-    TypeAlias,
     TypeVar,
     runtime_checkable,
 )
@@ -159,24 +154,10 @@ __all__ = [
     "GeneratingFunction",
     "ConditionFunction",
     "AtomisticGenerator",
-    "MaterializationFunction",
 ]
 
 InputT = TypeVar("InputT")
 SampleT = TypeVar("SampleT")
-
-MaterializationFunction: TypeAlias = Callable[[SampleT], Batch]
-"""Map a raw sample of type ``SampleT`` to a :class:`~nvalchemi.data.Batch`.
-
-The mapping receives the sample alone: conditioning has already happened
-on the inputs, so no conditioning batch is passed in. The sample must be
-self-describing: anything the mapping needs (cell parameters, conditioning
-metadata, a per-candidate condition index for tracing through filtering)
-has to be part of the sample the generating function emitted. Hooks at
-``BEFORE_MAPPING`` see the sample (and the inputs via ``ctx.batch`` when
-they were a :class:`~nvalchemi.data.Batch`), and ``ctx.accepted_mask``
-records which candidates survived filtering.
-"""
 
 
 @runtime_checkable
@@ -185,8 +166,8 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
 
     A :class:`GeneratingFunction` owns everything generation needs —
     including the model, when there is one (held as a closure or an
-    attribute of a callable object) — samples from it, and returns the raw
-    sample.
+    attribute of a callable object) — samples from it, and returns the
+    generated artifact.
 
     Conditioning may live inside the function, or as a ``condition``
     attribute the driver calls before generation (see below); with neither,
@@ -203,18 +184,17 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
     on a device, make sure the generator matches it (e.g.
     ``torch.randn(..., generator=rng, device=...)``).
 
-    For tensor outputs, return a :class:`~tensordict.TensorDict` with a
-    leading sample dimension (e.g. the denoised endpoint under ``"x1"``,
-    per-sample log-probabilities under ``"logp"``). TensorDict is the
-    recommended container: it survives ``torch.compile``, where arbitrary
-    containers graph-break under ``compile_generate``. Returning a
-    :class:`~nvalchemi.data.Batch` directly is equally supported — with no
-    ``batch_mapping`` set the driver returns it untouched. Library-native
-    sampling loops (e.g. PhysicsNeMo diffusion samplers) plug in through a
-    thin adapter with this signature.
-
-    The returned sample is mapped to a :class:`~nvalchemi.data.Batch` by the
-    driver when it has a ``batch_mapping`` set, and returned as-is otherwise.
+    Return a :class:`~nvalchemi.data.Batch`: that is the output contract.
+    The driver fires the ``AFTER_GENERATE`` hooks on it, validates its device
+    and declared ``produces_fields``, and pipelines compose it (including
+    driving dynamics on it). Any other container is a fallback with real
+    losses: ``sample()`` passes it through untouched, the ``AFTER_GENERATE``
+    hooks are skipped, and it cannot feed dynamics stages. Inside the
+    function, a :class:`~tensordict.TensorDict` is a fine intermediate (it
+    survives ``torch.compile``, where arbitrary containers graph-break under
+    ``compile_generate``); convert it to a ``Batch`` before returning.
+    Library-native sampling loops (e.g. PhysicsNeMo diffusion samplers) plug
+    in through a thin adapter with this signature.
 
     **Optional attributes.** A callable object (rather than a plain function)
     may carry attributes the :class:`AtomisticGenerator` reads as defaults when
@@ -298,14 +278,6 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire. Serialized
         like ``generator_func`` (its own ``to_spec()``, else dotted import
         path).
-    batch_mapping
-        Optional :data:`MaterializationFunction` ``batch_mapping(sample) ->
-        Batch`` mapping the raw sample to a :class:`~nvalchemi.data.Batch`
-        after generation. When unset, :meth:`sample` returns the raw sample
-        as-is and ``AFTER_GENERATE`` hooks do not fire. The sample is whatever
-        container the generating function produced;
-        :class:`~tensordict.TensorDict` is the recommended container for
-        tensor outputs.
     device
         Optional device pin (``"cpu"``, ``"cuda"``, ``"cuda:0"``, or a
         :class:`torch.device`). Validated at construction: ``cpu`` always
@@ -368,7 +340,6 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     generator_func: GeneratingFunction
-    batch_mapping: MaterializationFunction | None = None
     condition_func: ConditionFunction | None = None
     device: torch.device | None = Field(
         default=None,
@@ -463,17 +434,6 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             elif isinstance(stage, int):
                 hook.stage = GenerationStage(stage)
         self._init_hooks(list(self.hooks))
-        if self.batch_mapping is None and any(
-            hook.stage is GenerationStage.AFTER_GENERATE for hook in self.hooks
-        ):
-            warnings.warn(
-                "AtomisticGenerator has no batch_mapping but hooks target "
-                "GenerationStage.AFTER_GENERATE: sample() returns the raw "
-                "sample as-is and AFTER_GENERATE hooks never fire. Set "
-                "batch_mapping, or retarget the hooks to BEFORE_MAPPING.",
-                UserWarning,
-                stacklevel=2,
-            )
         self._ctx: GenerationContext | None = None
         self._stream: torch.cuda.Stream | None = None
         self._stream_ctx: Any = None
@@ -617,9 +577,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         sets :attr:`compile_generate`, and wraps ``generator_func``.
         Calling again re-compiles with the new kwargs.
 
-        Only the generating function is compiled; ``batch_mapping`` and hook
-        dispatch run eagerly because they build data structures and would
-        graph-break anyway. Non-tensor-pure generating functions will
+        Only the generating function is compiled; hook dispatch runs eagerly
+        because it builds data structures and would graph-break anyway. Non-tensor-pure generating functions will
         graph-break under ``torch.compile``; compile the model inside such
         functions directly instead.
 
@@ -777,8 +736,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
 
         Runs the per-call pipeline shown in the module docstring: condition
         (only if a condition callable resolved for the call), generate on the
-        session's CUDA stream, materialize (only if ``batch_mapping`` is
-        set). Hooks fire at the
+        session's CUDA stream, and the ``Batch`` path (hooks, device and field
+        checks) when the sample is a :class:`~nvalchemi.data.Batch`. Hooks
+        fire at the
         :class:`~nvalchemi.gen.stages.GenerationStage` points — each stage
         only when the step it brackets ran — and share one
         :class:`~nvalchemi.hooks.GenerationContext` for the whole call.
@@ -803,26 +763,28 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Returns
         -------
         Any
-            The generated :class:`~nvalchemi.data.Batch` when
-            ``batch_mapping`` is set — post-filter, so possibly with fewer
-            graphs than were sampled. A mapping may return a zero-graph
-            ``Batch`` (built via :meth:`~nvalchemi.data.Batch.empty`) to
-            signal that nothing was accepted; :meth:`sample` returns it
-            as-is (subsetting a batch to zero graphs still raises
-            ``IndexError``). When ``batch_mapping`` is unset, the generating
-            function's raw output is returned as-is and ``AFTER_GENERATE``
-            hooks do not fire.
+            The generating function's output: a
+            :class:`~nvalchemi.data.Batch` on the contract path —
+            ``AFTER_GENERATE`` hooks have run (post-filter, so possibly with
+            fewer graphs than were sampled), and the device and declared-field
+            checks passed. A zero-graph ``Batch`` (built via
+            :meth:`~nvalchemi.data.Batch.empty`) passes through as-is
+            (subsetting a batch to zero graphs still raises ``IndexError``).
+            Any other container forfeits the ``Batch`` machinery: returned
+            untouched, ``AFTER_GENERATE`` hooks skipped, and it cannot feed
+            dynamics stages in a pipeline.
 
         Raises
         ------
         TypeError
-            If ``batch_mapping`` is set but its result is not a
-            :class:`~nvalchemi.data.Batch` — the mapping must return a
-            ``Batch``.
+            If the call declares ``consumes_fields`` but the inputs cannot
+            carry fields, or ``AFTER_GENERATE`` hooks leave ``ctx.batch`` as
+            something other than a :class:`~nvalchemi.data.Batch`.
         ValueError
-            If ``num_samples`` resolves to less than 1, or a device resolved
-            (via ``device`` or ``generator_func.device``) but the
-            materialized batch lives on a different device.
+            If ``num_samples`` resolves to less than 1, declared fields are
+            missing from the inputs or the returned batch, or a device
+            resolved (via ``device`` or ``generator_func.device``) but the
+            returned batch lives on a different device.
         """
         from nvalchemi.training.distributed import get_rank
 
@@ -884,16 +846,10 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     **kwargs,
                 )
                 self._call_hooks(GenerationStage.BEFORE_MAPPING, None)
-                if self.batch_mapping is None:
+                if not isinstance(ctx.sample, Batch):
+                    # raw passthrough: AFTER_GENERATE hooks are Batch-level
                     return ctx.sample
-                ctx.batch = self.batch_mapping(ctx.sample)
-            if not isinstance(ctx.batch, Batch):
-                raise TypeError(
-                    "AtomisticGenerator batch_mapping produced "
-                    f"{type(ctx.batch).__name__}, not a Batch: the mapping "
-                    "must return a Batch. Leave batch_mapping unset to return "
-                    "the raw sample as-is."
-                )
+                ctx.batch = ctx.sample
             device = self._infer_device()
             if (
                 device is not None
@@ -908,10 +864,10 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     and device.index != batch_device.index
                 ):
                     raise ValueError(
-                        f"batch_mapping materialized the batch on device "
+                        f"the generated batch lives on device "
                         f"'{batch_device}', but the resolved device is "
                         f"'{device}'. Move the batch onto the resolved device "
-                        "inside the generating function or batch_mapping, or "
+                        "inside the generating function, or "
                         "fix the device chain (AtomisticGenerator.device / "
                         "generator_func.device)."
                     )
@@ -928,7 +884,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     raise ValueError(
                         "AtomisticGenerator declares produces_fields but the "
                         f"returned batch lacks {missing}. Add the fields in the "
-                        "generating function or batch_mapping, or fix the "
+                        "generating function, or fix the "
                         "declaration."
                     )
             return batch
@@ -949,8 +905,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Returns
         -------
         Any
-            The generated batch, or the raw sample when no ``batch_mapping``
-            is set.
+            The generated batch, or the raw sample when the function returns
+            a non-``Batch`` container.
         """
         return self.sample(inputs, **kwargs)
 
@@ -982,8 +938,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         ------
         Any
             Each :meth:`sample` result exactly as produced: a
-            :class:`~nvalchemi.data.Batch` when ``batch_mapping`` is set,
-            otherwise the raw sample. A mapping may signal total rejection
+            :class:`~nvalchemi.data.Batch` when the function returns one,
+            otherwise the raw sample. A function may signal total rejection
             with :meth:`~nvalchemi.data.Batch.empty` — that zero-graph batch
             is yielded, so rejection-aware consumers should check
             ``num_graphs == 0``. Retrying rejected draws is the consumer's job.

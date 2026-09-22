@@ -28,7 +28,6 @@ from nvalchemi.gen.generator import (
     AtomisticGenerator,
     ConditionFunction,
     GeneratingFunction,
-    MaterializationFunction,
 )
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
@@ -41,5 +40,4 @@ __all__ = [
     "GenerationPipeline",
     "GenerationStage",
     "GeneratingFunction",
-    "MaterializationFunction",
 ]

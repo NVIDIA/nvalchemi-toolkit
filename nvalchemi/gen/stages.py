@@ -37,7 +37,7 @@ class GenerationStage(Enum):
     condition step was provided for the call (the driver's ``condition_func``
     or the generating function's ``condition`` attribute); ``BEFORE_MAPPING``
     always fires, after generation with ``ctx.sample`` set; ``AFTER_GENERATE``
-    fires only when a ``batch_mapping`` ran.
+    fires only when the sample is a :class:`~nvalchemi.data.Batch`.
 
     Attributes
     ----------
@@ -56,27 +56,22 @@ class GenerationStage(Enum):
         guidance) or replace the conditioned input here. Fires only when a
         condition step was provided for the call.
     BEFORE_MAPPING
-        Fired after the generating function returns and before the raw sample
-        is materialized into a :class:`~nvalchemi.data.Batch`;
-        ``ctx.sample`` holds the sample in whatever container the generating
-        function produced (a :class:`~tensordict.TensorDict` for
-        tensor-native families, otherwise any container the materialization
-        callable understands), and ``ctx.batch`` holds the call's inputs when
-        they were a :class:`~nvalchemi.data.Batch` (``None`` otherwise).
-        Filter or replace ``ctx.sample`` here — workflows with compact
-        internal representations can drop rejected candidates before paying
-        materialization cost. The driver re-reads ``ctx.sample`` after
-        dispatch and hands it to the materialization callable — or returns
-        it as-is when no ``batch_mapping`` is set. This stage fires either
-        way.
+        Fired after the generating function returns; ``ctx.sample`` holds
+        whatever the function produced (a :class:`~nvalchemi.data.Batch` on
+        the contract path), and ``ctx.batch`` holds the call's inputs when they
+        were a :class:`~nvalchemi.data.Batch` (``None`` otherwise). Filter or
+        replace ``ctx.sample`` here — workflows with compact internal
+        representations can drop rejected candidates before any downstream
+        ``Batch`` work. The driver re-reads ``ctx.sample`` after dispatch and
+        returns it: through the ``Batch`` path when it is a ``Batch``, as-is
+        otherwise. This stage fires either way.
     AFTER_GENERATE
-        Fired after the raw sample has been materialized into the generated
-        :class:`~nvalchemi.data.Batch`; ``ctx.batch`` holds it. Only fires
-        when a ``batch_mapping`` is set — a mapping-less generator returns
-        its raw sample and skips this stage. Filter or mutate the generated
-        batch here — filtering is graph-level subsetting (``ctx.batch =
-        ctx.batch[keep]``). The materialized batch may already be zero-graph
-        (a materialization callable may signal total rejection via
+        Fired after generation when the sample is a
+        :class:`~nvalchemi.data.Batch`; ``ctx.batch`` holds it. A function
+        returning a non-``Batch`` container skips this stage. Filter or
+        mutate the generated batch here — filtering is graph-level subsetting
+        (``ctx.batch = ctx.batch[keep]``). The batch may already be zero-graph
+        (a function may signal total rejection via
         :meth:`~nvalchemi.data.Batch.empty`), so filters should tolerate
         ``num_graphs == 0``. Zero-graph *selections* still raise
         ``IndexError`` — a hook signalling total rejection replaces
