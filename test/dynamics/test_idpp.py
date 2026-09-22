@@ -34,7 +34,10 @@ from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
 
 
 def _endpoints(
-    positions: list[Tensor], atomic_numbers: list[Tensor]
+    positions: list[Tensor],
+    atomic_numbers: list[Tensor],
+    *,
+    device: str = "cpu",
 ) -> tuple[Batch, Batch]:
     """Return endpoint batches from alternating initial and final positions."""
     initial = Batch.from_data_list(
@@ -49,7 +52,7 @@ def _endpoints(
             for index, numbers in enumerate(atomic_numbers)
         ]
     )
-    return initial, final
+    return initial.to(device), final.to(device)
 
 
 def _prepared_path(image: AtomicData, target_distances: Tensor) -> Batch:
@@ -77,6 +80,7 @@ def _pair_data(
     *,
     cell: Tensor | None = None,
     pbc: Tensor | None = None,
+    device: str = "cpu",
 ) -> Batch:
     """Return a complete path with one prepared IDPP pair per image."""
     dtype = torch.float64
@@ -87,6 +91,7 @@ def _pair_data(
         cell=cell,
         pbc=pbc,
     )
+    image = image.to(device)
     return _prepared_path(
         image, torch.tensor([target], dtype=dtype, device=image.device)
     )
@@ -100,7 +105,7 @@ def _pair_data(
 class TestPrepareIDPPTargets:
     """Test preparation of image-dependent target pair distances."""
 
-    def test_pair_distances_for_three_image_two_atom_path(self) -> None:
+    def test_pair_distances_for_three_image_two_atom_path(self, device: str) -> None:
         """Pair targets interpolate across all three two-atom images."""
         initial, final = _endpoints(
             [
@@ -108,6 +113,7 @@ class TestPrepareIDPPTargets:
                 torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]),
             ],
             [torch.tensor([1, 1])],
+            device=device,
         )
         paths = interpolate_paths(initial, final, 3)
 
@@ -118,10 +124,12 @@ class TestPrepareIDPPTargets:
         assert paths.neighbor_list.tolist() == [[0, 1], [2, 3], [4, 5]]
         assert torch.allclose(
             paths.idpp_target_distances,
-            torch.tensor([1.0, 2.0, 3.0]),
+            torch.tensor([1.0, 2.0, 3.0], device=device),
         )
 
-    def test_prepare_supports_multiple_paths_with_different_atom_counts(self) -> None:
+    def test_prepare_supports_multiple_paths_with_different_atom_counts(
+        self, device: str
+    ) -> None:
         """One prepared batch can hold ragged pair targets for multiple paths."""
         initial, final = _endpoints(
             [
@@ -131,6 +139,7 @@ class TestPrepareIDPPTargets:
                 torch.tensor([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]),
             ],
             [torch.tensor([1, 1]), torch.tensor([1, 6, 8])],
+            device=device,
         )
         paths = interpolate_paths(initial, final, [3, 4])
 
@@ -154,7 +163,7 @@ class TestPrepareIDPPTargets:
 class TestIDPPModel:
     """Test IDPP energies, forces, configuration, and validation."""
 
-    def test_analytic_forces_match_finite_difference(self) -> None:
+    def test_analytic_forces_match_finite_difference(self, device: str) -> None:
         """Analytic IDPP forces agree with central energy differences."""
         image = AtomicData(
             positions=torch.tensor(
@@ -163,10 +172,10 @@ class TestIDPPModel:
             ),
             atomic_numbers=torch.tensor([1, 6, 8]),
             neighbor_list=torch.tensor([[0, 1], [0, 2], [1, 2]], dtype=torch.int32),
-        )
+        ).to(device)
         data = _prepared_path(
             image,
-            torch.tensor([1.0, 1.2, 1.4], dtype=torch.float64),
+            torch.tensor([1.0, 1.2, 1.4], dtype=torch.float64, device=device),
         )
         model = IDPPModel()
         analytic_forces = model(data)["forces"]
@@ -192,9 +201,11 @@ class TestIDPPModel:
             atol=1.0e-9,
         )
 
-    def test_minimum_image_matches_equivalent_nonperiodic_pair(self) -> None:
+    def test_minimum_image_matches_equivalent_nonperiodic_pair(
+        self, device: str
+    ) -> None:
         """A wrapped pair in a non-unit cell matches its direct displacement."""
-        direct = IDPPModel()(_pair_data(distance=-0.2, target=0.4))
+        direct = IDPPModel()(_pair_data(distance=-0.2, target=0.4, device=device))
         wrapped = IDPPModel()(
             _pair_data(
                 distance=1.8,
@@ -203,21 +214,23 @@ class TestIDPPModel:
                     torch.tensor([2.0, 3.0, 4.0], dtype=torch.float64)
                 ).unsqueeze(0),
                 pbc=torch.tensor([[True, False, False]]),
+                device=device,
             )
         )
 
         assert torch.allclose(wrapped["energy"], direct["energy"])
         assert torch.allclose(wrapped["forces"], direct["forces"])
 
-    def test_model_ignores_nonperiodic_placeholder_cell(self) -> None:
+    def test_model_ignores_nonperiodic_placeholder_cell(self, device: str) -> None:
         """Nonperiodic placeholder cells do not enter minimum-image calculations."""
-        reference = IDPPModel()(_pair_data(distance=1.5, target=1.0))
+        reference = IDPPModel()(_pair_data(distance=1.5, target=1.0, device=device))
         with_cell = IDPPModel()(
             _pair_data(
                 distance=1.5,
                 target=1.0,
                 cell=torch.zeros(1, 3, 3, dtype=torch.float64),
                 pbc=torch.zeros(1, 3, dtype=torch.bool),
+                device=device,
             )
         )
 
@@ -274,11 +287,11 @@ class TestMICCacheLifecycle:
     """MIC setup does not retain stale geometry inputs."""
 
     @pytest.mark.parametrize("changed", ["cell", "pbc", "layout", "dtype"])
-    def test_setup_rebuilds_changed_geometry(self, changed: str) -> None:
+    def test_setup_rebuilds_changed_geometry(self, changed: str, device: str) -> None:
         """Setup detects changes even when the source tensors mutate in place."""
-        paths = _pair_data(0.5, 0.8)
-        cell = torch.eye(3, dtype=paths.positions.dtype).unsqueeze(0)
-        pbc = torch.ones((1, 3), dtype=torch.bool)
+        paths = _pair_data(0.5, 0.8, device=device)
+        cell = torch.eye(3, dtype=paths.positions.dtype, device=device).unsqueeze(0)
+        pbc = torch.ones((1, 3), dtype=torch.bool, device=device)
         original = prepare_batch_mic(paths, cell, pbc)
         if changed == "cell":
             cell.mul_(2)

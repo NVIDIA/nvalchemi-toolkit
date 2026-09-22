@@ -92,7 +92,15 @@ class SpringContext:
 
 @runtime_checkable
 class SpringConfig(Protocol):
-    """Resolve spring constants for the links in one or more NEB paths."""
+    """Resolve spring constants for the links in one or more NEB paths.
+
+    Custom implementations are runtime-only:
+    :class:`~nvalchemi.dynamics.paths.neb.NEB` accepts them during engine
+    construction, but
+    :meth:`~nvalchemi.dynamics.paths.neb.NEB.to_spec_dict` cannot serialize them.
+    The ``refresh`` stage must remain unchanged for the lifetime of a configured
+    engine.
+    """
 
     refresh: Literal[
         DynamicsStage.ON_ADMISSION,
