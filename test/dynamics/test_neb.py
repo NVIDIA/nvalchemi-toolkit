@@ -165,23 +165,28 @@ class TestNEBConfiguration:
         assert "available_neb_methods" in neb_api.__all__
         assert "register_neb_method" in neb_api.__all__
 
-    def test_registered_named_method_round_trips_by_name(self) -> None:
-        name = "test_serializable_neb_method"
-        strategy = NEB(model=_model(), method=NEBMethod(name=name))
-
-        assert strategy.method == name
-
-        spec = json.loads(json.dumps(strategy.to_spec_dict()))
-        restored = NEB.from_spec_dict(spec, model=strategy.model)
-        restored_force_hook = next(
+    def test_named_method_is_registered_for_runtime_only(self) -> None:
+        name = "test_runtime_neb_method"
+        method = NEBMethod(name=name)
+        strategy = NEB(model=_model(), method=method)
+        force_hook = next(
             hook
-            for hook in restored.build_engine().hooks
+            for hook in strategy.build_engine().hooks
             if isinstance(hook, NEBForceHook)
         )
 
+        assert strategy.method is method
+        assert name in available_neb_methods()
+        assert force_hook.method == name
+        with pytest.raises(ValueError, match="NEBMethod objects are runtime-only"):
+            strategy.to_spec_dict()
+
+        by_name = NEB(model=_model(), method=name)
+        spec = json.loads(json.dumps(by_name.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=by_name.model)
+
         assert spec["method"] == name
         assert restored.method == name
-        assert restored_force_hook.method == name
 
     def test_identical_named_method_registration_is_idempotent(self) -> None:
         name = "test_idempotent_neb_method"
@@ -211,7 +216,7 @@ class TestNEBConfiguration:
         assert isinstance(strategy.method, NEBMethod)
         assert strategy.method.name is None
         assert force_hook.method.startswith("__runtime_neb_method_")
-        with pytest.raises(ValueError, match="Unnamed NEBMethod"):
+        with pytest.raises(ValueError, match="NEBMethod objects are runtime-only"):
             strategy.to_spec_dict()
 
     def test_spec_round_trip_preserves_configuration(self) -> None:

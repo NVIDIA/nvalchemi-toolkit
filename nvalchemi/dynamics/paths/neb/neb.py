@@ -397,7 +397,7 @@ class NEB(DynamicsStrategy):
     @field_validator("method")
     @classmethod
     def _register_method(cls, method: str | NEBMethod) -> str | NEBMethod:
-        """Register named method objects and validate registry-name references."""
+        """Register named runtime methods and validate registry-name references."""
         if isinstance(method, str):
             get_neb_method(method)
         elif method.name is not None:
@@ -407,7 +407,6 @@ class NEB(DynamicsStrategy):
                 force_fn=method.effective_force_fn,
                 climbing_force_fn=method.climbing_force_fn,
             )
-            return method.name
         return method
 
     @field_serializer("spring", when_used="json")
@@ -424,15 +423,13 @@ class NEB(DynamicsStrategy):
 
     @field_serializer("method", when_used="json")
     def _serialize_method(self, method: str | NEBMethod) -> str:
-        """Serialize NEB methods through their stable registry names."""
-        if isinstance(method, str):
-            return method
-        if method.name is None:
+        """Serialize built-in names and reject runtime-only custom methods."""
+        if isinstance(method, NEBMethod):
             raise ValueError(
-                "Unnamed NEBMethod objects are runtime-only and cannot be "
+                "NEBMethod objects are runtime-only and cannot be "
                 "serialized by NEB.to_spec_dict()"
             )
-        return method.name
+        return method
 
     @model_validator(mode="after")
     def _validate_configuration(self) -> NEB:

@@ -175,9 +175,10 @@ class NEBMethod:
     climbing_force_fn : wp.Function, optional
         Construct the effective force for a climbing image.
     name : str or None, optional
-        Stable registry name. Named methods can participate in serializable
-        configurations when the same registration is available on restore;
-        unnamed methods are runtime-only.
+        Optional registry name used for kernel selection and caching. Method
+        objects remain runtime-only because their equation functions are not
+        captured by :meth:`NEB.to_spec_dict`; use the registered name in a
+        separate configuration when it must serialize.
 
     Examples
     --------

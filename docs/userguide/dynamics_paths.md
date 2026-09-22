@@ -208,17 +208,19 @@ doubly-nudged elastic band (DNEB,
 [Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)).
 
 A named custom `NEBMethod` passed directly to `NEB` declares that method in
-the registry. Repeating the same name and equations is an idempotent no-op;
-reusing the name for different equations raises an error. Once registered, the
-method can be selected by name, for example `NEB(method="central_tangent")`.
-Call
+the runtime registry. Repeating the same name and equations is an idempotent
+no-op; reusing the name for different equations raises an error. Once
+registered, the method can be selected by name in the same process, for example
+`NEB(method="central_tangent")`. Call
 {py:func}`~nvalchemi.dynamics.paths.neb.register_neb_method` explicitly when
 you need to register a method separately before configuring `NEB` by name.
 {py:func}`~nvalchemi.dynamics.paths.neb.available_neb_methods` lists the
 registered names. Registration must finish before compilation or graph capture.
-A custom `NEBMethod` without a `name` is registered under an internal name
-when the engine is built and remains runtime-only: it cannot round-trip through
-`to_spec_dict()`.
+`NEBMethod` objects are runtime-only, even when named, because `to_spec_dict()`
+does not capture their equation functions. To serialize a named custom method,
+register it first and configure `NEB` with its registry-name string; the same
+registration must be available when restoring the specification. An unnamed
+`NEBMethod` is registered under an internal name when the engine is built.
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.paths.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.
