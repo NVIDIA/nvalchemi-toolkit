@@ -105,25 +105,25 @@ class _NoOpHook:
         """Observe a dynamics stage without changing state."""
 
 
-def _model() -> DemoModelWrapper:
+def _model(device: str = "cpu") -> DemoModelWrapper:
     """Return a lightweight model for strategy construction and execution."""
-    return DemoModelWrapper(DemoModel()).eval()
+    return DemoModelWrapper(DemoModel()).to(device).eval()
 
 
-def _bands() -> Batch:
+def _bands(device: str = "cpu") -> Batch:
     """Return one valid three-image path with optimizer state fields."""
     images = []
     for x in (0.0, 0.5, 1.0):
         image = AtomicData(
-            atomic_numbers=torch.tensor([1]),
-            positions=torch.tensor([[x, 0.0, 0.0]]),
-            energy=torch.zeros(1, 1),
-            forces=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([1], device=device),
+            positions=torch.tensor([[x, 0.0, 0.0]], device=device),
+            energy=torch.zeros(1, 1, device=device),
+            forces=torch.zeros(1, 3, device=device),
         )
-        image.add_node_property("velocities", torch.zeros(1, 3))
+        image.add_node_property("velocities", torch.zeros(1, 3, device=device))
         images.append(image)
     bands = Batch.from_data_list(images)
-    bands.set_group_layout(torch.zeros(3, dtype=torch.long))
+    bands.set_group_layout(torch.zeros(3, dtype=torch.long, device=device))
     return bands
 
 
@@ -148,6 +148,16 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
+
+    def test_constant_spring_refresh_is_fixed_at_admission(self) -> None:
+        spring = ConstantSpringConfig(0.2)
+
+        assert spring.refresh is DynamicsStage.ON_ADMISSION
+        with pytest.raises(TypeError):
+            ConstantSpringConfig(
+                0.2,
+                refresh=DynamicsStage.AFTER_COMPUTE,
+            )
 
     def test_registry_functions_are_public(self) -> None:
         assert neb_api.available_neb_methods is available_neb_methods
@@ -223,11 +233,13 @@ class TestNEBConfiguration:
 
         assert spec["optimizer"] == "nvalchemi.dynamics.optimizers.fire2.FIRE2"
         assert spec["climbing"]["regular_fmax"] == 0.5
+        assert spec["spring"] == {"type": "constant", "value": 0.2}
 
         restored = NEB.from_spec_dict(spec, model=strategy.model)
 
         assert restored.n_steps == 19
         assert restored.spring == ConstantSpringConfig(0.2)
+        assert restored.spring.refresh is DynamicsStage.ON_ADMISSION
         assert restored.climbing == ClimbingImageConfig(
             regular_fmax=0.5,
             max_regular_steps=11,
@@ -404,20 +416,21 @@ class TestNEBConfiguration:
         )
 
     def test_convergence_hooks_round_trip_through_spec(self) -> None:
-        strategy = NEB(
-            model=_model(),
-            climbing=ClimbingImageConfig(),
-        )
-        strategy.convergence_hook = ConvergenceHook(
+        final = ConvergenceHook(
             criteria={"key": "energy", "threshold": 0.2},
             by_group=True,
         )
-        strategy.regular_convergence_hook = ConvergenceHook.from_fmax(
-            0.5,
-            by_group=True,
+        regular = ConvergenceHook.from_fmax(0.5, by_group=True)
+        strategy = NEB(
+            model=_model(),
+            climbing=ClimbingImageConfig(),
+            convergence_hook=final,
+            regular_convergence_hook=regular,
         )
 
         spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        assert "convergence_hook" not in spec
+        assert "regular_convergence_hook" not in spec
         restored = NEB.from_spec_dict(spec, model=strategy.model)
 
         assert restored.convergence_hook is not None
@@ -434,9 +447,9 @@ class TestNEBConfiguration:
         strategy = NEB(
             model=_model(),
             climbing=ClimbingImageConfig(),
+            convergence_hook=final,
+            regular_convergence_hook=regular,
         )
-        strategy.convergence_hook = final
-        strategy.regular_convergence_hook = regular
         engine = strategy.build_engine()
 
         regular_hook = engine.sub_stages[0][1].convergence_hook
@@ -461,23 +474,25 @@ class TestNEBConfiguration:
         assert final_hook is not template
         assert regular_hook is not final_hook
 
-    def test_regular_neb_builds_one_grouped_stage(self) -> None:
+    def test_regular_neb_builds_one_grouped_stage(self, device: str) -> None:
         spring = ConstantSpringConfig(0.2)
         engine = NEB(
-            model=_model(),
+            model=_model(device),
             spring=spring,
             fmax=0.05,
             n_steps=17,
-            optimizer_kwargs={"dt": 0.02, "maxstep": 0.03},
+            optimizer_kwargs={"dt": 0.02, "maxstep": 0.03, "device_type": device},
         ).build_engine()
 
         assert isinstance(engine, FusedStage)
         assert engine.by_group is True
+        assert engine.device_type == device
         assert engine.n_steps == 17
         assert engine.reprime_on_entry == frozenset()
         assert len(engine.sub_stages) == 1
         stage = engine.sub_stages[0][1]
         assert stage.by_group is True
+        assert stage.device_type == device
         assert stage._dt_init == 0.02
         assert stage.maxstep == 0.03
         assert stage.convergence_hook.by_group is True
@@ -489,9 +504,9 @@ class TestNEBConfiguration:
         assert not any(isinstance(hook, LoggingHook) for hook in engine.hooks)
         assert _force_hook(engine).spring is spring
 
-    def test_after_regular_builds_two_stage_strategy(self) -> None:
+    def test_after_regular_builds_two_stage_strategy(self, device: str) -> None:
         engine = NEB(
-            model=_model(),
+            model=_model(device),
             fmax=0.05,
             n_steps=500,
             climbing=ClimbingImageConfig(
@@ -500,8 +515,10 @@ class TestNEBConfiguration:
                 max_regular_steps=11,
                 max_climbing_steps=13,
             ),
+            optimizer_kwargs={"device_type": device},
         ).build_engine()
 
+        assert engine.device_type == device
         assert len(engine.sub_stages) == 2
         assert engine.n_steps == 500
         assert engine.reprime_on_entry == frozenset({1})
@@ -509,6 +526,8 @@ class TestNEBConfiguration:
         climbing = engine.sub_stages[1][1]
         assert regular.n_steps == 11
         assert climbing.n_steps == 13
+        assert regular.device_type == device
+        assert climbing.device_type == device
         assert regular.convergence_hook.criteria[0].threshold == 0.5
         assert climbing.convergence_hook.criteria[0].threshold == 0.05
         assert not any(
@@ -586,15 +605,18 @@ class TestNEBConfiguration:
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
 
-    def test_shared_path_hooks_match_per_stage_hooks(self) -> None:
-        """Shared status-gated path hooks match per-stage hook pipelines."""
+    def test_neb_force_hook_matches_as_fused_or_substage_hook(
+        self, device: str
+    ) -> None:
+        """NEB forces match for fused-level and substage-level registration."""
         strategy = NEB(
-            model=_CompilerFriendlyModel().eval(),
+            model=_CompilerFriendlyModel().to(device).eval(),
             fmax=1.0e-12,
             climbing=ClimbingImageConfig(
                 max_regular_steps=1,
                 max_climbing_steps=2,
             ),
+            optimizer_kwargs={"device_type": device},
         )
         shared_engine: FusedStage = strategy.build_engine()
         per_stage_engine: FusedStage = strategy.build_engine()
@@ -641,8 +663,17 @@ class TestNEBRun:
             )
         )
 
-        shared_batch = _bands()
-        per_stage_batch = _bands()
+        assert any(isinstance(hook, NEBForceHook) for hook in shared_engine.hooks)
+        assert not any(
+            isinstance(hook, NEBForceHook) for hook in per_stage_engine.hooks
+        )
+        assert all(
+            any(isinstance(hook, NEBForceHook) for hook in stage.hooks)
+            for _, stage in per_stage_engine.sub_stages
+        )
+
+        shared_batch = _bands(device)
+        per_stage_batch = _bands(device)
         shared_batch.positions[1, 1] = 0.5
         per_stage_batch.positions[1, 1] = 0.5
 
@@ -655,6 +686,7 @@ class TestNEBRun:
             "physical_forces",
             "force_mode",
             "forward_link_length",
+            "neb_fixed_node_mask",
             "reprime_pending",
             "n_steps_counter_0",
             "n_steps_counter_1",
@@ -672,11 +704,12 @@ class TestNEBRun:
         assert shared_batch.status.unique().tolist() == [1]
         assert not shared_batch.reprime_pending.any()
 
-    def test_shared_path_hooks_match_standalone_dynamics(self) -> None:
+    def test_shared_path_hooks_match_standalone_dynamics(self, device: str) -> None:
         """Shared path hooks match direct use on a standalone optimizer."""
         strategy = NEB(
-            model=_CompilerFriendlyModel().eval(),
+            model=_CompilerFriendlyModel().to(device).eval(),
             fmax=1.0e-12,
+            optimizer_kwargs={"device_type": device},
         )
         shared_engine = strategy.build_engine()
         standalone = strategy.optimizer(
@@ -695,13 +728,15 @@ class TestNEBRun:
             **strategy.optimizer_kwargs,
         )
 
-        shared_batch = _bands()
-        standalone_batch = _bands()
+        shared_batch = _bands(device)
+        standalone_batch = _bands(device)
         shared_batch.positions[1, 1] = 0.5
         standalone_batch.positions[1, 1] = 0.5
-        shared_batch.status = torch.zeros(shared_batch.num_graphs, dtype=torch.long)
+        shared_batch.status = torch.zeros(
+            shared_batch.num_graphs, dtype=torch.long, device=device
+        )
         standalone_batch.status = torch.zeros(
-            standalone_batch.num_graphs, dtype=torch.long
+            standalone_batch.num_graphs, dtype=torch.long, device=device
         )
 
         compared_fields = (
@@ -722,10 +757,10 @@ class TestNEBRun:
                     getattr(standalone_batch, field),
                 )
 
-    def test_compile_executes_strategy(self) -> None:
+    def test_compile_executes_strategy(self, device: str) -> None:
         torch.compiler.reset()
         try:
-            model = _CompilerFriendlyModel().eval()
+            model = _CompilerFriendlyModel().to(device).eval()
             result = NEB(
                 model=model,
                 fmax=1.0e9,
@@ -733,7 +768,8 @@ class TestNEBRun:
                 climbing=ClimbingImageConfig(mode="immediate"),
                 compile=True,
                 compile_kwargs={"backend": "eager"},
-            ).run(_bands())
+                optimizer_kwargs={"device_type": device},
+            ).run(_bands(device))
         finally:
             torch.compiler.reset()
 
@@ -793,13 +829,15 @@ class TestNEBRun:
         self,
         climbing: ClimbingImageConfig | None,
         exit_status: int,
+        device: str,
     ) -> None:
-        bands = _bands()
+        bands = _bands(device)
         result = NEB(
-            model=_model(),
+            model=_model(device),
             fmax=1.0e9,
             climbing=climbing,
             n_steps=5,
+            optimizer_kwargs={"device_type": device},
         ).run(bands)
 
         assert result is bands
@@ -816,15 +854,16 @@ class TestNEBRun:
 class TestNEBwithIDPP:
     """Exercise NEB optimization with the analytic IDPP model."""
 
-    def test_runs_on_prepared_idpp_path(self) -> None:
+    def test_runs_on_prepared_idpp_path(self, device: str) -> None:
         """NEB consumes prepared IDPP energies and forces end to end."""
-        atomic_numbers = torch.tensor([1, 1, 1])
+        atomic_numbers = torch.tensor([1, 1, 1], device=device)
         initial = Batch.from_data_list(
             [
                 AtomicData(
                     atomic_numbers=atomic_numbers,
                     positions=torch.tensor(
-                        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+                        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                        device=device,
                     ),
                 )
             ]
@@ -834,7 +873,8 @@ class TestNEBwithIDPP:
                 AtomicData(
                     atomic_numbers=atomic_numbers,
                     positions=torch.tensor(
-                        [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]
+                        [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]],
+                        device=device,
                     ),
                 )
             ]
@@ -855,7 +895,12 @@ class TestNEBwithIDPP:
         assert paths.num_edges_per_graph.tolist() == [3] * 5
         assert model.make_neighbor_hooks() == []
 
-        result = NEB(model=model, fmax=1.0e9, n_steps=2).run(paths)
+        result = NEB(
+            model=model,
+            fmax=1.0e9,
+            n_steps=2,
+            optimizer_kwargs={"device_type": device},
+        ).run(paths)
 
         assert result is paths
         assert torch.all(result.status == 1)

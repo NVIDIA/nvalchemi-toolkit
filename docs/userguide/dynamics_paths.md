@@ -222,7 +222,10 @@ when the engine is built and remains runtime-only: it cannot round-trip through
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.paths.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.
-energy-dependent springs.
+energy-dependent springs. Custom spring policies are runtime-only and cannot
+round-trip through `NEB.to_spec_dict()`. Only numeric springs and
+{py:class}`~nvalchemi.dynamics.paths.ConstantSpringConfig` have a persistent
+spec representation.
 
 ## Building NEB manually with hooks
 

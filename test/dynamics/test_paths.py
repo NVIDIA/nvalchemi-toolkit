@@ -54,6 +54,7 @@ def _batch(
     *,
     cell: Tensor | None = None,
     pbc: Tensor | None = None,
+    device: str = "cpu",
 ) -> Batch:
     return Batch.from_data_list(
         [
@@ -65,7 +66,7 @@ def _batch(
             )
             for coordinates, numbers in zip(positions, atomic_numbers, strict=True)
         ]
-    )
+    ).to(device)
 
 
 # ---------------------------------------------------------------------------
@@ -185,14 +186,18 @@ class TestValidatePaths:
 class TestInterpolatePaths:
     """Interpolate one or more index-corresponded endpoint pairs."""
 
-    def test_linear_interpolates_multiple_paths_and_sets_layout(self) -> None:
+    def test_linear_interpolates_multiple_paths_and_sets_layout(
+        self, device: str
+    ) -> None:
         initial = _batch(
             [torch.zeros(2, 3), torch.zeros(1, 3)],
             [torch.tensor([1, 8]), torch.tensor([6])],
+            device=device,
         )
         final = _batch(
             [torch.full((2, 3), 2.0), torch.full((1, 3), 4.0)],
             [torch.tensor([1, 8]), torch.tensor([6])],
+            device=device,
         )
 
         paths = interpolate_paths(initial, final, [3, 5])
@@ -203,8 +208,12 @@ class TestInterpolatePaths:
         assert torch.equal(paths.get_data(2).positions, final.get_data(0).positions)
         assert torch.equal(paths.get_data(3).positions, initial.get_data(1).positions)
         assert torch.equal(paths.get_data(7).positions, final.get_data(1).positions)
-        assert torch.allclose(paths.get_data(1).positions, torch.ones(2, 3))
-        assert torch.allclose(paths.get_data(5).positions, torch.full((1, 3), 2.0))
+        assert torch.allclose(
+            paths.get_data(1).positions, torch.ones(2, 3, device=device)
+        )
+        assert torch.allclose(
+            paths.get_data(5).positions, torch.full((1, 3), 2.0, device=device)
+        )
         assert validate_paths(paths) is None
 
     def test_uses_batch_storage_without_reconstructing_atomic_data(self) -> None:
@@ -241,7 +250,7 @@ class TestInterpolatePaths:
         assert "forces" in initial
 
     def test_uses_minimum_image_displacement_per_graph_and_keeps_endpoints(
-        self,
+        self, device: str
     ) -> None:
         cell = 10.0 * torch.eye(3).unsqueeze(0)
         periodic = torch.tensor([[True, False, False]])
@@ -280,6 +289,8 @@ class TestInterpolatePaths:
             ]
         )
 
+        initial = initial.to(device)
+        final = final.to(device)
         path = interpolate_paths(initial, final, 3)
 
         assert validate_paths(path) is None
@@ -288,13 +299,15 @@ class TestInterpolatePaths:
         assert torch.equal(path.get_data(3).positions, initial.get_data(1).positions)
         assert torch.equal(path.get_data(5).positions, final.get_data(1).positions)
         assert torch.allclose(
-            path.get_data(1).positions, torch.tensor([[10.0, 0.0, 0.0]])
+            path.get_data(1).positions,
+            torch.tensor([[10.0, 0.0, 0.0]], device=device),
         )
         assert torch.allclose(
-            path.get_data(4).positions, torch.tensor([[2.0, 0.0, 0.0]])
+            path.get_data(4).positions,
+            torch.tensor([[2.0, 0.0, 0.0]], device=device),
         )
 
-    def test_optionally_removes_translation_and_rotation(self) -> None:
+    def test_optionally_removes_translation_and_rotation(self, device: str) -> None:
         initial_positions = torch.tensor(
             [[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
         )
@@ -303,8 +316,8 @@ class TestInterpolatePaths:
             [4.0, -3.0, 2.0]
         )
         numbers = [torch.tensor([1, 1, 8])]
-        initial = _batch([initial_positions], numbers)
-        final = _batch([final_positions], numbers)
+        initial = _batch([initial_positions], numbers, device=device)
+        final = _batch([final_positions], numbers, device=device)
 
         path = interpolate_paths(
             initial,
@@ -314,10 +327,12 @@ class TestInterpolatePaths:
         )
 
         for image in path.to_data_list():
-            torch.testing.assert_close(image.positions, initial_positions)
-        torch.testing.assert_close(final.positions, final_positions)
+            torch.testing.assert_close(image.positions, initial_positions.to(device))
+        torch.testing.assert_close(final.positions, final_positions.to(device))
 
-    def test_fit_mask_aligns_multiple_endpoint_pairs_independently(self) -> None:
+    def test_fit_mask_aligns_multiple_endpoint_pairs_independently(
+        self, device: str
+    ) -> None:
         reference_core = torch.tensor(
             [
                 [0.0, 0.0, 0.0],
@@ -350,12 +365,16 @@ class TestInterpolatePaths:
         initial = _batch(
             [reference_core, reference_second],
             [torch.tensor([46, 6, 6, 1]), torch.tensor([8, 1, 1])],
+            device=device,
         )
         final = _batch(
             [mobile_core, mobile_second],
             [torch.tensor([46, 6, 6, 1]), torch.tensor([8, 1, 1])],
+            device=device,
         )
-        fit_mask = torch.tensor([True, True, True, False, True, True, True])
+        fit_mask = torch.tensor(
+            [True, True, True, False, True, True, True], device=device
+        )
 
         paths = interpolate_paths(
             initial,
@@ -368,16 +387,16 @@ class TestInterpolatePaths:
         first_terminal = paths.get_data(2).positions
         second_terminal = paths.get_data(6).positions
         torch.testing.assert_close(
-            first_terminal[:3], reference_core[:3], rtol=0, atol=1.0e-12
+            first_terminal[:3], reference_core[:3].to(device), rtol=0, atol=1.0e-12
         )
         torch.testing.assert_close(
-            torch.linalg.vector_norm(first_terminal[3] - reference_core[3]),
-            torch.tensor(1.5, dtype=torch.float64),
+            torch.linalg.vector_norm(first_terminal[3] - reference_core[3].to(device)),
+            torch.tensor(1.5, dtype=torch.float64, device=device),
             rtol=0,
             atol=1.0e-12,
         )
         torch.testing.assert_close(
-            second_terminal, reference_second, rtol=0, atol=1.0e-12
+            second_terminal, reference_second.to(device), rtol=0, atol=1.0e-12
         )
 
     def test_fit_mask_requires_endpoint_alignment(self) -> None:
@@ -393,14 +412,18 @@ class TestInterpolatePaths:
                 fit_mask=torch.ones(2, dtype=torch.bool),
             )
 
-    def test_alignment_removes_periodic_minimum_image_translation(self) -> None:
+    def test_alignment_removes_periodic_minimum_image_translation(
+        self, device: str
+    ) -> None:
         cell = 10.0 * torch.eye(3).unsqueeze(0)
         pbc = torch.tensor([[True, False, False]])
         numbers = [torch.tensor([1, 8])]
         initial_positions = torch.tensor([[9.0, 0.0, 0.0], [2.0, 1.0, 0.0]])
         final_positions = torch.tensor([[1.0, 0.0, 0.0], [4.0, 1.0, 0.0]])
-        initial = _batch([initial_positions], numbers, cell=cell, pbc=pbc)
-        final = _batch([final_positions], numbers, cell=cell, pbc=pbc)
+        initial = _batch(
+            [initial_positions], numbers, cell=cell, pbc=pbc, device=device
+        )
+        final = _batch([final_positions], numbers, cell=cell, pbc=pbc, device=device)
 
         path = interpolate_paths(
             initial,
@@ -410,7 +433,7 @@ class TestInterpolatePaths:
         )
 
         for image in path.to_data_list():
-            torch.testing.assert_close(image.positions, initial_positions)
+            torch.testing.assert_close(image.positions, initial_positions.to(device))
 
     def test_prepares_periodic_geometry_once_for_alignment_and_interpolation(
         self,

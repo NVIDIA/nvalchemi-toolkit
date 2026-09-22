@@ -276,6 +276,58 @@ class TestNEBForceHook:
         with pytest.raises(ValueError, match="requires dynamics.*by_group=True"):
             hook.on_register(Mock(by_group=False))
 
+    def test_published_forces_apply_climbing_law(self) -> None:
+        """The real NEB operation publishes climbing and regular forces."""
+        translations = (0.0, 1.0, 3.0, 4.0)
+        energies = (0.0, 2.0, 1.0, 0.0)
+        model_forces = (
+            [[7.0, 8.0, 0.0], [9.0, 10.0, 0.0]],
+            [[1.0, 2.0, 0.0], [3.0, 4.0, 0.0]],
+            [[1.0, 5.0, 0.0], [3.0, 6.0, 0.0]],
+            [[11.0, 12.0, 0.0], [13.0, 14.0, 0.0]],
+        )
+        images = [
+            AtomicData(
+                atomic_numbers=torch.tensor([1, 1]),
+                positions=torch.tensor(
+                    [[translation, 0.0, 0.0], [translation, 1.0, 0.0]]
+                ),
+                energy=torch.tensor([[energy]]),
+                forces=torch.tensor(forces),
+            )
+            for translation, energy, forces in zip(
+                translations, energies, model_forces, strict=True
+            )
+        ]
+        batch = Batch.from_data_list(images)
+        batch.set_group_layout(torch.zeros(4, dtype=torch.long))
+        ctx = DynamicsContext(
+            batch=batch,
+            active_graph_mask=torch.ones(batch.num_graphs, dtype=torch.bool),
+        )
+        hook = _force_hook(
+            method="improved_tangent",
+            spring=ConstantSpringConfig(0.1),
+            endpoint_mode="fixed",
+            fixed_atom_indices={},
+        )
+
+        hook.on_register(Mock(by_group=True))
+        hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        batch.force_mode[1] = CLIMBING_NEB
+        hook.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        expected_climbing = torch.tensor([[-3.0, 2.0, 0.0], [-1.0, 4.0, 0.0]])
+        expected_regular = torch.tensor([[-1.1, 5.0, 0.0], [0.9, 6.0, 0.0]])
+        endpoint_rows = (batch.batch_idx == 0) | (batch.batch_idx == 3)
+        torch.testing.assert_close(
+            batch.forces[batch.batch_idx == 1], expected_climbing
+        )
+        torch.testing.assert_close(batch.forces[batch.batch_idx == 2], expected_regular)
+        assert torch.all(batch.forces[endpoint_rows] == 0)
+
     @pytest.mark.parametrize(
         "active_graph_mask",
         [None, [True] * 4, [True, True, False, False]],

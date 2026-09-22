@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, runtime_checkable
 
 import torch
@@ -86,7 +86,15 @@ class SpringContext:
 
 @runtime_checkable
 class SpringConfig(Protocol):
-    """Resolve spring constants for the links in one or more NEB paths."""
+    """Resolve spring constants for the links in one or more NEB paths.
+
+    Custom implementations are runtime-only:
+    :class:`~nvalchemi.dynamics.paths.neb.NEB` accepts them during engine
+    construction, but
+    :meth:`~nvalchemi.dynamics.paths.neb.NEB.to_spec_dict` cannot serialize them.
+    The ``refresh`` stage must remain unchanged for the lifetime of a configured
+    engine.
+    """
 
     refresh: Literal[
         DynamicsStage.ON_ADMISSION,
@@ -120,7 +128,10 @@ class ConstantSpringConfig:
     """
 
     value: float
-    refresh: Literal[DynamicsStage.ON_ADMISSION] = DynamicsStage.ON_ADMISSION
+    refresh: Literal[DynamicsStage.ON_ADMISSION] = field(
+        default=DynamicsStage.ON_ADMISSION,
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         """Normalize and validate the constant spring value."""
