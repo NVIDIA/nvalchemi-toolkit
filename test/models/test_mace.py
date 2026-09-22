@@ -1246,12 +1246,9 @@ def real_wrapper_cpu():
 @pytest.fixture(scope="session")
 def real_derivative_wrapper_cpu():
     """Load the MACE-MP checkpoint in float64 for derivative qualification."""
-    try:
-        return MACEWrapper.from_checkpoint(
-            "small-0b", device=torch.device("cpu"), dtype=torch.float64
-        )
-    except Exception as exc:
-        pytest.skip(f"Could not load MACE derivative checkpoint: {exc}")
+    return MACEWrapper.from_checkpoint(
+        "small-0b", device=torch.device("cpu"), dtype=torch.float64
+    )
 
 
 @pytest.fixture(scope="session")
@@ -1262,15 +1259,12 @@ def real_derivative_wrapper_cueq_cuda():
     )
     if not torch.cuda.is_available():
         pytest.skip("CUDA is required for cuEquivariance derivative qualification")
-    try:
-        return MACEWrapper.from_checkpoint(
-            "small-0b",
-            device=torch.device("cuda"),
-            dtype=torch.float32,
-            enable_cueq=True,
-        )
-    except Exception as exc:
-        pytest.skip(f"Could not load cuEquivariance MACE checkpoint: {exc}")
+    return MACEWrapper.from_checkpoint(
+        "small-0b",
+        device=torch.device("cuda"),
+        dtype=torch.float32,
+        enable_cueq=True,
+    )
 
 
 def _pbc_water_batch_float64() -> Batch:

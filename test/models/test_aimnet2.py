@@ -384,12 +384,9 @@ def real_aimnet2_derivative_wrapper():
     pytest.importorskip("aimnet")
     from nvalchemi.models.aimnet2 import AIMNet2Wrapper
 
-    try:
-        return AIMNet2Wrapper.from_checkpoint(
-            "aimnet2_wb97m_d3_3", device=torch.device("cuda")
-        )
-    except Exception as exc:
-        pytest.skip(f"Could not load AIMNet2 checkpoint: {exc}")
+    return AIMNet2Wrapper.from_checkpoint(
+        "aimnet2_wb97m_d3_3", device=torch.device("cuda")
+    )
 
 
 class TestAIMNet2Derivatives:
