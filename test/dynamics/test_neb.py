@@ -42,6 +42,7 @@ from nvalchemi.dynamics.paths import (
 )
 from nvalchemi.dynamics.paths.hooks import (
     PathDiagnosticsHook,
+    PathEnergyStatsHook,
 )
 from nvalchemi.dynamics.paths.neb.hooks import (
     ClimbingImageSelectionHook,
@@ -523,6 +524,92 @@ class TestNEBConfiguration:
 
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
+
+    def test_shared_path_hooks_match_per_stage_hooks(self) -> None:
+        """Shared status-gated path hooks match per-stage hook pipelines."""
+        strategy = NEB(
+            model=_CompilerFriendlyModel().eval(),
+            fmax=1.0e-12,
+            climbing=ClimbingImageConfig(
+                max_regular_steps=1,
+                max_climbing_steps=2,
+            ),
+        )
+        shared_engine: FusedStage = strategy.build_engine()
+        per_stage_engine: FusedStage = strategy.build_engine()
+
+        per_stage_engine.hooks = [
+            hook
+            for hook in per_stage_engine.hooks
+            if not isinstance(
+                hook,
+                (
+                    PathEnergyStatsHook,
+                    ClimbingImageSelectionHook,
+                    NEBForceHook,
+                ),
+            )
+        ]
+
+        regular_energy_stats = PathEnergyStatsHook()
+        regular_stage = per_stage_engine.sub_stages[0][1]
+        regular_stage.register_hook(regular_energy_stats)
+        regular_stage.register_hook(
+            NEBForceHook(
+                energy_stats_hook=regular_energy_stats,
+                spring=strategy.spring,
+                method=strategy.method,
+                endpoint_mode=strategy.endpoint_mode,
+                fixed_atom_indices=strategy.fixed_atom_indices,
+            )
+        )
+
+        climbing_energy_stats = PathEnergyStatsHook()
+        climbing_stage = per_stage_engine.sub_stages[1][1]
+        climbing_stage.register_hook(climbing_energy_stats)
+        climbing_stage.register_hook(
+            ClimbingImageSelectionHook(energy_stats_hook=climbing_energy_stats)
+        )
+        climbing_stage.register_hook(
+            NEBForceHook(
+                energy_stats_hook=climbing_energy_stats,
+                spring=strategy.spring,
+                method=strategy.method,
+                endpoint_mode=strategy.endpoint_mode,
+                fixed_atom_indices=strategy.fixed_atom_indices,
+            )
+        )
+
+        shared_batch = _bands()
+        per_stage_batch = _bands()
+        shared_batch.positions[1, 1] = 0.5
+        per_stage_batch.positions[1, 1] = 0.5
+
+        compared_fields = (
+            "status",
+            "positions",
+            "velocities",
+            "energy",
+            "forces",
+            "physical_forces",
+            "force_mode",
+            "forward_link_length",
+            "reprime_pending",
+            "n_steps_counter_0",
+            "n_steps_counter_1",
+        )
+        for _ in range(3):
+            shared_engine.step(shared_batch)
+            per_stage_engine.step(per_stage_batch)
+            for field in compared_fields:
+                torch.testing.assert_close(
+                    getattr(shared_batch, field),
+                    getattr(per_stage_batch, field),
+                    msg=lambda message: f"{field} differs: {message}",
+                )
+
+        assert shared_batch.status.unique().tolist() == [1]
+        assert not shared_batch.reprime_pending.any()
 
     def test_shared_path_hooks_match_standalone_dynamics(self) -> None:
         """Shared path hooks match direct use on a standalone optimizer."""
