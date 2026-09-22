@@ -2189,7 +2189,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         active_graph_mask: Bool[torch.Tensor, "B"] | None,
     ) -> None:
         """Publish one detached model output while preserving inactive rows."""
-        source = value.view(target.shape)
+        source = value.view(target.shape).to(dtype=target.dtype)
         if active_graph_mask is None:
             target.copy_(source)
             return

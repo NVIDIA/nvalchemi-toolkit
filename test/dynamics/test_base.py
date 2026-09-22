@@ -518,7 +518,8 @@ class TestBaseDynamics:
         assert dynamics.convergence_hook is hook
 
     def test_compute_publishes_only_active_graph_and_node_rows(self) -> None:
-        """Inactive model-output rows retain their previous batch values."""
+        """Active rows convert model outputs and inactive rows stay unchanged."""
+        self.model.double()
         dynamics = BaseDynamics(self.model)
         batch = create_simple_batch()
         batch.energy.fill_(-11.0)
@@ -528,13 +529,17 @@ class TestBaseDynamics:
 
         outputs = dynamics.compute(batch, active_graph_mask)
 
+        assert outputs["energy"].dtype == torch.float64
+        assert outputs["forces"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        assert batch.forces.dtype == torch.float32
         torch.testing.assert_close(
             batch.energy[active_graph_mask],
-            outputs["energy"][active_graph_mask],
+            outputs["energy"][active_graph_mask].to(batch.energy.dtype),
         )
         torch.testing.assert_close(
             batch.forces[active_node_mask],
-            outputs["forces"][active_node_mask],
+            outputs["forces"][active_node_mask].to(batch.forces.dtype),
         )
         torch.testing.assert_close(
             batch.energy[~active_graph_mask],
