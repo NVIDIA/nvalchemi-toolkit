@@ -190,9 +190,9 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
     driving dynamics on it). Any other container is a fallback with real
     losses: ``sample()`` passes it through untouched, the ``AFTER_GENERATE``
     hooks are skipped, and it cannot feed dynamics stages. Inside the
-    function, a :class:`~tensordict.TensorDict` is a fine intermediate (it
-    survives ``torch.compile``, where arbitrary containers graph-break under
-    ``compile_generate``); convert it to a ``Batch`` before returning.
+    function, a :class:`~tensordict.TensorDict` survives ``torch.compile``
+    where arbitrary containers graph-break under ``compile_generate``;
+    convert it to a ``Batch`` before returning.
     Library-native sampling loops (e.g. PhysicsNeMo diffusion samplers) plug
     in through a thin adapter with this signature.
 

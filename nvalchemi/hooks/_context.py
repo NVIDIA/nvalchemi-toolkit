@@ -189,18 +189,15 @@ class GenerationContext(HookContext):
         call. Drives hook frequency gating.
     sample : Any
         The raw sample for this call, set when the generating function
-        returns and exposed to hooks at ``BEFORE_MAPPING``; the driver
-        re-reads it after that dispatch and hands it to the materialization
-        callable (or returns it as-is when no ``batch_mapping`` is set), and
-        it stays populated through ``AFTER_GENERATE``. A
-        :class:`~tensordict.TensorDict` for tensor-native families; otherwise
-        any container the materialization callable understands.
+        returns and exposed to hooks at ``BEFORE_MAPPING``. The driver
+        re-reads it after that dispatch and returns it: through the
+        ``Batch`` path when it is a :class:`~nvalchemi.data.Batch`, as-is
+        otherwise. It stays populated through ``AFTER_GENERATE``.
     accepted_mask : torch.Tensor | None
         Boolean mask recording which of the call's candidates were accepted,
-        written by filtering hooks. The materialization callable never sees
-        this context; it signals total rejection by returning a zero-graph
-        ``Batch``. ``None`` when acceptance has not been recorded for this
-        dispatch. Mirrors the
+        written by filtering hooks (a generating function signals total
+        rejection by returning a zero-graph ``Batch``). ``None`` when
+        acceptance has not been recorded for this dispatch. Mirrors the
         :attr:`~nvalchemi.hooks.DynamicsContext.converged_mask` convention so
         acceptance-aware reporting and resampling loops have a stable
         channel.
