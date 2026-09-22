@@ -568,6 +568,7 @@ def _prepare_derivative_graph(
                 )
             positions = stored_positions.detach().clone().requires_grad_(True)
             working_batch["positions"] = positions
+            model._copy_derivative_runtime_data(batch, working_batch)
 
             config = model.model_config
             saved_active_outputs = config.active_outputs

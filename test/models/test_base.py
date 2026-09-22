@@ -1038,19 +1038,17 @@ class TestHessianVectorProduct:
 
         assert model.forward_calls == 0
 
-    def test_pipeline_remains_unqualified(self, simple_batch):
+    def test_flat_pipeline_sums_qualified_hvps(self, simple_batch):
         left = _QualifiedQuadraticDerivativeWrapper()
         right = _QualifiedQuadraticDerivativeWrapper()
         pipeline = left + right
+        vector = torch.ones_like(simple_batch.positions)
 
-        with pytest.raises(NotImplementedError, match="PipelineModelWrapper"):
-            pipeline.hessian_vector_product(
-                simple_batch,
-                torch.ones_like(simple_batch.positions),
-            )
+        result = pipeline.hessian_vector_product(simple_batch, vector)
 
-        assert left.forward_calls == 0
-        assert right.forward_calls == 0
+        torch.testing.assert_close(result, 4 * vector)
+        assert left.forward_calls == 1
+        assert right.forward_calls == 1
 
 
 class TestHessianOperator:
@@ -1638,17 +1636,19 @@ class TestDenseHessian:
         model.compute_hessian(batch, strategy="loop")
         assert model.forward_calls == 1
 
-    def test_pipeline_remains_unqualified(self):
+    def test_flat_pipeline_materializes_sum_of_qualified_hessians(self):
         batch = _make_derivative_batch(2)
         left = _QualifiedQuadraticDerivativeWrapper()
         right = _QualifiedQuadraticDerivativeWrapper()
         pipeline = left + right
 
-        with pytest.raises(NotImplementedError, match="PipelineModelWrapper"):
-            pipeline.compute_hessian(batch)
+        result = pipeline.compute_hessian(batch)
 
-        assert left.forward_calls == 0
-        assert right.forward_calls == 0
+        assert result is batch
+        expected = 4 * torch.eye(6).reshape(2, 3, 2, 3).permute(0, 2, 1, 3)
+        torch.testing.assert_close(batch.get_data(0).hessian, expected)
+        assert left.forward_calls == 1
+        assert right.forward_calls == 1
 
 
 # ===========================================================================

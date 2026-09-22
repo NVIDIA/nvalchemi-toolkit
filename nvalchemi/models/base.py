@@ -525,6 +525,27 @@ class BaseModelMixin(abc.ABC):
         """Return the execution mode used for derivative capability checks."""
         return "eager"
 
+    def _copy_derivative_runtime_data(
+        self,
+        source: Batch,
+        working: Batch,
+    ) -> None:
+        """Copy wrapper-owned runtime inputs into a derivative snapshot.
+
+        The structured contents of *source* have already been cloned into
+        *working*. Wrappers that consume derivative-relevant runtime attributes
+        outside normal :class:`Batch` storage may override this hook to copy
+        only those attributes. Implementations must not mutate *source*, replace
+        the prepared position leaf, execute the model, or rebuild neighbors.
+
+        Parameters
+        ----------
+        source : Batch
+            Caller-owned batch being snapshotted.
+        working : Batch
+            Independent derivative batch to receive runtime inputs.
+        """
+
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Reject second-order derivatives until a wrapper is qualified.
 

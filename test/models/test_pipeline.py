@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import copy
 from collections import OrderedDict
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -2554,3 +2555,889 @@ class TestAutoGradGroupHybridForces:
         direct_stress = 0.5 * torch.eye(3).unsqueeze(0)
         expected = out_autograd["stress"] + direct_stress
         torch.testing.assert_close(out_hybrid["stress"], expected, atol=1e-5, rtol=1e-5)
+
+
+# ===========================================================================
+# Pipeline second-order derivative tests
+# ===========================================================================
+
+
+class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
+    """Small qualified position-energy wrapper for pipeline derivatives."""
+
+    def __init__(self, scale: float = 1.0, output_kind: str = "normal") -> None:
+        super().__init__()
+        self.scale = scale
+        self.output_kind = output_kind
+        self.forward_calls = 0
+        self.derivative_mode = "eager"
+        self.seen_active_outputs = None
+        self.seen_gradient_keys = None
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def _validate_derivative_request(self, request) -> None:
+        if (
+            request.execution == "local"
+            and request.mode == "eager"
+            and (request.operation == "hvp" or request.strategy in {"loop", "vmap"})
+        ):
+            return
+        super()._validate_derivative_request(request)
+
+    def _derivative_execution_mode(self):
+        return self.derivative_mode
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        self.forward_calls += 1
+        self.seen_active_outputs = set(self.model_config.active_outputs)
+        self.seen_gradient_keys = set(self.model_config.gradient_keys)
+        if self.output_kind == "raise":
+            raise LookupError("injected pipeline derivative failure")
+        if self.output_kind == "missing":
+            return OrderedDict()
+        positions = data.positions
+        node_energy = 0.5 * self.scale * positions.square().sum(dim=-1, keepdim=True)
+        energy = torch.zeros(
+            data.num_graphs,
+            1,
+            dtype=positions.dtype,
+            device=positions.device,
+        ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
+        return OrderedDict(energy=energy)
+
+
+class _UnqualifiedPipelineQuadratic(_QualifiedPipelineQuadratic):
+    """Qualified-looking test model that retains the base rejection."""
+
+    def _validate_derivative_request(self, request) -> None:
+        BaseModelMixin._validate_derivative_request(self, request)
+
+
+class _LoopOnlyPipelineQuadratic(_QualifiedPipelineQuadratic):
+    """Qualified test wrapper that rejects vectorized dense rows."""
+
+    def _validate_derivative_request(self, request) -> None:
+        if request.operation == "dense_hessian" and request.strategy == "vmap":
+            raise NotImplementedError("test child supports dense strategy='loop' only")
+        super()._validate_derivative_request(request)
+
+
+class _NonlinearChargeProducer(nn.Module, BaseModelMixin):
+    """Produce position-dependent wired values for a nonlinear chain."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.forward_calls = 0
+        self.output_kind = "normal"
+        self.seen_active_outputs = None
+        self.seen_gradient_keys = None
+        self.model_config = ModelConfig(
+            outputs=frozenset({"charges"}),
+            autograd_inputs=frozenset({"positions"}),
+            active_outputs={"charges"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def _validate_derivative_request(self, request) -> None:
+        if (
+            request.execution == "local"
+            and request.mode == "eager"
+            and (request.operation == "hvp" or request.strategy in {"loop", "vmap"})
+        ):
+            return
+        super()._validate_derivative_request(request)
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        self.forward_calls += 1
+        self.seen_active_outputs = set(self.model_config.active_outputs)
+        self.seen_gradient_keys = set(self.model_config.gradient_keys)
+        if self.output_kind == "missing":
+            return OrderedDict()
+        return OrderedDict(charges=data.positions.sin())
+
+
+class _NonlinearChargeConsumer(_QualifiedPipelineQuadratic):
+    """Consume wired charges while retaining a direct position term."""
+
+    def __init__(self, output_kind: str = "normal") -> None:
+        super().__init__(output_kind=output_kind)
+        self.last_data = None
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            required_inputs=frozenset({"node_charges"}),
+            autograd_inputs=frozenset({"positions"}),
+            active_outputs={"energy"},
+        )
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        self.forward_calls += 1
+        self.last_data = data
+        self.seen_active_outputs = set(self.model_config.active_outputs)
+        self.seen_gradient_keys = set(self.model_config.gradient_keys)
+        if self.output_kind == "raise":
+            raise LookupError("injected pipeline derivative failure")
+        if self.output_kind == "missing":
+            return OrderedDict()
+        charges = getattr(data, "node_charges")
+        node_energy = charges.pow(3).sum(dim=-1, keepdim=True)
+        node_energy += 0.25 * data.positions.square().sum(dim=-1, keepdim=True)
+        energy = torch.zeros(
+            data.num_graphs,
+            1,
+            dtype=data.positions.dtype,
+            device=data.positions.device,
+        ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
+        return OrderedDict(energy=energy)
+
+
+class _CountingForceOnlyModel(MockForceOnlyModel):
+    """Force-only model whose invocation is observable by topology tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.forward_calls = 0
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        self.forward_calls += 1
+        return super().forward(data, **kwargs)
+
+
+class _QualifiedNeighborEnergy(_QualifiedPipelineQuadratic):
+    """Qualified energy wrapper that records MATRIX/COO runtime state."""
+
+    def __init__(self, neighbor_format: NeighborListFormat) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_inputs=frozenset({"positions"}),
+            neighbor_config=NeighborConfig(
+                cutoff=10.0 if neighbor_format == NeighborListFormat.MATRIX else 4.0,
+                format=neighbor_format,
+            ),
+            active_outputs={"energy"},
+        )
+        self.captured_neighbor_matrix = None
+        self.captured_neighbor_matrix_shifts = None
+        self.captured_neighbor_list = None
+        self.captured_neighbor_list_shifts = None
+        self.runtime_neighbor_matrix = None
+        self.runtime_neighbor_list = None
+        self.captured_alias = False
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        sources = data.__dict__.get(_PIPELINE_NEIGHBOR_SOURCES_ATTR)
+        if sources and getattr(data, "neighbor_matrix", None) is not None:
+            self.captured_alias = data.neighbor_matrix is sources[0].neighbor_matrix
+        matrix = getattr(data, "neighbor_matrix", None)
+        neighbor_list = getattr(data, "neighbor_list", None)
+        matrix_shifts = getattr(data, "neighbor_matrix_shifts", None)
+        list_shifts = getattr(data, "neighbor_list_shifts", None)
+        self.runtime_neighbor_matrix = matrix
+        self.runtime_neighbor_list = neighbor_list
+        self.captured_neighbor_matrix = matrix.clone() if matrix is not None else None
+        self.captured_neighbor_matrix_shifts = (
+            matrix_shifts.clone() if matrix_shifts is not None else None
+        )
+        self.captured_neighbor_list = (
+            neighbor_list.clone() if neighbor_list is not None else None
+        )
+        self.captured_neighbor_list_shifts = (
+            list_shifts.clone() if list_shifts is not None else None
+        )
+        output = super().forward(data, **kwargs)
+        if matrix is not None:
+            topology_weight = data.num_neighbors.sum().to(data.positions) + 1
+        else:
+            topology_weight = data.positions.new_tensor(neighbor_list.shape[0] + 1)
+        output["energy"] = output["energy"] * topology_weight
+        return output
+
+
+def _make_pipeline_derivative_batch(
+    *sizes: int,
+    dtype: torch.dtype = torch.float64,
+) -> Batch:
+    """Build a deterministic mixed-size batch for pipeline derivatives."""
+    if not sizes:
+        sizes = (2,)
+    return Batch.from_data_list(
+        [
+            AtomicData(
+                positions=(
+                    torch.arange(size * 3, dtype=dtype).reshape(size, 3) / 7.0 - 0.4
+                ),
+                atomic_numbers=torch.ones(size, dtype=torch.long),
+            )
+            for size in sizes
+        ]
+    )
+
+
+def _make_one_system_derivative_batch() -> Batch:
+    """Build a small one-system batch for explicit position derivatives."""
+    return _make_pipeline_derivative_batch(2)
+
+
+def _nonlinear_chain_expected_hvp(
+    positions: torch.Tensor, vector: torch.Tensor, *, frozen_charges: bool
+) -> torch.Tensor:
+    """Compute the explicit autograd reference for the wired chain."""
+    leaf = positions.detach().clone().requires_grad_(True)
+    charges = leaf.sin()
+    if frozen_charges:
+        charges = charges.detach()
+    energy = charges.pow(3).sum() + 0.25 * leaf.square().sum()
+    gradient = torch.autograd.grad(energy, leaf, create_graph=True)[0]
+    return torch.autograd.grad(gradient, leaf, grad_outputs=vector)[0]
+
+
+class TestPipelineDerivatives:
+    """Second-order pipeline behavior through qualified synthetic wrappers."""
+
+    def test_additive_hvp_prepared_and_dense_strategies(self):
+        batch = _make_pipeline_derivative_batch(1, 3)
+        left = _QualifiedPipelineQuadratic()
+        right = _QualifiedPipelineQuadratic(scale=2.0)
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[left], use_autograd=True),
+                PipelineGroup(steps=[right], use_autograd=True),
+            ]
+        )
+        vector = torch.randn_like(batch.positions)
+
+        hvp = pipeline.hessian_vector_product(batch, vector)
+        torch.testing.assert_close(hvp, 3.0 * vector)
+
+        with pipeline.prepare_hessian(batch) as operator:
+            torch.testing.assert_close(operator.matvec(vector), hvp)
+            torch.testing.assert_close(operator.matvec(-vector), -hvp)
+        assert left.forward_calls == 2
+        assert right.forward_calls == 2
+
+        loop_batch = batch.clone()
+        vmap_batch = batch.clone()
+        pipeline.compute_hessian(loop_batch, strategy="loop")
+        pipeline.compute_hessian(vmap_batch, strategy="vmap")
+        torch.testing.assert_close(loop_batch.hessian, vmap_batch.hessian)
+        for index, size in enumerate(batch.num_nodes_list):
+            expected = 3.0 * torch.eye(3 * size, dtype=batch.positions.dtype).reshape(
+                size, 3, size, 3
+            ).permute(0, 2, 1, 3)
+            torch.testing.assert_close(loop_batch.get_data(index).hessian, expected)
+
+        start = 0
+        for index, size in enumerate(batch.num_nodes_list):
+            stop = start + size
+            contraction = torch.einsum(
+                "abij,bj->ai",
+                vmap_batch.get_data(index).hessian,
+                vector[start:stop],
+            )
+            torch.testing.assert_close(contraction, hvp[start:stop])
+            start = stop
+
+    def test_nonlinear_wired_chain_matches_autograd_not_frozen_charges(self):
+        batch = _make_one_system_derivative_batch()
+        producer = _NonlinearChargeProducer()
+        consumer = _NonlinearChargeConsumer()
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(producer, wire={"charges": "node_charges"}),
+                        consumer,
+                    ],
+                    use_autograd=True,
+                )
+            ]
+        )
+        vector = torch.randn_like(batch.positions)
+
+        actual = pipeline.hessian_vector_product(batch, vector)
+        expected = _nonlinear_chain_expected_hvp(
+            batch.positions, vector, frozen_charges=False
+        )
+        frozen = _nonlinear_chain_expected_hvp(
+            batch.positions, vector, frozen_charges=True
+        )
+        torch.testing.assert_close(actual, expected)
+        assert not torch.allclose(actual, frozen)
+
+        loop_batch = batch.clone()
+        vmap_batch = batch.clone()
+        pipeline.compute_hessian(loop_batch, strategy="loop", row_chunk_size=2)
+        pipeline.compute_hessian(vmap_batch, strategy="vmap", row_chunk_size=3)
+        torch.testing.assert_close(
+            loop_batch.hessian,
+            vmap_batch.hessian,
+            rtol=1e-9,
+            atol=1e-10,
+        )
+        dense = vmap_batch.get_data(0).hessian
+        contraction = torch.einsum("abij,bj->ai", dense, vector)
+        torch.testing.assert_close(contraction, actual, rtol=1e-9, atol=1e-10)
+
+        assert producer.seen_active_outputs == {"charges"}
+        assert producer.seen_gradient_keys == {"positions"}
+        assert consumer.seen_active_outputs == {"energy"}
+        assert consumer.seen_gradient_keys == {"positions"}
+
+    def test_custom_derivative_and_force_only_step_are_excluded_from_hvp(self):
+        batch = _make_one_system_derivative_batch()
+        derivative_calls = []
+
+        def derivative_fn(energy, data, requested):
+            derivative_calls.append(set(requested))
+            return {"forces": torch.zeros_like(data.positions)}
+
+        energy = _QualifiedPipelineQuadratic()
+        force_only = _CountingForceOnlyModel()
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[energy], use_autograd=True, derivative_fn=derivative_fn
+                ),
+                PipelineGroup(steps=[force_only]),
+            ]
+        )
+        pipeline.model_config.active_outputs = {"energy", "forces"}
+        pipeline(batch)
+        assert derivative_calls == [{"forces"}]
+        assert force_only.forward_calls == 1
+
+        derivative_calls.clear()
+        force_only.forward_calls = 0
+        vector = torch.randn_like(batch.positions)
+        actual = pipeline.hessian_vector_product(batch, vector)
+        torch.testing.assert_close(actual, vector)
+        assert derivative_calls == []
+        assert force_only.forward_calls == 0
+
+    def test_failure_restores_runtime_writes_and_config_identity(self):
+        batch = _make_one_system_derivative_batch()
+        producer = _NonlinearChargeProducer()
+        consumer = _NonlinearChargeConsumer(output_kind="raise")
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(producer, wire={"charges": "node_charges"}),
+                        consumer,
+                    ],
+                    use_autograd=True,
+                )
+            ]
+        )
+        pipeline_active = pipeline.model_config.active_outputs
+        pipeline_gradient = pipeline.model_config.gradient_keys
+        producer_active = producer.model_config.active_outputs
+        producer_gradient = producer.model_config.gradient_keys
+        consumer_active = consumer.model_config.active_outputs
+        consumer_gradient = consumer.model_config.gradient_keys
+
+        with pytest.raises(LookupError, match="injected pipeline derivative failure"):
+            pipeline.prepare_hessian(batch)
+
+        assert "node_charges" not in batch.__dict__
+        assert consumer.last_data is not None
+        assert "node_charges" not in consumer.last_data.__dict__
+        assert pipeline.model_config.active_outputs is pipeline_active
+        assert pipeline.model_config.gradient_keys is pipeline_gradient
+        assert producer.model_config.active_outputs is producer_active
+        assert producer.model_config.gradient_keys is producer_gradient
+        assert consumer.model_config.active_outputs is consumer_active
+        assert consumer.model_config.gradient_keys is consumer_gradient
+
+        with pytest.raises(LookupError, match="injected pipeline derivative failure"):
+            pipeline.compute_hessian(batch, strategy="vmap")
+        assert "hessian" not in batch
+
+    def test_success_restores_exact_configuration_objects(self):
+        batch = _make_one_system_derivative_batch()
+        producer = _NonlinearChargeProducer()
+        consumer = _NonlinearChargeConsumer()
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(producer, wire={"charges": "node_charges"}),
+                        consumer,
+                    ]
+                )
+            ]
+        )
+        pipeline_active = {"energy", "sentinel"}
+        pipeline_gradient = {"cell"}
+        producer_active = {"charges", "sentinel"}
+        producer_gradient = {"cell"}
+        consumer_active = {"energy", "sentinel"}
+        consumer_gradient = {"cell"}
+        pipeline.model_config.active_outputs = pipeline_active
+        pipeline.model_config.gradient_keys = pipeline_gradient
+        producer.model_config.active_outputs = producer_active
+        producer.model_config.gradient_keys = producer_gradient
+        consumer.model_config.active_outputs = consumer_active
+        consumer.model_config.gradient_keys = consumer_gradient
+
+        pipeline.hessian_vector_product(batch, torch.randn_like(batch.positions))
+
+        assert pipeline.model_config.active_outputs is pipeline_active
+        assert pipeline.model_config.gradient_keys is pipeline_gradient
+        assert producer.model_config.active_outputs is producer_active
+        assert producer.model_config.gradient_keys is producer_gradient
+        assert consumer.model_config.active_outputs is consumer_active
+        assert consumer.model_config.gradient_keys is consumer_gradient
+        assert producer.seen_active_outputs == {"charges"}
+        assert consumer.seen_active_outputs == {"energy"}
+
+
+class TestPipelineDerivativeTopology:
+    """Preflight and graph-topology contracts for pipeline derivatives."""
+
+    def test_unqualified_child_is_rejected_before_forward(self):
+        batch = _make_one_system_derivative_batch()
+        model = _UnqualifiedPipelineQuadratic()
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+
+        with pytest.raises(NotImplementedError, match="has not been qualified"):
+            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert model.forward_calls == 0
+
+    @pytest.mark.parametrize(
+        "context", ["pipeline_distributed", "child_distributed", "compiled"]
+    )
+    def test_contextual_capability_rejection_precedes_all_forwards(self, context):
+        batch = _make_one_system_derivative_batch()
+        earlier = _QualifiedPipelineQuadratic()
+        rejected = _QualifiedPipelineQuadratic()
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[earlier, rejected], use_autograd=True)]
+        )
+        if context == "pipeline_distributed":
+            pipeline._dist_ctx = object()
+        elif context == "child_distributed":
+            rejected._dist_ctx = object()
+        else:
+            rejected.derivative_mode = "compiled"
+
+        with pytest.raises(NotImplementedError, match=context.split("_")[-1]):
+            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+
+        assert earlier.forward_calls == 0
+        assert rejected.forward_calls == 0
+
+    def test_strategy_specific_rejection_does_not_fall_back(self):
+        batch = _make_one_system_derivative_batch()
+        earlier = _QualifiedPipelineQuadratic()
+        loop_only = _LoopOnlyPipelineQuadratic()
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[earlier, loop_only], use_autograd=True)]
+        )
+
+        with pytest.raises(NotImplementedError, match="strategy='loop' only"):
+            pipeline.compute_hessian(batch, strategy="vmap")
+        assert earlier.forward_calls == 0
+        assert loop_only.forward_calls == 0
+
+        pipeline.compute_hessian(batch, strategy="loop")
+        assert earlier.forward_calls == 1
+        assert loop_only.forward_calls == 1
+
+    @pytest.mark.parametrize("operation", ["hvp", "loop", "vmap"])
+    def test_no_energy_pipeline_is_rejected_before_forward(self, operation):
+        batch = _make_one_system_derivative_batch()
+        force_only = _CountingForceOnlyModel()
+        pipeline = PipelineModelWrapper(groups=[PipelineGroup(steps=[force_only])])
+
+        with pytest.raises(NotImplementedError, match="no energy-producing step"):
+            if operation == "hvp":
+                pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+            else:
+                pipeline.compute_hessian(batch, strategy=operation)
+        assert force_only.forward_calls == 0
+
+    def test_nested_pipeline_is_rejected_before_forward(self):
+        batch = _make_one_system_derivative_batch()
+        inner_model = _QualifiedPipelineQuadratic()
+        inner = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[inner_model], use_autograd=True)]
+        )
+        outer = PipelineModelWrapper(groups=[PipelineGroup(steps=[inner])])
+
+        with pytest.raises(NotImplementedError, match="nested PipelineModelWrapper"):
+            outer.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert inner_model.forward_calls == 0
+
+        ordinary = outer(batch)
+        assert ordinary["energy"] is not None
+        assert inner_model.forward_calls == 1
+
+        for strategy in ("loop", "vmap"):
+            with pytest.raises(
+                NotImplementedError, match="nested PipelineModelWrapper"
+            ):
+                outer.compute_hessian(batch.clone(), strategy=strategy)
+        assert inner_model.forward_calls == 1
+
+    def test_missing_required_output_is_runtime_error(self):
+        batch = _make_one_system_derivative_batch()
+        model = _QualifiedPipelineQuadratic(output_kind="missing")
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+
+        with pytest.raises(RuntimeError, match="did not return required output"):
+            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert model.forward_calls == 1
+
+    def test_missing_wired_output_is_runtime_error(self):
+        batch = _make_one_system_derivative_batch()
+        producer = _NonlinearChargeProducer()
+        producer.output_kind = "missing"
+        consumer = _NonlinearChargeConsumer()
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(producer, wire={"charges": "node_charges"}),
+                        consumer,
+                    ]
+                )
+            ]
+        )
+
+        with pytest.raises(RuntimeError, match="charges"):
+            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert producer.forward_calls == 1
+        assert consumer.forward_calls == 0
+
+    @pytest.mark.parametrize("operation", ["hvp", "loop", "vmap"])
+    def test_later_dftd3_rejects_before_all_forwards(self, operation, monkeypatch):
+        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+        params = MagicMock(
+            rcov=torch.zeros(100),
+            r4r2=torch.zeros(100),
+            c6ab=torch.zeros(100, 100, 5, 3),
+            cn_ref=torch.zeros(100, 5),
+        )
+        with patch("nvalchemi.models.dftd3.load_dftd3_params", return_value=params):
+            dftd3 = DFTD3ModelWrapper(a1=0.4, a2=4.4, s8=0.8)
+        earlier = _QualifiedPipelineQuadratic()
+        monkeypatch.setattr(
+            dftd3,
+            "forward",
+            lambda *_args, **_kwargs: pytest.fail("DFT-D3 forward must not run"),
+        )
+        pipeline = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[earlier], use_autograd=True),
+                PipelineGroup(steps=[dftd3]),
+            ]
+        )
+        batch = _make_one_system_derivative_batch()
+
+        with pytest.raises(NotImplementedError, match="analytical Warp"):
+            if operation == "hvp":
+                pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+            else:
+                pipeline.compute_hessian(batch, strategy=operation)
+
+        assert earlier.forward_calls == 0
+
+    @pytest.mark.parametrize("wrapper_name", ["ewald", "pme"])
+    @pytest.mark.parametrize(
+        ("configuration", "reason"),
+        [("hybrid", "hybrid_forces=False"), ("slab", "slab_correction=True")],
+    )
+    def test_unsupported_coulomb_child_rejects_before_forward(
+        self, wrapper_name, configuration, reason, monkeypatch
+    ):
+        if wrapper_name == "ewald":
+            from nvalchemi.models.ewald import EwaldModelWrapper as Wrapper
+        else:
+            from nvalchemi.models.pme import PMEModelWrapper as Wrapper
+
+        child = Wrapper(
+            cutoff=6.0,
+            hybrid_forces=configuration == "hybrid",
+            slab_correction=configuration == "slab",
+        )
+        monkeypatch.setattr(
+            child,
+            "forward",
+            lambda *_args, **_kwargs: pytest.fail("Coulomb forward must not run"),
+        )
+        earlier = _QualifiedPipelineQuadratic()
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[earlier, child], use_autograd=True)]
+        )
+        batch = _make_one_system_derivative_batch()
+
+        with pytest.raises(NotImplementedError, match=reason):
+            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert earlier.forward_calls == 0
+
+    def test_prepared_operator_isolated_from_caller_positions_and_neighbors(self):
+        batch = _make_neighbor_batch()
+        matrix = _QualifiedNeighborEnergy(NeighborListFormat.MATRIX)
+        coo = _QualifiedNeighborEnergy(NeighborListFormat.COO)
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[matrix, coo], use_autograd=True)],
+            neighbor_adaptation="always",
+        )
+        source = _NeighborSourceData(
+            source_id=0,
+            config=pipeline._neighbor_sources[0].config,
+            neighbor_matrix=batch.neighbor_matrix,
+            num_neighbors=batch.num_neighbors,
+            neighbor_matrix_shifts=batch.neighbor_matrix_shifts,
+        )
+        batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = (source,)
+        original_matrix = batch.neighbor_matrix.clone()
+        vector = torch.randn_like(batch.positions)
+
+        with pipeline.prepare_hessian(batch) as operator:
+            first = operator.matvec(vector)
+            batch.positions.add_(0.5)
+            batch.neighbor_matrix[0, 0] = 99
+            batch.num_neighbors.zero_()
+            second = operator.matvec(vector)
+
+        torch.testing.assert_close(second, first)
+        torch.testing.assert_close(matrix.captured_neighbor_matrix, original_matrix)
+        torch.testing.assert_close(matrix.runtime_neighbor_matrix, original_matrix)
+        assert (
+            matrix.runtime_neighbor_matrix.untyped_storage().data_ptr()
+            != batch.neighbor_matrix.untyped_storage().data_ptr()
+        )
+        assert matrix.captured_alias is True
+        assert coo.captured_neighbor_list is not None
+        assert coo.captured_neighbor_list.shape[1] == 2
+
+    def test_distinct_matrix_and_coo_sources_are_copied_without_rebuilding(self):
+        batch = _make_neighbor_batch()
+        matrix = _QualifiedNeighborEnergy(NeighborListFormat.MATRIX)
+        coo = _QualifiedNeighborEnergy(NeighborListFormat.COO)
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[matrix, coo], use_autograd=True)],
+            neighbor_adaptation="never",
+        )
+        matrix_values = batch.neighbor_matrix.clone()
+        matrix_values[0, 1:] = -1
+        matrix_counts = batch.num_neighbors.clone()
+        matrix_counts[0] = 1
+        matrix_shifts = torch.arange(
+            matrix_values.numel() * 3, dtype=torch.int32
+        ).reshape(*matrix_values.shape, 3)
+        coo_values = torch.tensor([[0, 1], [1, 0], [2, 3]], dtype=torch.long)
+        edge_ptr = torch.tensor([0, 3], dtype=torch.long)
+        coo_shifts = torch.tensor([[1, 0, 0], [-1, 0, 0], [0, 1, 0]], dtype=torch.int32)
+        matrix_source = _NeighborSourceData(
+            source_id=0,
+            config=pipeline._neighbor_sources[0].config,
+            neighbor_matrix=matrix_values,
+            num_neighbors=matrix_counts,
+            neighbor_matrix_shifts=matrix_shifts,
+        )
+        coo_source = _NeighborSourceData(
+            source_id=1,
+            config=pipeline._neighbor_sources[1].config,
+            neighbor_list=coo_values,
+            edge_ptr=edge_ptr,
+            neighbor_list_shifts=coo_shifts,
+        )
+        batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = (
+            matrix_source,
+            coo_source,
+        )
+        batch.__dict__["neighbor_matrix"] = matrix_values
+        batch.__dict__["num_neighbors"] = matrix_counts
+        batch.__dict__["neighbor_matrix_shifts"] = matrix_shifts
+        batch.__dict__["_neighbor_list_cutoff"] = 10.0
+
+        vector = torch.randn_like(batch.positions)
+        result = pipeline.hessian_vector_product(batch, vector)
+
+        torch.testing.assert_close(matrix.captured_neighbor_matrix, matrix_values)
+        torch.testing.assert_close(
+            matrix.captured_neighbor_matrix_shifts, matrix_shifts
+        )
+        torch.testing.assert_close(coo.captured_neighbor_list, coo_values)
+        torch.testing.assert_close(coo.captured_neighbor_list_shifts, coo_shifts)
+        assert matrix.captured_alias is True
+        torch.testing.assert_close(result, 15 * vector)
+
+    def test_single_source_runtime_shadows_work_without_source_records(self):
+        batch = _make_neighbor_batch()
+        matrix = _QualifiedNeighborEnergy(NeighborListFormat.MATRIX)
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[matrix], use_autograd=True)]
+        )
+        assert _PIPELINE_NEIGHBOR_SOURCES_ATTR not in batch.__dict__
+
+        vector = torch.randn_like(batch.positions)
+        result = pipeline.hessian_vector_product(batch, vector)
+
+        assert torch.isfinite(result).all()
+        torch.testing.assert_close(
+            matrix.captured_neighbor_matrix,
+            batch.neighbor_matrix,
+        )
+        torch.testing.assert_close(result, 13 * vector)
+
+
+@pytest.fixture(scope="module")
+def real_aimnet2_pipeline_derivative_wrapper():
+    """Load the real CUDA AIMNet2 checkpoint for connected-charge tests."""
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA required for connected AIMNet2 pipeline qualification")
+    pytest.importorskip("aimnet")
+    from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+    try:
+        wrapper = AIMNet2Wrapper.from_checkpoint(
+            "aimnet2_wb97m_d3_3",
+            device=torch.device("cuda"),
+        )
+    except Exception as exc:
+        pytest.skip(f"Could not load AIMNet2 checkpoint: {exc}")
+    wrapper.eval()
+    return wrapper
+
+
+def _make_periodic_water_pipeline_batch() -> Batch:
+    """Build the small periodic water system used for CUDA qualification."""
+    data = AtomicData(
+        positions=torch.tensor(
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+            dtype=torch.float32,
+        ),
+        atomic_numbers=torch.tensor([8, 1, 1], dtype=torch.long),
+        charge=torch.zeros(1, 1),
+        cell=torch.eye(3).unsqueeze(0) * 15.0,
+        pbc=torch.tensor([[True, True, True]]),
+    )
+    return Batch.from_data_list([data], device="cuda")
+
+
+class TestAIMNetCoulombPipelineDerivatives:
+    """Real connected AIMNet2 charge response through Ewald and PME."""
+
+    @pytest.mark.parametrize("coulomb_kind", ["ewald", "pme"])
+    def test_connected_hvp_dense_and_fixed_topology_force_difference(
+        self,
+        coulomb_kind,
+        real_aimnet2_pipeline_derivative_wrapper,
+    ):
+        pytest.importorskip("nvalchemiops")
+        if coulomb_kind == "ewald":
+            from nvalchemi.models.ewald import EwaldModelWrapper as CoulombWrapper
+        else:
+            from nvalchemi.models.pme import PMEModelWrapper as CoulombWrapper
+        from nvalchemi.neighbors import compute_neighbors
+
+        aimnet = real_aimnet2_pipeline_derivative_wrapper
+        coulomb = CoulombWrapper(
+            cutoff=8.0,
+            hybrid_forces=False,
+            slab_correction=False,
+        ).to(device="cuda")
+        coulomb.eval()
+        pipeline = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[aimnet, coulomb], use_autograd=True)],
+            neighbor_adaptation="always",
+        ).eval()
+        batch = _make_periodic_water_pipeline_batch()
+        compute_neighbors(batch, config=pipeline.model_config.neighbor_config)
+        original_batch = {
+            key: value.detach().clone()
+            for key, value in batch
+            if key
+            in {
+                "positions",
+                "charge",
+                "cell",
+                "neighbor_matrix",
+                "num_neighbors",
+                "neighbor_matrix_shifts",
+            }
+        }
+        pipeline_active = pipeline.model_config.active_outputs
+        pipeline_gradient = pipeline.model_config.gradient_keys
+        aimnet_active = aimnet.model_config.active_outputs
+        aimnet_gradient = aimnet.model_config.gradient_keys
+        coulomb_active = coulomb.model_config.active_outputs
+        coulomb_gradient = coulomb.model_config.gradient_keys
+        torch.manual_seed(31)
+        vector = torch.randn_like(batch.positions)
+        vector /= vector.norm()
+
+        hvp = pipeline.hessian_vector_product(batch, vector)
+
+        eps = 2e-3
+        plus = batch.clone()
+        minus = batch.clone()
+        plus.positions = batch.positions + eps * vector
+        minus.positions = batch.positions - eps * vector
+        requested = {"energy", "forces"}
+        pipeline.model_config.active_outputs = requested
+        try:
+            force_plus = pipeline(plus)["forces"].detach()
+            force_minus = pipeline(minus)["forces"].detach()
+        finally:
+            pipeline.model_config.active_outputs = pipeline_active
+        finite_difference = -(force_plus - force_minus) / (2 * eps)
+        torch.testing.assert_close(
+            hvp,
+            finite_difference,
+            rtol=3e-2,
+            atol=5e-3,
+        )
+
+        dense_batch = batch.clone()
+        pipeline.compute_hessian(
+            dense_batch,
+            strategy="vmap",
+            row_chunk_size=3,
+        )
+        dense = dense_batch.get_data(0).hessian
+        contraction = torch.einsum("abij,bj->ai", dense, vector)
+        torch.testing.assert_close(contraction, hvp, rtol=2e-2, atol=2e-3)
+        torch.testing.assert_close(
+            dense,
+            dense.permute(1, 0, 3, 2),
+            rtol=2e-2,
+            atol=2e-3,
+        )
+
+        for key, value in original_batch.items():
+            torch.testing.assert_close(batch[key], value)
+        assert "charges" not in batch.__dict__
+        assert pipeline.model_config.active_outputs is pipeline_active
+        assert pipeline.model_config.gradient_keys is pipeline_gradient
+        assert aimnet.model_config.active_outputs is aimnet_active
+        assert aimnet.model_config.gradient_keys is aimnet_gradient
+        assert coulomb.model_config.active_outputs is coulomb_active
+        assert coulomb.model_config.gradient_keys is coulomb_gradient
