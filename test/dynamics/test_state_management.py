@@ -906,8 +906,8 @@ class TestFusedStageStateInit:
 
         saved = first._save_state_fields()
         wrong_cardinality_mask = torch.ones(3, dtype=torch.bool)
-        with pytest.raises(RuntimeError, match="state=2, graphs=3"):
-            first._restore_unmasked_state(saved, wrong_cardinality_mask)
+        with pytest.raises(RuntimeError, match="state=2, updates=3"):
+            first._restore_unmasked_state(batch, saved, wrong_cardinality_mask)
 
 
 # ---------------------------------------------------------------------------
