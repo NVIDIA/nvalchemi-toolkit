@@ -32,7 +32,6 @@ Core classes
 
    GeneratingFunction
    ConditionFunction
-   MaterializationFunction
    GenerationStage
    GenerationContext
    GenerationPipeline
