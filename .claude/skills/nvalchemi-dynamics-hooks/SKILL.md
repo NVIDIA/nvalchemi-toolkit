@@ -125,7 +125,11 @@ fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
 `AFTER_*` hooks run after it. Every hook receives `ctx.active_graph_mask` for
 the graphs participating at that boundary. Fused-level masks span all
 participating sub-stages; sub-stage masks are further restricted to graphs
-owned by that sub-stage.
+owned by that sub-stage. The shared model forward can evaluate the whole batch,
+but publication back to the batch uses the fused-level active mask. Graph-,
+atom-, and edge-level rows for inactive or graduated graphs retain their prior
+values. Mutating sub-stage hooks must then restrict their own writes to the
+sub-stage mask so they do not overwrite another stage's rows.
 
 During a force-reprime iteration, a graph participates in the step and shared
 compute but skips both integrator updates. Therefore:

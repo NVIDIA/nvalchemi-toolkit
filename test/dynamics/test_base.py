@@ -517,6 +517,34 @@ class TestBaseDynamics:
         )
         assert dynamics.convergence_hook is hook
 
+    def test_compute_publishes_only_active_graph_and_node_rows(self) -> None:
+        """Inactive model-output rows retain their previous batch values."""
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+        batch.energy.fill_(-11.0)
+        batch.forces.fill_(-13.0)
+        active_graph_mask = torch.tensor([True, False])
+        active_node_mask = active_graph_mask[batch.batch_idx]
+
+        outputs = dynamics.compute(batch, active_graph_mask)
+
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            outputs["energy"][active_graph_mask],
+        )
+        torch.testing.assert_close(
+            batch.forces[active_node_mask],
+            outputs["forces"][active_node_mask],
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -11.0),
+        )
+        torch.testing.assert_close(
+            batch.forces[~active_node_mask],
+            torch.full_like(batch.forces[~active_node_mask], -13.0),
+        )
+
     def test_compute_restores_requires_grad_on_autograd_inputs(self) -> None:
         """Verify compute() restores requires_grad on positions after forwarding.
 

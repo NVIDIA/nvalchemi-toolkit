@@ -2028,9 +2028,12 @@ class TestFusedStageSubstageHooks:
 
         original_compute = fused.compute
 
-        def recording_compute(batch: Batch) -> Any:
+        def recording_compute(
+            batch: Batch,
+            active_graph_mask: torch.Tensor | None = None,
+        ) -> Any:
             events.append("compute")
-            return original_compute(batch)
+            return original_compute(batch, active_graph_mask)
 
         with patch.object(
             fused, "compute", side_effect=recording_compute
@@ -2055,6 +2058,25 @@ class TestFusedStageSubstageHooks:
             assert hook.active_masks[0].tolist() == [True, False, False]
         for hook in (substage1_before, substage1_after):
             assert hook.active_masks[0].tolist() == [False, True, False]
+
+    def test_shared_compute_preserves_graduated_model_outputs(self) -> None:
+        """Fused shared forwards do not publish into globally inactive rows."""
+        model = CompilerFriendlyModel()
+        dynamics0 = _CompileNoOpDynamics(model=model)
+        dynamics1 = _CompileNoOpDynamics(model=model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 1, fused.exit_status])
+        batch.forces[2].fill_(-13.0)
+        batch.energy[2].fill_(-11.0)
+
+        fused.step(batch)
+
+        torch.testing.assert_close(batch.forces[2], torch.full((3,), -13.0))
+        torch.testing.assert_close(batch.energy[2], torch.full((1,), -11.0))
+        assert not torch.equal(batch.forces[0], torch.full((3,), -13.0))
+        assert not torch.equal(batch.forces[1], torch.full((3,), -13.0))
 
     def test_admission_hooks_ignore_frequency_across_runs(self) -> None:
         """Admission hooks refire across runs with stage-specific masks."""
