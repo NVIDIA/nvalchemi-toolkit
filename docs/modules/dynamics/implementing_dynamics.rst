@@ -221,8 +221,9 @@ priming. In a compiled :class:`~nvalchemi.dynamics.FusedStage`, it remains
 outside ``_step_impl`` so validation and shape-dependent setup are not captured.
 
 ``compute()`` handles the full model pipeline: forward pass →
-``adapt_output()`` → ``_validate_model_outputs()`` → write
-forces/energy to batch via ``copy_()``.
+``adapt_output()`` → ``_validate_model_outputs()`` → publish model outputs to
+the batch. When an ``active_graph_mask`` is supplied, graph-, atom-, and
+edge-level output rows belonging to inactive graphs retain their prior values.
 
 
 Split masked updates for ``FusedStage`` compatibility

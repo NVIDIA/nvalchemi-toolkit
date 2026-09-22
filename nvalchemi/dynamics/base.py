@@ -2121,7 +2121,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         "stress": "stress",
     }
 
-    def compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+    def compute(
+        self,
+        batch: Batch | AtomsLike,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None = None,
+    ) -> ModelOutputs:
         """
         Perform the model forward pass to compute forces and energies.
 
@@ -2150,8 +2154,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Parameters
         ----------
         batch : Batch
-            The current batch of atomic data. Will have forces and
-            energies updated in-place.
+            The current batch of atomic data. Will have forces and energies
+            updated in-place.
+        active_graph_mask : torch.Tensor | None, optional
+            Boolean mask selecting graph rows whose model outputs may be
+            published to the batch. Node-level outputs use the corresponding
+            broadcast node mask. Inactive rows retain their existing values.
+            When None, publish every output row.
 
         Returns
         -------
@@ -2167,11 +2176,48 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             specified by ``__needs_keys__``.
         """
         if getattr(self, "_autograd_cleanup_deferred", False):
-            return self._compute(batch)
+            return self._compute(batch, active_graph_mask)
         with requires_grad_ctx(*self._autograd_input_tensors(batch)):
-            return self._compute(batch)
+            return self._compute(batch, active_graph_mask)
 
-    def _compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+    def _publish_model_output(
+        self,
+        batch: Batch | AtomsLike,
+        batch_attr: str,
+        target: torch.Tensor,
+        value: torch.Tensor,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None,
+    ) -> None:
+        """Publish one detached model output while preserving inactive rows."""
+        source = value.view(target.shape)
+        if active_graph_mask is None:
+            target.copy_(source)
+            return
+
+        group_name = batch._storage._group_name_from_attr(batch_attr)
+        if group_name == "system":
+            output_mask = active_graph_mask
+        elif group_name == "atoms":
+            output_mask = active_graph_mask[batch.batch_idx]
+        elif group_name == "edges":
+            edge_graph_idx = batch.batch_idx[batch.neighbor_list[:, 0]]
+            output_mask = active_graph_mask[edge_graph_idx]
+        else:
+            raise RuntimeError(
+                f"Cannot apply a graph activity mask to model output {batch_attr!r} "
+                f"stored at level {group_name!r}."
+            )
+
+        output_mask = output_mask.view(
+            output_mask.shape[0], *([1] * (target.dim() - 1))
+        )
+        torch.where(output_mask, source, target, out=target)
+
+    def _compute(
+        self,
+        batch: Batch | AtomsLike,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None = None,
+    ) -> ModelOutputs:
         """Execute model evaluation while autograd input state is managed."""
         self._last_outputs = None
 
@@ -2205,7 +2251,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     # allocate storage for model outputs lazily.
                     setattr(batch, batch_attr, torch.empty_like(value))
                     target = getattr(batch, batch_attr)
-                target.copy_(value.view(target.shape))
+                self._publish_model_output(
+                    batch,
+                    batch_attr,
+                    target,
+                    value,
+                    active_graph_mask,
+                )
 
         self._last_outputs = detached
 
@@ -2299,7 +2351,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 active_graph_mask,
             )
             self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
-            self.compute(batch)
+            self.compute(batch, active_graph_mask)
             self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
             self._call_hooks(
                 DynamicsStage.BEFORE_POST_UPDATE,
@@ -2357,7 +2409,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 batch,
                 active_graph_mask,
             )
-            self.compute(batch)
+            self.compute(batch, active_graph_mask)
             self._call_hooks(
                 DynamicsStage.AFTER_COMPUTE,
                 batch,
@@ -3720,12 +3772,23 @@ class FusedStage(BaseDynamics):
                 active_graph_mask,
             )
 
-        outputs: ModelOutputs = self.compute(batch)
+        outputs: ModelOutputs = self.compute(batch, overall_active_graph_mask)
 
-        # Skip None placeholders — writing them only churns dynamo guards.
+        # Skip mapped outputs, which compute has already published, and None
+        # placeholders, which only churn dynamo guards.
         for key, tensor in outputs.items():
-            if key not in ("forces", "energy") and tensor is not None:
-                batch[key] = tensor
+            if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
+                target = getattr(batch, key, None)
+                if target is None:
+                    setattr(batch, key, torch.empty_like(tensor))
+                    target = getattr(batch, key)
+                self._publish_model_output(
+                    batch,
+                    key,
+                    target,
+                    tensor,
+                    overall_active_graph_mask,
+                )
 
         for (_, dynamics), active_graph_mask in zip(
             self.sub_stages, stage_active_masks, strict=True
@@ -4010,7 +4073,7 @@ class FusedStage(BaseDynamics):
                     stage_active_mask,
                 )
 
-            self.compute(batch)
+            self.compute(batch, active_graph_mask)
 
             for (_, dynamics), stage_active_mask in zip(
                 self.sub_stages, stage_active_masks, strict=True
