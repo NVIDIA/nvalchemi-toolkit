@@ -30,7 +30,11 @@ from nvalchemi.data import Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
-from nvalchemi.models.gen import DemoGANModel, make_demo_gan_generate
+from nvalchemi.models.gen import (
+    DemoGANModel,
+    demo_nonparametric_generation,
+    make_demo_gan_generate,
+)
 from test.gen.conftest import (
     make_batch,
     trivial_generate,
@@ -443,9 +447,10 @@ def _dynamics_batch(num_graphs: int = 2) -> Batch:
     return batch
 
 
-def _to_cuda(batch: Batch) -> Batch:
-    """Move the generated batch onto the CUDA device (test-local mapping)."""
-    return batch.to("cuda")
+def _nonparametric_cuda(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch:
+    """The nonparametric source with the function-owned device move."""
+    del inputs, kwargs
+    return demo_nonparametric_generation(num_samples=num_samples, rng=rng).to("cuda")
 
 
 class _RunRecorder:
@@ -481,7 +486,6 @@ class TestDynamicsStages:
         """``gen | optimizer``: the fold drives the engine's own loop."""
         from nvalchemi.dynamics.demo import DemoDynamics
         from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-        from nvalchemi.models.gen import demo_nonparametric_generation
 
         gen = AtomisticGenerator(
             generator_func=demo_nonparametric_generation,
@@ -623,11 +627,9 @@ class TestDuckTypedSessions:
         """``BaseDynamics.__enter__`` honors the pre-set shared stream."""
         from nvalchemi.dynamics.demo import DemoDynamics
         from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-        from nvalchemi.models.gen import demo_nonparametric_generation
 
         gen = AtomisticGenerator(
-            generator_func=demo_nonparametric_generation,
-            batch_mapping=_to_cuda,
+            generator_func=_nonparametric_cuda,
             consumes_fields=frozenset(),
             produces_fields=frozenset({"positions", "atomic_numbers"}),
             device="cuda",
