@@ -521,10 +521,6 @@ class BaseModelMixin(abc.ABC):
     # Derivative graph preparation
     # ------------------------------------------------------------------
 
-    def _derivative_execution_mode(self) -> Literal["eager", "compiled"]:
-        """Return the execution mode used for derivative capability checks."""
-        return "eager"
-
     def _copy_derivative_runtime_data(
         self,
         source: Batch,
@@ -620,7 +616,6 @@ class BaseModelMixin(abc.ABC):
         request = _DerivativeRequest(
             operation=operation,
             execution="distributed" if self._dist_ctx is not None else "local",
-            mode=self._derivative_execution_mode(),
             strategy=strategy,
         )
         return _prepare_derivative_graph(self, batch, request)

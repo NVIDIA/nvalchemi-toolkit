@@ -585,12 +585,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 request,
                 "distributed second-order derivatives are not supported",
             )
-        if request.mode != "eager":
-            _reject_derivative_request(
-                self,
-                request,
-                "compiled second-order derivatives are not supported",
-            )
         _reject_derivative_request(
             self,
             request,

@@ -806,20 +806,13 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         )
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Validate one local eager derivative request across pipeline steps."""
+        """Validate one local derivative request across pipeline steps."""
         if request.execution != "local":
             _reject_derivative_request(
                 self,
                 request,
                 "distributed pipeline second-order derivatives are not supported",
             )
-        if request.mode != "eager":
-            _reject_derivative_request(
-                self,
-                request,
-                "compiled pipeline second-order derivatives are not supported",
-            )
-
         for group_index, group in enumerate(self.groups):
             for step_index, step in enumerate(group.steps):
                 if isinstance(step.model, PipelineModelWrapper):
@@ -847,7 +840,6 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     if step.model._dist_ctx is not None
                     else request.execution
                 ),
-                mode=step.model._derivative_execution_mode(),
                 strategy=request.strategy,
             )
             step.model._validate_derivative_request(child_request)

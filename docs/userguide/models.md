@@ -921,7 +921,7 @@ with model.prepare_hessian(batch) as operator:
 ```
 
 The operator copies the batch inputs and retains the derivative graph built during
-preparation. Keep model parameters, buffers, execution mode, and pipeline wiring
+preparation. Keep model parameters, buffers, training mode, and pipeline wiring
 unchanged while using it. Prepare a new operator for a different geometry or model
 state. The operator closes automatically on context exit.
 
@@ -958,7 +958,7 @@ the geometry changes; hold topology fixed when comparing to finite differences.
 
 #### Supported configurations
 
-The initial release qualifies local eager execution as follows:
+The initial release qualifies local, uncompiled execution as follows:
 
 | Configuration | HVP | Dense loop | Dense vmap |
 |---|---:|---:|---:|
@@ -968,7 +968,8 @@ The initial release qualifies local eager execution as follows:
 | Ewald/PME with `hybrid_forces=False`, `slab_correction=False` | Yes | Yes | Yes |
 | Flat pipeline whose participating steps accept the request | Yes | Yes | Context-dependent |
 | DFT-D3 | No | No | No |
-| Distributed or compiled execution | No | No | No |
+| Distributed execution | No | No | No |
+| Compiled execution | No | No | No |
 | Explicitly nested pipelines | No | No | No |
 
 cuEquivariance dense `vmap` is rejected because
@@ -978,6 +979,12 @@ cuEquivariance dense `vmap` is rejected because
 and cannot produce the complete position Hessian. Slab correction has not been
 qualified. DFT-D3's current analytical Warp derivative path does not expose the
 required energy double backward.
+
+Toolkit does not try to identify compiled modules or reject them before model
+evaluation. PyTorch's current AOTAutograd path raises when these APIs request the
+required double backward. Supporting compilation would require tracing and
+compiling a function that contains both the model forward and its first
+derivative; that integration remains future work.
 
 A flat {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` differentiates
 one connected total-energy graph. Wired outputs remain connected, so an

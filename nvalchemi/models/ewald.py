@@ -420,18 +420,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Validate Ewald's local eager differentiable-energy capability."""
+        """Validate Ewald's local differentiable-energy capability."""
         if request.execution != "local":
             _reject_derivative_request(
                 self,
                 request,
                 "distributed second-order derivatives are not supported",
-            )
-        if request.mode != "eager":
-            _reject_derivative_request(
-                self,
-                request,
-                "compiled second-order derivatives are not supported",
             )
         if self.hybrid_forces:
             _reject_derivative_request(

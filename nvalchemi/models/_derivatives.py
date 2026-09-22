@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 _DerivativeOperation = Literal["hvp", "dense_hessian"]
 _DerivativeStrategy = Literal["loop", "vmap"]
 _DerivativeExecutionKind = Literal["local", "distributed"]
-_DerivativeExecutionMode = Literal["eager", "compiled"]
 
 
 def _reject_derivative_request(
@@ -59,7 +58,7 @@ def _reject_derivative_request(
     raise NotImplementedError(
         f"{type(model).__name__} does not support derivative operation "
         f"'{request.operation}' for execution='{request.execution}', "
-        f"mode='{request.mode}', strategy='{strategy}': {reason}"
+        f"strategy='{strategy}': {reason}"
     )
 
 
@@ -69,7 +68,6 @@ class _DerivativeRequest:
 
     operation: _DerivativeOperation
     execution: _DerivativeExecutionKind
-    mode: _DerivativeExecutionMode
     strategy: _DerivativeStrategy | None
 
     def __post_init__(self) -> None:
@@ -82,8 +80,6 @@ class _DerivativeRequest:
             raise ValueError(
                 f"execution must be 'local' or 'distributed', got {self.execution!r}"
             )
-        if self.mode not in {"eager", "compiled"}:
-            raise ValueError(f"mode must be 'eager' or 'compiled', got {self.mode!r}")
         if self.strategy not in {None, "loop", "vmap"}:
             raise ValueError(
                 f"strategy must be None, 'loop', or 'vmap', got {self.strategy!r}"

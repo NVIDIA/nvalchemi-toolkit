@@ -410,21 +410,11 @@ class TestAIMNet2Derivatives:
 
         torch.testing.assert_close(loop_batch.hessian, vmap_batch.hessian)
 
-    def test_distributed_rejection_precedes_compiled_mode(
-        self, mock_model, simple_batch
-    ):
+    def test_distributed_rejection_precedes_forward(self, mock_model, simple_batch):
         wrapper = _make_wrapper(mock_model, compile_model=True)
         wrapper._dist_ctx = object()
 
         with pytest.raises(NotImplementedError, match="distributed"):
-            wrapper.hessian_vector_product(
-                simple_batch, torch.randn_like(simple_batch.positions)
-            )
-
-    def test_compiled_mode_is_recorded_by_constructor(self, mock_model, simple_batch):
-        wrapper = _make_wrapper(mock_model, compile_model=True)
-
-        with pytest.raises(NotImplementedError, match="compiled"):
             wrapper.hessian_vector_product(
                 simple_batch, torch.randn_like(simple_batch.positions)
             )

@@ -1010,27 +1010,6 @@ class TestFromCheckpointErrors:
         assert load_map_locations == [torch.device("cpu")]
         assert to_devices == [torch.device("cpu")]
 
-    def test_compiled_factory_rejects_derivatives_before_forward(
-        self, monkeypatch, mock_model, single_batch
-    ):
-        monkeypatch.setattr(
-            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
-            lambda _: "unused",
-        )
-        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
-        monkeypatch.setattr("torch.compile", lambda model, **kwargs: model)
-        wrapper = MACEWrapper.from_checkpoint("medium", compile_model=True)
-        monkeypatch.setattr(
-            wrapper,
-            "forward",
-            lambda *_args, **_kwargs: pytest.fail("compiled derivative forward ran"),
-        )
-
-        with pytest.raises(NotImplementedError, match="mode='compiled'"):
-            wrapper.hessian_vector_product(
-                single_batch, torch.randn_like(single_batch.positions)
-            )
-
     def test_cueq_conversion_uses_active_cuda_context(self, monkeypatch, mock_model):
         """Explicit CUDA indices are preserved via the active CUDA context."""
         import sys

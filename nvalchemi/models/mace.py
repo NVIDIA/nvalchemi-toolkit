@@ -64,7 +64,7 @@ import warnings
 from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import nn
@@ -545,7 +545,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> None:
         super().__init__()
         self.model = model
-        self._derivative_mode: Literal["eager", "compiled"] = "eager"
         self._checkpoint_spec = reconstruction_spec
 
         # e3nn's ``Irrep.__len__`` raises under TorchDynamo guard-building, so
@@ -671,23 +670,13 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # Derivative qualification
     # ------------------------------------------------------------------
 
-    def _derivative_execution_mode(self) -> Literal["eager", "compiled"]:
-        """Return the execution mode selected at wrapper construction."""
-        return self._derivative_mode
-
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Validate local eager MACE derivatives for the requested strategy."""
+        """Validate local MACE derivatives for the requested strategy."""
         if request.execution != "local":
             _reject_derivative_request(
                 self,
                 request,
                 "distributed second-order derivatives are not supported",
-            )
-        if request.mode != "eager":
-            _reject_derivative_request(
-                self,
-                request,
-                "compiled second-order derivatives are not supported",
             )
         if (
             _mace_uses_cueq(self.model)
@@ -1177,8 +1166,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             **compile_kwargs,
         )
         wrapper = cls(model, reconstruction_spec=checkpoint_spec)
-        if compile_model:
-            wrapper._derivative_mode = "compiled"
         wrapper.eval()
         return wrapper
 

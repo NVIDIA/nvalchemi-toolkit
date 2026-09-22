@@ -2570,7 +2570,6 @@ class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
         self.scale = scale
         self.output_kind = output_kind
         self.forward_calls = 0
-        self.derivative_mode = "eager"
         self.seen_active_outputs = None
         self.seen_gradient_keys = None
         self.model_config = ModelConfig(
@@ -2588,16 +2587,11 @@ class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
         raise NotImplementedError
 
     def _validate_derivative_request(self, request) -> None:
-        if (
-            request.execution == "local"
-            and request.mode == "eager"
-            and (request.operation == "hvp" or request.strategy in {"loop", "vmap"})
+        if request.execution == "local" and (
+            request.operation == "hvp" or request.strategy in {"loop", "vmap"}
         ):
             return
         super()._validate_derivative_request(request)
-
-    def _derivative_execution_mode(self):
-        return self.derivative_mode
 
     def forward(self, data, **kwargs) -> ModelOutputs:
         self.forward_calls += 1
@@ -2657,10 +2651,8 @@ class _NonlinearChargeProducer(nn.Module, BaseModelMixin):
         raise NotImplementedError
 
     def _validate_derivative_request(self, request) -> None:
-        if (
-            request.execution == "local"
-            and request.mode == "eager"
-            and (request.operation == "hvp" or request.strategy in {"loop", "vmap"})
+        if request.execution == "local" and (
+            request.operation == "hvp" or request.strategy in {"loop", "vmap"}
         ):
             return
         super()._validate_derivative_request(request)
@@ -3024,9 +3016,7 @@ class TestPipelineDerivativeTopology:
             pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
         assert model.forward_calls == 0
 
-    @pytest.mark.parametrize(
-        "context", ["pipeline_distributed", "child_distributed", "compiled"]
-    )
+    @pytest.mark.parametrize("context", ["pipeline_distributed", "child_distributed"])
     def test_contextual_capability_rejection_precedes_all_forwards(self, context):
         batch = _make_one_system_derivative_batch()
         earlier = _QualifiedPipelineQuadratic()
@@ -3038,9 +3028,6 @@ class TestPipelineDerivativeTopology:
             pipeline._dist_ctx = object()
         elif context == "child_distributed":
             rejected._dist_ctx = object()
-        else:
-            rejected.derivative_mode = "compiled"
-
         with pytest.raises(NotImplementedError, match=context.split("_")[-1]):
             pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
 

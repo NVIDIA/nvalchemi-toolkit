@@ -88,7 +88,6 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
         self.seen_requests: list[_DerivativeRequest] = []
         self.observed_active_outputs: set[str] | None = None
         self.observed_gradient_keys: set[str] | None = None
-        self.derivative_mode = "eager"
         self.output_kind = "valid"
         self.working_batch_ref = None
 
@@ -98,9 +97,6 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
 
     def compute_embeddings(self, data, **kwargs):
         raise NotImplementedError
-
-    def _derivative_execution_mode(self):
-        return self.derivative_mode
 
     def forward(self, data: Batch):
         self.forward_calls += 1
@@ -180,19 +176,15 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
 
 
 class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
-    """Test wrapper accepting only local eager derivative requests."""
+    """Test wrapper accepting supported local derivative requests."""
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         self.seen_requests.append(request)
-        supported = (
-            request.execution == "local"
-            and request.mode == "eager"
-            and (
-                (request.operation == "hvp" and request.strategy is None)
-                or (
-                    request.operation == "dense_hessian"
-                    and request.strategy in {"loop", "vmap"}
-                )
+        supported = request.execution == "local" and (
+            (request.operation == "hvp" and request.strategy is None)
+            or (
+                request.operation == "dense_hessian"
+                and request.strategy in {"loop", "vmap"}
             )
         )
         if supported:
@@ -201,7 +193,7 @@ class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
         raise NotImplementedError(
             f"{type(self).__name__} does not support derivative operation "
             f"'{request.operation}' for execution='{request.execution}', "
-            f"mode='{request.mode}', strategy='{strategy}': test capability rejection"
+            f"strategy='{strategy}': test capability rejection"
         )
 
 
@@ -699,7 +691,7 @@ class TestDerivativeCapability:
             NotImplementedError,
             match=(
                 "_QuadraticDerivativeWrapperBase.*operation 'hvp'.*"
-                "execution='local'.*mode='eager'.*strategy='none'"
+                "execution='local'.*strategy='none'"
             ),
         ):
             with model._prepare_derivative_graph(simple_batch, operation="hvp"):
@@ -715,7 +707,7 @@ class TestDerivativeCapability:
             ("dense_hessian", "vmap"),
         ],
     )
-    def test_supported_local_eager_requests_reach_forward(
+    def test_supported_local_requests_reach_forward(
         self, simple_batch, operation, strategy
     ):
         model = _QualifiedQuadraticDerivativeWrapper()
@@ -732,23 +724,12 @@ class TestDerivativeCapability:
         assert request.operation == operation
         assert request.strategy == strategy
         assert request.execution == "local"
-        assert request.mode == "eager"
 
     def test_distributed_request_fails_before_forward(self, simple_batch):
         model = _QualifiedQuadraticDerivativeWrapper()
         model._dist_ctx = object()
 
         with pytest.raises(NotImplementedError, match="execution='distributed'"):
-            with model._prepare_derivative_graph(simple_batch, operation="hvp"):
-                pass
-
-        assert model.forward_calls == 0
-
-    def test_compiled_request_fails_before_forward(self, simple_batch):
-        model = _QualifiedQuadraticDerivativeWrapper()
-        model.derivative_mode = "compiled"
-
-        with pytest.raises(NotImplementedError, match="mode='compiled'"):
             with model._prepare_derivative_graph(simple_batch, operation="hvp"):
                 pass
 
@@ -761,7 +742,6 @@ class TestDerivativeCapability:
                 {
                     "operation": "unknown",
                     "execution": "local",
-                    "mode": "eager",
                     "strategy": None,
                 },
                 "operation must be",
@@ -770,7 +750,6 @@ class TestDerivativeCapability:
                 {
                     "operation": "hvp",
                     "execution": "unknown",
-                    "mode": "eager",
                     "strategy": None,
                 },
                 "execution must be",
@@ -779,16 +758,6 @@ class TestDerivativeCapability:
                 {
                     "operation": "hvp",
                     "execution": "local",
-                    "mode": "unknown",
-                    "strategy": None,
-                },
-                "mode must be",
-            ),
-            (
-                {
-                    "operation": "hvp",
-                    "execution": "local",
-                    "mode": "eager",
                     "strategy": "unknown",
                 },
                 "strategy must be",
@@ -797,7 +766,6 @@ class TestDerivativeCapability:
                 {
                     "operation": "hvp",
                     "execution": "local",
-                    "mode": "eager",
                     "strategy": "loop",
                 },
                 "HVP requests must not specify",
@@ -806,7 +774,6 @@ class TestDerivativeCapability:
                 {
                     "operation": "dense_hessian",
                     "execution": "local",
-                    "mode": "eager",
                     "strategy": None,
                 },
                 "Dense-Hessian requests must specify",
@@ -1017,7 +984,7 @@ class TestHessianVectorProduct:
 
         torch.testing.assert_close(result, 2 * vector)
 
-    @pytest.mark.parametrize("context_kind", ["base", "distributed", "compiled"])
+    @pytest.mark.parametrize("context_kind", ["base", "distributed"])
     def test_capability_rejection_occurs_before_forward(
         self, simple_batch, context_kind
     ):
@@ -1027,8 +994,6 @@ class TestHessianVectorProduct:
             model = _QualifiedQuadraticDerivativeWrapper()
         if context_kind == "distributed":
             model._dist_ctx = object()
-        elif context_kind == "compiled":
-            model.derivative_mode = "compiled"
 
         with pytest.raises(NotImplementedError):
             model.hessian_vector_product(
@@ -1588,7 +1553,7 @@ class TestDenseHessian:
             assert torch.is_inference_mode_enabled() is expected_inference
             assert not batch.hessian.is_inference()
 
-    @pytest.mark.parametrize("context_kind", ["base", "distributed", "compiled"])
+    @pytest.mark.parametrize("context_kind", ["base", "distributed"])
     def test_capability_rejection_occurs_before_forward(self, context_kind):
         batch = _make_derivative_batch(2)
         if context_kind == "base":
@@ -1597,8 +1562,6 @@ class TestDenseHessian:
             model = _QualifiedQuadraticDerivativeWrapper()
         if context_kind == "distributed":
             model._dist_ctx = object()
-        elif context_kind == "compiled":
-            model.derivative_mode = "compiled"
         snapshot = self._snapshot(batch)
 
         with pytest.raises(NotImplementedError):
