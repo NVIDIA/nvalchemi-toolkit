@@ -394,6 +394,7 @@ class TestModelConfigCapabilities:
         assert "energy" in cfg.outputs
         assert "forces" in cfg.outputs
         assert "stress" in cfg.outputs
+        assert "hessian" not in cfg.outputs
 
     def test_autograd_inputs(self, wrapper):
         assert "positions" in wrapper.model_config.autograd_inputs
@@ -595,11 +596,26 @@ class TestAdaptOutput:
         assert "stress" in out
 
     def test_missing_optional_outputs_absent(self, wrapper, single_batch):
-        # No stress or hessian in raw output → not in result
+        # No stress in raw output → not in result
         raw = {"energy": torch.randn(1), "forces": torch.randn(3, 3)}
         out = wrapper.adapt_output(raw, single_batch)
         assert "stress" not in out or out.get("stress") is None
-        assert "hessian" not in out or out.get("hessian") is None
+
+    def test_raw_hessian_is_not_exposed(self, wrapper, single_batch):
+        raw = self._raw()
+        raw["hessian"] = torch.randn(9, 3, 3)
+
+        out = wrapper.adapt_output(raw, single_batch)
+
+        assert "hessian" not in out
+
+    def test_ordinary_hessian_request_uses_unsupported_output_behavior(self, wrapper):
+        wrapper.model_config.active_outputs = {"energy", "hessian"}
+
+        with pytest.warns(UserWarning, match="hessian"):
+            outputs = wrapper.output_data()
+
+        assert outputs == {"energy"}
 
 
 # ---------------------------------------------------------------------------

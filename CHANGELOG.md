@@ -22,6 +22,13 @@
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
   before it advances them.
 
+### Breaking Changes
+
+- `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
+  model output. Custom MACE modules that relied on the raw upstream value must
+  use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
+  the canonical position Hessian.
+
 ### Fixed
 
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the

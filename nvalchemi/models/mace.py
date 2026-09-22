@@ -574,9 +574,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # ``atomic_energies`` (per-atom energy = MACE's raw ``node_energy``)
             # is a normal output; the distributed force path requests it to get
             # a per-node energy to differentiate, and callers may ask for it too.
-            outputs=frozenset(
-                {"energy", "forces", "stress", "hessian", "atomic_energies"}
-            ),
+            outputs=frozenset({"energy", "forces", "stress", "atomic_energies"}),
             active_outputs={"energy", "forces"},
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
@@ -850,9 +848,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> ModelOutputs:
         """Map MACE raw outputs to nvalchemi standard keys.
 
-        Normalizes ``energy`` shape, forwards ``forces`` / ``stress`` / ``hessian``
-        when present, and exposes MACE's ``node_energy`` as ``atomic_energies``,
-        then delegates to the base auto-mapper.
+        Normalizes ``energy`` shape, forwards ``forces`` and ``stress`` when
+        present, exposes MACE's ``node_energy`` as ``atomic_energies``, then
+        delegates to the base auto-mapper.
 
         Parameters
         ----------
@@ -865,7 +863,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         -------
         ModelOutputs
             The standardized outputs (subset of ``energy``, ``forces``,
-            ``stress``, ``hessian``, ``atomic_energies``).
+            ``stress``, and ``atomic_energies``).
         """
         energy = raw_output["energy"]
         mapped: dict[str, Any] = {
@@ -875,8 +873,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             mapped["forces"] = raw_output["forces"]
         if raw_output.get("stress") is not None:
             mapped["stress"] = raw_output["stress"]
-        if raw_output.get("hessian") is not None:
-            mapped["hessian"] = raw_output["hessian"]
         # Per-atom energy = MACE's raw ``node_energy``. The base auto-mapper
         # keeps it only when ``atomic_energies`` is active, so it is free
         # otherwise.
