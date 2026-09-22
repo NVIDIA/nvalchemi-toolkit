@@ -1778,7 +1778,9 @@ class Batch(DataMixin):
         Raises
         ------
         ValueError
-            If *src_batch* is on another device than this batch, or if a mask's
+            If either batch has ``group_idx`` metadata (because graph-level
+            insertion cannot preserve whole groups), or if *src_batch* is on
+            another device than this batch, or if a mask's
             length does not match ``src_batch.num_graphs``.
 
         Notes
@@ -1788,6 +1790,12 @@ class Batch(DataMixin):
         hide a per-step host-device transfer inside what callers use as an
         in-place buffer write.
         """
+        if "group_idx" in self or "group_idx" in src_batch:
+            raise ValueError(
+                "put does not support grouped batches; group_idx must be absent "
+                "from both source and destination. Use append() to combine "
+                "grouped batches."
+            )
         self._invalidate_group_layout()
         device = self.device
         if src_batch.device != device:

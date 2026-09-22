@@ -170,17 +170,37 @@ class TestBatchGroupLayout:
             == [0, 0, 1, 1, 1][: rebuilt_batch.num_graphs]
         )
 
-    def test_put_invalidates_cached_layout(self):
+    @pytest.mark.parametrize(
+        ("grouped_receiver", "grouped_source"),
+        [(True, False), (False, True), (True, True)],
+    )
+    def test_put_rejects_grouped_batches_before_mutation(
+        self,
+        grouped_receiver,
+        grouped_source,
+    ):
         batch = _batch()
-        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
-        original_layout = batch.group_layout
-        source = batch.clone()
+        source = _batch()
+        original_positions = batch.positions.clone()
+        original_layout = None
+        if grouped_receiver:
+            batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
+            original_layout = batch.group_layout
+        if grouped_source:
+            source.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
+        copied_mask = torch.zeros(source.num_graphs, dtype=torch.bool)
 
-        batch.put(source, torch.zeros(batch.num_graphs, dtype=torch.bool))
+        with pytest.raises(ValueError, match="does not support grouped batches"):
+            batch.put(
+                source,
+                torch.ones(source.num_graphs, dtype=torch.bool),
+                copied_mask=copied_mask,
+            )
 
-        assert object.__getattribute__(batch, "_group_layout") is None
-        assert batch.group_layout is not original_layout
-        assert batch.group_layout.group_idx.tolist() == [0, 0, 1, 1, 1]
+        torch.testing.assert_close(batch.positions, original_positions)
+        assert not copied_mask.any()
+        if original_layout is not None:
+            assert batch.group_layout is original_layout
 
     def test_append_rebases_group_idx(self):
         batch = _batch()
