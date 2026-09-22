@@ -169,7 +169,7 @@ class NEBForceHook:
     -----
     Component-level constraints, such as fixing only one Cartesian axis, are
     not supported.
-    
+
     Examples
     --------
     Use the registered improved-tangent method with a constant spring::
@@ -555,8 +555,11 @@ class NEBForceHook:
         ctx: DynamicsContext,
         stage: DynamicsStage,
     ) -> SpringContext:
-        """Build the read-only spring-policy view of the current NEB stat
-        instead of providing the full workspace that may contain irrelevant fields."""
+        """Build a read-only spring-policy view of the current NEB state.
+
+        The view exposes the fields a spring policy reads and omits workspace
+        buffers it does not need.
+        """
         workspace = self._workspace
         batch = ctx.batch
         model_outputs_available = stage == DynamicsStage.AFTER_COMPUTE

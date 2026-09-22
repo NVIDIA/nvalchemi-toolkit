@@ -42,7 +42,10 @@ class PathEnergyStats:
     highest_interior_image_idx : Tensor
         Packed image index attaining ``highest_interior_energy`` for each path,
         shape ``(num_paths,)``. The tensor has dtype ``torch.int32``. Ties
-        select the first interior image.
+        select the first interior image. Unlike
+        :attr:`PathDiagnostics.highest_interior_image_idx
+        <nvalchemi.dynamics.paths.hooks.PathDiagnostics.highest_interior_image_idx>`,
+        this index is batch-global rather than path-local.
     """
 
     endpoint_reference_energy: Tensor
