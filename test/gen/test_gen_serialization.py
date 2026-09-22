@@ -18,7 +18,7 @@ Covers :class:`~nvalchemi.gen.generator.AtomisticGenerator` and
 :class:`~nvalchemi.gen.pipeline.GenerationPipeline` round-trips via
 ``model_dump_json`` / ``model_validate_json``. The driver is a pydantic model
 and round-trips directly; callable fields (``generator_func``,
-``batch_mapping``, ``condition_func``, ``hooks``, pipeline ``stages``) are
+``condition_func``, ``hooks``, pipeline ``stages``) are
 captured via dotted import paths or the object's own ``to_spec()``.
 Lambdas, closures, and ``functools.partial`` are rejected.
 """
@@ -43,33 +43,11 @@ from nvalchemi.models.gen import (
     make_demo_gan_generate,
 )
 from test.gen.conftest import (
+    batch_generate,
     make_batch,
     tile_condition,
     trivial_generate,
-    zeros_to_batch,
 )
-
-
-def make_trivial_generate():
-    """Factory returning the trivial generating function (spec-able).
-
-    Returns
-    -------
-    Callable
-        ``trivial_generate``.
-    """
-    return trivial_generate
-
-
-def make_zeros_recon():
-    """Factory returning the zeros reconstruction (spec-able).
-
-    Returns
-    -------
-    Callable
-        ``zeros_to_batch``.
-    """
-    return zeros_to_batch
 
 
 def make_tile_condition():
@@ -134,8 +112,7 @@ class TestAtomisticGeneratorDirectSerialization:
             A ``trivial_generate``-backed generator.
         """
         defaults: dict = {
-            "generator_func": trivial_generate,
-            "batch_mapping": zeros_to_batch,
+            "generator_func": batch_generate,
         }
         defaults.update(kwargs)
         return AtomisticGenerator(**defaults)
@@ -154,8 +131,7 @@ class TestAtomisticGeneratorDirectSerialization:
         )
         blob = gen.model_dump_json()
         rebuilt = AtomisticGenerator.model_validate_json(blob)
-        assert rebuilt.generator_func is trivial_generate
-        assert rebuilt.batch_mapping is zeros_to_batch
+        assert rebuilt.generator_func is batch_generate
         assert rebuilt.num_samples == 2
         assert rebuilt.seed == 11
         assert rebuilt.device == torch.device("cpu")
@@ -173,8 +149,7 @@ class TestAtomisticGeneratorDirectSerialization:
         """``model_dump()`` (dict mode) round-trips the same as JSON."""
         gen = self._generator(hooks=[ScaleSampleHook(factor=3.0)])
         rebuilt = AtomisticGenerator.model_validate(gen.model_dump())
-        assert rebuilt.generator_func is trivial_generate
-        assert rebuilt.batch_mapping is zeros_to_batch
+        assert rebuilt.generator_func is batch_generate
         assert isinstance(rebuilt.hooks[0], ScaleSampleHook)
         assert rebuilt().num_graphs == 1
 
@@ -194,10 +169,8 @@ class TestAtomisticGeneratorDirectSerialization:
         raw = json.loads(gen.model_dump_json())
         func = raw["generator_func"]
         assert func["cls_path"].endswith("_return_importable")
-        assert func["path"].endswith("trivial_generate")
-        mapping = raw["batch_mapping"]
-        assert mapping["cls_path"].endswith("_return_importable")
-        assert mapping["path"].endswith("zeros_to_batch")
+        assert func["path"].endswith("batch_generate")
+        assert "batch_mapping" not in raw  # the field was removed
         assert raw["consumes_fields"] == ["positions"]
         assert raw["produces_fields"] is None
         assert len(raw["hooks"]) == 1
@@ -267,8 +240,7 @@ class TestGenerationPipelineDirectSerialization:
             The stage.
         """
         return AtomisticGenerator(
-            generator_func=trivial_generate,
-            batch_mapping=zeros_to_batch,
+            generator_func=batch_generate,
             consumes_fields=kwargs.pop("consumes_fields", frozenset()),
             produces_fields=kwargs.pop("produces_fields", frozenset({"positions"})),
             **kwargs,
@@ -291,7 +263,7 @@ class TestGenerationPipelineDirectSerialization:
         assert len(raw["stages"]) == 2
         gen_func = raw["stages"][0]["generator_func"]
         assert gen_func["cls_path"].endswith("_return_importable")
-        assert gen_func["path"].endswith("trivial_generate")
+        assert gen_func["path"].endswith("batch_generate")
         assert raw["stages"][1]["cls_path"].endswith("_return_importable")
         assert raw["stages"][1]["path"].endswith("make_passthrough_stage")
 

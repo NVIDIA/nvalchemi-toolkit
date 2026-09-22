@@ -507,9 +507,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 )
         return device
 
-    @field_validator(
-        "generator_func", "batch_mapping", "condition_func", "hooks", mode="before"
-    )
+    @field_validator("generator_func", "condition_func", "hooks", mode="before")
     @classmethod
     def _deserialize_spec_payloads(cls, v: Any) -> Any:
         """Rebuild live objects from spec payloads at load time.
@@ -542,7 +540,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             ]
         return v
 
-    @field_serializer("generator_func", "batch_mapping", "condition_func")
+    @field_serializer("generator_func", "condition_func")
     def _serialize_callable(
         self, fn: Callable[..., Any] | None, info: FieldSerializationInfo
     ) -> dict[str, Any] | None:
