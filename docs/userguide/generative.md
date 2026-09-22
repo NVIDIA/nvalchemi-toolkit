@@ -77,8 +77,8 @@ The pieces carry the semantics:
   dynamics). Any other container is a fallback with real losses — the raw
   output passes through untouched, but the `AFTER_GENERATE` hooks are skipped
   and it cannot feed dynamics stages. (Inside the function, a
-  {class}`~tensordict.TensorDict` is a fine intermediate: it survives
-  `torch.compile`; convert it to a `Batch` before returning.) Nothing about
+  {class}`~tensordict.TensorDict` survives `torch.compile` where arbitrary
+  containers graph-break; convert it to a `Batch` before returning.) Nothing about
   the family lives in the `AtomisticGenerator` — a GAN does one forward pass,
   a diffusion model integrates a sampler loop, a GA runs a population loop;
   all behind the same signature. The function also *owns the model* when
