@@ -21,6 +21,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
+from uuid import uuid4
 
 import torch
 from torch import Tensor
@@ -29,7 +30,10 @@ from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
 from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.neb._ops.modes import ENDPOINT, REGULAR_NEB
-from nvalchemi.dynamics.paths.neb._ops.registry import get_neb_method
+from nvalchemi.dynamics.paths.neb._ops.registry import (
+    get_neb_method,
+    register_neb_method,
+)
 from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
 from nvalchemi.dynamics.paths.neb.configs import (
     ConstantSpringConfig,
@@ -95,7 +99,7 @@ class _NEBWorkspace:
     vector_scratch: Tensor
 
 
-def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
+def _resolve_neb_method(method: str | NEBMethod) -> str:
     """Resolve a registered method name or validate a method configuration.
 
     Parameters
@@ -105,8 +109,8 @@ def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
 
     Returns
     -------
-    NEBMethod
-        The normalized method configuration.
+    str
+        The validated or newly registered method name.
 
     Raises
     ------
@@ -116,14 +120,21 @@ def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
         If a string does not name a registered method.
     """
     if isinstance(method, NEBMethod):
-        return method
+        method_name = method.name or f"__runtime_neb_method_{uuid4().hex}"
+        register_neb_method(
+            name=method_name,
+            tangent_fn=method.tangent_weights_fn,
+            force_fn=method.effective_force_fn,
+            climbing_force_fn=method.climbing_force_fn,
+        )
+        return method_name
     if not isinstance(method, str):
         raise TypeError(
             "method must be a registered method name or an NEBMethod; "
             f"got {type(method).__name__}"
         )
     get_neb_method(method)
-    return NEBMethod(name=method)
+    return method
 
 
 class NEBForceHook:
@@ -485,7 +496,7 @@ class NEBForceHook:
 
         batch = ctx.batch
         workspace = self._workspace
-        method_name = self.method.name
+        method_name = self.method
         active_nodes = (
             torch.ones_like(workspace.fixed_node_mask)
             if ctx.active_graph_mask is None

@@ -165,10 +165,12 @@ displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
   The spring force is dropped and the parallel physical-force component is
   reversed, driving the image uphill along the path toward the saddle point.
 
-To use a different formulation, pass a custom
-{py:class}`~nvalchemi.dynamics.paths.NEBMethod` to `method`. It bundles three
-`warp.func`-decorated device functions, any of which can be overridden
-independently (unset ones fall back to the improved-tangent equations above):
+To use a different formulation, register its equations and pass the registry
+name to `method`, as shown below. Alternatively, pass a new
+{py:class}`~nvalchemi.dynamics.paths.NEBMethod` directly and `NEB` will
+register it. `NEBMethod` bundles three `warp.func`-decorated device functions,
+any of which can be overridden independently (unset ones fall back to the
+improved-tangent equations above):
 
 | Field | Inputs available | Returns |
 |-------|-------------------|---------|
@@ -178,13 +180,26 @@ independently (unset ones fall back to the improved-tangent equations above):
 
 ```python
 import warp as wp
-from nvalchemi.dynamics.paths import NEB, NEBMethod
+from nvalchemi.dynamics.paths.neb import (
+    NEB,
+    register_neb_method,
+)
+from nvalchemi.dynamics.paths.neb.equations import (
+    climbing_image_effective_force,
+    neb_effective_force_from_gram_stats,
+)
 
 @wp.func
 def central_tangent_weights(energy_prev: float, energy_curr: float, energy_next: float):
     return 1.0, 1.0  # plain central-difference tangent instead of improved-tangent weighting
 
-neb = NEB(model=model, method=NEBMethod(tangent_weights_fn=central_tangent_weights), fmax=0.05)
+register_neb_method(
+    name="central_tangent",
+    tangent_fn=central_tangent_weights,
+    force_fn=neb_effective_force_from_gram_stats,
+    climbing_force_fn=climbing_image_effective_force,
+)
+neb = NEB(model=model, method="central_tangent", fmax=0.05)
 ```
 
 The full Gram-statistics contract exists so `effective_force_fn` can go
@@ -192,9 +207,18 @@ beyond the stored-tangent projection above --- for example, to implement
 doubly-nudged elastic band (DNEB,
 [Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)).
 
-A custom `NEBMethod` without a `name` is runtime-only (it cannot round-trip
-through `to_spec_dict()`); giving it a stable, registered `name` is required
-for serialization and for use under `torch.compile`/CUDA graph capture.
+A named custom `NEBMethod` passed directly to `NEB` declares that method in
+the registry. Repeating the same name and equations is an idempotent no-op;
+reusing the name for different equations raises an error. Once registered, the
+method can be selected by name, for example `NEB(method="central_tangent")`.
+Call
+{py:func}`~nvalchemi.dynamics.paths.neb.register_neb_method` explicitly when
+you need to register a method separately before configuring `NEB` by name.
+{py:func}`~nvalchemi.dynamics.paths.neb.available_neb_methods` lists the
+registered names. Registration must finish before compilation or graph capture.
+A custom `NEBMethod` without a `name` is registered under an internal name
+when the engine is built and remains runtime-only: it cannot round-trip through
+`to_spec_dict()`.
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.paths.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.

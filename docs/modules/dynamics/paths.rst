@@ -49,6 +49,18 @@ Spring and method configuration
    ConstantSpringConfig
    SpringContext
 
+Method registry
+---------------
+
+.. currentmodule:: nvalchemi.dynamics.paths.neb
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   register_neb_method
+   available_neb_methods
+
 Hooks
 -----
 

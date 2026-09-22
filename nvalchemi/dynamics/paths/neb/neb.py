@@ -40,6 +40,10 @@ from nvalchemi.dynamics.paths.hooks import (
     PathDiagnosticsHook,
     PathEnergyStatsHook,
 )
+from nvalchemi.dynamics.paths.neb._ops.registry import (
+    get_neb_method,
+    register_neb_method,
+)
 from nvalchemi.dynamics.paths.neb.configs import (
     ConstantSpringConfig,
     NEBMethod,
@@ -376,6 +380,22 @@ class NEB(DynamicsStrategy):
         if not isinstance(value, SpringConfig):
             raise TypeError("spring must be a number or implement SpringConfig")
         return value
+
+    @field_validator("method")
+    @classmethod
+    def _register_method(cls, method: str | NEBMethod) -> str | NEBMethod:
+        """Register named method objects and validate registry-name references."""
+        if isinstance(method, str):
+            get_neb_method(method)
+        elif method.name is not None:
+            register_neb_method(
+                name=method.name,
+                tangent_fn=method.tangent_weights_fn,
+                force_fn=method.effective_force_fn,
+                climbing_force_fn=method.climbing_force_fn,
+            )
+            return method.name
+        return method
 
     @field_serializer("spring", when_used="json")
     def _serialize_spring(self, spring: float | SpringConfig) -> float | dict[str, Any]:

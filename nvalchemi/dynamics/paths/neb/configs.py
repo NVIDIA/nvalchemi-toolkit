@@ -175,7 +175,7 @@ class NEBMethod:
 
         import warp as wp
 
-        from nvalchemi.dynamics.paths.neb.methods import NEBMethod
+        from nvalchemi.dynamics.paths.neb import NEBMethod
 
         @wp.func
         def central_tangent_weights(
