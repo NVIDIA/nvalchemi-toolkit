@@ -102,14 +102,16 @@ def path_energy_stats(
         raise ValueError("image_energies and path_ptr must be one-dimensional")
     if image_energies.dtype not in _TORCH_TO_WP_SCALAR:
         raise ValueError("image_energies must have dtype float32 or float64")
-    if path_ptr.dtype != torch.int32:
-        raise ValueError("path_ptr must have dtype int32")
+    if path_ptr.dtype != torch.int32 or path_ptr.device != image_energies.device:
+        raise ValueError("path_ptr must have dtype int32 on the image_energies device")
     if image_energies.device.type not in {"cpu", "cuda"}:
         raise ValueError("path energy statistics require CPU or CUDA tensors")
     if not image_energies.is_contiguous() or not path_ptr.is_contiguous():
         raise ValueError("image_energies and path_ptr must be contiguous")
 
     num_paths = path_ptr.shape[0] - 1
+    if num_paths <= 0:
+        raise ValueError("path_ptr must describe at least one path")
     float_outputs = {
         "endpoint_reference_energy": endpoint_reference_energy,
         "highest_interior_energy": highest_interior_energy,

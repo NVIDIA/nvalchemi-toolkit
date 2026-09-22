@@ -91,6 +91,8 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
     num_links = i - p
     if min(i, p, num_links) < 0:
         raise ValueError("image_ptr and path_ptr describe invalid batch sizes")
+    if p == 0:
+        raise ValueError("path_ptr must describe at least one path")
     floats = {
         "physical_forces": (forces, (a, 3)),
         "image_energies": (energies, (i,)),

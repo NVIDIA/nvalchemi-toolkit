@@ -576,6 +576,13 @@ class TestNEBTorchAdapter:
         with pytest.raises(ValueError, match=match):
             neb_forces(*inputs)
 
+    def test_rejects_zero_paths(self) -> None:
+        inputs = list(_inputs(device="cpu"))
+        inputs[4] = torch.tensor([0], dtype=torch.int32)
+
+        with pytest.raises(ValueError, match="at least one path"):
+            neb_forces(*inputs)
+
     @pytest.mark.parametrize(
         ("case", "match"),
         [

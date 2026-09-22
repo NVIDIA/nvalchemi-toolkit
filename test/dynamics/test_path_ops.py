@@ -53,6 +53,17 @@ def test_path_energy_stats_rejects_invalid_inputs(case: str, match: str) -> None
         )
 
 
+def test_path_energy_stats_rejects_zero_paths() -> None:
+    with pytest.raises(ValueError, match="at least one path"):
+        path_energy_stats(
+            torch.empty(0),
+            torch.tensor([0], dtype=torch.int32),
+            torch.empty(0),
+            torch.empty(0),
+            torch.empty(0, dtype=torch.int32),
+        )
+
+
 @pytest.mark.parametrize(
     ("case", "match"),
     [
