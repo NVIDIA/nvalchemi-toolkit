@@ -11,7 +11,7 @@ copy the skill folders into your project's or home skills directory.
 
 | Task | Skill |
 | --- | --- |
-| Build or batch atomic systems; debug shape, dtype, or device errors | `nvalchemi-data-structures` |
+| Build, batch, or group atomic systems; debug shape, dtype, or device errors | `nvalchemi-data-structures` |
 | Write, read, compose, or stream atomic data with the Zarr pipeline | `nvalchemi-data-storage` |
 | Tune Dataset/DataLoader throughput or Zarr chunking | `nvalchemi-zarr-perf` |
 | Wrap an MLIP or custom PyTorch model for use in nvalchemi | `nvalchemi-model-wrapping` |
