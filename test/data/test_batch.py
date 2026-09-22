@@ -218,6 +218,46 @@ def _custom_uniform_schema() -> LevelSchema:
     return schema
 
 
+def _hessian_data(num_nodes: int) -> AtomicData:
+    """Build one plain atomic system for a Hessian-bearing batch."""
+    positions = torch.arange(num_nodes * 3, dtype=torch.float64).reshape(num_nodes, 3)
+    return AtomicData(
+        positions=positions,
+        atomic_numbers=torch.ones(num_nodes, dtype=torch.long),
+    )
+
+
+def _hessian_batch(*num_nodes: int, offset: float = 0.0) -> Batch:
+    """Build a Hessian-bearing batch with mixed graph sizes."""
+    data = [_hessian_data(nodes) for nodes in num_nodes]
+    batch = Batch.from_data_list(data)
+    batch.add_product_level("atom_atom", left="atoms", right="atoms")
+    blocks = [
+        torch.arange(nodes * nodes * 9, dtype=torch.float64)
+        .reshape(nodes, nodes, 3, 3)
+        .add(offset + index * 1000.0)
+        for index, nodes in enumerate(num_nodes)
+    ]
+    batch.add_key("hessian", blocks, level="atom_atom")
+    return batch
+
+
+def _assert_hessian_batch(batch: Batch, num_nodes: tuple[int, ...]) -> None:
+    """Assert the canonical Hessian schema, packing, and logical shapes."""
+    schema = batch.get_level_schema()
+    assert schema.product_parents["atom_atom"] == ("atoms", "atoms")
+    assert schema.group_to_attrs["atom_atom"] == {"hessian"}
+    assert schema.dtypes["hessian"] == "float64"
+    assert batch.hessian.shape == (sum(count**2 for count in num_nodes), 3, 3)
+
+    pointer = [0]
+    for count in num_nodes:
+        pointer.append(pointer[-1] + count**2)
+    assert batch.level_ptr("atom_atom").tolist() == pointer
+    for index, count in enumerate(num_nodes):
+        assert batch.get_data(index).hessian.shape == (count, count, 3, 3)
+
+
 def _custom_transport_schema() -> LevelSchema:
     """Build the mixed custom schema used by transport tests."""
     schema = LevelSchema()
@@ -2364,6 +2404,65 @@ class TestBatchMutation:
 # -----------------------------------------------------------------------------
 # Round-trip: added keys appear correctly in to_data_list()
 # -----------------------------------------------------------------------------
+class TestHessianBatchLifecycle:
+    """Test public lifecycle operations for dense Hessian result batches."""
+
+    def test_clone_is_independent_and_preserves_schema(self):
+        batch = _hessian_batch(2, 3)
+        clone = batch.clone()
+        clone.hessian[0, 0, 0] = -1.0
+
+        assert (
+            batch.get_level_schema().level_names == clone.get_level_schema().level_names
+        )
+        _assert_hessian_batch(clone, (2, 3))
+        assert batch.hessian[0, 0, 0].item() != -1.0
+        torch.testing.assert_close(clone.get_data(1).hessian, batch.get_data(1).hessian)
+
+    def test_device_move_uses_public_data_fixture(self, device):
+        batch = _hessian_batch(2, 3).to(device)
+
+        _assert_hessian_batch(batch, (2, 3))
+        assert batch.hessian.device.type == torch.device(device).type
+        assert batch.get_data(0).hessian.device.type == torch.device(device).type
+        torch.testing.assert_close(batch.hessian.cpu(), _hessian_batch(2, 3).hessian)
+
+    def test_reordered_and_repeated_select_preserves_blocks(self):
+        batch = _hessian_batch(2, 3, 1)
+        selected = batch.index_select([2, 0, 2])
+
+        _assert_hessian_batch(selected, (1, 2, 1))
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                selected.get_data(result_index).hessian,
+                batch.get_data(source_index).hessian,
+            )
+
+    def test_get_data_to_data_list_and_rebatch_preserve_exact_values(self):
+        batch = _hessian_batch(2, 3)
+        data_list = batch.to_data_list()
+        rebuilt = Batch.from_data_list(data_list, attr_map=batch.get_level_schema())
+
+        _assert_hessian_batch(rebuilt, (2, 3))
+        for index in range(batch.num_graphs):
+            torch.testing.assert_close(
+                batch.get_data(index).hessian, data_list[index].hessian
+            )
+        torch.testing.assert_close(rebuilt.hessian, batch.hessian)
+
+    def test_append_compatible_hessian_batches(self):
+        left = _hessian_batch(2, 1)
+        right = _hessian_batch(3, 2, offset=5000.0)
+        expected = [data.hessian for data in left.to_data_list() + right.to_data_list()]
+
+        left.append(right)
+
+        assert left.num_graphs == 4
+        _assert_hessian_batch(left, (2, 1, 3, 2))
+        for index, value in enumerate(expected):
+            torch.testing.assert_close(left.get_data(index).hessian, value)
+
+
 class TestBatchRoundTripAddedKeys:
     """Test that keys added to a Batch (e.g. by MD code) are correctly stored in
     AtomicData when converting back via to_data_list() / get_data().

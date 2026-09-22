@@ -4,6 +4,13 @@
 
 ### Added
 
+- Local position-Hessian APIs on model wrappers: one-shot Hessian-vector
+  products, reusable prepared operators, and in-place dense materialization on
+  the canonical `atoms x atoms` product level. Dense results retain their
+  schema and packed per-system blocks through the `Batch` lifecycle and Zarr
+  persistence. Local eager AIMNet2, MACE, differentiable-energy Ewald/PME, and
+  connected flat pipelines are qualified; DFT-D3, unsupported Coulomb modes,
+  compiled execution, and distributed execution reject before evaluation.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.

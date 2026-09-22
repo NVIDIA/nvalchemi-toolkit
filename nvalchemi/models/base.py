@@ -628,6 +628,12 @@ class BaseModelMixin(abc.ABC):
     def prepare_hessian(self, batch: Batch) -> HessianOperator:
         """Prepare an immediately active matrix-free position Hessian.
 
+        The operator represents ``d^2 E / dR^2`` at the supplied geometry. It
+        copies the batch inputs and retains a derivative graph evaluated with
+        the current model. Keep model parameters, buffers, execution mode, and
+        pipeline wiring unchanged while using it. Close the operator explicitly
+        or use it as a context manager.
+
         Parameters
         ----------
         batch : Batch
@@ -661,8 +667,17 @@ class BaseModelMixin(abc.ABC):
         """Materialize the dense position Hessian on a batch in place.
 
         The model evaluates an independent snapshot, then attaches or replaces
-        ``batch["hessian"]`` on the ``atoms x atoms`` product level. Callers
-        that need an independent result should clone the batch first.
+        ``batch["hessian"]`` on the ``atoms x atoms`` product level. To keep a
+        simulation batch unchanged, supply a separate analysis batch with its
+        required neighbor data already prepared. For system ``i``, the logical
+        field shape is ``[N_i, N_i, 3, 3]`` with axes
+        ``[atom_out, atom_in, xyz_out, xyz_in]``; the packed batch shape is
+        ``[sum(N_i**2), 3, 3]``. The detached result is the energy Hessian
+        ``d^2 E / dR^2``, so the directional force Jacobian is ``-H @ v``.
+
+        Neighbor membership is held fixed at the topology supplied by
+        ``batch``. The method does not run neighbor-list hooks or differentiate
+        the discrete neighbor-selection operation.
 
         Parameters
         ----------
@@ -672,8 +687,9 @@ class BaseModelMixin(abc.ABC):
             Whether each row chunk uses batched vector-Jacobian products or
             evaluates one row at a time. Defaults to ``"vmap"``.
         row_chunk_size : int, optional
-            Maximum number of Cartesian Hessian rows evaluated together for
-            each system. ``None`` evaluates every row of one system together.
+            Maximum number of flattened Cartesian rows per chunk, within each
+            system. ``None`` uses one chunk per system. ``"vmap"`` evaluates
+            the chunk together; ``"loop"`` evaluates its rows individually.
 
         Returns
         -------
@@ -731,6 +747,11 @@ class BaseModelMixin(abc.ABC):
         vectors: torch.Tensor,
     ) -> torch.Tensor:
         """Compute a detached position Hessian-vector product.
+
+        This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed
+        neighbor topology. It does not rebuild neighbors or differentiate
+        neighbor membership. The force directional derivative has the
+        opposite sign.
 
         Parameters
         ----------

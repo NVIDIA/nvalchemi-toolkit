@@ -27,6 +27,22 @@ Core classes
    NeighborConfig
    BaseModelMixin
 
+Position-Hessian operator
+-------------------------
+
+:meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian` returns a
+:class:`~nvalchemi.models.HessianOperator` for repeated Hessian-vector
+products at one geometry.
+
+.. currentmodule:: nvalchemi.models
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   HessianOperator
+
 Demo utilities
 --------------
 

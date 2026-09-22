@@ -402,12 +402,14 @@ def _attach_hessian_blocks(
 
 
 class HessianOperator:
-    """Matrix-free position Hessian retained at one fixed model snapshot.
+    """Matrix-free position Hessian for repeated products at one geometry.
 
-    Instances are created by
-    :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`. The operator
-    is immediately active and must be closed explicitly or used as a context
-    manager to release its private autograd graph.
+    Obtain an operator through
+    :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`. Its
+    :meth:`matvec` method computes ``(d^2 E / dR^2) @ v`` using an independent
+    batch snapshot and a retained autograd graph. Keep model parameters,
+    buffers, execution mode, and pipeline wiring unchanged while the operator
+    is active. Call :meth:`close` or use a context manager to release the graph.
     """
 
     def __init__(

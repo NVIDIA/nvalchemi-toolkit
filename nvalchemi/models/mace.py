@@ -676,7 +676,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         return self._derivative_mode
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Validate the local eager plain-MACE second-order capability."""
+        """Validate local eager MACE derivatives for the requested strategy."""
         if request.execution != "local":
             _reject_derivative_request(
                 self,

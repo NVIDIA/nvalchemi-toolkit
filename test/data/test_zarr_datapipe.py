@@ -140,6 +140,27 @@ def _custom_zarr_batch(offset: int = 0) -> Batch:
     return Batch.from_data_list(samples, device="cpu", attr_map=schema)
 
 
+def _hessian_batch(*num_atoms: int, offset: float = 0.0) -> Batch:
+    """Build a Hessian-bearing batch exclusively through public Batch APIs."""
+    data_list = [
+        AtomicData(
+            atomic_numbers=torch.ones(count, dtype=torch.long),
+            positions=torch.arange(count * 3, dtype=torch.float64).reshape(count, 3),
+        )
+        for count in num_atoms
+    ]
+    batch = Batch.from_data_list(data_list, device="cpu")
+    batch.add_product_level("atom_atom", left="atoms", right="atoms")
+    blocks = [
+        torch.arange(count * count * 9, dtype=torch.float64)
+        .reshape(count, count, 3, 3)
+        .add(offset + index * 1000.0)
+        for index, count in enumerate(num_atoms)
+    ]
+    batch.add_key("hessian", blocks, level="atom_atom")
+    return batch
+
+
 class TestAtomicDataZarrWriter:
     """Tests for AtomicDataZarrWriter."""
 
@@ -1499,6 +1520,80 @@ def test_empty_data_list_raises(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Cannot create batch from empty"):
         writer.write([])
+
+
+class TestHessianZarrPersistence:
+    """Test Zarr persistence and public loading of dense Hessian fields."""
+
+    def test_write_raw_read_reordered_dataset_load_and_append(self, tmp_path: Path):
+        first = _hessian_batch(2, 3, 1)
+        second = _hessian_batch(2, 1, offset=5000.0)
+        path = tmp_path / "hessian.zarr"
+        writer = AtomicDataZarrWriter(path)
+        writer.write(first)
+
+        root = zarr.open(path, mode="r")
+        assert root.attrs["levels"]["version"] == 1
+        assert root.attrs["num_samples"] == 3
+        assert root.attrs["levels"]["definitions"]["atom_atom"] == {
+            "kind": "product",
+            "left": "atoms",
+            "right": "atoms",
+        }
+        assert root["meta"]["level_ptrs"]["atom_atom"].dtype == np.int64
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [0, 4, 13, 14]
+        assert root["levels"]["atom_atom"]["hessian"].dtype == np.float64
+        assert root["levels"]["atom_atom"]["hessian"].shape == (14, 3, 3)
+        np.testing.assert_array_equal(
+            root["levels"]["atom_atom"]["hessian"][:], first.hessian.cpu().numpy()
+        )
+
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        for index in range(first.num_graphs):
+            raw, _ = reader[index]
+            expected = first.get_data(index).hessian
+            assert raw["hessian"].shape == expected.shape
+            torch.testing.assert_close(raw["hessian"], expected)
+        dataset = Dataset(reader, device="cpu")
+        loaded = dataset.load_batches([[2, 0, 2]])[0]
+        assert loaded.level_ptr("atom_atom").tolist() == [0, 1, 5, 6]
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                loaded.get_data(result_index).hessian,
+                first.get_data(source_index).hessian,
+            )
+        dataset.close()
+
+        writer.append(second)
+        root = zarr.open(path, mode="r")
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [
+            0,
+            4,
+            13,
+            14,
+            18,
+            19,
+        ]
+        assert root.attrs["num_samples"] == 5
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        appended_dataset = Dataset(reader, device="cpu")
+        appended = appended_dataset.load_batches([[3, 4]])[0]
+        torch.testing.assert_close(
+            appended.get_data(0).hessian, second.get_data(0).hessian
+        )
+        torch.testing.assert_close(
+            appended.get_data(1).hessian, second.get_data(1).hessian
+        )
+        appended_dataset.close()
+        reader.close()
 
 
 class TestAtomicDataZarrReader:

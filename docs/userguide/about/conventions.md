@@ -4,6 +4,29 @@
 
 This page documents the project-wide sign conventions used by `nvalchemi`.
 
+## Position Hessian
+
+The position Hessian is the second derivative of total energy with respect to
+Cartesian positions:
+
+$$
+H_{ia,jb} = \frac{\partial^2 E}
+{\partial R_{ia}\,\partial R_{jb}}.
+$$
+
+Here `i` and `j` identify atoms, while `a` and `b` identify Cartesian
+components. Dense Hessian blocks are stored with axes
+`[atom_out, atom_in, xyz_out, xyz_in]`, so entry `[i, j, a, b]` is
+$H_{ia,jb}$. In the default Toolkit unit system, the Hessian has units of
+$\mathrm{eV}/\mathrm{\AA}^2$.
+
+Forces use $F=-\partial E/\partial R$. Their directional Jacobian therefore has
+the opposite sign:
+
+$$
+\left(\frac{\partial F}{\partial R}\right)v = -Hv.
+$$
+
 ## Virial
 
 The virial tensor is defined as the negative strain derivative of the energy:

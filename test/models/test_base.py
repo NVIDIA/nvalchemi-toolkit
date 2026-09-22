@@ -1395,24 +1395,6 @@ class TestDenseHessian:
         assert "atom_atom" not in original_schema.level_names
         assert "hessian" in result
 
-    def test_canonical_field_survives_batch_lifecycle(self):
-        batch = _make_derivative_batch(1, 2)
-        model = _QualifiedQuadraticDerivativeWrapper()
-        model.output_kind = "coupled"
-        model.compute_hessian(batch)
-
-        cloned = batch.clone()
-        selected = batch.index_select([1, 0])
-        rebatched = Batch.from_data_list(batch.to_data_list())
-
-        torch.testing.assert_close(cloned.hessian, batch.hessian)
-        torch.testing.assert_close(
-            selected.get_data(0).hessian,
-            batch.get_data(1).hessian,
-        )
-        torch.testing.assert_close(rebatched.hessian, batch.hessian)
-        assert cloned.level_ptr("atom_atom").tolist() == [0, 1, 5]
-
     @pytest.mark.parametrize(
         ("strategy", "row_chunk_size", "error", "message"),
         [
