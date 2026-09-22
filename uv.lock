@@ -73,7 +73,7 @@ overrides = [
 
 [[manifest.dependency-metadata]]
 name = "nvalchemi-toolkit-ops"
-version = "0.4.1"
+version = "0.5.0"
 requires-dist = ["warp-lang>=1.13.0", "numpy", "torch>=2.8.0 ; extra == 'torch'", "torch>=2.8.0 ; extra == 'torch-cu12'", "torch>=2.8.0 ; extra == 'torch-cu13'"]
 provides-extras = ["torch", "torch-cu12", "torch-cu13"]
 
@@ -3476,11 +3476,11 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy", specifier = ">=2,<3" },
-    { name = "nvalchemi-toolkit-ops", specifier = ">=0.4.1" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=0.4.1" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'uma-cu12'", specifier = ">=0.4.1" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.4.1" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'uma-cu13'", specifier = ">=0.4.1" },
+    { name = "nvalchemi-toolkit-ops", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'uma-cu12'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'uma-cu13'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
     { name = "nvidia-physicsnemo", specifier = ">=2.2.0" },
     { name = "nvidia-physicsnemo", marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=2.2.0" },
     { name = "nvidia-physicsnemo", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=2.2.0" },
@@ -3550,15 +3550,12 @@ docs = [
 
 [[package]]
 name = "nvalchemi-toolkit-ops"
-version = "0.4.1"
-source = { registry = "https://pypi.org/simple" }
+version = "0.5.0"
+source = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc#6002cda69f6650f5c0cc2911c4ce3aac1516b79e" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or extra == 'extra-17-nvalchemi-toolkit-uma' or extra == 'extra-17-nvalchemi-toolkit-uma-cu12' or extra == 'extra-17-nvalchemi-toolkit-uma-cu13' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-mace') or (python_full_version >= '3.12' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
     { name = "warp-lang" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/9e/ba3b01e6345247f19d904cbfffba5a56132a2d313eec77c356a8b9f8afde/nvalchemi_toolkit_ops-0.4.1-py3-none-any.whl", hash = "sha256:f2f1e195f90d7a27ec52c26484ef727d734cc34cab15d45a3a38e2077c046c88", size = 1287584, upload-time = "2026-08-04T17:02:54.259Z" },
 ]
 
 [package.optional-dependencies]
