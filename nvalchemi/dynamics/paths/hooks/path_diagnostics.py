@@ -43,7 +43,10 @@ class PathDiagnostics:
         shape (num_paths,).
     highest_interior_image_idx : Tensor
         Zero-based path-local index of the highest-energy interior image for
-        each path, shape (num_paths,) and dtype torch.int32.
+        each path, shape (num_paths,) and dtype torch.int32. Unlike
+        :attr:`PathEnergyStats.highest_interior_image_idx
+        <nvalchemi.dynamics.paths.hooks.PathEnergyStats.highest_interior_image_idx>`,
+        this index is relative to the start of its path rather than the batch.
     path_length : Tensor
         Sum of minimum-image forward-link lengths for each path, shape
         (num_paths,).
