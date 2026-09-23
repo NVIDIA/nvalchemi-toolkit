@@ -2936,8 +2936,10 @@ class TestBatchRecvHandleWait:
 
         irecv_handles = []
 
-        def make_irecv_handle(*args, **kwargs):
+        def make_irecv_handle(tensor, *args, **kwargs):
             h = MagicMock()
+            # Simulate irecv populating its destination when wait completes.
+            h.wait.side_effect = lambda: tensor.fill_(5)
             irecv_handles.append(h)
             return h
 
