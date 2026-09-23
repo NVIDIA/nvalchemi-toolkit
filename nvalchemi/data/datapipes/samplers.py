@@ -126,12 +126,13 @@ def _num_sharded_items(length: int, num_replicas: int, drop_last: bool) -> int:
     return ceil(length / num_replicas)
 
 
-def _distributed_shard(
+def distributed_shard(
     indices: list,
     *,
     num_replicas: int,
     rank: int,
     drop_last: bool,
+    pad: bool = True,
 ) -> list:
     """Return the subset of epoch items assigned to one distributed rank.
 
@@ -140,14 +141,22 @@ def _distributed_shard(
     indices : list
         Sample indices in the order they would be retrieved for this epoch
         before splitting the work across data-parallel ranks. In a
-        single-process run, this would be the sampler order.
+        single-process run, this would be the sampler order. The list is not
+        modified.
     num_replicas : int
         Number of distributed ranks sharing the epoch.
     rank : int
         Rank whose local shard should be returned.
     drop_last : bool
         Whether to truncate the full epoch instead of padding it when the epoch
-        length is not evenly divisible by ``num_replicas``.
+        length is not evenly divisible by ``num_replicas``. Ignored when
+        ``pad=False``.
+    pad : bool, optional
+        Whether an uneven epoch is padded (or, with ``drop_last=True``,
+        truncated) so every rank receives the same number of items. ``False``
+        deals the items strided without resizing, so the shards are disjoint
+        and cover ``indices`` exactly while differing in length by at most
+        one. Default ``True``.
 
     Returns
     -------
@@ -168,10 +177,13 @@ def _distributed_shard(
     is evenly divisible across ranks, matching PyTorch
     :class:`~torch.utils.data.DistributedSampler` behavior. After resizing, rank
     ``r`` receives every ``num_replicas``-th item starting at offset ``r``:
-    ``indices[r:total_size:num_replicas]``.
+    ``indices[r:total_size:num_replicas]``. With ``pad=False`` no resizing
+    happens and rank ``r`` receives ``indices[r::num_replicas]``.
     """
     if num_replicas == 1:
         return indices
+    if not pad:
+        return indices[rank::num_replicas]
 
     num_samples = _num_sharded_items(len(indices), num_replicas, drop_last)
     total_size = num_samples * num_replicas
@@ -180,9 +192,11 @@ def _distributed_shard(
     elif len(indices) < total_size:
         padding_size = total_size - len(indices)
         if padding_size <= len(indices):
-            indices += indices[:padding_size]
+            indices = indices + indices[:padding_size]
         else:
-            indices += (indices * ceil(padding_size / len(indices)))[:padding_size]
+            indices = (
+                indices + (indices * ceil(padding_size / len(indices)))[:padding_size]
+            )
     return indices[rank:total_size:num_replicas]
 
 
@@ -432,7 +446,7 @@ class MultiDatasetSampler(Sampler[int]):
 
     def __iter__(self) -> Iterator[int]:
         """Yield rank-local global sample indices."""
-        yield from _distributed_shard(
+        yield from distributed_shard(
             self._global_indices(),
             num_replicas=self.num_replicas,
             rank=self.rank,

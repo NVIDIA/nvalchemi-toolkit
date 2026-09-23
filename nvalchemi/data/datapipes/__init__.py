@@ -84,6 +84,7 @@ from nvalchemi.data.datapipes.samplers import (
     DistributedSamplerProtocol,
     MultiDatasetBatchSampler,
     MultiDatasetSampler,
+    distributed_shard,
 )
 
 __all__ = [
@@ -102,5 +103,6 @@ __all__ = [
     "DistributedSamplerProtocol",
     "MultiDatasetSampler",
     "MultiDatasetBatchSampler",
+    "distributed_shard",
     "DataLoader",
 ]

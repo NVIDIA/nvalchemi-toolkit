@@ -21,7 +21,8 @@ than duplicated, and its autouse seeding fixture applies here too.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import pytest
 import torch
@@ -36,6 +37,7 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.training.distillation.seeding import FitPolicy
 from test.training.conftest import _build_atomic_data, _build_batch, _build_demo_model
 
 _LJ_CUTOFF = 5.0
@@ -116,10 +118,17 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         return {"node_embeddings": (self.model.hidden_dim,)}
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect the tensors the underlying model's forward expects."""
+        """Collect the tensors the underlying model's forward expects, at its dtype.
+
+        Positions are cast to the parameter dtype, which is what lets a
+        reduced-precision copy of this model run over an ordinary float32 batch.
+        """
         model_inputs = super().adapt_input(data, **kwargs)
         model_inputs["batch_indices"] = (
             data.batch_idx if isinstance(data, Batch) else None
+        )
+        model_inputs["positions"] = model_inputs["positions"].to(
+            next(self.model.parameters()).dtype
         )
         return model_inputs
 
@@ -129,7 +138,10 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         """Write per-node embeddings onto *data* in place."""
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
-        features = self.model.features(data.atomic_numbers, data.positions)
+        features = self.model.features(
+            data.atomic_numbers,
+            data.positions.to(next(self.model.parameters()).dtype),
+        )
         atoms_group = data._atoms_group
         if atoms_group is not None:
             atoms_group["node_embeddings"] = features
@@ -268,6 +280,64 @@ class _ChargeSourceModel(nn.Module, BaseModelMixin):
                 ("charges", torch.full((data.num_nodes,), _WIRED_CHARGE)),
             ]
         )
+
+
+class _ListSource:
+    """Minimal ``InitialStructuresSource`` over a fixed list of structures.
+
+    Serves the whole list as the initial batch, then the remainder through
+    ``draw``, and records every shard installed on it.
+    """
+
+    def __init__(self, structures: list[AtomicData]) -> None:
+        self.structures = structures
+        self.shards: list[tuple[int, int]] = []
+        self._cursor = 0
+
+    @property
+    def exhausted(self) -> bool:
+        """Whether every structure has been handed out."""
+        return self._cursor >= len(self.structures)
+
+    def shard(self, rank: int, world_size: int) -> None:
+        """Record the shard and reopen the cursor."""
+        self.shards.append((rank, world_size))
+        self._cursor = 0
+
+    def probe(self) -> Batch:
+        """Return the first structure as a one-graph batch."""
+        return Batch.from_data_list([self.structures[0]])
+
+    def initial_batch(self) -> Batch:
+        """Return every structure left as one batch."""
+        batch = Batch.from_data_list(self.structures[self._cursor :])
+        self._cursor = len(self.structures)
+        return batch
+
+    def draw(
+        self,
+        *,
+        limit: int | None = None,
+        fits: FitPolicy | None = None,  # noqa: ARG002
+        on_miss: Literal["stop", "skip"] = "stop",  # noqa: ARG002
+    ) -> list[AtomicData]:
+        """Serve up to *limit* structures, each stamped with its ``system_id``."""
+        end = None if limit is None else self._cursor + limit
+        served = self.structures[self._cursor : end]
+        for offset, data in enumerate(served):
+            data.add_system_property(
+                "system_id", torch.tensor([[self._cursor + offset]], dtype=torch.long)
+            )
+        self._cursor += len(served)
+        return served
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the cursor."""
+        return {"cursor": self._cursor}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Resume at the recorded cursor."""
+        self._cursor = int(state["cursor"])
 
 
 def _build_pair_potential_teacher(
