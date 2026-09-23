@@ -123,6 +123,7 @@ def _discard_stale_fields(batch: Batch) -> None:
     """Remove edge data, model outputs, and dynamical state from path images."""
     edge_group = batch._edges_group
     edge_fields = set() if edge_group is None else set(edge_group.keys())
+    batch._storage.groups.pop("edges", None)
     discarded = edge_fields | _STALE_FIELDS
     for field in discarded:
         if field in batch:
