@@ -549,7 +549,15 @@ print(loaded_batch.get_data(1).constraint_features[0].tolist())
 # [16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0]
 ```
 
-`reader.level_schema` returns an independent schema. `Dataset` and
+`reader.level_schema` returns an independent schema. The reader also describes
+the store without reading a chunk: `reader.schema()` returns one
+{py:class}`~nvalchemi.data.FieldSchema` (level, dtype, row shape) per stored
+field, `reader.level_sizes()` the row count of every level including custom
+ones, `reader.num_samples` the stored sample count with soft-deleted samples
+included, `reader.field_array(name)` the Zarr array behind a field, and
+`reader.check_integrity()` raises when the pointers, masks, and field arrays
+disagree with the committed sample count, which is what an append interrupted
+mid-write leaves behind. `Dataset` and
 {py:class}`~nvalchemi.data.InMemoryDataset` propagate field-bearing custom levels
 and fieldless parents whose counts can be recovered from product payload axes. A
 level represented only by a stored pointer, with no field or product payload, is

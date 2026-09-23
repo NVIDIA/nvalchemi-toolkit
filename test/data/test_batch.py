@@ -1524,6 +1524,18 @@ class TestBatchMutation:
         with pytest.raises(ValueError, match="Group 'edges' not found"):
             batch.add_key("edge_attr", [torch.randn(1, 4)], level="edge")
 
+    def test_add_key_system_creates_the_missing_system_group(self) -> None:
+        """A batch of bare positions gains a system group sized to its graphs."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        assert batch._system_group is None
+        batch.add_key(
+            "tag", [torch.tensor([[1.0]]), torch.tensor([[2.0]])], level="system"
+        )
+        assert batch["tag"].shape == (2, 1)
+        assert batch._storage._group_name_from_attr("tag") == "system"
+        assert "tag" in batch.keys["system"]
+        assert batch.get_data(1).tag.tolist() == [[2.0]]
+
     def test_add_key_registered_custom_level(self):
         schema = LevelSchema()
         schema.add_level("samples", segmented=True)
@@ -1852,6 +1864,148 @@ class TestBatchMutation:
         alias = Batch(device=batch.device, storage=batch._storage)
         with pytest.raises(ValueError, match="shares storage"):
             batch.append(alias)
+
+
+# -----------------------------------------------------------------------------
+# Level lifecycle: drop_level / pop_level / set_level
+# -----------------------------------------------------------------------------
+class TestBatchLevelLifecycle:
+    """Tests for drop_level, pop_level, and set_level."""
+
+    def test_drop_level_removes_an_empty_edges_group(self) -> None:
+        """An edges group left with no fields can be dropped outright."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        del batch["neighbor_list"]
+        assert batch.level_keys["edges"] == set()
+
+        batch.drop_level("edges")
+
+        assert "edges" not in batch._storage.groups
+        assert batch.num_edges == 0
+        assert batch.level_ptr("edges").tolist() == [0, 0, 0]
+
+    def test_pop_and_set_level_round_trips_a_group_and_its_keys(self) -> None:
+        """A popped edges group carries its fields out and back unchanged."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        neighbor_list = batch["neighbor_list"]
+
+        popped = batch.pop_level("edges")
+
+        assert isinstance(popped, SegmentedLevelStorage)
+        assert "neighbor_list" not in batch
+        assert batch.num_edges == 0
+
+        batch.set_level("edges", popped)
+
+        assert batch["neighbor_list"] is neighbor_list
+        assert batch.num_edges == 3
+        assert batch.num_edges_list == [2, 1]
+        assert batch.level_keys["edges"] == {"neighbor_list"}
+        assert batch.to_data_list()[1].num_edges == 1
+
+    def test_set_level_restores_schema_level_order(self) -> None:
+        """A re-attached level returns to its schema position, not the end."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2) for _ in range(2)]
+        )
+
+        batch.set_level("edges", batch.pop_level("edges"))
+
+        assert list(batch._storage.groups) == ["atoms", "edges", "system"]
+        assert batch._storage.attr_map.group("neighbor_list") == "edges"
+
+    def test_pop_level_returns_none_for_an_unmaterialized_level(self) -> None:
+        """A registered level with no storage pops as None and drops as a no-op."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+
+        assert batch.pop_level("edges") is None
+        batch.drop_level("edges")
+
+    def test_pop_level_round_trips_a_custom_level(self) -> None:
+        """A custom segmented level keeps its payload across pop and set."""
+        batch = _custom_boundary_batch(3, 1.0, payload_value=2.0)
+        values = batch["sample_values"]
+
+        popped = batch.pop_level("samples")
+        assert "sample_values" not in batch
+
+        batch.set_level("samples", popped)
+
+        assert torch.equal(batch["sample_values"], values)
+        assert batch.level_ptr("samples").tolist() == [0, 3]
+
+    @pytest.mark.parametrize("level", ["atoms", "system"])
+    def test_pop_level_rejects_count_bearing_builtin_levels(self, level: str) -> None:
+        """The atoms and system levels carry the batch's counts and cannot leave."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2) for _ in range(2)]
+        )
+
+        with pytest.raises(ValueError, match="cannot be detached"):
+            batch.pop_level(level)
+        with pytest.raises(ValueError, match="cannot be detached"):
+            batch.drop_level(level)
+
+    def test_pop_level_unregistered_name_raises(self) -> None:
+        """An unregistered level name is a KeyError listing the known levels."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+
+        with pytest.raises(KeyError, match="is not registered"):
+            batch.pop_level("nonexistent")
+
+    def test_set_level_unregistered_name_raises(self) -> None:
+        """Attaching storage under an unregistered level name is a KeyError."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        popped = batch.pop_level("edges")
+
+        with pytest.raises(KeyError, match="is not registered"):
+            batch.set_level("nonexistent", popped)
+
+    def test_set_level_wrong_storage_class_raises(self) -> None:
+        """A segmented level rejects uniform storage."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        batch.pop_level("edges")
+        uniform = UniformLevelStorage(
+            data={"edge_total": torch.zeros(2, 1)}, device="cpu", validate=False
+        )
+
+        with pytest.raises(TypeError, match="needs a SegmentedLevelStorage"):
+            batch.set_level("edges", uniform)
+
+    def test_set_level_graph_count_mismatch_raises(self) -> None:
+        """Storage spanning a different number of graphs is rejected."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        other = Batch.from_data_list([_minimal_atomic_data(2, 2)])
+        popped = other.pop_level("edges")
+
+        with pytest.raises(ValueError, match="spans 1 graphs, expected 2"):
+            batch.set_level("edges", popped)
+
+    def test_set_level_field_owned_by_another_level_raises(self) -> None:
+        """A field another level already holds cannot be attached."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        batch.pop_level("edges")
+        clashing = SegmentedLevelStorage(
+            data={"positions": torch.zeros(3, 3)},
+            segment_lengths=[2, 1],
+            device="cpu",
+            validate=False,
+        )
+
+        with pytest.raises(ValueError, match="already belongs to level 'atoms'"):
+            batch.set_level("edges", clashing)
 
 
 # -----------------------------------------------------------------------------
@@ -2936,8 +3090,10 @@ class TestBatchRecvHandleWait:
 
         irecv_handles = []
 
-        def make_irecv_handle(*args, **kwargs):
+        def make_irecv_handle(tensor, *args, **kwargs):
             h = MagicMock()
+            # Simulate irecv populating its destination when wait completes.
+            h.wait.side_effect = lambda: tensor.fill_(5)
             irecv_handles.append(h)
             return h
 
