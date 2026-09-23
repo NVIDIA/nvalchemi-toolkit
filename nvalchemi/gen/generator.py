@@ -573,6 +573,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             If a hook is missing required members.
         """
         for i, hook in enumerate(hooks):
+            if isinstance(hook, dict):
+                continue  # a spec payload; the deserialization layer builds it
             missing = []
             if not hasattr(hook, "frequency"):
                 missing.append("frequency")
