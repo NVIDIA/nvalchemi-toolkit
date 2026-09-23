@@ -26,7 +26,7 @@ all below; this table is the map.
 
 | Component | Role |
 | ----------- | ------ |
-| {class}`~nvalchemi.gen.generator.AtomisticGenerator` | The driver. Runs the condition → generate → materialize pipeline, fires hooks, streams, and owns sessions |
+| {class}`~nvalchemi.gen.generator.AtomisticGenerator` | The driver. Runs the condition → generate pipeline, fires hooks, streams, and owns sessions |
 | {class}`~nvalchemi.gen.generator.GeneratingFunction` | The callable that owns the family-specific sampling procedure (diffusion, GAN, GA, ...) — and the model, when there is one |
 | {class}`~nvalchemi.gen.generator.ConditionFunction` | The optional conditioning step: translates the call's inputs into what the generating function consumes |
 | {class}`~nvalchemi.gen.stages.GenerationStage` / {class}`~nvalchemi.hooks.GenerationContext` | The hook lifecycle: when hooks fire, and the per-call state they see |
@@ -47,7 +47,6 @@ BEFORE_CONDITION    hooks                     (only when conditioning runs)
                     inputs = condition(inputs, num_samples=...)
 AFTER_CONDITION     hooks                     (only when conditioning runs)
                     sample = generator_func(inputs, num_samples=..., rng=...)
-BEFORE_MAPPING      hooks                     (always; ctx.sample is set)
 if sample is a Batch:                           (the output contract)
     ctx.batch = sample
     AFTER_GENERATE  hooks  (filtering = subsetting ctx.batch)
@@ -73,7 +72,7 @@ The pieces carry the semantics:
   conditioned) inputs, the draw count, and an optional RNG. The output
   contract is a {class}`~nvalchemi.data.Batch`: the driver fires the
   `AFTER_GENERATE` hooks on it, validates its device and declared
-  `produces_fields`, and pipelines can compose it (including driving
+  `outputs`, and pipelines can compose it (including driving
   dynamics). Any other container is a fallback with real losses — the raw
   output passes through untouched, but the `AFTER_GENERATE` hooks are skipped
   and it cannot feed dynamics stages. (Inside the function, a
@@ -95,8 +94,7 @@ pipelines then skip the remaining stages for that item.
 | ------- | --------------- | --------------------- |
 | `BEFORE_CONDITION` | Before the condition step, when one runs | Edit or replace `ctx.inputs` |
 | `AFTER_CONDITION` | After conditioning, when one runs | Attach conditioning metadata (e.g. text embeddings); replace the conditioned input |
-| `BEFORE_MAPPING` | After generation, before materialization — always | Filter or replace `ctx.sample` before paying materialization cost |
-| `AFTER_GENERATE` | After materialization, when a mapping ran | Filter or mutate the generated batch |
+| `AFTER_GENERATE` | After the function returns a `Batch` | Filter or mutate the generated batch |
 
 ## Hooks and the generation context
 
@@ -109,14 +107,13 @@ hook's edit is visible to later steps and hooks. The context carries:
 
 - `inputs` — the call's inputs (editable at `BEFORE_CONDITION`), holding the
   conditioned value after the condition step,
-- `sample` — the raw sample the generating function returned (set at
-  `BEFORE_MAPPING`),
+- `sample` — the raw sample the generating function returned,
 - `batch` — the generated batch once the function has returned one (and the
   call's inputs when they were a `Batch`),
 - `accepted_mask` — which of the call's candidates were accepted, written by
-  filtering hooks (the materialization callable never sees the context; it
-  signals total rejection by returning a zero-graph `Batch`), mirroring the
-  dynamics `converged_mask` convention,
+  filtering hooks (the generating function signals total rejection by
+  returning a zero-graph `Batch`), mirroring the dynamics `converged_mask`
+  convention,
 - `intermediates` — scratch space for hook-to-hook state within one call,
 - `step_count` — which generation call this is; drives `frequency` gating.
 
@@ -140,8 +137,8 @@ generating function, which owns the model.
 
 The config is a small frozen declaration with four fields:
 `supports_variable_atoms`, the batch fields the model's conditioning reads
-(`consumes_fields`; empty means unconditional), the fields its generated
-output carries (`produces_fields`), and `prediction_outputs` (the tensor
+(`required_inputs`; empty means unconditional), the fields its generated
+output carries (`outputs`), and `prediction_outputs` (the tensor
 names a forward returns). The field declarations are what lets a
 [pipeline](#chaining-generators) validate stage links at construction: a
 generating function picks them up from its model's config, or declares its
@@ -190,7 +187,7 @@ signature at construction and in `compile()`:
 
 ```python
 gan = AtomisticGenerator(
-    generator_func=make_gan_generate(gan_model),
+    generator_func=GANGenerate(gan_model),
     compile_kwargs={"fullgraph": True},
 )
 
@@ -240,7 +237,7 @@ when their session is entered — so sequential stages serialize on it with
 no cross-stream sync.
 
 For construction-time validation, every generator stage declares the batch
-fields it reads and carries — `consumes_fields` / `produces_fields`, set on
+fields it reads and carries — `required_inputs` / `outputs`, set on
 the `AtomisticGenerator` or defaulted from the generating function's own
 attributes (which in turn default from the model's
 {class}`~nvalchemi.models.gen.base.GenerativeModelConfig`). If a stage
@@ -252,8 +249,8 @@ pipeline construction fails fast — the same contract pattern as
 
 Putting the pieces together: a small learned decoder that generates a
 structure from a latent draw. The model is a plain `torch.nn.Module` with the
-mixin and config; a *factory* builds the generating function as a callable
-object that owns the model and declares the field contract:
+mixin and config; the generating function is a callable object —
+constructed directly — that owns the model and declares the field contract:
 
 ```python
 import torch
@@ -275,8 +272,8 @@ class ToyDecoder(nn.Module, GenerativeModelMixin):
         )
         self.model_config = GenerativeModelConfig(
             supports_variable_atoms=False,
-            consumes_fields=frozenset(),  # unconditional
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
+            required_inputs=frozenset(),  # unconditional
+            outputs=frozenset({"positions", "atomic_numbers"}),
             prediction_outputs=("positions",),
         )
 
@@ -290,8 +287,8 @@ class ToyGenerate:
 
     def __init__(self, model: ToyDecoder) -> None:
         self.model = model
-        self.consumes_fields = model.model_config.consumes_fields
-        self.produces_fields = model.model_config.produces_fields
+        self.required_inputs = model.model_config.required_inputs
+        self.outputs = model.model_config.outputs
 
     def __call__(self, inputs=None, *, num_samples=1, rng=None, **kwargs):
         z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
@@ -301,10 +298,6 @@ class ToyGenerate:
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
 
-
-def make_toy_generate(model: ToyDecoder) -> ToyGenerate:
-    """Factory: the spec-able pattern — bind the model and config here."""
-    return ToyGenerate(model)
 ```
 
 Note what the model does *not* define: no `condition` (this model is
@@ -313,11 +306,8 @@ the function — one graph per draw — so the driver takes the `Batch` path.
 
 For testing and debugging, the toolkit ships ready-made placeholders —
 {class}`~nvalchemi.models.gen.demo.DemoGANModel` and
-{class}`~nvalchemi.models.gen.demo.DemoDiffusionModel` — with their own
-factories ({func}`~nvalchemi.models.gen.demo.make_demo_gan_generate`,
-{func}`~nvalchemi.models.gen.demo.make_demo_diffusion_generate`), plus
-{func}`~nvalchemi.models.gen.demo.demo_nonparametric_generation`, a
-synthetic-structure source usable standalone or as a pipeline stage.
+{class}`~nvalchemi.models.gen.demo.DemoDiffusionModel` — together with the
+model-owning sampler callables the test suite drives them through.
 
 ## Driving it
 
@@ -352,7 +342,7 @@ class MaxDisplacementFilter:
 
 
 gen = AtomisticGenerator(
-    generator_func=make_toy_generate(ToyDecoder(num_atoms=8)),
+    generator_func=ToyGenerate(ToyDecoder(num_atoms=8)),
     hooks=[MaxDisplacementFilter(threshold=2.0)],
 )
 
@@ -403,7 +393,7 @@ from physicsnemo.diffusion.preconditioners import EDMPreconditioner
 from physicsnemo.diffusion.samplers import sample as pn_sample
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.gen import AtomisticGenerator, GeneratingFunction
+from nvalchemi.gen import AtomisticGenerator
 
 
 class PositionDenoiser(nn.Module):  # plain torch: the protocols need no PhysicsNeMo base
@@ -450,7 +440,7 @@ class EDMGenerate:
         self.model = model
         self.num_steps = num_steps
         self.scheduler = EDMNoiseScheduler(sigma_max=sigma_max)
-        self.produces_fields = frozenset({"positions"})
+        self.outputs = frozenset({"positions"})
 
     def __call__(
         self,
@@ -473,15 +463,8 @@ class EDMGenerate:
         )
 
 
-def make_edm_generate(
-    model: PositionDenoiser, *, num_steps: int = 18, sigma_max: float = 5.0
-) -> GeneratingFunction:
-    """Piece the EDM components together inside a GeneratingFunction."""
-    return EDMGenerate(model, num_steps=num_steps, sigma_max=sigma_max)
-
-
 diffusion = AtomisticGenerator(
-    generator_func=make_edm_generate(PositionDenoiser(num_atoms=32), num_steps=18),
+    generator_func=EDMGenerate(PositionDenoiser(num_atoms=32), num_steps=18),
     seed=42,
 )
 
@@ -540,18 +523,20 @@ A VAE samples a latent from the prior and decodes it — same shape as the
 GAN, one line different:
 
 ```python
-def make_vae_generate(model):
-    """Bind the model in a factory: the generating function owns it."""
+class VAEGenerate:
+    def __init__(self, model):
+        self.model = model
 
-    def vae_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
-        z = torch.randn(num_samples, model.latent_dim, generator=rng)
-        positions = model.decode(z).reshape(num_samples, -1, 3)
+    def __call__(self, inputs=None, *, num_samples=1, rng=None, **kwargs):
+        z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+        positions = self.model.decode(z).reshape(num_samples, -1, 3)
         numbers = torch.full((positions.shape[1],), 6, dtype=torch.long)
         return Batch.from_data_list(
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
 
-    return vae_generate
+
+vae = AtomisticGenerator(generator_func=VAEGenerate(vae_model))
 ```
 
 ## What's next

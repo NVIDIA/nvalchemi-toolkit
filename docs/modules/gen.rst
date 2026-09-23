@@ -56,8 +56,8 @@ Demo models
 
 .. autosummary::
    :toctree: generated
+   :template: class.rst
    :nosignatures:
 
-   make_demo_gan_generate
-   make_demo_diffusion_generate
-   demo_nonparametric_generation
+   DemoGANModel
+   DemoDiffusionModel
