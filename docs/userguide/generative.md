@@ -261,8 +261,6 @@ from nvalchemi.models.gen import GenerativeModelConfig, GenerativeModelMixin
 
 
 class ToyDecoder(nn.Module, GenerativeModelMixin):
-    """Decode a latent draw into a point cloud of ``num_atoms`` atoms."""
-
     def __init__(self, num_atoms: int, latent_dim: int = 16) -> None:
         super().__init__()
         self.latent_dim = latent_dim
@@ -278,13 +276,10 @@ class ToyDecoder(nn.Module, GenerativeModelMixin):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Raw forward: latent -> flat positions."""
         return self.net(x)
 
 
 class ToyGenerate:
-    """The generating function as an object: owns the model, declares fields."""
-
     def __init__(self, model: ToyDecoder) -> None:
         self.model = model
         self.required_inputs = model.model_config.required_inputs
@@ -306,8 +301,8 @@ the function — one graph per draw — so the driver takes the `Batch` path.
 
 For testing and debugging, the toolkit ships ready-made placeholders —
 {class}`~nvalchemi.models.gen.demo.DemoGANModel` and
-{class}`~nvalchemi.models.gen.demo.DemoDiffusionModel` — together with the
-model-owning sampler callables the test suite drives them through.
+{class}`~nvalchemi.models.gen.demo.DemoDiffusionModel`; the test suite and
+the examples gallery drive them through model-owning sampler callables.
 
 ## Driving it
 
@@ -397,8 +392,6 @@ from nvalchemi.gen import AtomisticGenerator
 
 
 class PositionDenoiser(nn.Module):  # plain torch: the protocols need no PhysicsNeMo base
-    """Stand-in for a trained x0-predictor backbone."""
-
     def __init__(self, num_atoms: int) -> None:
         super().__init__()
         self.num_atoms = num_atoms
@@ -414,22 +407,12 @@ class PositionDenoiser(nn.Module):  # plain torch: the protocols need no Physics
         sigma: torch.Tensor,
         class_labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Predict clean positions from noisy ones.
-
-        Flattens ``x`` from ``(B, N, 3)``, appends the noise level ``sigma``
-        as a per-draw feature, and maps back to ``(B, N, 3)`` through the
-        MLP — the x0-prediction the sampler denoises toward.
-        ``class_labels`` is accepted for the PhysicsNeMo calling convention
-        and unused here.
-        """
         b = x.shape[0]
         s = sigma.reshape(b, 1).expand(b, 1)
         return self.net(torch.cat([x.reshape(b, -1), s], dim=-1)).reshape_as(x)
 
 
 class EDMGenerate:
-    """The EDM sampling procedure, owning the backbone and the settings."""
-
     def __init__(
         self,
         model: PositionDenoiser,
@@ -476,7 +459,11 @@ The backbone is a plain `torch.nn.Module`: the `physicsnemo.diffusion`
 interfaces are protocol-based, so anything with the matching call
 signature — `forward(x, sigma)` here — slots in without inheriting a
 PhysicsNeMo base class; only the diffusion machinery comes from
-PhysicsNeMo.
+PhysicsNeMo. The stand-in's forward flattens `x` from `(B, N, 3)`, appends
+the noise level `sigma` as a per-draw feature, and maps back to
+`(B, N, 3)` through the MLP — the x0-prediction the sampler denoises
+toward. `class_labels` is accepted for the PhysicsNeMo calling convention
+and unused.
 
 With the deterministic solvers (`"euler"`, `"heun"`), the only randomness
 is the initial noise `xN`, which the generating function draws from the
