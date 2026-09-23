@@ -142,6 +142,8 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
                 )
                 start = stop
             energy = torch.stack(energies).reshape(-1, 1)
+        elif self.output_kind == "detached_quadratic":
+            node_energy = _DetachedQuadratic.apply(data.positions)
         elif self.output_kind == "linear":
             node_energy = self.scale * data.positions.sum(dim=-1, keepdim=True)
         else:
@@ -221,6 +223,18 @@ class _RaiseOnSecondDerivative(torch.autograd.Function):
     def backward(ctx, grad_output):
         (positions,) = ctx.saved_tensors
         return 2 * _RaiseDuringBackward.apply(positions) * grad_output
+
+
+class _DetachedQuadratic(torch.autograd.Function):
+    """Quadratic forward with a detached constant first derivative."""
+
+    @staticmethod
+    def forward(ctx, positions):
+        return positions.square().sum(dim=-1, keepdim=True)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.new_ones((grad_output.shape[0], 3))
 
 
 class _RaiseDuringBackward(torch.autograd.Function):
@@ -858,7 +872,7 @@ class TestHessianVectorProduct:
             atol=1e-8,
         )
 
-    def test_zero_vector_and_linear_energy_have_zero_hvp(self):
+    def test_zero_vector_has_zero_hvp_and_affine_energy_is_rejected(self):
         batch = _make_derivative_batch(1, 2)
         model = _QualifiedQuadraticDerivativeWrapper()
 
@@ -867,13 +881,60 @@ class TestHessianVectorProduct:
             torch.zeros_like(batch.positions),
         )
         model.output_kind = "linear"
-        linear = model.hessian_vector_product(
-            batch,
-            torch.randn_like(batch.positions),
-        )
-
         torch.testing.assert_close(quadratic, torch.zeros_like(batch.positions))
-        torch.testing.assert_close(linear, torch.zeros_like(batch.positions))
+        with pytest.raises(RuntimeError, match="not connected to the position leaf"):
+            model.hessian_vector_product(batch, torch.randn_like(batch.positions))
+
+    def test_detached_first_derivative_is_rejected(self):
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "detached_quadratic"
+
+        with pytest.raises(
+            RuntimeError, match="does not retain a differentiable graph"
+        ):
+            model.hessian_vector_product(batch, torch.ones_like(batch.positions))
+
+    def test_differentiable_but_disconnected_first_derivative_is_rejected(self):
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "linear"
+
+        with pytest.raises(RuntimeError, match="not connected to the position leaf"):
+            model.hessian_vector_product(batch, torch.ones_like(batch.positions))
+
+    def test_torch_compile_aot_eager_second_derivative(self):
+        if not hasattr(torch, "compile"):
+            pytest.skip("torch.compile is unavailable")
+        backends = torch._dynamo.list_backends()
+        if "aot_eager" not in backends:
+            pytest.skip("aot_eager backend is unavailable")
+
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.forward = torch.compile(model.forward, backend="aot_eager")
+        vector = torch.ones_like(batch.positions)
+
+        try:
+            result = model.hessian_vector_product(batch, vector)
+        except RuntimeError as exc:
+            message = str(exc).lower()
+            assert "position leaf" in message or "second derivative" in message
+        else:
+            torch.testing.assert_close(result, 2 * vector)
+
+    def test_empty_hvp_and_prepared_operator_return_empty_results(self):
+        batch = _make_derivative_batch(0, 0)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.empty_like(batch.positions)
+
+        result = model.hessian_vector_product(batch, vector)
+        torch.testing.assert_close(result, vector)
+        with model.prepare_hessian(batch) as operator:
+            prepared = operator.matvec(vector)
+
+        torch.testing.assert_close(prepared, vector)
+        assert result.shape == prepared.shape == (0, 3)
 
     def test_mixed_systems_have_no_cross_system_response(self):
         batch = _make_derivative_batch(2, 3)
@@ -1304,18 +1365,23 @@ class TestDenseHessian:
             torch.testing.assert_close(block_product, product[start:stop])
             start = stop
 
-    def test_linear_energy_and_empty_systems_produce_zero_blocks(self):
-        batch = _make_derivative_batch(0, 2)
+    def test_empty_systems_produce_empty_hessian_blocks(self):
+        batch = _make_derivative_batch(0, 0)
         model = _QualifiedQuadraticDerivativeWrapper()
-        model.output_kind = "linear"
 
         model.compute_hessian(batch, strategy="vmap")
 
         assert batch.get_data(0).hessian.shape == (0, 0, 3, 3)
-        torch.testing.assert_close(
-            batch.get_data(1).hessian,
-            torch.zeros(2, 2, 3, 3),
-        )
+        assert batch.get_data(1).hessian.shape == (0, 0, 3, 3)
+
+    @pytest.mark.parametrize("strategy", ["loop", "vmap"])
+    def test_affine_energy_is_rejected_for_nonempty_dense_hessian(self, strategy):
+        batch = _make_derivative_batch(2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "linear"
+
+        with pytest.raises(RuntimeError, match="not connected to the position leaf"):
+            model.compute_hessian(batch, strategy=strategy)
 
     def test_zero_graph_batch_materializes_empty_canonical_field(self):
         batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)

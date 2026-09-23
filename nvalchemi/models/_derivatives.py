@@ -139,8 +139,33 @@ def _position_gradient(graph: _DerivativeGraph) -> Tensor:
             retain_graph=True,
             allow_unused=True,
         )[0]
-    if gradient is None:
-        raise RuntimeError("Derivative energy is not connected to the position leaf")
+        if gradient is None:
+            raise RuntimeError(
+                "Derivative energy is not connected to the position leaf"
+            )
+
+        if graph.positions.numel() == 0:
+            return gradient
+        if not gradient.requires_grad:
+            raise RuntimeError(
+                "First position derivative does not retain a differentiable graph"
+            )
+
+        try:
+            torch.autograd.grad(
+                gradient,
+                graph.positions,
+                grad_outputs=torch.ones_like(gradient),
+                retain_graph=True,
+                allow_unused=False,
+            )
+        except RuntimeError as exc:
+            message = str(exc).lower()
+            if "not have been used in the graph" not in message:
+                raise
+            raise RuntimeError(
+                "First position derivative is not connected to the position leaf"
+            ) from exc
     return gradient
 
 
@@ -153,13 +178,17 @@ def _gradient_vector_product(
 ) -> Tensor:
     """Differentiate a gradient view against positions for one or many seeds."""
     with torch.inference_mode(False), torch.enable_grad():
-        if not outputs.requires_grad:
+        if positions.numel() == 0:
             shape = (
                 (grad_outputs.shape[0], *positions.shape)
                 if is_grads_batched
                 else positions.shape
             )
-            return positions.new_zeros(shape)
+            return positions.new_empty(shape)
+        if not outputs.requires_grad:
+            raise RuntimeError(
+                "First position derivative does not retain a differentiable graph"
+            )
 
         if is_grads_batched:
 
@@ -170,10 +199,8 @@ def _gradient_vector_product(
                     grad_outputs=seed,
                     create_graph=False,
                     retain_graph=True,
-                    allow_unused=True,
+                    allow_unused=False,
                 )[0]
-                if product is None:
-                    return positions.new_zeros(positions.shape)
                 return product
 
             return torch.vmap(_single_product)(grad_outputs.detach()).detach()
@@ -184,15 +211,8 @@ def _gradient_vector_product(
             grad_outputs=grad_outputs.detach(),
             create_graph=False,
             retain_graph=True,
-            allow_unused=True,
+            allow_unused=False,
         )[0]
-        if product is None:
-            shape = (
-                (grad_outputs.shape[0], *positions.shape)
-                if is_grads_batched
-                else positions.shape
-            )
-            return positions.new_zeros(shape)
         return product.detach()
 
 
