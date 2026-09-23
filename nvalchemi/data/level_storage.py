@@ -123,7 +123,7 @@ LevelKind: TypeAlias = Literal["uniform", "segmented", "product"]
 INDEX_DTYPE = torch.int32
 
 
-def _resolve_device(device: DeviceType | None) -> torch.device:
+def resolve_device(device: DeviceType | None) -> torch.device:
     """Return *device* with a bare ``cuda`` indexed by the current CUDA device.
 
     A storage records the device it is asked for, but ``.to("cuda")`` puts its
@@ -131,7 +131,9 @@ def _resolve_device(device: DeviceType | None) -> torch.device:
     verbatim makes the record disagree with the tensors as soon as the current
     device changes, so every later ``torch.cat`` or lazily built pointer raises
     a device mismatch. Resolving once at record time pins the storage to the
-    GPU its tensors actually reached.
+    GPU its tensors actually reached. The same resolution turns a caller's
+    index-less ``"cuda"``, meaning the device a launcher pinned this process
+    to, into the concrete device other placements can be compared against.
 
     Parameters
     ----------
@@ -975,7 +977,7 @@ class BaseLevelStorage(ABC):
         validate: bool = True,
     ) -> None:
         self._attr_map = attr_map if attr_map else LevelSchema()
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         self.validate = validate
 
         if data is None:
@@ -1187,7 +1189,7 @@ class BaseLevelStorage(ABC):
         Self
             For method chaining.
         """
-        device = _resolve_device(device)
+        device = resolve_device(device)
         self.device = device
         self._data = self._data.to(device, non_blocking=non_blocking)
         return self
@@ -2495,7 +2497,7 @@ class MultiLevelStorage:
             groups if groups is not None else {}
         )
         self.attr_map = attr_map if attr_map is not None else LevelSchema()
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
 
         if validate and self.groups:
             self._validate_consistency()
@@ -2724,7 +2726,7 @@ class MultiLevelStorage:
         Self
             For method chaining.
         """
-        device = _resolve_device(device)
+        device = resolve_device(device)
         self.device = device
         for group in self.groups.values():
             group.to_device(device, non_blocking=non_blocking)

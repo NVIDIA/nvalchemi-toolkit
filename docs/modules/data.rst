@@ -18,6 +18,15 @@ Core classes
    Batch
    LevelSchema
 
+Device helpers
+--------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   resolve_device
+
 I/O and pipelines
 -----------------
 
@@ -47,6 +56,12 @@ Dataset composition and sampling
    MultiDataset
    MultiDatasetSampler
    MultiDatasetBatchSampler
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   distributed_shard
 
 Write configuration
 -------------------

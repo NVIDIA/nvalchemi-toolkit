@@ -2324,6 +2324,17 @@ class AtomicDataZarrReader(Reader):
         return self._level_schema.clone() if self._level_schema is not None else None
 
     @property
+    def store(self) -> StoreLike:
+        """Store reference this reader was opened with.
+
+        Returns
+        -------
+        StoreLike
+            The path, URI, or store object passed at construction, unchanged.
+        """
+        return self._store
+
+    @property
     def num_samples(self) -> int:
         """Number of samples the store holds, soft-deleted ones included.
 

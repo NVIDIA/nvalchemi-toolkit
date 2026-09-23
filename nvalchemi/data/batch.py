@@ -52,7 +52,7 @@ from nvalchemi.data.level_storage import (
     SegmentedLevelStorage,
     UniformLevelStorage,
     _checked_segment_metadata,
-    _resolve_device,
+    resolve_device,
 )
 
 # Edge-level keys whose values are node indices and therefore need
@@ -561,7 +561,7 @@ def _batch_device(
         If *device* names an indexed device the storage is not on.
     """
     if storage is None or not storage.groups:
-        return _resolve_device(device)
+        return resolve_device(device)
     if device is None:
         return storage.device
     requested = torch.device(device)
@@ -3133,7 +3133,7 @@ class Batch(DataMixin):
         _BatchRecvHandle
             Handle whose ``.wait()`` returns the received :class:`Batch`.
         """
-        device = _resolve_device(device)
+        device = resolve_device(device)
 
         meta = torch.empty(3, dtype=torch.int64, device=device)
         meta_handle = dist.irecv(meta, src=src, tag=tag, group=group)

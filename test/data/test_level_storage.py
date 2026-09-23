@@ -20,6 +20,7 @@ import pytest
 import torch
 
 from nvalchemi.data import LevelSchema as PublicLevelSchema
+from nvalchemi.data import resolve_device as public_resolve_device
 from nvalchemi.data.level_storage import (
     DEFAULT_ATTRIBUTE_MAP,
     DEFAULT_SEGMENTED_GROUPS,
@@ -29,6 +30,7 @@ from nvalchemi.data.level_storage import (
     SegmentedLevelStorage,
     UniformLevelStorage,
     _expand_segments_warp,
+    resolve_device,
 )
 
 
@@ -2368,3 +2370,45 @@ class TestExpandSegmentsWarp:
             _expand_segments_warp(seg_idx, batch_ptr, torch.int64)
 
             assert torch.cuda.current_device() == 0
+
+
+# -----------------------------------------------------------------------------
+# resolve_device
+# -----------------------------------------------------------------------------
+class TestResolveDevice:
+    """Tests for the device-resolution helper storages record their device with."""
+
+    def test_public_import(self) -> None:
+        """The helper is exported from the data package."""
+        assert public_resolve_device is resolve_device
+
+    def test_none_resolves_to_cpu(self) -> None:
+        """An unset device means host memory."""
+        assert resolve_device(None) == torch.device("cpu")
+
+    @pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
+    def test_a_host_device_is_returned_as_a_torch_device(
+        self, device: str | torch.device
+    ) -> None:
+        """A string or device spelling of the host comes back as ``torch.device``."""
+        assert resolve_device(device) == torch.device("cpu")
+
+    def test_an_indexed_accelerator_is_left_unchanged(self) -> None:
+        """A device carrying its index is already concrete, so no CUDA call is made."""
+        assert resolve_device("cuda:1") == torch.device("cuda", 1)
+        assert resolve_device(torch.device("cuda", 1)) == torch.device("cuda", 1)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_an_index_less_accelerator_takes_the_current_device_index(self) -> None:
+        """``"cuda"`` is pinned to the device current at the time of the call."""
+        resolved = resolve_device("cuda")
+
+        assert resolved == torch.device("cuda", torch.cuda.current_device())
+
+    @pytest.mark.multigpu
+    def test_an_index_less_accelerator_follows_a_changed_current_device(self) -> None:
+        """Resolving under another current device pins to that device instead."""
+        with torch.cuda.device(1):
+            resolved = resolve_device("cuda")
+
+        assert resolved == torch.device("cuda", 1)

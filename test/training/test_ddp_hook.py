@@ -35,13 +35,14 @@ from torch.utils.data import (
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.hooks._context import HookContext, TrainContext
-from nvalchemi.training import TrainingStage
+from nvalchemi.training import OptimizerConfig, TrainingStage
 from nvalchemi.training.hooks import DDPHook
 from nvalchemi.training.strategy import TrainingStrategy
 from test.training.conftest import (
     _build_baseline_strategy_kwargs,
     _build_batch,
     _build_dataset,
+    _build_demo_model,
 )
 
 
@@ -373,6 +374,31 @@ class TestDDPHookWrapping:
                 "static_graph": False,
             }
         ]
+
+    def test_named_models_train_on_one_device_per_rank(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from test.training.test_strategy import dict_demo_training_fn
+
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        student = _build_demo_model()
+        teacher = _build_demo_model()
+        strategy = _make_strategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+            devices=[torch.device("cpu"), torch.device("cpu")],
+            distributed_manager=_FakeManager(),
+            hooks=[DDPHook()],
+            num_steps=1,
+        )
+
+        strategy.run([_build_batch()])
+
+        assert strategy.step_count == 1
+        assert len(_FakeDDP.calls) == 1
 
     def test_unknown_model_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)

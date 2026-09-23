@@ -21,7 +21,8 @@ than duplicated, and its autouse seeding fixture applies here too.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import pytest
 import torch
@@ -36,6 +37,9 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.training.distillation._attach import _attach_teacher_labels
+from nvalchemi.training.distillation.scoring import TeacherScorer
+from nvalchemi.training.distillation.seeding import FitPolicy
 from test.training.conftest import _build_atomic_data, _build_batch, _build_demo_model
 
 _LJ_CUTOFF = 5.0
@@ -46,6 +50,16 @@ _PAIR_CUTOFF = 4.5
 
 _WIRED_CHARGE = 7.0
 """Per-atom charge the charge-emitting stub teacher writes for every atom."""
+
+
+_INITIAL_ELEMENT = 1
+"""Atomic number tagging every structure an on-policy run generates from."""
+
+_REFERENCE_ELEMENT = 6
+"""Atomic number tagging every structure that comes from the reference dataset."""
+
+_ATOMS_PER_SYSTEM = 4
+"""Atoms in every synthetic on-policy system, so batches stay small and uniform."""
 
 
 class _DirectForceModel(nn.Module):
@@ -116,10 +130,17 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         return {"node_embeddings": (self.model.hidden_dim,)}
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect the tensors the underlying model's forward expects."""
+        """Collect the tensors the underlying model's forward expects, at its dtype.
+
+        Positions are cast to the parameter dtype, which is what lets a
+        reduced-precision copy of this model run over an ordinary float32 batch.
+        """
         model_inputs = super().adapt_input(data, **kwargs)
         model_inputs["batch_indices"] = (
             data.batch_idx if isinstance(data, Batch) else None
+        )
+        model_inputs["positions"] = model_inputs["positions"].to(
+            next(self.model.parameters()).dtype
         )
         return model_inputs
 
@@ -129,7 +150,10 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         """Write per-node embeddings onto *data* in place."""
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
-        features = self.model.features(data.atomic_numbers, data.positions)
+        features = self.model.features(
+            data.atomic_numbers,
+            data.positions.to(next(self.model.parameters()).dtype),
+        )
         atoms_group = data._atoms_group
         if atoms_group is not None:
             atoms_group["node_embeddings"] = features
@@ -270,6 +294,68 @@ class _ChargeSourceModel(nn.Module, BaseModelMixin):
         )
 
 
+class _ListSource:
+    """Minimal ``InitialStructuresSource`` over a fixed list of structures.
+
+    Serves the whole list as the initial batch, then the remainder through
+    ``draw``, and records every shard installed on it.
+    """
+
+    def __init__(self, structures: list[AtomicData]) -> None:
+        self.structures = structures
+        self.shards: list[tuple[int, int]] = []
+        self._cursor = 0
+
+    @property
+    def exhausted(self) -> bool:
+        """Whether every structure has been handed out."""
+        return self._cursor >= len(self.structures)
+
+    def shard(self, rank: int, world_size: int) -> None:
+        """Record the shard and reopen the cursor."""
+        self.shards.append((rank, world_size))
+        self._cursor = 0
+
+    def probe(self) -> Batch:
+        """Return the first structure as a one-graph batch."""
+        return Batch.from_data_list([self.structures[0]])
+
+    def initial_batch(self) -> Batch:
+        """Return every structure left as one batch, stamped with clean bookkeeping."""
+        batch = Batch.from_data_list(self.structures[self._cursor :])
+        batch["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
+        batch["system_id"] = torch.arange(
+            self._cursor, self._cursor + batch.num_graphs, dtype=torch.long
+        ).unsqueeze(-1)
+        self._cursor = len(self.structures)
+        return batch
+
+    def draw(
+        self,
+        *,
+        limit: int | None = None,
+        fits: FitPolicy | None = None,  # noqa: ARG002
+        on_miss: Literal["stop", "skip"] = "stop",  # noqa: ARG002
+    ) -> list[AtomicData]:
+        """Serve up to *limit* structures, each stamped with its ``system_id``."""
+        end = None if limit is None else self._cursor + limit
+        served = self.structures[self._cursor : end]
+        for offset, data in enumerate(served):
+            data.add_system_property(
+                "system_id", torch.tensor([[self._cursor + offset]], dtype=torch.long)
+            )
+        self._cursor += len(served)
+        return served
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the cursor."""
+        return {"cursor": self._cursor}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Resume at the recorded cursor."""
+        self._cursor = int(state["cursor"])
+
+
 def _build_pair_potential_teacher(
     num_atom_types: int = 20, cutoff: float = _PAIR_CUTOFF, seed: int = 0
 ) -> _PairPotentialTeacher:
@@ -355,6 +441,63 @@ def _build_periodic_dataset(
         for index in range(n_systems)
     ]
     return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
+
+
+def _build_propagator_system(
+    atomic_number: int, seed: int, *, predictions: bool = True
+) -> AtomicData:
+    """Return one system tagged by *atomic_number*, carrying the propagator's keys.
+
+    ``predictions=False`` leaves out the ``energy`` and ``forces`` a propagator
+    writes and the labeling hook strips again, which is the shape a replay frame
+    — and therefore the mixture's reference dataset — has.
+    """
+    generator = torch.Generator().manual_seed(seed)
+    predicted = (
+        {"energy": torch.zeros(1, 1), "forces": torch.zeros(_ATOMS_PER_SYSTEM, 3)}
+        if predictions
+        else {}
+    )
+    return AtomicData(
+        positions=torch.randn(_ATOMS_PER_SYSTEM, 3, generator=generator),
+        atomic_numbers=torch.full(
+            (_ATOMS_PER_SYSTEM,), atomic_number, dtype=torch.long
+        ),
+        atomic_masses=torch.ones(_ATOMS_PER_SYSTEM),
+        **predicted,
+    )
+
+
+def _build_propagator_batch(
+    atomic_number: int, n_systems: int, base_seed: int, *, predictions: bool = True
+) -> Batch:
+    """Return a batch of *n_systems* systems all tagged by *atomic_number*."""
+    return Batch.from_data_list(
+        [
+            _build_propagator_system(
+                atomic_number, base_seed + index, predictions=predictions
+            )
+            for index in range(n_systems)
+        ]
+    )
+
+
+def _build_initial_dataset(n_systems: int = 4, base_seed: int = 500) -> InMemoryDataset:
+    """Return the structures the generated trajectories start from."""
+    return InMemoryDataset(
+        in_memory_batch=_build_propagator_batch(_INITIAL_ELEMENT, n_systems, base_seed)
+    )
+
+
+def _build_reference_dataset(
+    scorer: TeacherScorer, n_systems: int = 8, base_seed: int = 700
+) -> InMemoryDataset:
+    """Return a teacher-labeled reference dataset with the generated frames' schema."""
+    frames = _build_propagator_batch(
+        _REFERENCE_ELEMENT, n_systems, base_seed, predictions=False
+    )
+    _attach_teacher_labels(frames, scorer.label(frames))
+    return InMemoryDataset(in_memory_batch=frames)
 
 
 @pytest.fixture
