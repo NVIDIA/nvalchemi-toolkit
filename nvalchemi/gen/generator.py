@@ -376,13 +376,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     enable_inference_mode: bool = Field(
         default=True,
         description=(
-            "Enter torch.inference_mode for the session when the flag is set "
-            "(with gen: covers every call in the block; skipped when one is "
-            "already active). Bare one-shot calls outside a session run "
-            "grad-live. This is an inference driver: sessions produce batches "
-            "with no autograd history, and a pipeline fold hands dynamics "
-            "stages fresh autograd-capable tensors. Set False when training "
-            "on or backpropagating through generated batches."
+            "Run the session under torch.inference_mode: no autograd history "
+            "on generated batches. Set False when training on or "
+            "backpropagating through them."
         ),
     )
     step_count: int = Field(
