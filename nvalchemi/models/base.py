@@ -18,15 +18,27 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
+from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import (
+    HessianOperator,
+    _attach_hessian_blocks,
+    _dense_hessian_blocks,
+    _DerivativeRequest,
+    _position_gradient,
+    _prepare_derivative_graph,
+    _reject_derivative_request,
+    _validate_hessian_vector,
+    _ValidatedDenseHessianRequest,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.distributed.config import StrategyKind
@@ -499,6 +511,244 @@ class BaseModelMixin(abc.ABC):
             Default: empty set (all derivatives come from autograd).
         """
         return set()
+
+    # ------------------------------------------------------------------
+    # Derivative graph preparation
+    # ------------------------------------------------------------------
+
+    def _copy_derivative_runtime_data(
+        self,
+        source: Batch,
+        working: Batch,
+    ) -> None:
+        """Copy wrapper-owned runtime inputs into a derivative snapshot.
+
+        The structured contents of *source* have already been cloned into
+        *working*. Wrappers that consume derivative-relevant runtime attributes
+        outside normal :class:`Batch` storage may override this hook to copy
+        only those attributes. Implementations must not mutate *source*, replace
+        the prepared position leaf, execute the model, or rebuild neighbors.
+
+        Parameters
+        ----------
+        source : Batch
+            Caller-owned batch being snapshotted.
+        working : Batch
+            Independent derivative batch to receive runtime inputs.
+        """
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Reject second-order derivatives until a wrapper supports them.
+
+        Parameters
+        ----------
+        request : _DerivativeRequest
+            Contextual derivative request to validate.
+
+        Raises
+        ------
+        DerivativeNotSupported
+            Always, unless a wrapper that supports derivatives overrides it.
+        """
+        _reject_derivative_request(
+            self,
+            request,
+            "the wrapper does not support second-order derivatives",
+        )
+
+    def _derivative_energy(self, data: Batch) -> torch.Tensor:
+        """Run the ordinary wrapper path and return connected system energies.
+
+        Parameters
+        ----------
+        data : Batch
+            Independent working batch configured for position gradients.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-system energy tensor. Graph validation is handled by the shared
+            derivative preparation boundary.
+
+        Raises
+        ------
+        RuntimeError
+            If the ordinary wrapper output does not contain an energy value.
+        """
+        output = self(data)  # type: ignore[operator]
+        if not isinstance(output, Mapping) or output.get("energy") is None:
+            raise RuntimeError(
+                f"{type(self).__name__} derivative evaluation did not return energy"
+            )
+        return output["energy"]
+
+    def prepare_hessian(self, batch: Batch) -> HessianOperator:
+        """Prepare an immediately active matrix-free Hessian.
+
+        The operator represents the second derivative of total energy with
+        respect to Cartesian positions, ``d^2 E / dR^2``, at the supplied
+        geometry. It copies the batch inputs and retains a derivative graph
+        evaluated with the current model. Keep model parameters, buffers,
+        execution mode, and pipeline wiring unchanged while using it. Close the
+        operator explicitly or use it as a context manager.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to snapshot for repeated Hessian-vector products.
+
+        Returns
+        -------
+        HessianOperator
+            Operator retaining one private derivative graph. Close it explicitly
+            or use it as a context manager.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch`.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support HVPs.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        request = _DerivativeRequest(
+            operation="hvp",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=None,
+        )
+        context = _prepare_derivative_graph(self, batch, request)
+        return HessianOperator(context)
+
+    def compute_hessian(
+        self,
+        batch: Batch,
+        *,
+        strategy: Literal["vmap", "loop"] = "vmap",
+        row_chunk_size: int | None = None,
+    ) -> Batch:
+        """Materialize the dense Hessian on a batch in place.
+
+        The model evaluates an independent snapshot, then attaches or replaces
+        ``batch["hessian"]`` on the ``atoms x atoms`` product level. To keep a
+        simulation batch unchanged, supply a separate analysis batch with its
+        required neighbor data already prepared. For system ``i``, the logical
+        field shape is ``[N_i, N_i, 3, 3]`` with axes
+        ``[atom_out, atom_in, xyz_out, xyz_in]``; the packed batch shape is
+        ``[sum(N_i**2), 3, 3]``. The detached result is ``d^2 E / dR^2``, so
+        the directional force Jacobian is ``-H @ v``.
+
+        Neighbor membership is held fixed at the topology supplied by
+        ``batch``. The method does not run neighbor-list hooks or differentiate
+        the discrete neighbor-selection operation.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to update after successful materialization.
+        strategy : {"vmap", "loop"}, optional
+            Whether each row chunk uses batched vector-Jacobian products or
+            evaluates one row at a time. Defaults to ``"vmap"``.
+        row_chunk_size : int, optional
+            Maximum number of flattened Cartesian rows per chunk, within each
+            system. ``None`` uses one chunk per system. ``"vmap"`` evaluates
+            the chunk together; ``"loop"`` evaluates its rows individually.
+
+        Returns
+        -------
+        Batch
+            The same object supplied as *batch*, with a detached canonical
+            ``hessian`` field.
+
+        Raises
+        ------
+        TypeError
+            If *batch* or an argument has the wrong type.
+        ValueError
+            If tensor layout, storage declarations, strategy, or chunk size is
+            incompatible with dense Hessian materialization.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support the requested
+            dense strategy.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        request = _ValidatedDenseHessianRequest.build(
+            batch,
+            strategy,
+            row_chunk_size,
+        )
+        derivative_request = _DerivativeRequest(
+            operation="dense_hessian",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=request.strategy,
+        )
+
+        with _prepare_derivative_graph(self, batch, derivative_request) as graph:
+            gradient = _position_gradient(graph)
+            blocks = _dense_hessian_blocks(
+                graph,
+                gradient,
+                request.num_nodes,
+                strategy=request.strategy,
+                row_chunk_size=request.row_chunk_size,
+            )
+
+        with torch.inference_mode(False):
+            staging = batch.clone()
+            _attach_hessian_blocks(staging, blocks, dtype=request.positions.dtype)
+            _attach_hessian_blocks(batch, blocks, dtype=request.positions.dtype)
+        return batch
+
+    def hessian_vector_product(
+        self,
+        batch: Batch,
+        vectors: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute a detached Hessian-vector product.
+
+        This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed
+        neighbor topology. It does not rebuild neighbors or differentiate
+        neighbor membership. The force directional derivative has the
+        opposite sign.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to evaluate without mutation.
+        vectors : torch.Tensor
+            One vector with the same shape, dtype, and device as
+            ``batch.positions``.
+
+        Returns
+        -------
+        torch.Tensor
+            Detached Hessian-vector product aligned with ``batch.positions``.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch` or ``vectors`` is not a
+            floating-point tensor.
+        ValueError
+            If vector shape, dtype, or device does not match positions.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support HVPs.
+        """
+        if not isinstance(batch, Batch):
+            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+        positions = getattr(batch, "positions", None)
+        if not isinstance(positions, torch.Tensor):
+            raise RuntimeError("Hessian-vector products require tensor positions")
+        if not positions.is_floating_point():
+            raise TypeError(
+                "Hessian-vector product positions must have a floating-point dtype, "
+                f"got {positions.dtype}"
+            )
+        _validate_hessian_vector(vectors, positions)
+
+        with self.prepare_hessian(batch) as operator:
+            return operator.matvec(vectors)
 
     def set_config(self, key: str, value: Any) -> None:
         """Set a mutable field on :attr:`model_config`.

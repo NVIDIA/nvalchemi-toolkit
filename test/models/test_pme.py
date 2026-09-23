@@ -33,8 +33,12 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.models.base import NeighborListFormat
+from test.models.test_ewald import (
+    _finite_difference_charge_gradient,
+    _make_charged_batch,
+    _PeriodicDerivativeCases,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -47,67 +51,6 @@ def _make_pme(**kwargs):
 
     kwargs.setdefault("cutoff", 10.0)
     return PMEModelWrapper(**kwargs)
-
-
-def _make_charged_batch(
-    n_atoms: int = 8,
-    box_size: float = 10.0,
-    device: str = "cpu",
-    dtype: torch.dtype = torch.float32,
-) -> Batch:
-    """Build a PBC batch with charges for PME tests."""
-    positions = torch.rand(n_atoms, 3, dtype=dtype, device=device) * box_size
-    atomic_numbers = torch.ones(n_atoms, dtype=torch.long, device=device)
-    # Alternating +1/-1 charges (charge-neutral)
-    charges = torch.tensor(
-        [1.0 if i % 2 == 0 else -1.0 for i in range(n_atoms)],
-        dtype=dtype,
-        device=device,
-    )
-
-    data = AtomicData(
-        positions=positions,
-        atomic_numbers=atomic_numbers,
-        charges=charges,
-        forces=torch.zeros(n_atoms, 3, dtype=dtype, device=device),
-        energy=torch.zeros(1, 1, dtype=dtype, device=device),
-        cell=torch.eye(3, dtype=dtype, device=device).unsqueeze(0) * box_size,
-        pbc=torch.tensor([[True, True, True]], device=device),
-    )
-    attr_map = None
-    if dtype == torch.float64:
-        attr_map = LevelSchema()
-        for key in ("positions", "forces", "charges", "cell", "stress", "virial"):
-            attr_map.set(key, attr_map.attr_to_group[key], dtype="float64")
-
-    batch = Batch.from_data_list([data], attr_map=attr_map)
-    return batch
-
-
-def _finite_difference_charge_gradient(
-    model,
-    batch: Batch,
-    build_nl,
-    eps: float = 1e-6,
-) -> torch.Tensor:
-    """Estimate dE/dq with central finite differences."""
-    build_nl(batch, model)
-    base_charges = batch.charges.detach().clone()
-    grad = torch.zeros_like(base_charges)
-
-    for atom_idx in range(base_charges.shape[0]):
-        batch.charges = base_charges.clone()
-        batch.charges[atom_idx] += eps
-        energy_plus = model(batch)["energy"].sum().item()
-
-        batch.charges = base_charges.clone()
-        batch.charges[atom_idx] -= eps
-        energy_minus = model(batch)["energy"].sum().item()
-
-        grad[atom_idx] = (energy_plus - energy_minus) / (2.0 * eps)
-
-    batch.charges = base_charges
-    return grad
 
 
 # ===========================================================================
@@ -881,6 +824,12 @@ class TestPMEIntegration:
 # ===========================================================================
 # Cross-model cache interface tests
 # ===========================================================================
+
+
+class TestPMEDerivatives(_PeriodicDerivativeCases):
+    @staticmethod
+    def _make_model(**kwargs):
+        return _make_pme(**kwargs)
 
 
 class TestPMECrossModel:

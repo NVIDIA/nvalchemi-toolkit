@@ -197,6 +197,26 @@ TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
     torch.bool: "bool",
 }
 
+
+def effective_dtype(declared: str | torch.dtype | None) -> torch.dtype | str | None:
+    """Resolve known dtype aliases while preserving unknown strings.
+
+    Parameters
+    ----------
+    declared : str, torch.dtype, or None
+        Dtype name or object declared by the schema.
+
+    Returns
+    -------
+    torch.dtype, str, or None
+        The resolved dtype for a known alias, or the original value when it is
+        ``None``, a ``torch.dtype``, or an unknown string.
+    """
+    if declared is None or isinstance(declared, torch.dtype):
+        return declared
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
+
 # ---------------------------------------------------------------------------
 # Domain-specific defaults (aligned with nvalchemi naming conventions)
 # ---------------------------------------------------------------------------
@@ -530,6 +550,76 @@ class LevelSchema:
         self.segmented_groups.remove(group_name)
         if group_name in self.level_kinds:
             self.level_kinds[group_name] = "uniform"
+
+    def _merged_with(self, extension: LevelSchema) -> LevelSchema:
+        """Return an additive merge without modifying either input schema.
+
+        The existing schema remains authoritative for declarations it already
+        owns. New levels and fields are appended from *extension* in its
+        definition order. Equivalent dtype aliases compare through their
+        effective :class:`torch.dtype` values.
+
+        Parameters
+        ----------
+        extension : LevelSchema
+            Schema declarations to add.
+
+        Returns
+        -------
+        LevelSchema
+            Independent merged schema.
+
+        Raises
+        ------
+        TypeError
+            If *extension* is not a :class:`LevelSchema`.
+        ValueError
+            If an existing level, product, field owner, or dtype conflicts.
+        """
+        if not isinstance(extension, LevelSchema):
+            raise TypeError(
+                f"extension must be a LevelSchema, got {type(extension).__name__}"
+            )
+
+        merged = self.clone()
+        for level_name in extension.level_names:
+            kind = extension.level_kind(level_name)
+            if kind == "product":
+                left, right = extension.product_parents[level_name]
+                merged.add_product_level(level_name, left=left, right=right)
+            else:
+                merged.add_level(level_name, segmented=kind == "segmented")
+
+        for attr_name, group_name in extension.attr_to_group.items():
+            existing_group = merged.attr_to_group.get(attr_name)
+            if existing_group is not None and existing_group != group_name:
+                raise ValueError(
+                    f"Field '{attr_name}' is already assigned to level "
+                    f"'{existing_group}', not '{group_name}'"
+                )
+
+            existing_dtype = merged.dtypes.get(attr_name)
+            extension_dtype = extension.dtypes.get(attr_name)
+            if existing_dtype is not None and extension_dtype is not None:
+                existing_effective = effective_dtype(existing_dtype)
+                extension_effective = effective_dtype(extension_dtype)
+                if existing_effective != extension_effective:
+                    raise ValueError(
+                        f"Field '{attr_name}' has incompatible declared dtypes: "
+                        f"{existing_dtype} vs {extension_dtype}"
+                    )
+
+            if existing_group is None or (
+                existing_dtype is None and extension_dtype is not None
+            ):
+                merged.set(
+                    attr_name,
+                    group_name,
+                    dtype=extension_dtype,
+                    is_segmented=merged.level_kind(group_name) != "uniform",
+                )
+
+        return merged
 
     # -- Queries ------------------------------------------------------------
 

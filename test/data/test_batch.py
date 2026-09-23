@@ -218,6 +218,22 @@ def _custom_uniform_schema() -> LevelSchema:
     return schema
 
 
+def _assert_hessian_batch(batch: Batch, num_nodes: tuple[int, ...]) -> None:
+    """Assert the canonical Hessian schema, packing, and logical shapes."""
+    schema = batch.get_level_schema()
+    assert schema.product_parents["atom_atom"] == ("atoms", "atoms")
+    assert schema.group_to_attrs["atom_atom"] == {"hessian"}
+    assert schema.dtypes["hessian"] == "float64"
+    assert batch.hessian.shape == (sum(count**2 for count in num_nodes), 3, 3)
+
+    pointer = [0]
+    for count in num_nodes:
+        pointer.append(pointer[-1] + count**2)
+    assert batch.level_ptr("atom_atom").tolist() == pointer
+    for index, count in enumerate(num_nodes):
+        assert batch.get_data(index).hessian.shape == (count, count, 3, 3)
+
+
 def _custom_transport_schema() -> LevelSchema:
     """Build the mixed custom schema used by transport tests."""
     schema = LevelSchema()
@@ -1316,6 +1332,567 @@ class TestBatchIndexing:
 
 
 # -----------------------------------------------------------------------------
+# Public schema transfer and extension
+# -----------------------------------------------------------------------------
+class TestBatchSchemaExtension:
+    """Public-contract tests for post-construction schema registration."""
+
+    @staticmethod
+    def _schema_state(schema: LevelSchema) -> tuple:
+        """Return public schema state suitable for atomicity assertions."""
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+        )
+
+    def test_get_level_schema_returns_a_defensive_copy(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+
+        exposed = batch.get_level_schema()
+        exposed.add_level("samples", segmented=True)
+        exposed.set("sample_values", "samples", dtype="float32")
+
+        assert "samples" not in batch.get_level_schema().level_names
+        assert "sample_values" not in batch.get_level_schema().attr_to_group
+
+    def test_extension_is_owned_and_batches_remain_isolated(self):
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = Batch.from_data_list([_minimal_atomic_data(3)])
+
+        first.extend_level_schema(extension)
+        second.extend_level_schema(extension)
+        extension.add_level("extension_only", segmented=True)
+        first.add_level("first_only", segmented=False)
+
+        assert "extension_only" not in first.get_level_schema().level_names
+        assert "extension_only" not in second.get_level_schema().level_names
+        assert "first_only" in first.get_level_schema().level_names
+        assert "first_only" not in second.get_level_schema().level_names
+
+    def test_transfer_then_materialize_product_level(self):
+        source_schema = LevelSchema()
+        source_schema.add_level("samples", segmented=True)
+        source_schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        source_schema.set("hessian_blocks", "atom_atom", dtype="float32")
+        source_data = _minimal_atomic_data(1)
+        source_data.hessian_blocks = torch.zeros(1, 1, 3, 3)
+        source = Batch.from_data_list([source_data], attr_map=source_schema)
+        destination = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        )
+        before = destination.model_dump()
+
+        destination.extend_level_schema(source.get_level_schema())
+
+        assert destination.get_level_schema().level_names[-2:] == (
+            "samples",
+            "atom_atom",
+        )
+        assert destination.get_level_schema().group("hessian_blocks") == "atom_atom"
+        assert destination.get_level_schema().dtype("hessian_blocks") == "float32"
+        after = destination.model_dump()
+        assert after.keys() == before.keys()
+        for key, value in before.items():
+            if isinstance(value, torch.Tensor):
+                torch.testing.assert_close(after[key], value)
+            else:
+                assert after[key] == value
+
+        destination.add_key(
+            "hessian_blocks",
+            [torch.zeros(2, 2, 3, 3), torch.ones(3, 3, 3, 3)],
+            level="atom_atom",
+        )
+
+        assert destination.hessian_blocks.shape == (13, 3, 3)
+        assert destination.level_ptr("atom_atom").tolist() == [0, 4, 13]
+        assert destination.get_data(0).hessian_blocks.shape == (2, 2, 3, 3)
+        assert destination.get_data(1).hessian_blocks.shape == (3, 3, 3, 3)
+
+    def test_identical_extension_is_idempotent_and_dtype_aliases_match(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float")
+
+        batch.extend_level_schema(extension)
+        first_state = self._schema_state(batch.get_level_schema())
+        batch.extend_level_schema(extension)
+        assert self._schema_state(batch.get_level_schema()) == first_state
+
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        assert batch.get_level_schema().level_names.count("atom_atom") == 1
+        assert batch.get_level_schema().dtype("custom_values") == "float32"
+
+    def test_level_kind_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=False)
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(ValueError, match="already registered as segmented"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    def test_product_parent_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        batch.add_level("other", segmented=True)
+        batch.add_product_level("pairs", left="atoms", right="samples")
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        extension.add_level("other", segmented=True)
+        extension.add_product_level("pairs", left="atoms", right="other")
+        before = self._schema_state(batch.get_level_schema())
+        extension_before = self._schema_state(extension)
+
+        with pytest.raises(ValueError, match="already registered with parents"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        assert self._schema_state(extension) == extension_before
+
+    def test_field_owner_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key("custom_values", [torch.ones(2, 1)], level="node")
+        extension = LevelSchema()
+        extension.set("custom_values", "system", dtype="float32")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="already assigned to level 'atoms'"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_declared_dtype_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float64")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="incompatible declared dtypes"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_unknown_dtype_aliases_remain_distinct(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        existing = LevelSchema()
+        existing.set("custom_values", "samples", dtype="custom_float")
+        batch.extend_level_schema(existing)
+        extension = LevelSchema()
+        extension.set("custom_values", "samples", dtype="other_float")
+
+        with pytest.raises(ValueError, match="custom_float vs other_float"):
+            batch.extend_level_schema(extension)
+
+    def test_from_data_list_preserves_unknown_dtype_error(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.set("custom_values", "metadata", dtype="custom_float")
+        data = _minimal_atomic_data(2)
+        data.custom_values = torch.ones(1, 1)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            Batch.from_data_list([data], attr_map=schema)
+
+    def test_extension_rejects_non_schema_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(TypeError, match="got dict"):
+            batch.extend_level_schema({})  # type: ignore[arg-type]
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "get_level_schema",
+            "extend_level_schema",
+            "add_level",
+            "add_product_level",
+        ],
+    )
+    def test_api_name_collision_remains_available_by_item(self, field_name):
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key(
+            field_name,
+            [torch.tensor([[1.0]]), torch.tensor([[2.0]])],
+            level="system",
+        )
+
+        torch.testing.assert_close(batch[field_name], torch.tensor([[1.0], [2.0]]))
+        assert field_name in batch
+        assert field_name in {key for key, _ in batch}
+        assert field_name in batch.model_dump()
+        assert callable(getattr(batch, field_name))
+
+        torch.testing.assert_close(batch.clone()[field_name], batch[field_name])
+        torch.testing.assert_close(
+            batch.index_select([1])[field_name], torch.tensor([[2.0]])
+        )
+
+    def test_extended_schema_survives_public_batch_lifecycle(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        derived = [
+            batch.clone(),
+            batch.to("cpu"),
+            batch.index_select([1]),
+            Batch.from_data_list([batch.get_data(0)]),
+            Batch.from_data_list(batch.to_data_list()),
+        ]
+
+        for result in derived:
+            assert result.get_level_schema().level_kind("samples") == "segmented"
+            assert result.get_level_schema().product_parents["atom_atom"] == (
+                "atoms",
+                "atoms",
+            )
+
+
+# -----------------------------------------------------------------------------
+class TestBatchEmptyFieldInsertion:
+    """Public-contract tests for adding typed fields to zero-graph batches."""
+
+    @staticmethod
+    def _metadata_state(batch: Batch) -> tuple:
+        """Return public schema and field state for atomicity assertions."""
+        schema = batch.get_level_schema()
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+            tuple(batch.model_dump()),
+        )
+
+    def test_adds_empty_uniform_segmented_and_product_fields(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_level("metadata", segmented=False)
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("sample_pairs", left="samples", right="samples")
+
+        batch.add_key(
+            "metadata_values",
+            [],
+            level="metadata",
+            dtype=torch.int64,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "sample_values",
+            [],
+            level="samples",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+        batch.add_key(
+            "pair_values",
+            [],
+            level="sample_pairs",
+            dtype=torch.float64,
+            payload_shape=(3, 3),
+        )
+
+        assert batch.metadata_values.shape == (0, 2)
+        assert batch.sample_values.shape == (0, 4)
+        assert batch.pair_values.shape == (0, 3, 3)
+        assert batch.level_ptr("metadata").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("sample_pairs").tolist() == [0]
+        schema = batch.get_level_schema()
+        assert schema.dtype("metadata_values") == "int64"
+        assert schema.dtype("sample_values") == "float32"
+        assert schema.dtype("pair_values") == "float64"
+
+    def test_preserves_existing_builtin_buffer_capacities(self):
+        batch = Batch.empty(num_systems=4, num_nodes=10, num_edges=0)
+
+        batch.add_key(
+            "node_features",
+            [],
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "system_tags",
+            [],
+            level="system",
+            dtype=torch.int64,
+            payload_shape=(),
+        )
+
+        assert batch.num_graphs == 0
+        assert batch.node_features.shape == (10, 2)
+        assert batch.system_tags.shape == (4,)
+        assert batch.system_capacity == 4
+
+    def test_materializes_missing_empty_product_parents(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+
+        batch.add_key(
+            "pair_values",
+            [],
+            level="atom_sample",
+            dtype=torch.float32,
+            payload_shape=(1,),
+        )
+
+        assert batch.level_ptr("atoms").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("atom_sample").tolist() == [0]
+        assert batch.pair_values.shape == (0, 1)
+
+    def test_empty_product_survives_lifecycle_and_append(self):
+        empty = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        empty.add_product_level("atom_atom", left="atoms", right="atoms")
+        empty.add_key(
+            "hessian",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        for derived in (empty.clone(), empty.cpu()):
+            assert derived.hessian.shape == (0, 3, 3)
+            assert derived.level_ptr("atom_atom").tolist() == [0]
+            assert derived.get_level_schema().group("hessian") == "atom_atom"
+        assert empty.model_dump()["hessian"].shape == (0, 3, 3)
+
+        populated = Batch.from_data_list(
+            [_minimal_atomic_data(2)],
+            attr_map=empty.get_level_schema(),
+        )
+        values = torch.arange(36, dtype=torch.float32).reshape(2, 2, 3, 3)
+        populated.add_key(
+            "hessian",
+            [values],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        empty.append(populated)
+        rebuilt = Batch.from_data_list(empty.to_data_list())
+
+        assert empty.num_nodes_list == [2]
+        assert empty.level_ptr("atom_atom").tolist() == [0, 4]
+        torch.testing.assert_close(empty.get_data(0).hessian, values)
+        torch.testing.assert_close(rebuilt.get_data(0).hessian, values)
+
+    def test_empty_overwrite_replaces_payload_shape(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            overwrite=True,
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+
+        assert batch.values.shape == (0, 2)
+        assert batch.get_level_schema().dtype("values") == "float32"
+
+    def test_nonempty_values_accept_matching_hints(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        values = [torch.zeros(2, 4), torch.ones(3, 4)]
+
+        batch.add_key(
+            "features",
+            values,
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+
+        assert batch.features.shape == (5, 4)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "error", "message"),
+        [
+            ({"payload_shape": (3, 3)}, ValueError, "both dtype and payload_shape"),
+            ({"dtype": torch.float32}, ValueError, "both dtype and payload_shape"),
+            (
+                {"dtype": "float32", "payload_shape": (3, 3)},
+                TypeError,
+                "dtype must be a torch.dtype",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": [3, 3]},
+                TypeError,
+                "payload_shape must be a tuple",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (True, 3)},
+                TypeError,
+                "non-negative integers",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (-1, 3)},
+                ValueError,
+                "dimensions must be non-negative",
+            ),
+            (
+                {"dtype": torch.bfloat16, "payload_shape": (3, 3)},
+                ValueError,
+                "Unsupported torch dtype",
+            ),
+        ],
+    )
+    def test_invalid_empty_metadata_is_atomic(self, kwargs, error, message):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        before = self._metadata_state(batch)
+
+        with pytest.raises(error, match=message):
+            batch.add_key("hessian", [], level="atom_atom", **kwargs)
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_values_reject_nonempty_batch_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="Number of values"):
+            batch.add_key(
+                "features",
+                [],
+                level="node",
+                dtype=torch.float32,
+                payload_shape=(4,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+    @pytest.mark.parametrize(
+        ("dtype", "payload_shape", "message"),
+        [
+            (torch.float64, (4,), "must have dtype"),
+            (torch.float32, (5,), "must have payload shape"),
+        ],
+    )
+    def test_nonempty_hint_mismatch_is_atomic(self, dtype, payload_shape, message):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match=message):
+            batch.add_key(
+                "features",
+                [torch.zeros(2, 4)],
+                level="node",
+                dtype=dtype,
+                payload_shape=payload_shape,
+            )
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_declared_custom_dtype_mismatch_is_atomic(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            batch.add_key(
+                "sample_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+    def test_unknown_declared_dtype_keeps_caller_specific_errors(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("custom_values", "samples", dtype="custom_float")
+        empty = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        populated = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            empty.add_key(
+                "custom_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            populated.add_key(
+                "custom_values",
+                [torch.ones(2, 1)],
+                level="samples",
+            )
+
+
+# -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
 class TestBatchMutation:
@@ -2011,6 +2588,71 @@ class TestBatchLevelLifecycle:
 # -----------------------------------------------------------------------------
 # Round-trip: added keys appear correctly in to_data_list()
 # -----------------------------------------------------------------------------
+class TestHessianBatchLifecycle:
+    """Test public lifecycle operations for dense Hessian result batches."""
+
+    def test_clone_is_independent_and_preserves_schema(self, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3)
+        clone = batch.clone()
+        clone.hessian[0, 0, 0] = -1.0
+
+        assert (
+            batch.get_level_schema().level_names == clone.get_level_schema().level_names
+        )
+        _assert_hessian_batch(clone, (2, 3))
+        assert batch.hessian[0, 0, 0].item() != -1.0
+        torch.testing.assert_close(clone.get_data(1).hessian, batch.get_data(1).hessian)
+
+    def test_device_move_uses_public_data_fixture(self, device, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3).to(device)
+
+        _assert_hessian_batch(batch, (2, 3))
+        assert batch.hessian.device.type == torch.device(device).type
+        assert batch.get_data(0).hessian.device.type == torch.device(device).type
+        torch.testing.assert_close(
+            batch.hessian.cpu(), hessian_batch_factory(2, 3).hessian
+        )
+
+    def test_reordered_and_repeated_select_preserves_blocks(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3, 1)
+        selected = batch.index_select([2, 0, 2])
+
+        _assert_hessian_batch(selected, (1, 2, 1))
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                selected.get_data(result_index).hessian,
+                batch.get_data(source_index).hessian,
+            )
+
+    def test_get_data_to_data_list_and_rebatch_preserve_exact_values(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3)
+        data_list = batch.to_data_list()
+        rebuilt = Batch.from_data_list(data_list, attr_map=batch.get_level_schema())
+
+        _assert_hessian_batch(rebuilt, (2, 3))
+        for index in range(batch.num_graphs):
+            torch.testing.assert_close(
+                batch.get_data(index).hessian, data_list[index].hessian
+            )
+        torch.testing.assert_close(rebuilt.hessian, batch.hessian)
+
+    def test_append_compatible_hessian_batches(self, hessian_batch_factory):
+        left = hessian_batch_factory(2, 1)
+        right = hessian_batch_factory(3, 2, offset=5000.0)
+        expected = [data.hessian for data in left.to_data_list() + right.to_data_list()]
+
+        left.append(right)
+
+        assert left.num_graphs == 4
+        _assert_hessian_batch(left, (2, 1, 3, 2))
+        for index, value in enumerate(expected):
+            torch.testing.assert_close(left.get_data(index).hessian, value)
+
+
 class TestBatchRoundTripAddedKeys:
     """Test that keys added to a Batch (e.g. by MD code) are correctly stored in
     AtomicData when converting back via to_data_list() / get_data().

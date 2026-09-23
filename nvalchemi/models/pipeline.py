@@ -41,7 +41,7 @@ See the class docstrings below for full composition examples.
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, TypeAlias
@@ -58,6 +58,12 @@ from nvalchemi._typing import (
 )
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks import Hook, NeighborListHook
+from nvalchemi.models._derivatives import (
+    _DerivativeRequest,
+    _reject_derivative_request,
+    _require_local_derivative_request,
+    _temporary_model_config,
+)
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -702,10 +708,137 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     new_active -= {"forces", "stress"} - direct
                     self._step_active_overrides[id(step)] = new_active
 
+    def _copy_derivative_runtime_data(
+        self,
+        source: Batch,
+        working: Batch,
+    ) -> None:
+        """Copy supplied pipeline neighbor state into a derivative snapshot."""
+        tensor_copies: dict[int, torch.Tensor] = {}
+
+        def copy_tensor(value: torch.Tensor | None) -> torch.Tensor | None:
+            if value is None:
+                return None
+            key = id(value)
+            copied = tensor_copies.get(key)
+            if copied is None:
+                copied = value.detach().clone()
+                tensor_copies[key] = copied
+            return copied
+
+        sources = source.__dict__.get(_PIPELINE_NEIGHBOR_SOURCES_ATTR, _MISSING)
+        if sources is not _MISSING:
+            if sources is None:
+                working.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = None
+            else:
+                working.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = tuple(
+                    _NeighborSourceData(
+                        source_id=source_data.source_id,
+                        config=source_data.config.model_copy(deep=True),
+                        neighbor_matrix=copy_tensor(source_data.neighbor_matrix),
+                        num_neighbors=copy_tensor(source_data.num_neighbors),
+                        neighbor_matrix_shifts=copy_tensor(
+                            source_data.neighbor_matrix_shifts
+                        ),
+                        neighbor_list=copy_tensor(source_data.neighbor_list),
+                        edge_ptr=copy_tensor(source_data.edge_ptr),
+                        neighbor_list_shifts=copy_tensor(
+                            source_data.neighbor_list_shifts
+                        ),
+                    )
+                    for source_data in sources
+                )
+
+        for attr in _NEIGHBOR_ATTRS:
+            if attr not in source.__dict__:
+                continue
+            value = source.__dict__[attr]
+            working.__dict__[attr] = (
+                copy_tensor(value) if isinstance(value, torch.Tensor) else value
+            )
+
+    def _build_derivative_plan(self) -> dict[PipelineStep, frozenset[str]]:
+        """Build the flat dependency closure for connected pipeline energy."""
+        all_steps = [step for group in self.groups for step in group.steps]
+        latest_producer: dict[str, tuple[PipelineStep, str]] = {}
+        dependencies: dict[PipelineStep, tuple[tuple[PipelineStep, str], ...]] = {}
+
+        for step in all_steps:
+            step_dependencies: list[tuple[PipelineStep, str]] = []
+            for input_key in step.model.model_config.required_inputs:
+                producer = latest_producer.get(input_key)
+                if producer is not None:
+                    step_dependencies.append(producer)
+            dependencies[step] = tuple(step_dependencies)
+
+            for output_key in step.model.model_config.outputs:
+                data_attr = step.wire.get(output_key, output_key)
+                latest_producer[data_attr] = (step, output_key)
+
+        requested: dict[PipelineStep, set[str]] = {}
+        pending: list[PipelineStep] = []
+        for step in all_steps:
+            if "energy" in step.model.model_config.outputs:
+                requested.setdefault(step, set()).add("energy")
+                pending.append(step)
+
+        visited: set[PipelineStep] = set()
+        while pending:
+            step = pending.pop()
+            if step in visited:
+                continue
+            visited.add(step)
+            for producer, output_key in dependencies[step]:
+                requested.setdefault(producer, set()).add(output_key)
+                pending.append(producer)
+
+        return {
+            step: frozenset(requested[step]) for step in all_steps if step in requested
+        }
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Validate one local derivative request across pipeline steps."""
+        _require_local_derivative_request(self, request)
+        for group_index, group in enumerate(self.groups):
+            for step_index, step in enumerate(group.steps):
+                if isinstance(step.model, PipelineModelWrapper):
+                    _reject_derivative_request(
+                        self,
+                        request,
+                        "nested PipelineModelWrapper at "
+                        f"group[{group_index}].step[{step_index}] does not support "
+                        "derivative requests; flatten the pipeline before requesting "
+                        "derivatives",
+                    )
+
+        plan = self._build_derivative_plan()
+        if not plan:
+            _reject_derivative_request(
+                self,
+                request,
+                "the pipeline has no energy-producing step",
+            )
+
+        for step in plan:
+            child_request = _DerivativeRequest(
+                operation=request.operation,
+                execution=(
+                    "distributed"
+                    if step.model._dist_ctx is not None
+                    else request.execution
+                ),
+                strategy=request.strategy,
+            )
+            _require_local_derivative_request(step.model, child_request)
+            step.model._validate_derivative_request(child_request)
+
     def _call_step(
         self,
         step: PipelineStep,
         data: AtomicData | Batch,
+        *,
+        active_outputs_override: set[str] | object = _MISSING,
+        gradient_keys_override: set[str] | object = _MISSING,
         **kwargs: Any,
     ) -> ModelOutputs:
         """Call a step's model, temporarily applying overrides.
@@ -742,25 +875,27 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             )
             self._configure_sub_models()
             step_id = id(step)
-        override = self._step_active_overrides.get(step_id)
+        configured_override = self._step_active_overrides.get(step_id)
+        override = (
+            configured_override
+            if active_outputs_override is _MISSING
+            else active_outputs_override
+        )
         neighbor_plan = self._step_neighbor_plans.get(step_id)
 
         saved_neighbors: dict[str, Any] | None = None
-        saved_active: set[str] | None = None
-
         if neighbor_plan is not None:
             saved_neighbors = self._select_step_neighbors(data, neighbor_plan)
 
+        config_overrides = {}
         if override is not None:
-            cfg = step.model.model_config
-            saved_active = cfg.active_outputs
-            cfg.active_outputs = override
-
+            config_overrides["active_outputs"] = override
+        if gradient_keys_override is not _MISSING:
+            config_overrides["gradient_keys"] = gradient_keys_override
         try:
-            return step.model(data, **kwargs)
+            with _temporary_model_config(step.model, **config_overrides):
+                return step.model(data, **kwargs)
         finally:
-            if saved_active is not None:
-                step.model.model_config.active_outputs = saved_active
             if saved_neighbors is not None:
                 self._restore_step_neighbors(data, saved_neighbors)
 
@@ -791,7 +926,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 raise RuntimeError(
                     "PipelineModelWrapper: planned multiple neighbor-list sources, "
                     "but the batch has no captured pipeline neighbor sources. "
-                    "Ensure make_neighbor_hooks() hooks are registered."
+                    "Run the pipeline's neighbor hooks on this batch before evaluation."
                 )
             return None
         for source in sources:
@@ -799,8 +934,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 return source
         raise RuntimeError(
             "PipelineModelWrapper: missing neighbor source "
-            f"{plan.source_id} on batch. Ensure make_neighbor_hooks() hooks "
-            "are registered."
+            f"{plan.source_id} on batch. Run the pipeline's neighbor hooks "
+            "on this batch before evaluation."
         )
 
     @staticmethod
@@ -890,6 +1025,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         step: PipelineStep,
         context: dict[PipelineStep, ModelOutputs],
         data: Batch | AtomicData,
+        runtime_writes: dict[str, Any] | None = None,
     ) -> None:
         """Write resolved upstream outputs onto *data* for this step's model.
 
@@ -907,10 +1043,26 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     continue
                 data_attr = ctx_step.wire.get(out_key, out_key)
                 if data_attr in needed:
+                    if runtime_writes is not None and data_attr not in runtime_writes:
+                        runtime_writes[data_attr] = data.__dict__.get(
+                            data_attr, _MISSING
+                        )
                     # Use object.__setattr__ for wired intermediate
                     # values (e.g. charges [N]) that may not match the
                     # Batch system-group length validation.
                     object.__setattr__(data, data_attr, value)
+
+    @staticmethod
+    def _restore_runtime_writes(
+        data: Batch | AtomicData,
+        runtime_writes: dict[str, Any],
+    ) -> None:
+        """Restore runtime attributes shadowed by derivative-time wiring."""
+        for attr, value in runtime_writes.items():
+            if value is _MISSING:
+                data.__dict__.pop(attr, None)
+            else:
+                data.__dict__[attr] = value
 
     # ------------------------------------------------------------------
     # Neighbor hook factory
@@ -962,6 +1114,68 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
+
+    def _derivative_energy(self, data: Batch) -> torch.Tensor:
+        """Execute the flat pipeline as one connected total-energy graph."""
+        plan = self._build_derivative_plan()
+        if not plan:
+            raise RuntimeError("Pipeline derivative execution found no energy output")
+
+        context: dict[PipelineStep, ModelOutputs] = {}
+        group_outputs: list[ModelOutputs] = []
+        runtime_writes: dict[str, Any] = {}
+        try:
+            for group in self.groups:
+                step_outputs: list[ModelOutputs] = []
+                for step in group.steps:
+                    requested = plan.get(step)
+                    if requested is None:
+                        continue
+
+                    self._resolve_inputs(step, context, data, runtime_writes)
+                    output = self._call_step(
+                        step,
+                        data,
+                        active_outputs_override=set(requested),
+                        gradient_keys_override={"positions"},
+                    )
+                    if not isinstance(output, Mapping):
+                        raise RuntimeError(
+                            f"{type(step.model).__name__} derivative pipeline step "
+                            f"returned {type(output).__name__}, expected a mapping"
+                        )
+                    missing = [
+                        key for key in sorted(requested) if output.get(key) is None
+                    ]
+                    if missing:
+                        raise RuntimeError(
+                            f"{type(step.model).__name__} derivative pipeline step "
+                            f"did not return required output(s): {missing}"
+                        )
+
+                    filtered: ModelOutputs = OrderedDict(
+                        (key, output[key]) for key in output if key in requested
+                    )
+                    step_outputs.append(filtered)
+                    context[step] = filtered
+
+                if step_outputs:
+                    group_outputs.append(
+                        sum_outputs(
+                            *step_outputs,
+                            additive_keys=self.additive_keys,
+                        )
+                    )
+
+            result = sum_outputs(*group_outputs, additive_keys=self.additive_keys)
+            energy = result.get("energy")
+            if energy is None:
+                raise RuntimeError(
+                    "Pipeline derivative execution did not produce total energy"
+                )
+            return energy
+        finally:
+            self._restore_runtime_writes(data, runtime_writes)
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
         """Run all sub-models and accumulate outputs.

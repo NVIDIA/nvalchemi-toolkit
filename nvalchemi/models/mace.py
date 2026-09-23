@@ -72,6 +72,10 @@ from torch import nn
 from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import (
+    _DerivativeRequest,
+    _reject_derivative_request,
+)
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -570,9 +574,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # ``atomic_energies`` (per-atom energy = MACE's raw ``node_energy``)
             # is a normal output; the distributed force path requests it to get
             # a per-node energy to differentiate, and callers may ask for it too.
-            outputs=frozenset(
-                {"energy", "forces", "stress", "hessian", "atomic_energies"}
-            ),
+            outputs=frozenset({"energy", "forces", "stress", "atomic_energies"}),
             active_outputs={"energy", "forces"},
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
@@ -661,6 +663,30 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             cached = base.with_adapters(*refresh, *halo_conv)
             self._dist_spec_cache = cached
         return cached
+
+    # ------------------------------------------------------------------
+    # Derivative support
+    # ------------------------------------------------------------------
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Validate local MACE derivatives for the requested strategy."""
+        if (
+            _mace_uses_cueq(self.model)
+            and request.operation == "dense_hessian"
+            and request.strategy == "vmap"
+        ):
+            # cuEq double backward works for one direction at a time, so HVPs
+            # and dense ``loop`` are supported.  Dense ``vmap`` introduces a
+            # separate Hessian-row batch even for one physical system, but
+            # ``cuequivariance::uniform_1d`` has no vmap batching rule and
+            # PyTorch cannot generate a fallback for this operator.
+            _reject_derivative_request(
+                self,
+                request,
+                "cuEquivariance operator cuequivariance::uniform_1d does not "
+                "provide the batching rule required by dense strategy='vmap'; "
+                "use strategy='loop'",
+            )
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -816,9 +842,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> ModelOutputs:
         """Map MACE raw outputs to nvalchemi standard keys.
 
-        Normalizes ``energy`` shape, forwards ``forces`` / ``stress`` / ``hessian``
-        when present, and exposes MACE's ``node_energy`` as ``atomic_energies``,
-        then delegates to the base auto-mapper.
+        Normalizes ``energy`` shape, forwards ``forces`` and ``stress`` when
+        present, exposes MACE's ``node_energy`` as ``atomic_energies``, then
+        delegates to the base auto-mapper.
 
         Parameters
         ----------
@@ -831,7 +857,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         -------
         ModelOutputs
             The standardized outputs (subset of ``energy``, ``forces``,
-            ``stress``, ``hessian``, ``atomic_energies``).
+            ``stress``, and ``atomic_energies``).
         """
         energy = raw_output["energy"]
         mapped: dict[str, Any] = {
@@ -841,8 +867,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             mapped["forces"] = raw_output["forces"]
         if raw_output.get("stress") is not None:
             mapped["stress"] = raw_output["stress"]
-        if raw_output.get("hessian") is not None:
-            mapped["hessian"] = raw_output["hessian"]
         # Per-atom energy = MACE's raw ``node_energy``. The base auto-mapper
         # keeps it only when ``atomic_energies`` is active, so it is free
         # otherwise.

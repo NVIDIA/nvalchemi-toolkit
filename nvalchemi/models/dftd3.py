@@ -71,6 +71,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import _DerivativeRequest, _reject_derivative_request
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -570,6 +571,19 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             ),
             node_energy_key="atomic_energies",
             node_virial_key="atomic_virial",
+        )
+
+    # ------------------------------------------------------------------
+    # Derivative support
+    # ------------------------------------------------------------------
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Reject second-order requests before entering the D3 kernel."""
+        _reject_derivative_request(
+            self,
+            request,
+            "DFT-D3 uses an analytical Warp derivative path without energy "
+            "double backward support",
         )
 
     @property

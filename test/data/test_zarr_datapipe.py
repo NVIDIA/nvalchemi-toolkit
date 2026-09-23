@@ -1502,6 +1502,82 @@ def test_empty_data_list_raises(tmp_path: Path) -> None:
         writer.write([])
 
 
+class TestHessianZarrPersistence:
+    """Test Zarr persistence and public loading of dense Hessian fields."""
+
+    def test_write_raw_read_reordered_dataset_load_and_append(
+        self, tmp_path: Path, hessian_batch_factory
+    ):
+        first = hessian_batch_factory(2, 3, 1)
+        second = hessian_batch_factory(2, 1, offset=5000.0)
+        path = tmp_path / "hessian.zarr"
+        writer = AtomicDataZarrWriter(path)
+        writer.write(first)
+
+        root = zarr.open(path, mode="r")
+        assert root.attrs["levels"]["version"] == 1
+        assert root.attrs["num_samples"] == 3
+        assert root.attrs["levels"]["definitions"]["atom_atom"] == {
+            "kind": "product",
+            "left": "atoms",
+            "right": "atoms",
+        }
+        assert root["meta"]["level_ptrs"]["atom_atom"].dtype == np.int64
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [0, 4, 13, 14]
+        assert root["levels"]["atom_atom"]["hessian"].dtype == np.float64
+        assert root["levels"]["atom_atom"]["hessian"].shape == (14, 3, 3)
+        np.testing.assert_array_equal(
+            root["levels"]["atom_atom"]["hessian"][:], first.hessian.cpu().numpy()
+        )
+
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        for index in range(first.num_graphs):
+            raw, _ = reader[index]
+            expected = first.get_data(index).hessian
+            assert raw["hessian"].shape == expected.shape
+            torch.testing.assert_close(raw["hessian"], expected)
+        dataset = Dataset(reader, device="cpu")
+        loaded = dataset.load_batches([[2, 0, 2]])[0]
+        assert loaded.level_ptr("atom_atom").tolist() == [0, 1, 5, 6]
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                loaded.get_data(result_index).hessian,
+                first.get_data(source_index).hessian,
+            )
+        dataset.close()
+
+        writer.append(second)
+        root = zarr.open(path, mode="r")
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [
+            0,
+            4,
+            13,
+            14,
+            18,
+            19,
+        ]
+        assert root.attrs["num_samples"] == 5
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        appended_dataset = Dataset(reader, device="cpu")
+        appended = appended_dataset.load_batches([[3, 4]])[0]
+        torch.testing.assert_close(
+            appended.get_data(0).hessian, second.get_data(0).hessian
+        )
+        torch.testing.assert_close(
+            appended.get_data(1).hessian, second.get_data(1).hessian
+        )
+        appended_dataset.close()
+        reader.close()
+
+
 class TestAtomicDataZarrReader:
     """Tests for AtomicDataZarrReader."""
 

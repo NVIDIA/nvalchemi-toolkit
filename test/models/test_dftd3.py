@@ -31,6 +31,9 @@ import numpy as np
 import pytest
 import torch
 
+from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models import DerivativeNotSupported
+
 # ---------------------------------------------------------------------------
 # Import the functions under test
 # ---------------------------------------------------------------------------
@@ -887,6 +890,41 @@ class TestDFTD3ModelWrapper:
 # ===========================================================================
 # Integration tests -- guarded by nvalchemiops availability
 # ===========================================================================
+
+
+class TestDFTD3DerivativeCapability:
+    """All DFT-D3 second-order requests fail before the Warp kernel path."""
+
+    @pytest.fixture
+    def wrapper_and_batch(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=torch.randn(2, 3),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                )
+            ]
+        )
+        return wrapper, batch
+
+    @pytest.mark.parametrize("operation", ["hvp", "loop", "vmap"])
+    def test_second_order_requests_reject_before_forward_or_kernel(
+        self, operation, wrapper_and_batch, monkeypatch
+    ):
+        wrapper, batch = wrapper_and_batch
+        monkeypatch.setattr(
+            wrapper,
+            "forward",
+            lambda *_args, **_kwargs: pytest.fail("D3 forward must not run"),
+        )
+        message = "analytical Warp.*energy double backward"
+
+        with pytest.raises(DerivativeNotSupported, match=message):
+            if operation == "hvp":
+                wrapper.hessian_vector_product(batch, torch.randn_like(batch.positions))
+            else:
+                wrapper.compute_hessian(batch, strategy=operation)
 
 
 class TestDFTD3IntegrationForward:

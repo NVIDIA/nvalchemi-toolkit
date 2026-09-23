@@ -46,13 +46,13 @@ from torch.distributed import ProcessGroup, Work
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.level_storage import (
-    TORCH_DTYPE_MAP,
     LevelSchema,
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
     _checked_segment_metadata,
     _resolve_device,
+    effective_dtype,
 )
 
 # Edge-level keys whose values are node indices and therefore need
@@ -86,10 +86,7 @@ LevelStorage: TypeAlias = UniformLevelStorage | SegmentedLevelStorage
 
 def _canonical_schema_dtype(schema: LevelSchema, key: str) -> torch.dtype | str | None:
     """Return the effective dtype for a schema field, preserving unknown names."""
-    declared = schema.dtypes.get(key)
-    if declared is None:
-        return None
-    return TORCH_DTYPE_MAP.get(declared, declared)
+    return effective_dtype(schema.dtypes.get(key))
 
 
 def _checked_product_lengths(
@@ -328,13 +325,12 @@ def _build_batch_storage(
 
             declared_dtype = attr_map.dtypes.get(key)
             if declared_dtype is not None:
-                try:
-                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-                except KeyError as exc:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has "
                         f"unsupported declared dtype '{declared_dtype}'"
-                    ) from exc
+                    )
                 if expected_dtype != first_value.dtype:
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has dtype "
@@ -2009,6 +2005,121 @@ class Batch(DataMixin):
         del self._storage[key]
 
     # ------------------------------------------------------------------
+    # Schema access and mutation
+    # ------------------------------------------------------------------
+
+    def get_level_schema(self) -> LevelSchema:
+        """Return an independent copy of this batch's level schema.
+
+        The returned schema may be inspected or modified without changing the
+        batch. Use :meth:`extend_level_schema` to add declarations back to an
+        existing batch.
+
+        ``get_level_schema`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name remains
+        available as ``batch["get_level_schema"]``.
+
+        Returns
+        -------
+        LevelSchema
+            Defensive copy of the batch-owned schema.
+        """
+        return self._storage.attr_map.clone()
+
+    def _install_level_schema(self, schema: LevelSchema) -> None:
+        """Install one owned schema across the batch and its storage groups."""
+        ordered_groups = {
+            name: self._storage.groups[name]
+            for name in schema.level_names
+            if name in self._storage.groups
+        }
+        ordered_groups.update(
+            {
+                name: group
+                for name, group in self._storage.groups.items()
+                if name not in ordered_groups
+            }
+        )
+        self._storage.attr_map = schema
+        self._storage.groups = ordered_groups
+        for group in self._storage.groups.values():
+            group.attr_map = schema
+
+    def extend_level_schema(self, schema: LevelSchema) -> None:
+        """Add schema declarations atomically without materializing storage.
+
+        Existing declarations must be compatible. New ordinary levels,
+        product levels, field ownership, and declared dtypes are copied into
+        one batch-owned schema only after the complete merge validates.
+
+        ``extend_level_schema`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name
+        remains available as ``batch["extend_level_schema"]``.
+
+        Parameters
+        ----------
+        schema : LevelSchema
+            Schema declarations to add.
+
+        Raises
+        ------
+        TypeError
+            If *schema* is not a :class:`LevelSchema`.
+        ValueError
+            If a declaration conflicts with the batch's existing schema.
+        """
+        if not isinstance(schema, LevelSchema):
+            raise TypeError(
+                f"schema must be a LevelSchema, got {type(schema).__name__}"
+            )
+        candidate = self._storage.attr_map._merged_with(schema)
+        self._install_level_schema(candidate)
+
+    def add_level(self, name: str, *, segmented: bool) -> None:
+        """Register an ordinary uniform or segmented level on this batch.
+
+        Registration changes schema metadata only. It does not allocate a
+        storage group or create tensor fields.
+
+        ``add_level`` is reserved for this public API during attribute-style
+        access. A custom tensor field with the same name remains available as
+        ``batch["add_level"]``.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+        segmented : bool
+            Whether the level has variable per-system cardinality.
+        """
+        candidate = self.get_level_schema()
+        candidate.add_level(name, segmented=segmented)
+        self._install_level_schema(candidate)
+
+    def add_product_level(self, name: str, *, left: str, right: str) -> None:
+        """Register an ordered product of two segmented levels on this batch.
+
+        Registration changes schema metadata only. It does not allocate a
+        storage group or create tensor fields.
+
+        ``add_product_level`` is reserved for this public API during
+        attribute-style access. A custom tensor field with the same name
+        remains available as ``batch["add_product_level"]``.
+
+        Parameters
+        ----------
+        name : str
+            Name of the product level.
+        left : str
+            Registered segmented level for the left entity axis.
+        right : str
+            Registered segmented level for the right entity axis.
+        """
+        candidate = self.get_level_schema()
+        candidate.add_product_level(name, left=left, right=right)
+        self._install_level_schema(candidate)
+
+    # ------------------------------------------------------------------
     # Mutation
     # ------------------------------------------------------------------
 
@@ -2401,6 +2512,9 @@ class Batch(DataMixin):
         values: list[Tensor],
         level: str = "node",
         overwrite: bool = False,
+        *,
+        dtype: torch.dtype | None = None,
+        payload_shape: tuple[int, ...] | None = None,
     ) -> None:
         """Add a new key-value pair to the batch.
 
@@ -2409,7 +2523,8 @@ class Batch(DataMixin):
         of assigning the key to the atom level. A batch carrying no
         system-level field gains its system group when *level* is
         ``"system"``, since one row per graph needs no cardinality beyond the
-        batch's own.
+        batch's own. Empty zero-graph batches may materialize a field by
+        supplying its *dtype* and *payload_shape*.
 
         Parameters
         ----------
@@ -2421,17 +2536,46 @@ class Batch(DataMixin):
             Built-in alias or registered custom level name.
         overwrite : bool
             If ``True``, overwrite existing keys.
+        dtype : torch.dtype, optional
+            Expected field dtype. Required when *values* is empty; otherwise,
+            when supplied, it must match every value.
+        payload_shape : tuple[int, ...], optional
+            Shape after the dimensions owned by the level: the graph axis for
+            uniform levels, one cardinality axis for segmented levels, or two
+            parent-cardinality axes for product levels. Required when *values*
+            is empty; otherwise, when supplied, it must match every value.
 
         Raises
         ------
         ValueError
-            If key exists and *overwrite* is ``False``, if the number
-            of values does not match the batch size, shape, or level
-            cardinality, or if the batch has no atom or edge group to add
-            a field at that level to.
+            If key exists and *overwrite* is ``False``, if the number of
+            values does not match the batch size, shape, dtype, or level
+            cardinality, if empty-field metadata is incomplete or invalid, or
+            if the batch has no atom or edge group to add a field at that level
+            to.
         TypeError
-            If *level* is not a string or a value is not a tensor.
+            If *level* is not a string, a value is not a tensor, or an explicit
+            dtype or payload shape has the wrong type.
         """
+        if dtype is not None and not isinstance(dtype, torch.dtype):
+            raise TypeError(
+                f"dtype must be a torch.dtype or None, got {type(dtype).__name__}"
+            )
+        if payload_shape is not None:
+            if not isinstance(payload_shape, tuple):
+                raise TypeError(
+                    "payload_shape must be a tuple of non-negative integers or None"
+                )
+            if any(
+                not isinstance(dim, int) or isinstance(dim, bool)
+                for dim in payload_shape
+            ):
+                raise TypeError(
+                    "payload_shape must be a tuple of non-negative integers"
+                )
+            if any(dim < 0 for dim in payload_shape):
+                raise ValueError("payload_shape dimensions must be non-negative")
+
         if key in self._storage and not overwrite:
             raise ValueError(
                 f"Key '{key}' already exists in batch. "
@@ -2442,8 +2586,10 @@ class Batch(DataMixin):
                 f"Number of values ({len(values)}) must match "
                 f"number of graphs in batch ({self.num_graphs})"
             )
-        if not values:
-            raise ValueError("Values must be non-empty")
+        if not values and (dtype is None or payload_shape is None):
+            raise ValueError(
+                "Empty values require both dtype and payload_shape metadata"
+            )
 
         device = self.device
         if not isinstance(level, str):
@@ -2462,6 +2608,108 @@ class Batch(DataMixin):
 
         schema = self._storage.attr_map.clone()
         kind = schema.level_kind(group_name)
+
+        if not values:
+            # With no graphs, the schema cannot infer this field's shape or dtype.
+            declared_dtype = schema.dtypes.get(key)
+            if group_name not in _BUILTIN_LEVELS and declared_dtype is not None:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has "
+                        f"unsupported declared dtype '{declared_dtype}'"
+                    )
+                if expected_dtype != dtype:
+                    raise ValueError(
+                        f"Custom field '{key}' in level '{group_name}' has dtype "
+                        f"{dtype}, expected declared dtype {declared_dtype}"
+                    )
+
+            schema.set(
+                key,
+                group_name,
+                dtype=(
+                    dtype
+                    if group_name in _BUILTIN_LEVELS or key not in schema.dtypes
+                    else None
+                ),
+                is_segmented=kind != "uniform",
+            )
+            group = self._storage.groups.get(group_name)
+            if group is None and group_name in _BUILTIN_LEVELS:
+                raise ValueError(f"Group '{group_name}' not found in batch")
+            if kind == "uniform":
+                if group is not None and not isinstance(group, UniformLevelStorage):
+                    raise ValueError(
+                        f"Level '{group_name}' is uniform but storage is segmented"
+                    )
+            elif group is not None and not isinstance(group, SegmentedLevelStorage):
+                raise ValueError(
+                    f"Level '{group_name}' is segmented but storage is not"
+                )
+
+            parent_groups: dict[str, SegmentedLevelStorage] = {}
+            if kind == "product":
+                for parent in schema.product_parents[group_name]:
+                    parent_group = self._storage.groups.get(parent)
+                    if parent_group is not None:
+                        if not isinstance(parent_group, SegmentedLevelStorage):
+                            raise ValueError(
+                                f"Product parent '{parent}' must use segmented storage"
+                            )
+                        continue
+                    parent_groups[parent] = SegmentedLevelStorage(
+                        data=None,
+                        device=device,
+                        segment_lengths=[],
+                        validate=False,
+                        attr_map=schema,
+                    )
+
+            capacity = group._data.shape[0] if group is not None else 0
+            empty_data = torch.empty(
+                (capacity, *payload_shape),
+                device=device,
+                dtype=dtype,
+            )
+            if group is None:
+                if kind == "uniform":
+                    new_group: UniformLevelStorage | SegmentedLevelStorage = (
+                        UniformLevelStorage(
+                            data={key: empty_data},
+                            device=device,
+                            validate=False,
+                            attr_map=schema,
+                        )
+                    )
+                else:
+                    new_group = SegmentedLevelStorage(
+                        data={key: empty_data},
+                        device=device,
+                        segment_lengths=[],
+                        validate=False,
+                        attr_map=schema,
+                    )
+            else:
+                new_group = group
+
+            self._storage.groups.update(parent_groups)
+            if group is None:
+                self._storage.groups[group_name] = new_group
+            else:
+                group._data[key] = empty_data
+            self._install_level_schema(schema)
+
+            if self.keys is not None:
+                legacy_level = {
+                    "atoms": "node",
+                    "edges": "edge",
+                    "system": "system",
+                }.get(group_name)
+                if legacy_level is not None:
+                    self.keys[legacy_level].add(key)
+            return
+
         values = [v.to(device) if isinstance(v, Tensor) else v for v in values]
 
         def _validate_value(value: Any) -> Tensor:
@@ -2475,6 +2723,33 @@ class Batch(DataMixin):
             return value
 
         values = [_validate_value(value) for value in values]
+        if dtype is not None and any(value.dtype != dtype for value in values):
+            raise ValueError(
+                f"Values for key '{key}' must have dtype {dtype}, got "
+                f"{[value.dtype for value in values]}"
+            )
+        if payload_shape is not None:
+            if kind == "uniform":
+                actual_payload_shapes = [
+                    tuple(
+                        (
+                            value.squeeze(0)
+                            if value.ndim > 0 and value.shape[0] == 1
+                            else value
+                        ).shape
+                    )
+                    for value in values
+                ]
+            else:
+                trailing_start = 2 if kind == "product" else 1
+                actual_payload_shapes = [
+                    tuple(value.shape[trailing_start:]) for value in values
+                ]
+            if any(shape != payload_shape for shape in actual_payload_shapes):
+                raise ValueError(
+                    f"Values for key '{key}' must have payload shape "
+                    f"{payload_shape}, got {actual_payload_shapes}"
+                )
         if group_name not in _BUILTIN_LEVELS:
             first_dtype = values[0].dtype
             if any(value.dtype != first_dtype for value in values[1:]):
@@ -2485,13 +2760,12 @@ class Batch(DataMixin):
                 )
             declared_dtype = schema.dtypes.get(key)
             if declared_dtype is not None:
-                try:
-                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-                except KeyError as exc:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has "
                         f"unsupported declared dtype '{declared_dtype}'"
-                    ) from exc
+                    )
                 if expected_dtype != first_dtype:
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has dtype "
@@ -2670,22 +2944,7 @@ class Batch(DataMixin):
                 else:
                     group._data[key] = concatenated
 
-        self._storage.attr_map = schema
-        groups = {
-            name: self._storage.groups[name]
-            for name in schema.level_names
-            if name in self._storage.groups
-        }
-        groups.update(
-            {
-                name: group
-                for name, group in self._storage.groups.items()
-                if name not in groups
-            }
-        )
-        self._storage.groups = groups
-        for storage_group in self._storage.groups.values():
-            storage_group.attr_map = schema
+        self._install_level_schema(schema)
 
         if self.keys is not None:
             legacy_level = {
