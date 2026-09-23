@@ -29,7 +29,6 @@ The pipeline per :meth:`AtomisticGenerator.sample` looks like::
     AFTER_CONDITION    hooks  (replace what the function is called with)
     # generation and mapping:
     ctx.sample = generator_func(ctx.inputs, num_samples=..., rng=...)
-    BEFORE_MAPPING     hooks  (filtering = replacing ctx.sample)
     if isinstance(ctx.sample, Batch):   # the Batch path:
         ctx.batch = ctx.sample
         AFTER_GENERATE hooks (filtering = subsetting ctx.batch)
@@ -60,7 +59,7 @@ wins, then the generating function's attribute, then the module default.
 
 * conditioning: ``condition_func`` > ``generator_func.condition`` > ``None``
   (no condition step; the inputs pass through untouched).
-* field declarations: constructor ``consumes_fields`` / ``produces_fields`` >
+* field declarations: constructor ``required_inputs`` / ``outputs`` >
   ``generator_func``'s attributes > ``None`` (undeclared;
   :class:`~nvalchemi.gen.pipeline.GenerationPipeline` validation fails fast).
 * device: ``device`` > ``generator_func.device`` > ``None`` (no stream, no
@@ -90,9 +89,7 @@ A GAN, one forward pass, returning a batch directly::
 Model-owning procedures — a callable object carries the model (plus
 ``device`` and field declarations the driver reads as defaults); module-level
 factories such as
-:func:`~nvalchemi.models.gen.demo.make_demo_gan_generate` build such objects
-so they can be captured for serialization
-(``AtomisticGenerator.model_dump_json()``)::
+:func:`~nvalchemi.models.gen.demo.make_demo_gan_generate` build such objects::
 
     gen = AtomisticGenerator(generator_func=make_demo_gan_generate(DemoGANModel()))
 
@@ -115,7 +112,7 @@ session-scoped :class:`torch.Generator` (advanced per draw), compiles the
 generating function when ``compile_generate`` is set, and opens
 context-manager hooks; exiting unwinds all of it::
 
-    with gen.compile(fullgraph=True):
+    with gen.compile():
         for batch in gen.stream(inputs):
             ...
 """
@@ -124,8 +121,8 @@ from __future__ import annotations
 
 import inspect
 import itertools
-from collections.abc import Iterator
-from contextlib import nullcontext
+from collections.abc import Iterator, Mapping
+from contextlib import ExitStack, nullcontext
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -142,6 +139,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from tensordict import TensorDictBase
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
@@ -186,7 +184,7 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
 
     Return a :class:`~nvalchemi.data.Batch`: that is the output contract.
     The driver fires the ``AFTER_GENERATE`` hooks on it, validates its device
-    and declared ``produces_fields``, and pipelines compose it (including
+    and declared ``outputs``, and pipelines compose it (including
     driving dynamics on it). Any other container is a fallback with real
     losses: ``sample()`` passes it through untouched, the ``AFTER_GENERATE``
     hooks are skipped, and it cannot feed dynamics stages. Inside the
@@ -211,14 +209,8 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
       any extra context in their closure.
     - ``device`` — a :class:`torch.device` (or parseable device string),
       used when the driver's ``device`` is unset.
-    - ``consumes_fields`` / ``produces_fields`` — batch-field declarations,
+    - ``required_inputs`` / ``outputs`` — batch-field declarations,
       used when the driver does not pass them at construction.
-    - ``to_spec()`` — a zero-argument method returning a
-      :class:`~nvalchemi.training.BaseSpec` that captures the object's
-      construction (typically via a module-level factory and
-      :func:`~nvalchemi.training.create_model_spec`); used by the driver's
-      serialization (``model_dump()`` / ``model_dump_json()``) in
-      preference to dotted-path capture.
     """
 
     def __call__(
@@ -246,7 +238,7 @@ class ConditionFunction(Protocol):
     procedure is *asked* to do, not what it must emit. Constraints on the
     output (e.g. "structures with a carboxyl group") live elsewhere —
     guidance inside the generating function, rejection via hooks at
-    :class:`~nvalchemi.gen.stages.GenerationStage.BEFORE_MAPPING` or a
+    :class:`~nvalchemi.gen.stages.GenerationStage.AFTER_GENERATE` or a
     wrapper generating function, or an explicit stage in a
     :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.
     """
@@ -264,10 +256,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     ----------
     generator_func
         The :class:`GeneratingFunction` driving generation. Required; the
-        function owns the model when there is one. Serialized as a
-        :class:`~nvalchemi.training.BaseSpec` payload — the object's own
-        ``to_spec()`` when it provides one, else dotted import path — and
-        rebuilt at validation.
+        function owns the model when there is one.
     condition_func
         Optional :class:`ConditionFunction` run before generation: maps the
         call's raw inputs to the conditioned value the generating function is
@@ -275,9 +264,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         what comes out. Takes precedence over the generating function's own
         ``condition`` attribute. When neither is provided, no conditioning
         happens — the inputs pass through untouched and the
-        ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire. Serialized
-        like ``generator_func`` (its own ``to_spec()``, else dotted import
-        path).
+        ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire.
     device
         Optional device pin (``"cpu"``, ``"cuda"``, ``"cuda:0"``, or a
         :class:`torch.device`). Validated at construction: ``cpu`` always
@@ -294,15 +281,15 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Validated at registration; see :class:`~nvalchemi.hooks.HookRegistryMixin`.
         Serialized as attribute-faithful class specs (each ``__init__``
         parameter read back from the same-named attribute).
-    consumes_fields
+    required_inputs
         Batch fields this generator's input reads (empty means
         unconditional). Defaults from the generating function's
-        ``consumes_fields`` attribute; required by
+        ``required_inputs`` attribute; required by
         :class:`~nvalchemi.gen.pipeline.GenerationPipeline` for link
         validation.
-    produces_fields
+    outputs
         Batch fields this generator's output carries (written or forwarded).
-        Defaults from the generating function's ``produces_fields`` attribute.
+        Defaults from the generating function's ``outputs`` attribute.
     num_samples
         Independent draws requested per call, passed straight through to the
         generating function (per-entry vs total-draw semantics are the
@@ -327,9 +314,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     Notes
     -----
     ``generator_func`` and the other callables are held as arbitrary types
-    (``arbitrary_types_allowed=True``); they serialize to
-    :class:`~nvalchemi.training.BaseSpec` payloads and back through the
-    training spec machinery (:mod:`nvalchemi.training`).
+    (``arbitrary_types_allowed=True``).
 
     ``AtomisticGenerator`` is a context manager (``with gen:``): a session owns a
     dedicated CUDA stream (when the resolved device is CUDA and
@@ -363,19 +348,19 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             "GenerationContext per call."
         ),
     )
-    consumes_fields: frozenset[str] | None = Field(
+    required_inputs: frozenset[str] | None = Field(
         default=None,
         description=(
             "Batch fields the input carries (empty = unconditional). "
-            "Defaults from generator_func.consumes_fields when available. "
+            "Defaults from generator_func.required_inputs when available. "
             "Checked against the (conditioned) inputs on every call."
         ),
     )
-    produces_fields: frozenset[str] | None = Field(
+    outputs: frozenset[str] | None = Field(
         default=None,
         description=(
             "Batch fields the output carries (written or forwarded). "
-            "Defaults from generator_func.produces_fields when available. "
+            "Defaults from generator_func.outputs when available. "
             "Checked against the materialized batch before each return."
         ),
     )
@@ -387,6 +372,18 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     seed: int | None = Field(
         default=None,
         description="Base seed for per-draw RNGs (seed + step_count per call).",
+    )
+    enable_inference_mode: bool = Field(
+        default=True,
+        description=(
+            "Enter torch.inference_mode for the session when the flag is set "
+            "(with gen: covers every call in the block; skipped when one is "
+            "already active). Bare one-shot calls outside a session run "
+            "grad-live. This is an inference driver: sessions produce batches "
+            "with no autograd history, and a pipeline fold hands dynamics "
+            "stages fresh autograd-capable tensors. Set False when training "
+            "on or backpropagating through generated batches."
+        ),
     )
     step_count: int = Field(
         default=0,
@@ -439,6 +436,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         self._stream_ctx: Any = None
         self._session_rng: torch.Generator | None = None
         self._compiled_generate: Any = None
+        self._session_stack: ExitStack | None = None
 
     @field_validator("device", mode="before")
     @classmethod
@@ -509,16 +507,16 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         AtomisticGenerator
             The generator with declarations defaulted.
         """
-        consumes = self.consumes_fields
+        consumes = self.required_inputs
         if consumes is None:
-            consumes = getattr(self.generator_func, "consumes_fields", None)
+            consumes = getattr(self.generator_func, "required_inputs", None)
         if consumes is not None:
-            self.consumes_fields = frozenset(consumes)
-        produces = self.produces_fields
+            self.required_inputs = frozenset(consumes)
+        produces = self.outputs
         if produces is None:
-            produces = getattr(self.generator_func, "produces_fields", None)
+            produces = getattr(self.generator_func, "outputs", None)
         if produces is not None:
-            self.produces_fields = frozenset(produces)
+            self.outputs = frozenset(produces)
         return self
 
     @staticmethod
@@ -558,6 +556,43 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 f"torch.compile; valid options: {sorted(valid)}."
             )
 
+    @field_validator("hooks", mode="before")
+    @classmethod
+    def _validate_hooks(cls, hooks: list[Any]) -> list[Any]:
+        """Validate each hook has the required members (frequency, stage, __call__).
+
+        Parameters
+        ----------
+        hooks
+            List of hook objects.
+
+        Returns
+        -------
+        list
+            The validated hooks.
+
+        Raises
+        ------
+        TypeError
+            If a hook is missing required members.
+        """
+        for i, hook in enumerate(hooks):
+            missing = []
+            if not hasattr(hook, "frequency"):
+                missing.append("frequency")
+            if not hasattr(hook, "stage"):
+                missing.append("stage")
+            if not callable(hook):
+                missing.append("__call__")
+            if missing:
+                raise TypeError(
+                    f"Hook at index {i} ({type(hook).__name__}) is missing "
+                    f"required members: {', '.join(missing)}. "
+                    f"A hook must have 'frequency' (int), 'stage' (Enum | None), "
+                    f"and be callable."
+                )
+        return hooks
+
     @model_validator(mode="after")
     def _validate_compile_kwargs(self) -> AtomisticGenerator:
         """Check ``compile_kwargs`` against the installed ``torch.compile`` signature.
@@ -578,7 +613,13 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Calling again re-compiles with the new kwargs.
 
         Only the generating function is compiled; hook dispatch runs eagerly
-        because it builds data structures and would graph-break anyway. Non-tensor-pure generating functions will
+        because it builds data structures and would graph-break anyway. Note
+        the boundary: a function returning a :class:`~nvalchemi.data.Batch`
+        builds it through pydantic, which dynamo cannot trace — driver-level
+        compile captures the tensor-pure prefix and breaks at materialization,
+        and ``fullgraph=True`` cannot work there at all. For real capture,
+        compile the model inside the generating function and leave the driver
+        eager. Non-tensor-pure generating functions will
         graph-break under ``torch.compile``; compile the model inside such
         functions directly instead.
 
@@ -637,7 +678,12 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         is CUDA and :attr:`dedicated_stream` is set (skipped when a pipeline
         has already supplied a stream), seeds the session RNG from
         :attr:`seed`, compiles the generating function when
-        :attr:`compile_generate` is set, and opens any context-manager hooks.
+        :attr:`compile_generate` is set, enters :func:`torch.inference_mode`
+        when :attr:`enable_inference_mode` is set, and opens any
+        context-manager hooks. The new stream waits on the caller's current
+        stream at entry. Exiting does not synchronize the session stream:
+        enqueue a ``wait_stream`` or ``synchronize`` before consuming results
+        from a different stream.
         When no device resolves — the driver has no ``device`` and the
         generating function declares none — no stream is created, and the
         session owns only the RNG (when :attr:`seed` is set) and hook
@@ -648,26 +694,52 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         AtomisticGenerator
             This instance.
         """
-        if self._stream is None:
-            device = self._infer_device()
-            if device is not None and device.type == "cuda" and self.dedicated_stream:
-                self._stream = torch.cuda.Stream(device=device)
-                self._stream_ctx = torch.cuda.stream(self._stream)
-                self._stream_ctx.__enter__()
-        if self.seed is not None and self._session_rng is None:
-            device = self._infer_device()
-            rng_device = (
-                device if device is not None and device.type == "cuda" else "cpu"
-            )
-            self._session_rng = torch.Generator(device=rng_device).manual_seed(
-                self.seed
-            )
-        if self.compile_generate and self._compiled_generate is None:
-            self.compile()
-        for hook in self.hooks:
-            enter = getattr(hook, "__enter__", None)
-            if enter is not None:
-                enter()
+        stack = ExitStack()
+        try:
+            if self._stream is None:
+                device = self._infer_device()
+                if (
+                    device is not None
+                    and device.type == "cuda"
+                    and self.dedicated_stream
+                ):
+                    self._stream = torch.cuda.Stream(device=device)
+                    # order the session stream after the caller's in-flight work
+                    self._stream.wait_stream(torch.cuda.current_stream(device))
+                    self._stream_ctx = stack.enter_context(
+                        torch.cuda.stream(self._stream)
+                    )
+            if self.seed is not None and self._session_rng is None:
+                device = self._infer_device()
+                rng_device = (
+                    device if device is not None and device.type == "cuda" else "cpu"
+                )
+                self._session_rng = torch.Generator(device=rng_device).manual_seed(
+                    self.seed
+                )
+            if self.compile_generate and self._compiled_generate is None:
+                self.compile()
+            for hook in self.hooks:
+                enter = getattr(hook, "__enter__", None)
+                if enter is not None:
+                    enter()
+                # hooks unwind with (None, None, None): the lifecycle convention
+                # matches dynamics (no exception triple); close-having hooks
+                # without __exit__ unwind through close()
+                exit_ = getattr(hook, "__exit__", None)
+                if exit_ is not None:
+                    stack.callback(exit_, None, None, None)
+                else:
+                    close = getattr(hook, "close", None)
+                    if close is not None:
+                        stack.callback(close)
+        except Exception:
+            stack.close()
+            self._stream = None
+            self._stream_ctx = None
+            self._session_rng = None
+            raise
+        self._session_stack = stack.pop_all()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -678,16 +750,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         exc_type, exc_val, exc_tb
             The active exception, if any.
         """
-        for hook in self.hooks:
-            exit_ = getattr(hook, "__exit__", None)
-            if exit_ is not None:
-                exit_(None, None, None)
-            else:
-                close = getattr(hook, "close", None)
-                if close is not None:
-                    close()
-        if self._stream_ctx is not None:
-            self._stream_ctx.__exit__(exc_type, exc_val, exc_tb)
+        if self._session_stack is not None:
+            self._session_stack.close()
+            self._session_stack = None
         self._stream = None
         self._stream_ctx = None
         self._session_rng = None
@@ -711,16 +776,12 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         """
         if self._ctx is not None:
             return self._ctx
-        return GenerationContext(batch=batch, workflow=self)
-        ctx = getattr(self, "_ctx", None)
-        if ctx is not None:
-            return ctx
         from nvalchemi.training.distributed import get_rank
 
         return GenerationContext(
             batch=batch,
-            model=None,
             global_rank=get_rank(None),
+            inputs=batch,
             workflow=self,
             step_count=self.step_count,
         )
@@ -777,7 +838,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Raises
         ------
         TypeError
-            If the call declares ``consumes_fields`` but the inputs cannot
+            If the call declares ``required_inputs`` but the inputs cannot
             carry fields, or ``AFTER_GENERATE`` hooks leave ``ctx.batch`` as
             something other than a :class:`~nvalchemi.data.Batch`.
         ValueError
@@ -806,7 +867,10 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 if self._session_rng is not None:
                     rng = self._session_rng
                 elif self.seed is not None:
-                    rng = torch.Generator().manual_seed(self.seed + ctx.step_count)
+                    device = self._infer_device()
+                    rng = torch.Generator(
+                        device=device if device is not None else "cpu"
+                    ).manual_seed(self.seed + ctx.step_count)
             # Resolve condition: driver's condition_func > generator_func.condition
             condition = self.condition_func
             if condition is None:
@@ -815,21 +879,24 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 self._call_hooks(GenerationStage.BEFORE_CONDITION, None)
                 ctx.inputs = condition(ctx.inputs, num_samples=n_draws, rng=rng)
                 self._call_hooks(GenerationStage.AFTER_CONDITION, None)
-            if self.consumes_fields:
-                if ctx.inputs is None or not hasattr(ctx.inputs, "__contains__"):
+            if self.required_inputs:
+                if ctx.inputs is None or not isinstance(
+                    ctx.inputs, (Batch, TensorDictBase, Mapping)
+                ):
                     raise TypeError(
-                        "AtomisticGenerator declares consumes_fields="
-                        f"{sorted(self.consumes_fields)}, but the call's inputs "
+                        "AtomisticGenerator declares required_inputs="
+                        f"{sorted(self.required_inputs)}, but the call's inputs "
                         f"({type(ctx.inputs).__name__}) are not a "
-                        "field-addressable container (Batch or TensorDict). Pass "
-                        "inputs carrying those fields, or fix the declaration."
+                        "field-addressable container (Batch, TensorDict, or a "
+                        "string-keyed mapping). Pass inputs carrying those "
+                        "fields, or fix the declaration."
                     )
                 missing = [
-                    f for f in sorted(self.consumes_fields) if f not in ctx.inputs
+                    f for f in sorted(self.required_inputs) if f not in ctx.inputs
                 ]
                 if missing:
                     raise ValueError(
-                        "AtomisticGenerator declares consumes_fields but the "
+                        "AtomisticGenerator declares required_inputs but the "
                         f"call's inputs lack {missing}. Provide the fields in the "
                         "inputs or in the condition step, or fix the declaration."
                     )
@@ -845,19 +912,25 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     rng=rng,
                     **kwargs,
                 )
-                self._call_hooks(GenerationStage.BEFORE_MAPPING, None)
                 if not isinstance(ctx.sample, Batch):
                     # raw passthrough: AFTER_GENERATE hooks are Batch-level
                     return ctx.sample
                 ctx.batch = ctx.sample
+            self._call_hooks(GenerationStage.AFTER_GENERATE, None)
+            batch = ctx.batch
+            if not isinstance(batch, Batch):
+                raise TypeError(
+                    "AFTER_GENERATE hooks must leave ctx.batch a Batch, got "
+                    f"{type(batch).__name__}."
+                )
             device = self._infer_device()
             if (
                 device is not None
                 and not torch.compiler.is_compiling()
                 # a zero-graph batch (total rejection) carries no device state
-                and ctx.batch.num_graphs > 0
+                and batch.num_graphs > 0
             ):
-                batch_device = ctx.batch.device
+                batch_device = batch.device
                 if device.type != batch_device.type or (
                     device.index is not None
                     and batch_device.index is not None
@@ -871,18 +944,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                         "fix the device chain (AtomisticGenerator.device / "
                         "generator_func.device)."
                     )
-            self._call_hooks(GenerationStage.AFTER_GENERATE, None)
-            batch = ctx.batch
-            if not isinstance(batch, Batch):
-                raise TypeError(
-                    "AFTER_GENERATE hooks must leave ctx.batch a Batch, got "
-                    f"{type(batch).__name__}."
-                )
-            if self.produces_fields:
-                missing = [f for f in sorted(self.produces_fields) if f not in batch]
+            if self.outputs and batch.num_graphs > 0:
+                missing = [f for f in sorted(self.outputs) if f not in batch]
                 if missing:
                     raise ValueError(
-                        "AtomisticGenerator declares produces_fields but the "
+                        "AtomisticGenerator declares outputs but the "
                         f"returned batch lacks {missing}. Add the fields in the "
                         "generating function, or fix the "
                         "declaration."
@@ -953,6 +1019,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
 
     def __iter__(self) -> Iterator[Any]:
         """Thin sugar for :meth:`stream` with default arguments.
+
+        Warnings
+        --------
+        This is an unbounded stream: ``list(gen)`` or a bare ``for`` loop
+        never terminates. Bound it with ``stream(max_batches=...)``.
 
         Returns
         -------

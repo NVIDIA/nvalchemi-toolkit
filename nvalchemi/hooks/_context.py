@@ -25,8 +25,6 @@ from torch.nn import ModuleDict
 from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
-    from tensordict import TensorDict
-
     from nvalchemi.data.batch import Batch
     from nvalchemi.models.base import BaseModelMixin
 
@@ -163,14 +161,14 @@ class GenerationContext(HookContext):
     Attributes
     ----------
     batch : Batch | None
-        The single canonical batch for this call. At call start it holds
+        The generated batch on the contract path: set when the generating
+        function returns a :class:`~nvalchemi.data.Batch` (``AFTER_GENERATE``
+        hooks see it here), ``None`` on the raw path. At call start it holds
         ``inputs`` when they are a :class:`~nvalchemi.data.Batch` (``None``
-        otherwise); when a ``batch_mapping`` is set, materialization replaces
-        it with the generated :class:`~nvalchemi.data.Batch` before
-        ``AFTER_GENERATE`` hooks fire; from ``AFTER_GENERATE`` on it always
-        holds a ``Batch``. The raw sample in whatever container the
-        generating function produced lives on :attr:`sample`, not here.
-        The input for the current call — at call start, exactly what was
+        otherwise). The raw sample in whatever container the generating
+        function produced lives on :attr:`sample`, not here.
+    inputs : Any
+        The input for the current call: at call start, exactly what was
         passed to :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample`: a
         tensor container (``Batch``, ``TensorDict``, ...) with text or other
         raw modalities already encoded, or ``None`` for unconditional
@@ -182,17 +180,18 @@ class GenerationContext(HookContext):
         call input.
     intermediates : dict[str, Any]
         Scratch space for hook-to-hook state within one call (e.g. an
-        embedding computed at ``BEFORE_MAPPING`` and consumed at
+        embedding computed at ``AFTER_CONDITION`` and consumed at
         ``AFTER_GENERATE``).
     step_count : int
         Which generation call this is within a stream; ``0`` for a one-shot
         call. Drives hook frequency gating.
     sample : Any
         The raw sample for this call, set when the generating function
-        returns and exposed to hooks at ``BEFORE_MAPPING``. The driver
-        re-reads it after that dispatch and returns it: through the
-        ``Batch`` path when it is a :class:`~nvalchemi.data.Batch`, as-is
-        otherwise. It stays populated through ``AFTER_GENERATE``.
+        returns. The driver returns it through the ``Batch`` path when it is
+        a :class:`~nvalchemi.data.Batch` (and ``AFTER_GENERATE`` hooks see it
+        as ``ctx.batch`` there), as-is otherwise. This is the hot path: the
+        sample should be GPU tensors; it may be any structure the function
+        emits.
     accepted_mask : torch.Tensor | None
         Boolean mask recording which of the call's candidates were accepted,
         written by filtering hooks (a generating function signals total
@@ -207,5 +206,5 @@ class GenerationContext(HookContext):
     inputs: Any = None
     intermediates: dict[str, Any] = field(default_factory=dict)
     step_count: int = 0
-    sample: TensorDict | Any = None
+    sample: Any = None
     accepted_mask: torch.Tensor | None = None

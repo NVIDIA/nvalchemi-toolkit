@@ -18,7 +18,7 @@ Covers:
 
 * :class:`~nvalchemi.models.gen.base.GenerativeModelConfig` construction and
   validation of its four capability fields (``supports_variable_atoms``,
-  ``consumes_fields``, ``produces_fields``, ``prediction_outputs``),
+  ``required_inputs``, ``outputs``, ``prediction_outputs``),
   ``extra="forbid"`` rejection, subclassing, and config round-trip
   (serialize -> deserialize -> equality).
 * :class:`~nvalchemi.models.gen.base.GenerativeModelMixin` contract via a tiny
@@ -97,8 +97,8 @@ def _build_cfg(**overrides) -> GenerativeModelConfig:
     """
     fields = {
         "supports_variable_atoms": True,
-        "consumes_fields": frozenset({"positions", "atomic_numbers"}),
-        "produces_fields": frozenset({"positions", "atomic_numbers"}),
+        "required_inputs": frozenset({"positions", "atomic_numbers"}),
+        "outputs": frozenset({"positions", "atomic_numbers"}),
     }
     fields.update(overrides)
     return GenerativeModelConfig(**fields)
@@ -198,8 +198,8 @@ class TestGenerativeModelConfig:
         """The four fields validate; ``prediction_outputs`` defaults to None."""
         cfg = _build_cfg()
         assert cfg.supports_variable_atoms is True
-        assert cfg.consumes_fields == frozenset({"positions", "atomic_numbers"})
-        assert cfg.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert cfg.required_inputs == frozenset({"positions", "atomic_numbers"})
+        assert cfg.outputs == frozenset({"positions", "atomic_numbers"})
         assert cfg.prediction_outputs is None
 
     def test_unknown_kwarg_rejected(self) -> None:
@@ -210,12 +210,12 @@ class TestGenerativeModelConfig:
             _build_cfg(bogus_field=1)
 
     def test_field_declarations_required(self) -> None:
-        """Omitting ``consumes_fields``/``produces_fields`` raises."""
-        with pytest.raises(ValidationError, match="consumes_fields"):
+        """Omitting ``required_inputs``/``outputs`` raises."""
+        with pytest.raises(ValidationError, match="required_inputs"):
             GenerativeModelConfig(supports_variable_atoms=True)
-        with pytest.raises(ValidationError, match="produces_fields"):
+        with pytest.raises(ValidationError, match="outputs"):
             GenerativeModelConfig(
-                supports_variable_atoms=True, consumes_fields=frozenset()
+                supports_variable_atoms=True, required_inputs=frozenset()
             )
 
     def test_config_round_trip(self) -> None:
@@ -228,8 +228,8 @@ class TestGenerativeModelConfig:
         """A non-default ``prediction_outputs`` survives a round-trip."""
         cfg = _build_cfg(
             supports_variable_atoms=False,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset({"positions"}),
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions"}),
             prediction_outputs={"flow"},
         )
         restored = GenerativeModelConfig.model_validate(cfg.model_dump())
@@ -240,8 +240,8 @@ class TestGenerativeModelConfig:
         """A subclass carrying model-specific fields validates as a config."""
         cfg = _ExtendedConfig(
             supports_variable_atoms=False,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset({"positions"}),
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions"}),
             temperature=2.5,
         )
         assert isinstance(cfg, GenerativeModelConfig)
@@ -274,8 +274,8 @@ class TestGenerativeModelMixin:
                 super().__init__()
                 self.model_config = _ExtendedConfig(
                     supports_variable_atoms=True,
-                    consumes_fields=frozenset(),
-                    produces_fields=frozenset({"positions"}),
+                    required_inputs=frozenset(),
+                    outputs=frozenset({"positions"}),
                 )
 
             def forward(self, data, *, x, t, xsc=None, **kwargs):  # noqa: ANN001
@@ -329,16 +329,16 @@ class TestGenerativeModelMixin:
         """``extra_repr`` summarizes the declared field contracts."""
         model = _DemoGenerativeModel()
         rep = model.extra_repr()
-        assert "consumes_fields" in rep
+        assert "required_inputs" in rep
         assert "positions" in rep
-        assert "produces_fields" in rep
+        assert "outputs" in rep
 
     def test_extra_repr_with_empty_declarations(self) -> None:
         """``extra_repr`` renders empty declarations cleanly."""
         model = _DemoGenerativeModel()
         model.model_config = _build_cfg(
-            consumes_fields=frozenset(), produces_fields=frozenset({"positions"})
+            required_inputs=frozenset(), outputs=frozenset({"positions"})
         )
         rep = model.extra_repr()
-        assert "consumes_fields={}" in rep
+        assert "required_inputs={}" in rep
         assert "positions" in rep

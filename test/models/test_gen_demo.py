@@ -17,8 +17,7 @@
 Covers mixin conformance and config validity, the factory pattern
 (``make_demo_*_generate`` builds the model-owning generating function the
 :class:`~nvalchemi.gen.generator.AtomisticGenerator` consumes), seeding
-reproducibility, spec capture via the factory objects' own ``to_spec``,
-PhysicsNeMo interop for the diffusion demo, and the nonparametric
+reproducibility, PhysicsNeMo interop for the diffusion demo, and the nonparametric
 synthetic-structure source. CPU-only, GPU-free.
 """
 
@@ -26,7 +25,7 @@ from __future__ import annotations
 
 import torch
 
-from nvalchemi.data import Batch
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen import AtomisticGenerator
 from nvalchemi.models.gen import (
     DemoDiffusionModel,
@@ -46,10 +45,8 @@ class TestDemoGANModel:
         model = DemoGANModel()
         assert isinstance(model, GenerativeModelMixin)
         assert model.model_config.supports_variable_atoms is False
-        assert model.model_config.consumes_fields == frozenset()
-        assert model.model_config.produces_fields == frozenset(
-            {"positions", "atomic_numbers"}
-        )
+        assert model.model_config.required_inputs == frozenset()
+        assert model.model_config.outputs == frozenset({"positions", "atomic_numbers"})
         assert model.model_config.prediction_outputs is None
 
     def test_factory_generator_runs(self) -> None:
@@ -84,12 +81,12 @@ class TestDemoGANModel:
         fn = make_demo_gan_generate(DemoGANModel())
         assert fn.device == torch.device("cpu")
         assert callable(fn.condition)
-        assert fn.consumes_fields == frozenset()
-        assert fn.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert fn.required_inputs == frozenset()
+        assert fn.outputs == frozenset({"positions", "atomic_numbers"})
         gen = AtomisticGenerator(generator_func=fn)
         # The defaults chain picked the declarations up at construction.
-        assert gen.consumes_fields == frozenset()
-        assert gen.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert gen.required_inputs == frozenset()
+        assert gen.outputs == frozenset({"positions", "atomic_numbers"})
 
     def test_seeded_sessions_reproduce(self) -> None:
         """Same model + same seed across sessions gives identical draws."""
@@ -199,3 +196,27 @@ class TestDemoNonparametricGeneration:
         out = pipe(None)
         assert isinstance(out, Batch)
         assert out.num_graphs == 1
+
+
+class TestDemoHelperLegs:
+    """The demo helpers' less-traveled legs (users copy these)."""
+
+    def test_tile_condition_wraps_a_single_structure(self) -> None:
+        """An AtomicData condition tiles into a fresh Batch of ``num_samples``."""
+        from nvalchemi.models.gen.demo import _tile_condition
+
+        data = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.full((3,), 6, dtype=torch.long),
+        )
+        tiled = _tile_condition(data, num_samples=4)
+        assert isinstance(tiled, Batch)
+        assert tiled.num_graphs == 4
+        assert torch.equal(tiled.get_data(0).positions, data.positions)
+
+    def test_diffusion_per_call_sigma_overrides(self) -> None:
+        """Per-call ``sigma_max``/``sigma_min`` override the factory-bound values."""
+        fn = make_demo_diffusion_generate(DemoDiffusionModel(num_atoms=4), num_steps=2)
+        default = fn(num_samples=2, rng=torch.Generator().manual_seed(3))
+        wider = fn(num_samples=2, rng=torch.Generator().manual_seed(3), sigma_max=20.0)
+        assert not torch.allclose(default.positions, wider.positions)

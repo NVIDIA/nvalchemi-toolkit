@@ -17,14 +17,14 @@
 This subpackage holds the model-specific generative surface — the
 non-energy counterpart to :mod:`nvalchemi.models.base`. The mixin owns
 only the raw model output (predicted flow/velocity) from one forward
-call, plus the model↔:class:`~nvalchemi.data.Batch` translation methods.
+call, structured by ``adapt_output``.
 It owns no scheduler, sampler, or guidance; those compose on the
 :class:`~nvalchemi.gen.generator.AtomisticGenerator` via a
 :class:`~nvalchemi.gen.generator.GeneratingFunction`. The demo module
 also ships module-level factories
 (:func:`~nvalchemi.models.gen.demo.make_demo_gan_generate`,
 :func:`~nvalchemi.models.gen.demo.make_demo_diffusion_generate`) that
-build model-owning generating functions in a spec-capturable way.
+build model-owning generating functions.
 """
 
 from __future__ import annotations

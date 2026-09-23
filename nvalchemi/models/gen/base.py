@@ -74,13 +74,13 @@ class GenerativeModelConfig(BaseModel):
     ----------
     supports_variable_atoms
         Whether the model accepts systems with varying atom counts.
-    consumes_fields
+    required_inputs
         Batch fields the model's conditioning reads (empty means
         unconditional). Declared here so a
         :class:`~nvalchemi.gen.pipeline.GenerationPipeline` can validate stage
         links at construction; a generator writes *something* by definition,
         so declarations are required, not optional.
-    produces_fields
+    outputs
         Batch fields the model's generated output carries (written or
         forwarded). Distinct namespace from
         :attr:`prediction_outputs`, which keys ``ModelOutputs`` (e.g.
@@ -94,8 +94,8 @@ class GenerativeModelConfig(BaseModel):
     >>> from nvalchemi.models.gen.base import GenerativeModelConfig
     >>> cfg = GenerativeModelConfig(
     ...     supports_variable_atoms=True,
-    ...     consumes_fields=frozenset({"positions", "atomic_numbers"}),
-    ...     produces_fields=frozenset({"positions", "atomic_numbers", "cell"}),
+    ...     required_inputs=frozenset({"positions", "atomic_numbers"}),
+    ...     outputs=frozenset({"positions", "atomic_numbers", "cell"}),
     ... )
     >>> cfg.prediction_outputs is None
     True
@@ -113,7 +113,7 @@ class GenerativeModelConfig(BaseModel):
         bool,
         Field(description="Whether the model accepts variable atom counts."),
     ]
-    consumes_fields: Annotated[
+    required_inputs: Annotated[
         frozenset[str],
         Field(
             description=(
@@ -123,7 +123,7 @@ class GenerativeModelConfig(BaseModel):
             )
         ),
     ]
-    produces_fields: Annotated[
+    outputs: Annotated[
         frozenset[str],
         Field(
             description=(
@@ -275,6 +275,6 @@ class GenerativeModelMixin(abc.ABC):
         cfg = getattr(self, "model_config", None)
         if not isinstance(cfg, GenerativeModelConfig):
             return "model_config=<not set>"
-        consumes = ", ".join(sorted(cfg.consumes_fields))
-        produces = ", ".join(sorted(cfg.produces_fields))
-        return f"consumes_fields={{{consumes}}}, produces_fields={{{produces}}}"
+        consumes = ", ".join(sorted(cfg.required_inputs))
+        produces = ", ".join(sorted(cfg.outputs))
+        return f"required_inputs={{{consumes}}}, outputs={{{produces}}}"

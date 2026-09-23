@@ -9,12 +9,13 @@
   and base-model fingerprint checks for PEFT checkpoint loading.
 - Toolkit-level generative API (`nvalchemi.gen`): an `AtomisticGenerator`
   driver runs a user-supplied generating function (optionally conditioned)
-  and maps raw samples into `Batch` through an optional `batch_mapping`,
-  with lifecycle hooks, streaming, and session-managed CUDA stream, RNG,
-  and compile. Sequential composition via `gen_a | gen_b`
-  (`GenerationPipeline`), including dynamics engines driven through their
-  own `run()` loop, with per-call options addressed per stage via
-  `stage_kwargs`.
+  and returns a `Batch` on the contract path (hooks, device and field
+  checks, pipeline and dynamics composition), or passes through any
+  other container untouched. Lifecycle hooks, streaming, session-managed
+  CUDA stream, RNG, and compile. Sequential composition via
+  `gen_a | gen_b` (`GenerationPipeline`), including dynamics engines
+  driven through their own `run()` loop, with per-call options addressed
+  per stage via `stage_kwargs`.
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
   `DemoDiffusionModel` placeholders with `make_demo_*_generate` factories,
   plus `demo_nonparametric_generation`, a synthetic-structure source.

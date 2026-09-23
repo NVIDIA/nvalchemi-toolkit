@@ -25,9 +25,8 @@ class GenerationStage(Enum):
     """Stages of the :class:`~nvalchemi.gen.generator.AtomisticGenerator` pipeline.
 
     One stage per distinct point of the fixed pipeline (optionally condition
-    the inputs, generate, then materialize the raw sample into a
-    :class:`~nvalchemi.data.Batch` — the raw sample is exposed to hooks
-    between generation and materialization). Hooks mutate the
+    the inputs, then generate — a :class:`~nvalchemi.data.Batch` return takes
+    the contract path). Hooks mutate the
     :class:`~nvalchemi.hooks.GenerationContext` by replacing its fields, and
     the driver re-reads the context after each dispatch. Hooks at one stage
     run in list order, and a raising hook aborts the call (nothing catches
@@ -35,8 +34,7 @@ class GenerationStage(Enum):
 
     Firing policy: ``BEFORE_CONDITION``/``AFTER_CONDITION`` fire only when a
     condition step was provided for the call (the driver's ``condition_func``
-    or the generating function's ``condition`` attribute); ``BEFORE_MAPPING``
-    always fires, after generation with ``ctx.sample`` set; ``AFTER_GENERATE``
+    or the generating function's ``condition`` attribute); ``AFTER_GENERATE``
     fires only when the sample is a :class:`~nvalchemi.data.Batch`.
 
     Attributes
@@ -55,16 +53,6 @@ class GenerationStage(Enum):
         Attach conditioning metadata (e.g. text embeddings for classifier-free
         guidance) or replace the conditioned input here. Fires only when a
         condition step was provided for the call.
-    BEFORE_MAPPING
-        Fired after the generating function returns; ``ctx.sample`` holds
-        whatever the function produced (a :class:`~nvalchemi.data.Batch` on
-        the contract path), and ``ctx.batch`` holds the call's inputs when they
-        were a :class:`~nvalchemi.data.Batch` (``None`` otherwise). Filter or
-        replace ``ctx.sample`` here — workflows with compact internal
-        representations can drop rejected candidates before any downstream
-        ``Batch`` work. The driver re-reads ``ctx.sample`` after dispatch and
-        returns it: through the ``Batch`` path when it is a ``Batch``, as-is
-        otherwise. This stage fires either way.
     AFTER_GENERATE
         Fired after generation when the sample is a
         :class:`~nvalchemi.data.Batch`; ``ctx.batch`` holds it. A function
@@ -81,5 +69,4 @@ class GenerationStage(Enum):
 
     BEFORE_CONDITION = auto()
     AFTER_CONDITION = auto()
-    BEFORE_MAPPING = auto()
     AFTER_GENERATE = auto()

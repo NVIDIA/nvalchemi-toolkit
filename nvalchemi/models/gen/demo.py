@@ -22,9 +22,8 @@ weights or optional dependencies. The module-level factories
 :func:`make_demo_gan_generate` and :func:`make_demo_diffusion_generate` build
 model-owning generating functions for the driver; the callable objects they
 return carry ``device`` (from the model's parameters), the config's field
-declarations, a ``condition`` tiling helper, and ``to_spec`` (factory kwargs
-captured via :func:`~nvalchemi.training.create_model_spec`), so they slot
-into the driver's defaults chain and the spec machinery.
+declarations and a ``condition`` tiling helper, so they slot into the
+driver's defaults chain.
 :func:`demo_nonparametric_generation` is a plain function returning a
 :class:`~nvalchemi.data.Batch` directly, taking the driver's ``Batch``
 path (hooks, device and field checks).
@@ -62,8 +61,8 @@ def _demo_config() -> GenerativeModelConfig:
     """
     return GenerativeModelConfig(
         supports_variable_atoms=False,
-        consumes_fields=frozenset(),
-        produces_fields=frozenset({"positions", "atomic_numbers"}),
+        required_inputs=frozenset(),
+        outputs=frozenset({"positions", "atomic_numbers"}),
     )
 
 
@@ -163,13 +162,13 @@ class _DemoGANGenerate:
     reads as defaults: ``device`` (the model's parameter device) and the
     model config's field declarations — plus ``condition`` (the driver's
     optional pre-generation step, tiling a conditioning batch by the draw
-    count) and ``to_spec`` for spec round-trips.
+    count).
     """
 
     def __init__(self, model: DemoGANModel) -> None:
         self.model = model
-        self.consumes_fields = model.model_config.consumes_fields
-        self.produces_fields = model.model_config.produces_fields
+        self.required_inputs = model.model_config.required_inputs
+        self.outputs = model.model_config.outputs
 
     @property
     def device(self) -> torch.device:
@@ -256,8 +255,7 @@ def make_demo_gan_generate(model: DemoGANModel) -> GeneratingFunction:
     -------
     GeneratingFunction
         A callable object that draws latents and decodes them, carrying
-        ``device``, field declarations, a ``condition`` tiling helper, and
-        ``to_spec``.
+        ``device``, field declarations, and a ``condition`` tiling helper.
     """
     return _DemoGANGenerate(model)
 
@@ -316,7 +314,7 @@ class _DemoDiffusionGenerate:
     reads as defaults: ``device`` (the model's parameter device) and the
     model config's field declarations — plus ``condition`` (the driver's
     optional pre-generation step, tiling a conditioning batch by the draw
-    count) and ``to_spec`` for spec round-trips.
+    count).
     The sampler hyperparameters are factory-bound; per-call kwargs of the
     same names override them.
     """
@@ -333,8 +331,8 @@ class _DemoDiffusionGenerate:
         self.num_steps = num_steps
         self.sigma_max = sigma_max
         self.sigma_min = sigma_min
-        self.consumes_fields = model.model_config.consumes_fields
-        self.produces_fields = model.model_config.produces_fields
+        self.required_inputs = model.model_config.required_inputs
+        self.outputs = model.model_config.outputs
 
     @property
     def device(self) -> torch.device:
@@ -447,7 +445,7 @@ def make_demo_diffusion_generate(
     -------
     GeneratingFunction
         A callable object running the EDM Euler loop, carrying ``device``,
-        field declarations, a ``condition`` tiling helper, and ``to_spec``.
+        field declarations, and a ``condition`` tiling helper.
     """
     return _DemoDiffusionGenerate(
         model, num_steps=num_steps, sigma_max=sigma_max, sigma_min=sigma_min

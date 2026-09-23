@@ -142,8 +142,9 @@ class TestBaseGenerator:
         assert isinstance(out, TensorDict)
         assert out.batch_size[0] == 2
 
-    def test_raw_sample_fires_only_before_mapping(self) -> None:
-        """Raw (non-Batch) sample: BEFORE_MAPPING fires, AFTER_GENERATE does not."""
+    def test_raw_sample_fires_no_hooks(self) -> None:
+        """A raw (non-``Batch``) sample fires no hooks: dispatch happens only
+        on the Batch path."""
 
         class _Recorder:
             def __init__(self, stage: GenerationStage, log: list) -> None:
@@ -156,15 +157,13 @@ class TestBaseGenerator:
                 self._log.append(stage)
 
         log: list = []
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # no warning without AFTER_GENERATE hooks
-            gen = AtomisticGenerator(
-                generator_func=trivial_generate,
-                hooks=[_Recorder(GenerationStage.BEFORE_MAPPING, log)],
-            )
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,
+            hooks=[_Recorder(stage, log) for stage in GenerationStage],
+        )
         out = gen(num_samples=2)
         assert isinstance(out, TensorDict)
-        assert log == [GenerationStage.BEFORE_MAPPING]
+        assert log == []
 
     def test_after_generate_hook_skipped_for_raw_samples(self) -> None:
         """An ``AFTER_GENERATE`` hook on a raw-sample generator never fires;
@@ -188,23 +187,6 @@ class TestBaseGenerator:
             out = gen(num_samples=1)
         assert isinstance(out, TensorDict)
         assert not hook.fired
-
-    def test_before_mapping_hook_replaces_raw_sample(self) -> None:
-        """``BEFORE_MAPPING`` fires on the raw sample; its replacement is what
-        ``sample()`` returns."""
-        replacement = TensorDict({"x1": torch.ones(2, 1, 3)}, batch_size=[2])
-
-        class _SwapSample:
-            stage = GenerationStage.BEFORE_MAPPING
-            frequency = 1
-
-            def __call__(self, ctx, stage) -> None:
-                """Replace the raw sample outright."""
-                ctx.sample = replacement
-
-        gen = AtomisticGenerator(generator_func=trivial_generate, hooks=[_SwapSample()])
-        out = gen(num_samples=5)
-        assert out is replacement
 
     def test_num_samples_passthrough_and_per_call_override(self) -> None:
         """The driver's ``num_samples`` reaches the function; the per-call
@@ -251,25 +233,25 @@ class TestBaseGenerator:
         assert out["rows"].shape == (3, 2)
 
     def test_field_declarations_default_from_function(self) -> None:
-        """``consumes_fields``/``produces_fields`` default from the function."""
+        """``required_inputs``/``outputs`` default from the function."""
         gen = AtomisticGenerator(generator_func=make_demo_gan_generate(DemoGANModel()))
-        assert gen.consumes_fields == frozenset()
-        assert gen.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert gen.required_inputs == frozenset()
+        assert gen.outputs == frozenset({"positions", "atomic_numbers"})
 
     def test_field_declarations_explicit_override(self) -> None:
         """Explicit declarations win over the function's attributes."""
         gen = AtomisticGenerator(
             generator_func=make_demo_gan_generate(DemoGANModel()),
-            consumes_fields=frozenset({"charges"}),
+            required_inputs=frozenset({"charges"}),
         )
-        assert gen.consumes_fields == frozenset({"charges"})
-        assert gen.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert gen.required_inputs == frozenset({"charges"})
+        assert gen.outputs == frozenset({"positions", "atomic_numbers"})
 
     def test_field_declarations_none_without_attributes(self) -> None:
         """A function with no declarations leaves them undeclared (``None``)."""
         gen = AtomisticGenerator(generator_func=batch_generate)
-        assert gen.consumes_fields is None
-        assert gen.produces_fields is None
+        assert gen.required_inputs is None
+        assert gen.outputs is None
 
     def test_ctx_has_no_model_and_workflow_carries_procedure(self) -> None:
         """``ctx.model`` is ``None``; hooks reach the procedure via the workflow."""
@@ -430,7 +412,8 @@ class TestGenerationHooks:
         )
 
     def test_hook_firing_order(self) -> None:
-        """Hooks fire once per call, in pipeline order."""
+        """Hooks fire once per call, in pipeline order; with no condition step
+        only ``AFTER_GENERATE`` fires on the Batch path."""
 
         class _Recorder:
             def __init__(self, stage: GenerationStage, log: list) -> None:
@@ -445,10 +428,7 @@ class TestGenerationHooks:
         log: list = []
         gen = self._generator([_Recorder(stage, log) for stage in GenerationStage])
         gen()
-        assert log == [
-            GenerationStage.BEFORE_MAPPING,
-            GenerationStage.AFTER_GENERATE,
-        ]
+        assert log == [GenerationStage.AFTER_GENERATE]
 
     def test_hook_frequency_gating_across_stream(self) -> None:
         """A ``frequency=2`` hook fires every other generation call."""
@@ -489,12 +469,12 @@ class TestGenerationHooks:
         seen: list = []
 
         class _Producer:
-            stage = GenerationStage.BEFORE_MAPPING
+            stage = GenerationStage.BEFORE_CONDITION
             frequency = 1
 
             def __call__(self, ctx, stage) -> None:
                 """Stash a value for a later stage."""
-                ctx.intermediates["tag"] = "from-before-mapping"
+                ctx.intermediates["tag"] = "from-before-condition"
 
         class _Consumer:
             stage = GenerationStage.AFTER_GENERATE
@@ -504,9 +484,12 @@ class TestGenerationHooks:
                 """Read the stashed value."""
                 seen.append(ctx.intermediates.get("tag"))
 
-        gen = self._generator([_Producer(), _Consumer()])
+        gen = AtomisticGenerator(
+            generator_func=_TiledGenerate(),
+            hooks=[_Producer(), _Consumer()],
+        )
         gen()
-        assert seen == ["from-before-mapping"]
+        assert seen == ["from-before-condition"]
 
     def test_filter_hook_subsets_batch(self, device: str) -> None:
         """Filtering is graph-level subsetting at AFTER_GENERATE."""
@@ -548,85 +531,23 @@ class TestGenerationHooks:
         with pytest.raises(IndexError, match="Index is empty"):
             gen(make_batch(num_graphs=3))
 
-    def test_before_mapping_hook_sees_raw_sample_state(self) -> None:
-        """At BEFORE_MAPPING, ``ctx.sample`` holds the raw sample, ``ctx.batch``
-        the inputs (when they were a batch); a raw sample is returned as the
-        same object the hook saw."""
+    def test_int_stage_coerced(self) -> None:
+        """An int stage (e.g. from a spec payload) is coerced at construction."""
 
-        class _Observe:
-            stage = GenerationStage.BEFORE_MAPPING
+        class _IntStage:
             frequency = 1
 
             def __init__(self) -> None:
-                self.sample = None
-                self.batch = None
-                self.inputs = None
-
-            def __call__(self, ctx, stage) -> None:
-                """Record the context fields visible at this stage."""
-                self.sample = ctx.sample
-                self.batch = ctx.batch
-                self.inputs = ctx.inputs
-
-        probe = _Observe()
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            hooks=[probe],
-        )
-        cond = make_batch(num_graphs=3)
-        out = gen(cond)
-        assert probe.inputs is cond
-        assert probe.batch is cond  # inputs were a Batch
-        assert out is probe.sample  # the raw sample passed through as-is
-
-    def test_before_mapping_hook_replacement_can_take_batch_path(self) -> None:
-        """A BEFORE_MAPPING hook replacing the raw sample with a ``Batch``
-        routes the call onto the Batch path: AFTER_GENERATE fires and the
-        replacement batch is returned."""
-        replacement = make_batch(num_graphs=2)
-        fired: list = []
-
-        class _SwapSample:
-            stage = GenerationStage.BEFORE_MAPPING
-            frequency = 1
-
-            def __call__(self, ctx, stage) -> None:
-                """Replace the raw sample with a Batch."""
-                ctx.sample = replacement
-
-        class _After:
-            stage = GenerationStage.AFTER_GENERATE
-            frequency = 1
-
-            def __call__(self, ctx, stage) -> None:
-                """Record firing."""
-                fired.append(stage)
-
-        gen = AtomisticGenerator(
-            generator_func=trivial_generate,
-            hooks=[_SwapSample(), _After()],
-        )
-        out = gen(make_batch(num_graphs=3))
-        assert out is replacement
-        assert fired == [GenerationStage.AFTER_GENERATE]
-
-    def test_before_mapping_string_stage_coerced(self) -> None:
-        """A string ``"BEFORE_MAPPING"`` stage is coerced at construction."""
-
-        class _StringStage:
-            frequency = 1
-
-            def __init__(self) -> None:
-                self.stage = "BEFORE_MAPPING"
+                self.stage = GenerationStage.AFTER_GENERATE.value
                 self.fired = False
 
             def __call__(self, ctx, stage) -> None:
                 """Record firing."""
                 self.fired = True
 
-        hook = _StringStage()
+        hook = _IntStage()
         gen = self._generator([hook])
-        assert hook.stage is GenerationStage.BEFORE_MAPPING
+        assert hook.stage is GenerationStage.AFTER_GENERATE
         gen()
         assert hook.fired
 
@@ -644,15 +565,16 @@ class TestGenerationHooks:
         assert out.num_graphs == 0
 
     def test_accepted_mask_recorded_and_visible_later(self) -> None:
-        """``accepted_mask`` written at BEFORE_MAPPING is readable at AFTER_GENERATE."""
+        """``accepted_mask`` written at ``AFTER_CONDITION`` is readable at
+        ``AFTER_GENERATE``."""
 
         class _Accept:
-            stage = GenerationStage.BEFORE_MAPPING
+            stage = GenerationStage.AFTER_CONDITION
             frequency = 1
 
             def __call__(self, ctx, stage) -> None:
                 """Accept every draw."""
-                ctx.accepted_mask = torch.ones(ctx.sample.num_graphs, dtype=torch.bool)
+                ctx.accepted_mask = torch.ones(ctx.inputs.num_graphs, dtype=torch.bool)
 
         seen: list = []
 
@@ -664,17 +586,20 @@ class TestGenerationHooks:
                 """Read the recorded mask."""
                 seen.append(ctx.accepted_mask)
 
-        gen = self._generator([_Accept(), _Read()])
+        gen = AtomisticGenerator(
+            generator_func=_TiledGenerate(),
+            hooks=[_Accept(), _Read()],
+        )
         out = gen(make_batch(num_graphs=2))
         assert len(seen) == 1
         assert seen[0] is not None
         assert int(seen[0].sum()) == out.num_graphs == 2
 
-    def test_before_mapping_dispatch_inside_session_stream(self, device: str) -> None:
-        """BEFORE_MAPPING hooks dispatch on the session CUDA stream, when any."""
+    def test_after_generate_dispatch_inside_session_stream(self, device: str) -> None:
+        """AFTER_GENERATE hooks dispatch on the session CUDA stream, when any."""
 
         class _Probe:
-            stage = GenerationStage.BEFORE_MAPPING
+            stage = GenerationStage.AFTER_GENERATE
             frequency = 1
 
             def __init__(self) -> None:
@@ -815,10 +740,7 @@ class TestConditioning:
         out = gen(source)
         assert received[0] is source
         assert out is source
-        assert fired == [
-            GenerationStage.BEFORE_MAPPING,
-            GenerationStage.AFTER_GENERATE,
-        ]
+        assert fired == [GenerationStage.AFTER_GENERATE]
 
     def test_function_condition_attribute_runs_before_generation(self) -> None:
         """A function object's ``condition`` runs between the condition
@@ -843,7 +765,6 @@ class TestConditioning:
         assert fired == [
             GenerationStage.BEFORE_CONDITION,
             GenerationStage.AFTER_CONDITION,
-            GenerationStage.BEFORE_MAPPING,
             GenerationStage.AFTER_GENERATE,
         ]
 
@@ -1227,26 +1148,26 @@ class TestSession:
 
 
 class TestCallTimeFieldValidation:
-    """``consumes_fields`` / ``produces_fields`` are enforced inside ``sample``."""
+    """``required_inputs`` / ``outputs`` are enforced inside ``sample``."""
 
-    def test_consumes_fields_missing_raises(self) -> None:
+    def test_required_inputs_missing_raises(self) -> None:
         """Inputs lacking a declared field fail before the function runs."""
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            consumes_fields=frozenset({"positions", "cell"}),
+            required_inputs=frozenset({"positions", "cell"}),
         )
         with pytest.raises(ValueError, match="cell"):
             gen(make_batch())  # carries positions and atomic_numbers, no cell
 
-    def test_consumes_fields_present_passes(self) -> None:
+    def test_required_inputs_present_passes(self) -> None:
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            consumes_fields=frozenset({"positions", "atomic_numbers"}),
+            required_inputs=frozenset({"positions", "atomic_numbers"}),
         )
         out = gen(make_batch())
         assert out["x1"].shape[0] == 2
 
-    def test_consumes_fields_checked_after_conditioning(self) -> None:
+    def test_required_inputs_checked_after_conditioning(self) -> None:
         """A condition step that adds the field satisfies the check."""
 
         def add_cell(inputs: Batch, *, num_samples: int, rng=None) -> Batch:
@@ -1256,36 +1177,36 @@ class TestCallTimeFieldValidation:
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
             condition_func=add_cell,
-            consumes_fields=frozenset({"cell"}),
+            required_inputs=frozenset({"cell"}),
         )
         out = gen(make_batch())
         assert out["x1"].shape[0] == 2
 
-    def test_consumes_fields_none_inputs_raise_type_error(self) -> None:
+    def test_required_inputs_none_inputs_raise_type_error(self) -> None:
         """Declared consumers cannot run on empty or non-container inputs."""
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            consumes_fields=frozenset({"positions"}),
+            required_inputs=frozenset({"positions"}),
         )
         with pytest.raises(TypeError, match="field-addressable"):
             gen(None)
 
     def test_undeclared_consumes_skips_check(self) -> None:
-        """consumes_fields=None never inspects the inputs."""
+        """required_inputs=None never inspects the inputs."""
         gen = AtomisticGenerator(generator_func=trivial_generate)
         out = gen("a composition string")  # not a container at all
         assert out["x1"].shape[0] == 1
 
-    def test_produces_fields_missing_raises(self) -> None:
+    def test_outputs_missing_raises(self) -> None:
         """A returned batch lacking a declared field fails at return."""
         gen = AtomisticGenerator(
             generator_func=batch_generate,
-            produces_fields=frozenset({"positions", "cell"}),
+            outputs=frozenset({"positions", "cell"}),
         )
         with pytest.raises(ValueError, match="cell"):
             gen(make_batch())
 
-    def test_produces_fields_checked_after_hooks(self) -> None:
+    def test_outputs_checked_after_hooks(self) -> None:
         """A hook that drops a declared field trips the return-time check."""
 
         class _FieldDropper:
@@ -1301,17 +1222,122 @@ class TestCallTimeFieldValidation:
 
         gen = AtomisticGenerator(
             generator_func=batch_generate,
-            produces_fields=frozenset({"atomic_numbers"}),
+            outputs=frozenset({"atomic_numbers"}),
             hooks=[_FieldDropper()],
         )
         with pytest.raises(ValueError, match="atomic_numbers"):
             gen(make_batch())
 
     def test_raw_passthrough_skips_produces_check(self) -> None:
-        """A non-``Batch`` (raw) sample skips the ``produces_fields`` check."""
+        """A non-``Batch`` (raw) sample skips the ``outputs`` check."""
         gen = AtomisticGenerator(
             generator_func=trivial_generate,
-            produces_fields=frozenset({"cell"}),
+            outputs=frozenset({"cell"}),
         )
         out = gen(make_batch())
         assert out["x1"].shape[0] == 2
+
+
+class TestReviewPins:
+    """Pins added from the second-round review: error paths and orderings."""
+
+    @pytest.mark.parametrize("bad", [0, -1])
+    def test_per_call_num_samples_must_be_positive(self, bad: int) -> None:
+        """The per-call override validates like the constructor's ge=1."""
+        gen = AtomisticGenerator(generator_func=batch_generate)
+        with pytest.raises(ValueError, match="num_samples must be positive"):
+            gen(num_samples=bad)
+
+    def test_step_count_increments_on_failed_calls(self) -> None:
+        """A raising function still advances the counter (finally semantics)."""
+
+        def _boom(inputs=None, *, num_samples=1, rng=None, **kwargs):
+            raise RuntimeError("boom")
+
+        gen = AtomisticGenerator(generator_func=_boom)
+        with pytest.raises(RuntimeError, match="boom"):
+            gen()
+        assert gen.step_count == 1
+
+    def test_hook_close_fallback_without_exit(self) -> None:
+        """A hook with ``close`` but no ``__exit__`` is closed at session exit."""
+        calls: list[str] = []
+
+        class _CloseOnly:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
+
+            def __call__(self, ctx, stage) -> None:
+                pass
+
+            def close(self) -> None:
+                calls.append("closed")
+
+        gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_CloseOnly()])
+        with gen:
+            gen()
+        assert calls == ["closed"]
+
+    def test_hook_can_add_a_missing_output_field(self) -> None:
+        """The outputs check runs after hooks: a hook may satisfy it."""
+
+        class _AddForces:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
+
+            def __call__(self, ctx, stage) -> None:
+                ctx.batch.forces = torch.zeros(ctx.batch.num_nodes, 3)
+
+        gen = AtomisticGenerator(
+            generator_func=batch_generate,
+            outputs=frozenset({"positions", "forces"}),
+            hooks=[_AddForces()],
+        )
+        out = gen(make_batch())
+        assert out.forces is not None
+
+    def test_zero_graph_batch_exempt_from_field_check(self) -> None:
+        """A total-rejection batch declares intent, not content: no field check."""
+        gen = AtomisticGenerator(
+            generator_func=lambda inputs=None, **kw: Batch.empty(
+                num_systems=0, num_nodes=0, num_edges=0
+            ),
+            outputs=frozenset({"forces"}),  # outside the Batch.empty template
+        )
+        out = gen()
+        assert out.num_graphs == 0
+
+    def test_zero_graph_batch_exempt_from_residency_check(self) -> None:
+        """The residency exemption: a CPU zero-graph batch under a CUDA pin passes."""
+        if torch.cuda.is_available():
+            pytest.skip("the exemption needs no CUDA device to be host-checkable")
+
+        class _Pinned:
+            device = torch.device("cuda:0")  # attribute-declared, no host check
+
+            def __call__(self, inputs=None, **kw):
+                return Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+
+        gen = AtomisticGenerator(generator_func=_Pinned())
+        out = gen()  # without the num_graphs exemption this raises ValueError
+        assert out.num_graphs == 0
+
+    @pytest.mark.parametrize(
+        "stage_value",
+        ["AFTER_GENERATE", GenerationStage.AFTER_GENERATE.value],
+        ids=["name", "int"],
+    )
+    def test_stage_coercion_accepts_names_and_ints(self, stage_value) -> None:
+        """Hook stage coerces from both name strings and ints at construction."""
+
+        class _Hook:
+            frequency = 1
+
+            def __init__(self) -> None:
+                self.stage = stage_value
+
+            def __call__(self, ctx, stage) -> None:
+                pass
+
+        gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_Hook()])
+        assert gen.hooks[0].stage is GenerationStage.AFTER_GENERATE

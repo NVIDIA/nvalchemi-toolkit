@@ -60,8 +60,11 @@ Semantics:
 
 from __future__ import annotations
 
+import inspect
 import itertools
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
+from contextlib import ExitStack, nullcontext
 from typing import Any
 
 import torch
@@ -73,7 +76,6 @@ from pydantic import (
 )
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.gen.generator import AtomisticGenerator
 
 __all__ = ["GenerationPipeline"]
@@ -91,18 +93,18 @@ class GenerationPipeline(BaseModel):
     Notes
     -----
     **Field-contract validation.** Every ``AtomisticGenerator`` stage must declare
-    ``consumes_fields`` / ``produces_fields`` (set on the AtomisticGenerator directly
+    ``required_inputs`` / ``outputs`` (set on the AtomisticGenerator directly
     or defaulted from the generating function's attributes); construction
     raises otherwise. For each adjacent AtomisticGenerator → AtomisticGenerator link,
-    the downstream stage's ``consumes_fields`` must be covered by the upstream
-    stage's ``produces_fields``: the dynamics link contract
+    the downstream stage's ``required_inputs`` must be covered by the upstream
+    stage's ``outputs``: the dynamics link contract
     (AIMNet2 ``charges`` → Ewald) applied to generation. Authors of custom
     generating functions own keeping their stage's declaration in sync with
     what the function actually writes. Non-AtomisticGenerator stages carry no
     declarations and are not validated (their outputs are unknown at
     construction).
 
-    The first stage's ``consumes_fields`` describe its *conditioning* input
+    The first stage's ``required_inputs`` describe its *conditioning* input
     and are not validated (the pipeline cannot know what a user's ``inputs``
     carries).
 
@@ -144,31 +146,43 @@ class GenerationPipeline(BaseModel):
         ------
         ValueError
             If an AtomisticGenerator stage lacks field declarations, or a
-            stage's ``consumes_fields`` are not covered by the immediately
-            upstream AtomisticGenerator's ``produces_fields``.
+            stage's ``required_inputs`` are not covered by the immediately
+            upstream AtomisticGenerator's ``outputs``.
         """
         for index, stage in enumerate(self.stages):
+            if not callable(stage) and not hasattr(stage, "run"):
+                raise TypeError(
+                    f"Pipeline stage {index} has type {type(stage).__name__}: stages "
+                    "must be AtomisticGenerator instances, dynamics engines, or "
+                    "Batch -> Batch callables."
+                )
             if not isinstance(stage, AtomisticGenerator):
                 continue
-            consumes = stage.consumes_fields
-            produces = stage.produces_fields
+            consumes = stage.required_inputs
+            produces = stage.outputs
             if consumes is None or produces is None:
+                missing = []
+                if consumes is None:
+                    missing.append("required_inputs")
+                if produces is None:
+                    missing.append("outputs")
+                fn = stage.generator_func
+                name = getattr(fn, "__name__", None) or type(fn).__name__
                 raise ValueError(
-                    f"Pipeline stage {index} ({type(stage.generator_func).__name__} "
-                    "generator) declares neither consumes_fields nor "
-                    "produces_fields: set them on the AtomisticGenerator or on the "
-                    "generating function."
+                    f"Pipeline stage {index} ({name}) is missing declarations: "
+                    f"{', '.join(missing)}. Set them on the AtomisticGenerator or "
+                    "on the generating function."
                 )
             prev = self.stages[index - 1] if index > 0 else None
             if isinstance(prev, AtomisticGenerator):
                 # Validated non-None on the previous iteration.
-                produced = prev.produces_fields or frozenset()
+                produced = prev.outputs or frozenset()
                 missing = set(consumes) - set(produced)
                 if missing:
                     raise ValueError(
                         f"Pipeline stage {index} consumes fields "
                         f"{sorted(missing)} that the upstream stage does not "
-                        "produce (produces_fields="
+                        "produce (outputs="
                         f"{sorted(produced)}). Fix the "
                         "declarations or insert a stage that writes them."
                     )
@@ -178,6 +192,7 @@ class GenerationPipeline(BaseModel):
         """Initialize session state."""
         self._stream: torch.cuda.Stream | None = None
         self._stream_ctx: Any = None
+        self._session_stack: ExitStack | None = None
 
     def compile(self, **kwargs: Any) -> GenerationPipeline:
         """Compile every AtomisticGenerator stage's generating function.
@@ -223,33 +238,53 @@ class GenerationPipeline(BaseModel):
         """Enter a pipeline session: one CUDA stream shared across stages.
 
         Creates one dedicated CUDA stream (when the first AtomisticGenerator
-        stage's resolved device is CUDA), points every AtomisticGenerator stage
-        with ``dedicated_stream`` set at it, and enters each AtomisticGenerator
-        stage's own session (session RNG, lazy compile, context-manager
-        hooks — stream creation is skipped because ``stage._stream`` is
-        already set). Non-AtomisticGenerator stages manage their own contexts.
+        stage's resolved device is CUDA) and waits it on the caller's current
+        stream, shares it with every stage that follows the ``_stream``
+        convention — AtomisticGenerator stages with ``dedicated_stream`` set
+        whose resolved device matches, and any other stage accepting a pre-set
+        stream (dynamics engines and fused stages honor it) — then enters each
+        stage's own session. The pipeline never enters
+        :func:`torch.inference_mode` itself; generator stages manage their own.
+        Exiting does not synchronize the session stream: enqueue a
+        ``wait_stream`` or ``synchronize`` before consuming results from a
+        different stream.
 
         Returns
         -------
         GenerationPipeline
             This instance.
         """
-        device = self._infer_device()
-        if device is not None and device.type == "cuda":
-            self._stream = torch.cuda.Stream(device=device)
-            self._stream_ctx = torch.cuda.stream(self._stream)
-            self._stream_ctx.__enter__()
-        for stage in self.stages:
-            if isinstance(stage, AtomisticGenerator):
-                if stage.dedicated_stream:
-                    stage._stream = self._stream
-                stage.__enter__()
-            elif hasattr(stage, "__enter__"):
-                # Offer the shared stream to any stage that follows the
-                # ``_stream`` convention (dynamics engines, fused stages).
-                if hasattr(stage, "_stream"):
-                    stage._stream = self._stream
-                stage.__enter__()
+        stack = ExitStack()
+        try:
+            device = self._infer_device()
+            if device is not None and device.type == "cuda":
+                self._stream = torch.cuda.Stream(device=device)
+                # order the session stream after the caller's in-flight work
+                self._stream.wait_stream(torch.cuda.current_stream(device))
+                self._stream_ctx = stack.enter_context(torch.cuda.stream(self._stream))
+            for stage in self.stages:
+                if isinstance(stage, AtomisticGenerator):
+                    if stage.dedicated_stream and (
+                        self._stream is None
+                        or stage._infer_device() in (None, self._stream.device)
+                    ):
+                        stage._stream = self._stream
+                    stage.__enter__()
+                elif hasattr(stage, "__enter__"):
+                    # Offer the shared stream to any stage that follows the
+                    # ``_stream`` convention (dynamics engines, fused stages).
+                    if hasattr(stage, "_stream"):
+                        stage._stream = self._stream
+                    stage.__enter__()
+                # stages unwind with (None, None, None): the lifecycle convention
+                # matches dynamics (no exception triple)
+                stack.callback(stage.__exit__, None, None, None)
+        except Exception:
+            stack.close()
+            self._stream = None
+            self._stream_ctx = None
+            raise
+        self._session_stack = stack.pop_all()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -260,13 +295,9 @@ class GenerationPipeline(BaseModel):
         exc_type, exc_val, exc_tb
             The active exception, if any.
         """
-        for stage in self.stages:
-            if isinstance(stage, AtomisticGenerator):
-                stage.__exit__(exc_type, exc_val, exc_tb)
-            elif hasattr(stage, "__exit__"):
-                stage.__exit__(exc_type, exc_val, exc_tb)
-        if self._stream_ctx is not None:
-            self._stream_ctx.__exit__(exc_type, exc_val, exc_tb)
+        if self._session_stack is not None:
+            self._session_stack.close()
+            self._session_stack = None
         self._stream = None
         self._stream_ctx = None
 
@@ -322,27 +353,66 @@ class GenerationPipeline(BaseModel):
                     f"({len(self.stages)}), got {len(stage_kwargs)}."
                 )
             per_stage = [{} if kw is None else dict(kw) for kw in stage_kwargs]
+        from nvalchemi.dynamics.base import (
+            BaseDynamics,  # lazy: keeps gen's import light
+        )
+
         result: Any = inputs
-        for stage, kwargs in zip(self.stages, per_stage, strict=True):
+        for index, (stage, kwargs) in enumerate(
+            zip(self.stages, per_stage, strict=True)
+        ):
             if isinstance(result, Batch) and result.num_graphs == 0:
                 break
-            if (
-                not torch.compiler.is_compiling()
-                and not isinstance(result, Batch)
-                and isinstance(stage, BaseDynamics)
-            ):
-                raise TypeError(
-                    f"Pipeline stage {type(stage).__name__} runs dynamics and "
-                    f"requires a Batch input, but the previous stage produced "
-                    f"{type(result).__name__}. A generating function feeding "
-                    "dynamics must return a Batch (the documented output "
-                    "contract); adjust the previous stage to return one."
-                )
-            if hasattr(stage, "run"):
-                # duck: a dynamics engine or fused stage drives its own loop
-                result = stage.run(result, **kwargs)
+            run = getattr(stage, "run", None)
+            if kwargs:
+                try:
+                    params = inspect.signature(
+                        run if run is not None else stage
+                    ).parameters.values()
+                except (TypeError, ValueError):
+                    pass_kwargs = kwargs  # unsignatureable: pass through, loudly
+                else:
+                    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params):
+                        pass_kwargs = kwargs
+                    else:
+                        accepted = {p.name for p in params}
+                        pass_kwargs = {k: v for k, v in kwargs.items() if k in accepted}
+                        dropped = sorted(kwargs.keys() - accepted)
+                        if dropped:
+                            warnings.warn(
+                                f"Pipeline stage {index} ({type(stage).__name__}) "
+                                f"ignores unsupported stage_kwargs {dropped}: they "
+                                "match no parameter.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
             else:
-                result = stage(result, **kwargs)
+                pass_kwargs = kwargs
+            if run is None:
+                result = stage(result, **pass_kwargs)
+                continue
+            if not isinstance(result, Batch):
+                if not torch.compiler.is_compiling() and isinstance(
+                    stage, BaseDynamics
+                ):
+                    raise TypeError(
+                        f"Pipeline stage {index} ({type(stage).__name__}) runs dynamics "
+                        f"and requires a Batch input, but the previous stage produced "
+                        f"{type(result).__name__}. A generating function feeding "
+                        "dynamics must return a Batch (the documented output "
+                        "contract); adjust the previous stage to return one."
+                    )
+                result = run(result, **pass_kwargs)
+                continue
+            # Fresh, autograd-capable leaves for the engine: clone escapes any
+            # inference-mode or grad-history the producing stage left behind.
+            result = result.clone()
+            with (
+                torch.inference_mode(False)
+                if torch.is_inference_mode_enabled()
+                else nullcontext()
+            ):
+                result = run(result, **pass_kwargs)
         return result
 
     def stream(
@@ -393,4 +463,6 @@ class GenerationPipeline(BaseModel):
         GenerationPipeline
             A pipeline of ``self.stages`` followed by ``other``.
         """
+        if isinstance(other, GenerationPipeline):
+            return GenerationPipeline(stages=[*self.stages, *other.stages])
         return GenerationPipeline(stages=[*self.stages, other])

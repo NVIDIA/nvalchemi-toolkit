@@ -16,7 +16,7 @@
 
 Covers the ``|`` composition sugar, fold/stream semantics, empty-batch
 short-circuiting, and construction-time field-contract validation
-(``consumes_fields`` / ``produces_fields``). CPU-only, GPU-free, no optional
+(``required_inputs`` / ``outputs``). CPU-only, GPU-free, no optional
 deps.
 """
 
@@ -69,8 +69,8 @@ def _generator(
     """
     return AtomisticGenerator(
         generator_func=make_demo_gan_generate(DemoGANModel().to(device)),
-        consumes_fields=frozenset() if consumes is None else consumes,
-        produces_fields=frozenset() if produces is None else produces,
+        required_inputs=frozenset() if consumes is None else consumes,
+        outputs=frozenset() if produces is None else produces,
         hooks=hooks or [],
         dedicated_stream=dedicated_stream,
     )
@@ -203,8 +203,8 @@ class TestFoldAndStream:
 
         gen_empty = AtomisticGenerator(
             generator_func=_empty_generate,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset(),
+            required_inputs=frozenset(),
+            outputs=frozenset(),
         )
         gen_downstream = _generator(hooks=[_Mark()])
         pipe = GenerationPipeline(stages=[gen_empty, gen_downstream])
@@ -242,8 +242,8 @@ class TestMappinglessStages:
         its raw sample, not a ``Batch``."""
         terminal = AtomisticGenerator(
             generator_func=trivial_generate,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset(),
+            required_inputs=frozenset(),
+            outputs=frozenset(),
         )
         pipe = GenerationPipeline(stages=[_generator(), terminal])
         out = pipe(make_batch(num_graphs=2))
@@ -263,13 +263,13 @@ class TestMappinglessStages:
 
         mappingless = AtomisticGenerator(
             generator_func=trivial_generate,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset(),
+            required_inputs=frozenset(),
+            outputs=frozenset(),
         )
         downstream = AtomisticGenerator(
             generator_func=_spy,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset(),
+            required_inputs=frozenset(),
+            outputs=frozenset(),
         )
         pipe = GenerationPipeline(stages=[mappingless, downstream])
         out = pipe(make_batch(num_graphs=3))
@@ -286,15 +286,26 @@ class TestFieldContractValidation:
         undeclared = AtomisticGenerator(
             generator_func=trivial_generate,
         )
-        with pytest.raises(ValueError, match="declares neither"):
+        with pytest.raises(
+            Exception, match="missing declarations: required_inputs, outputs"
+        ):
             GenerationPipeline(stages=[_generator(), undeclared])
+
+    def test_partially_declared_stage_names_the_missing_one(self) -> None:
+        """A stage declaring only one direction is told which one is missing."""
+        half = AtomisticGenerator(
+            generator_func=trivial_generate,
+            required_inputs=frozenset(),
+        )
+        with pytest.raises(Exception, match="missing declarations: outputs"):
+            GenerationPipeline(stages=[_generator(), half])
 
     def test_function_attributes_default_into_pipeline_validation(self) -> None:
         """Declarations carried by the generating function satisfy the contract."""
         declared = AtomisticGenerator(
             generator_func=make_demo_gan_generate(DemoGANModel())
         )
-        assert declared.consumes_fields == frozenset()
+        assert declared.required_inputs == frozenset()
         pipe = GenerationPipeline(stages=[declared, _generator()])
         assert isinstance(pipe, GenerationPipeline)
 
@@ -313,7 +324,7 @@ class TestFieldContractValidation:
         assert isinstance(pipe, GenerationPipeline)
 
     def test_first_stage_consumes_unvalidated(self) -> None:
-        """The first stage reads ``inputs``; its consumes_fields are not checked."""
+        """The first stage reads ``inputs``; its required_inputs are not checked."""
         first = _generator(consumes=frozenset({"anything"}))
         pipe = GenerationPipeline(stages=[first, _generator()])
         assert isinstance(pipe, GenerationPipeline)
@@ -378,7 +389,8 @@ class TestPipelineSessionAndCompile:
             assert out.num_graphs == 1
             # CPU: no stream anywhere.
             assert pipe._stream is None and gen_a._stream is None
-        assert log == ["enter-a", "enter-b", "exit-a", "exit-b"]
+        # ExitStack unwinds in reverse entry order (context-manager convention)
+        assert log == ["enter-a", "enter-b", "exit-b", "exit-a"]
 
     def test_session_lazy_compiles_marked_stages(self) -> None:
         """A stage with ``compile_generate=True`` compiles at pipeline entry."""
@@ -489,8 +501,8 @@ class TestDynamicsStages:
 
         gen = AtomisticGenerator(
             generator_func=demo_nonparametric_generation,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions", "atomic_numbers"}),
         )
         engine = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=3, dt=0.5)
         pipe = gen | engine
@@ -508,8 +520,8 @@ class TestDynamicsStages:
 
         gen = AtomisticGenerator(
             generator_func=trivial_generate,  # returns a TensorDict, not a Batch
-            consumes_fields=frozenset(),
-            produces_fields=frozenset(),
+            required_inputs=frozenset(),
+            outputs=frozenset(),
         )
         engine = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
         pipe = gen | engine
@@ -555,16 +567,17 @@ class TestStageKwargs:
         with pytest.raises(ValueError, match="one entry per stage"):
             pipe(None, stage_kwargs=[{}])
 
-    def test_broadcast_into_run_stage_is_loud(self) -> None:
-        """A run-stage with a strict signature fails loudly on a misaddressed kwarg."""
+    def test_broadcast_into_run_stage_warns(self) -> None:
+        """A kwarg a run-stage cannot accept is dropped with a UserWarning."""
 
         class _StrictRun:
             def run(self, batch: Batch) -> Batch:
                 return batch
 
         pipe = _generator() | _StrictRun()
-        with pytest.raises(TypeError, match="run"):
-            pipe(None, stage_kwargs={"num_samples": 2})
+        with pytest.warns(UserWarning, match="ignores unsupported stage_kwargs"):
+            out = pipe(None, stage_kwargs={"num_samples": 2})
+        assert out.num_graphs == 2  # the generator still received num_samples
 
 
 class TestDuckTypedSessions:
@@ -630,8 +643,8 @@ class TestDuckTypedSessions:
 
         gen = AtomisticGenerator(
             generator_func=_nonparametric_cuda,
-            consumes_fields=frozenset(),
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions", "atomic_numbers"}),
             device="cuda",
         )
         engine = DemoDynamics(
@@ -644,3 +657,53 @@ class TestDuckTypedSessions:
             out = pipe(None)
             assert isinstance(out, Batch)
             assert out.positions.device.type == "cuda"
+
+
+class TestBoundaryGuardCompileSkip:
+    """The boundary guard stands down under ``torch.compile``."""
+
+    def test_guard_skipped_under_compile(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With is_compiling True, a non-Batch into a dynamics stage is not the guard's error."""
+        from nvalchemi.dynamics.demo import DemoDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+        gen = AtomisticGenerator(
+            generator_func=trivial_generate,  # TensorDict, not a Batch
+            required_inputs=frozenset(),
+            outputs=frozenset(),
+        )
+        engine = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+        pipe = gen | engine
+        with pytest.raises(Exception) as exc_info:
+            pipe(None)
+        assert "must return a Batch" not in str(exc_info.value)
+
+
+class TestStreamStageKwargsForwarding:
+    """``stream()`` forwards ``stage_kwargs`` into every fold."""
+
+    def test_stream_forwards_stage_kwargs(self) -> None:
+        engine = _RunRecorder()
+        pipe = _generator() | engine
+        outs = list(
+            pipe.stream([None, None], stage_kwargs=[{"num_samples": 2}, {"n_steps": 7}])
+        )
+        assert all(out.num_graphs == 2 for out in outs)
+        assert engine.calls == [{"n_steps": 7}, {"n_steps": 7}]
+
+    def test_stretched_copy_survives_a_popping_stage(self) -> None:
+        """A stage popping ``rng`` must not starve the next stage's copy."""
+
+        class _Popper:
+            def __call__(self, batch: Batch, rng=None) -> Batch:
+                assert rng is not None
+                return batch
+
+        engine = _RunRecorder()
+        pipe = _generator() | _Popper() | engine
+        rng = torch.Generator().manual_seed(0)
+        # the generator stage pops rng from its own copy; the engine must still see it
+        out = pipe(None, stage_kwargs=[{"rng": rng}, {"rng": rng}, {"rng": rng}])
+        assert engine.calls == [{"rng": rng}]
+        assert isinstance(out, Batch)
