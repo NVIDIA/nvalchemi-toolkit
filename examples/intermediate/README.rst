@@ -33,3 +33,9 @@ scheduler values.
 **08 — LoRA Fine-Tuning**: Download the LPSC dataset in EXTXYZ format, convert
 it to in-memory atomic data, create training and validation subsets, fit atomic
 reference energies, and fine-tune ``medium-mpa-0`` with LoRA adapters.
+
+**09 — Variable-Cell L-BFGS**: LBFGSVariableCell and FIRE2VariableCell with
+AlignCellHook relaxing strained, sheared FCC argon to its equilibrium lattice.
+
+**10 — L-BFGS in a FusedStage**: LBFGS relaxation handing off to NVT, on a fixed
+batch and with inflight batching.

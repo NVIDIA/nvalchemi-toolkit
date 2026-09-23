@@ -10,3 +10,4 @@ and runs end-to-end on a single GPU in under 60 seconds.
 **03 — ASE Integration**: Loading ASE structures, FreezeAtomsHook on a surface system.
 **04 — NVE MD**: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
 **05 — NVT MD**: Langevin thermostat, thermalization, LoggingHook to CSV.
+**06 — L-BFGS Optimization**: LBFGS as a drop-in for FIRE2, compared on the same batch.

@@ -26,7 +26,12 @@ import torch
 import warp as wp
 
 from nvalchemi.data import Batch
-from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
+from nvalchemi.data.level_storage import (
+    LevelSchema,
+    MultiLevelStorage,
+    SegmentedLevelStorage,
+    UniformLevelStorage,
+)
 
 
 def _make_state_batch(
@@ -60,6 +65,73 @@ def _make_state_batch(
     multi = MultiLevelStorage(groups={"system": system_group})
     keys = {"system": set(system_data.keys())}
     return Batch._construct(device=device, keys=keys, storage=multi)
+
+
+def _make_two_level_state_batch(
+    system_data: dict[str, torch.Tensor],
+    level_data: dict[str, torch.Tensor],
+    segment_lengths: torch.Tensor,
+    device: torch.device,
+    *,
+    level_name: str,
+) -> Batch:
+    """Build a state :class:`~nvalchemi.data.Batch` with a ``"system"`` level
+    and one segmented level.
+
+    Like :func:`_make_state_batch`, but for optimizers that also keep
+    per-degree-of-freedom state.  Every tensor leads with its owning entity,
+    so inflight batching selects and appends it as usual.  Build initial and
+    replacement state through this function so their schemas match.
+
+    Parameters
+    ----------
+    system_data : dict[str, torch.Tensor]
+        Per-system tensors ``[num_systems, ...]``.
+    level_data : dict[str, torch.Tensor]
+        Per-degree-of-freedom tensors ``[num_packed, ...]``.
+    segment_lengths : torch.Tensor
+        Degrees of freedom per system ``[num_systems]``.
+    device : torch.device
+        Target device; all tensors should already reside on it.
+    level_name : str
+        Segmented level name; must not be a built-in level.
+
+    Returns
+    -------
+    Batch
+        Tensors are stored by reference.
+    """
+    if level_name in ("atoms", "edges", "system"):
+        raise ValueError(
+            f"level_name {level_name!r} collides with a built-in level; pick a "
+            "name of the optimizer's own"
+        )
+    schema = LevelSchema()
+    schema.add_level(level_name, segmented=True)
+    for key in level_data:
+        # No dtype, so the append-time schema comparison is trivially equal.
+        schema.set(key, level_name)
+    groups = {
+        "system": UniformLevelStorage(
+            data=system_data, device=device, attr_map=schema, validate=False
+        ),
+        level_name: SegmentedLevelStorage(
+            data=level_data,
+            segment_lengths=segment_lengths,
+            device=device,
+            attr_map=schema,
+            validate=False,
+        ),
+    }
+    multi = MultiLevelStorage(groups=groups, attr_map=schema, validate=False)
+    return Batch._construct(
+        device=device, keys={"system": set(system_data)}, storage=multi
+    )
+
+
+def _state_level(state: Batch, level_name: str) -> SegmentedLevelStorage:
+    """Return the segmented level storage of a two-level state batch."""
+    return state._storage.groups[level_name]
 
 
 def _to_per_system(

@@ -71,6 +71,7 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
+from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -1477,6 +1478,18 @@ class _CommunicationMixin:
         return FusedStage(sub_stages=[(0, self), (1, other)])
 
 
+def _level_mask(
+    state: Batch, level: str, graph_mask: Bool[torch.Tensor, "B"]
+) -> torch.Tensor:
+    """Broadcast a per-graph mask to the rows of one materialized state level."""
+    group = state._storage.groups.get(level)
+    if group is None:
+        raise KeyError(f"state level {level!r} is not materialized")
+    if isinstance(group, SegmentedLevelStorage):
+        return graph_mask[group.batch_idx.long()]
+    return graph_mask
+
+
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     """Base class for all dynamics simulations.
 
@@ -1890,6 +1903,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         changes are retained for graphs selected by ``graph_mask``, while rows
         belonging to other sub-stages are restored from ``saved``. Thus,
         ``True`` retains updated state and ``False`` restores previous state.
+        Segmented state levels expand ``graph_mask`` through their own
+        ``batch_idx``.
         """
         if not saved:
             return
@@ -1899,10 +1914,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 f"state={self._state.num_graphs}, "
                 f"graphs={graph_mask.shape[0]}."
             )
-        for key, previous in saved.items():
-            value = getattr(self._state, key)
-            mask = graph_mask.view(graph_mask.shape[0], *([1] * (value.dim() - 1)))
-            torch.where(mask, value, previous, out=value)
+        for level, keys in self._state.level_keys.items():
+            keys = keys & saved.keys()
+            if not keys:
+                continue
+            level_mask = _level_mask(self._state, level, graph_mask)
+            for key in keys:
+                value = getattr(self._state, key)
+                mask = level_mask.view(level_mask.shape[0], *([1] * (value.dim() - 1)))
+                torch.where(mask, value, saved[key], out=value)
+
+    def _warm_state_levels(self) -> None:
+        """Build lazy segmented-level topology outside a compiled step."""
+        state = getattr(self, "_state", None)
+        if state is None:
+            return
+        for group in state._storage.groups.values():
+            if isinstance(group, SegmentedLevelStorage):
+                _ = group.batch_idx, group.batch_ptr
 
     def _init_state(self, batch: Batch) -> None:
         """Allocate per-system integrator state from the first concrete batch.
@@ -3814,6 +3843,7 @@ class FusedStage(BaseDynamics):
         self._ensure_bookkeeping_fields(batch)
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
+            dynamics._warm_state_levels()
 
         # Admission hooks remain outside of the compiled step
         self._ensure_admission_initialized(batch)

@@ -35,7 +35,7 @@ __all__ = ["AlignCellHook"]
 
 
 class AlignCellHook:
-    r"""Align periodic cells before the first variable-cell FIRE2 step.
+    r"""Align periodic cells before the first variable-cell FIRE2 or L-BFGS step.
 
     Transforms each periodic system's cell matrix to the standard
     upper-triangular (right-handed) form:
@@ -81,43 +81,56 @@ class AlignCellHook:
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Align the current batch when any periodic cell is not triangular."""
         del stage
-        batch = ctx.batch
+        aligned = _aligned_periodic(ctx.batch, ctx.active_graph_mask)
+        if aligned is not None:
+            with torch.no_grad():
+                ctx.batch.positions.copy_(aligned[0])
+                ctx.batch.cell.copy_(aligned[1])
 
-        if not hasattr(batch, "cell") or batch.cell is None:
-            return
-        if not hasattr(batch, "pbc") or batch.pbc is None:
-            return
 
-        # Determine which systems are periodic
-        pbc = batch.pbc
-        if pbc.dim() == 1:
-            if pbc.shape[0] == batch.num_graphs:
-                periodic_mask = pbc.to(dtype=torch.bool)
-            else:
-                periodic_mask = pbc.unsqueeze(0).any(dim=-1)
+def _aligned_periodic(
+    batch, active_graph_mask: torch.Tensor | None = None
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    """Return ``(positions, cell)`` with active periodic systems aligned.
+
+    Reads *batch* without writing it; other systems keep their values.
+    Returns ``None`` when there is nothing to align.
+    """
+    if getattr(batch, "cell", None) is None or getattr(batch, "pbc", None) is None:
+        return None
+
+    # Determine which systems are periodic
+    pbc = batch.pbc
+    if pbc.dim() == 1:
+        if pbc.shape[0] == batch.num_graphs:
+            periodic_mask = pbc.to(dtype=torch.bool)
         else:
-            periodic_mask = pbc.any(dim=-1)
-        if ctx.active_graph_mask is not None:
-            periodic_mask = periodic_mask & ctx.active_graph_mask
-        # This can cause a torch.compile graph break
-        if not periodic_mask.any():
-            return
+            periodic_mask = pbc.unsqueeze(0).any(dim=-1)
+    else:
+        periodic_mask = pbc.any(dim=-1)
+    if active_graph_mask is not None:
+        periodic_mask = periodic_mask & active_graph_mask
+    # Eager early exit; compiled graphs run branchless (all-False is a no-op).
+    if not torch.compiler.is_compiling() and not periodic_mask.any():
+        return None
 
-        positions = batch.positions.contiguous().clone()
-        cell = batch.cell.contiguous().clone()
-        if positions.dtype not in (torch.float32, torch.float64):
-            raise TypeError(
-                "Cell alignment only supports float32/float64 positions, got "
-                f"{positions.dtype}."
-            )
-        if cell.dtype != positions.dtype:
-            cell = cell.to(dtype=positions.dtype)
+    positions = batch.positions.detach().contiguous().clone()
+    cell = batch.cell.detach().contiguous().clone()
+    if positions.dtype not in (torch.float32, torch.float64):
+        raise TypeError(
+            "Cell alignment only supports float32/float64 positions, got "
+            f"{positions.dtype}."
+        )
+    if cell.dtype != positions.dtype:
+        cell = cell.to(dtype=positions.dtype)
 
-        batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
-        align_cell(positions, cell, batch_idx)
+    batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
+    align_cell(positions, cell, batch_idx)
 
-        # Update only active periodic graphs, leaving all other graphs unchanged
-        aligned_atoms = periodic_mask[batch.batch_idx].unsqueeze(-1)
-        aligned_cells = periodic_mask[:, None, None]
-        batch.positions.copy_(torch.where(aligned_atoms, positions, batch.positions))
-        batch.cell.copy_(torch.where(aligned_cells, cell, batch.cell))
+    # Keep only active periodic graphs, leaving all other graphs unchanged
+    aligned_atoms = periodic_mask[batch.batch_idx].unsqueeze(-1)
+    aligned_cells = periodic_mask[:, None, None]
+    return (
+        torch.where(aligned_atoms, positions, batch.positions.detach()),
+        torch.where(aligned_cells, cell, batch.cell.detach()),
+    )
