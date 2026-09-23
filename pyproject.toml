@@ -211,7 +211,7 @@ override-dependencies = [
   "lmdb>=2.0.0; python_version >= '3.14'",
 ]
 dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.4.1", requires-dist = [
+  { name = "nvalchemi-toolkit-ops", version = "0.5.0", requires-dist = [
     "warp-lang >= 1.13.0",
     "numpy",
     "torch>=2.8.0 ; extra == 'torch'",
@@ -233,6 +233,11 @@ torchvision = [
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
+# Pre-release pin: resolve nvalchemi-toolkit-ops from the 0.5.0-rc branch
+# instead of PyPI. tool.uv.sources only affects this workspace, so the
+# published package metadata is unchanged; drop this entry once ops 0.5.0
+# is released on PyPI.
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", rev = "0.5.0-rc" }
 
 # these are intended to be developer facing
 [dependency-groups]
