@@ -16,20 +16,21 @@
 Generative workflows: model-owning samplers
 ============================================
 
-The :class:`~nvalchemi.gen.generator.AtomisticGenerator` driver runs any
-callable with the generating-function signature
-``(inputs=None, *, num_samples=1, rng=None, **kwargs)``. The pattern this
-example walks through is the *model-owning sampler*: a callable object whose
-constructor owns the model, carrying the attributes the driver reads as
-defaults — ``device``, ``required_inputs`` / ``outputs``, and an optional
-``condition`` step.
+The generative driver runs any callable that matches the
+:class:`~nvalchemi.gen.generator.GeneratingFunction` protocol:
+``(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch``.
 
-Two samplers are built on the demo models
-(:class:`~nvalchemi.models.gen.demo.DemoGANModel` and
-:class:`~nvalchemi.models.gen.demo.DemoDiffusionModel`): a one-pass GAN
-decoder and a small EDM Euler loop. Both return a
-:class:`~nvalchemi.data.Batch`, so the driver takes its contract path
-(hooks, device and field checks).
+In the model-owning sampler pattern, the callable owns the trained model
+and exposes metadata attributes like ``device``, ``required_inputs``,
+``outputs``, and an optional ``condition`` hook. The driver reads these
+attributes as defaults instead of managing model internals directly.
+
+We walk through two sampling approaches:
+1. Single-pass latent decoding with a GAN.
+2. Iterative Euler integration with a diffusion model.
+
+Both samplers return a :class:`~nvalchemi.data.Batch`, matching the output
+contract needed for driver hooks, device checks, and pipeline chaining.
 """
 
 import torch
@@ -39,9 +40,18 @@ from nvalchemi.gen import AtomisticGenerator
 from nvalchemi.models.gen import DemoDiffusionModel, DemoGANModel
 
 # %%
-# The GAN sampler: one forward pass from a latent draw. The constructor binds
-# the model; ``required_inputs`` / ``outputs`` mirror the model's config so
-# the driver and pipelines can validate the field contract.
+# Model-owning GAN sampler: single-pass decode
+# ---------------------------------------------
+# Single-pass decoders implement the
+# :class:`~nvalchemi.gen.generator.GeneratingFunction` protocol directly.
+#
+# We hold the model inside the sampler rather than handing it to the driver.
+# Exposing ``required_inputs`` and ``outputs`` lets the driver and pipeline
+# stages validate tensor fields without inspecting the model itself.
+#
+# Packaging generated atoms into a :class:`~nvalchemi.data.Batch` satisfies the
+# output contract. Downstream stages, hooks, and dynamics can consume the
+# output immediately.
 
 
 class DemoGANGenerate:
@@ -75,9 +85,14 @@ class DemoGANGenerate:
 
 
 # %%
-# The diffusion sampler: a small EDM Euler loop. The sampler settings are
-# constructor-bound; a call may override them through kwargs of the same
-# names.
+# Model-owning diffusion sampler: iterative Euler loop
+# -----------------------------------------------------
+# Multi-step generation uses the same callable interface as single-pass
+# decoding. From the driver's perspective, the sampling algorithm is an
+# internal detail.
+#
+# Defaults for noise schedules and step counts live on the instance. Callers
+# can override them on any sample call by passing keyword arguments.
 
 
 class DemoDiffusionGenerate:
@@ -129,9 +144,14 @@ class DemoDiffusionGenerate:
 
 
 # %%
-# Driving the GAN sampler inside a session: the ``with gen:`` block owns the
-# seeded RNG (and a dedicated CUDA stream when the resolved device is CUDA),
-# so a ``seed`` reproduces draws exactly.
+# Driving the sampler: sessions and reproduction
+# -----------------------------------------------
+# :class:`~nvalchemi.gen.generator.AtomisticGenerator` coordinates sampling,
+# device transfers, and hooks.
+#
+# Entering a ``with gan:`` session sets up the RNG state, creates a CUDA
+# stream on GPU, and manages compiled model lifetimes. Repeated draws inside
+# the session advance the RNG deterministically.
 
 gan = AtomisticGenerator(generator_func=DemoGANGenerate(DemoGANModel()), seed=42)
 
@@ -145,8 +165,15 @@ print(
 )
 
 # %%
-# The diffusion sampler composes the same way — the family lives entirely in
-# the callable, so only the constructor changes.
+# Driving the diffusion sampler: per-call overrides
+# --------------------------------------------------
+# The driver setup looks identical across model families. We wrap the diffusion
+# sampler just like the GAN.
+#
+# Extra keyword arguments passed to
+# :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample` forward directly to
+# the sampler. Here ``num_steps=8`` overrides the default 4-step schedule for a
+# single call.
 
 diffusion = AtomisticGenerator(
     generator_func=DemoDiffusionGenerate(DemoDiffusionModel(), num_steps=4),
@@ -159,8 +186,14 @@ with diffusion:
 print(f"Diffusion batch: {batch.num_graphs} graphs at sigma_max=2.0")
 
 # %%
-# A conditional call tiles one draw per conditioning graph; the sampler reads
-# the conditioning batch's graph count when ``inputs`` is a ``Batch``.
+# Conditional generation: batch input handling
+# ---------------------------------------------
+# Passing a batch as the first argument runs conditional generation.
+#
+# If the sampler defines a ``condition`` attribute or the driver has a
+# ``condition_func``, the driver runs that transform first. Without one, the
+# input batch goes straight to the callable, which reads ``inputs.num_graphs``
+# and generates matching structures.
 
 conditioning = Batch.from_data_list(
     [
