@@ -1474,7 +1474,10 @@ class _CommunicationMixin:
                 "Both operands of + must be BaseDynamics instances. "
                 f"other is {type(other).__name__}, not BaseDynamics."
             )
-        return FusedStage(sub_stages=[(0, self), (1, other)])
+        return FusedStage(
+            sub_stages=[(0, self), (1, other)],
+            by_group=self.by_group,
+        )
 
 
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
@@ -4269,6 +4272,7 @@ class FusedStage(BaseDynamics):
             compile_step=False,
             compile_kwargs=self.compile_kwargs,
             reprime_on_entry=set(self.reprime_on_entry),
+            by_group=self.by_group,
         )
         # Defer compilation to __enter__ or an explicit .compile() call.
         new_fused.compile_step = self.compile_step
