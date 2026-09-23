@@ -12,39 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Knowledge-distillation workflows for ALCHEMI training."""
+
 from __future__ import annotations
 
-from nvalchemi.data import transforms
-from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes import (
-    AtomicDataZarrReader,
-    AtomicDataZarrWriter,
-    BatchDatasetProtocol,
-    DataLoader,
-    Dataset,
-    FieldSchema,
-    InMemoryDataset,
-    Reader,
+from nvalchemi.training.distillation.labeling import label_dataset
+from nvalchemi.training.distillation.scoring import (
+    BUILTIN_SIGNALS,
+    SUPPORTED_SIGNALS,
+    InProcessTeacherScorer,
+    NeighborListPolicy,
+    SignalLevel,
+    TeacherLabels,
+    TeacherScorer,
+    TeacherSignal,
+    scorer_fields,
+    signal_fields,
+    signal_for_field,
 )
-from nvalchemi.data.level_storage import LevelSchema
-from nvalchemi.data.transforms import Compose
 
 __all__ = [
-    # Core
-    "AtomicData",
-    "Batch",
-    "LevelSchema",
-    # Datapipes
-    "Reader",
-    "AtomicDataZarrReader",
-    "AtomicDataZarrWriter",
-    "BatchDatasetProtocol",
-    "FieldSchema",
-    "Dataset",
-    "InMemoryDataset",
-    "DataLoader",
-    # Transforms
-    "Compose",
-    "transforms",
+    "BUILTIN_SIGNALS",
+    "InProcessTeacherScorer",
+    "NeighborListPolicy",
+    "SUPPORTED_SIGNALS",
+    "SignalLevel",
+    "TeacherLabels",
+    "TeacherScorer",
+    "TeacherSignal",
+    "label_dataset",
+    "scorer_fields",
+    "signal_fields",
+    "signal_for_field",
 ]

@@ -73,6 +73,8 @@ from nvalchemi.training.optimizers import (
 from nvalchemi.training.runtime import (
     configure_dataloader,
     configure_parallelism,
+    eval_configured_models,
+    evaluating,
     freeze_unconfigured_models,
     move_to_devices,
     rehome_optimizer_state,
@@ -118,6 +120,8 @@ __all__ = [
     "create_model_spec",
     "create_model_spec_from_json",
     "default_training_fn",
+    "eval_configured_models",
+    "evaluating",
     "freeze_unconfigured_models",
     "loss_component_to_spec",
     "load_checkpoint",
