@@ -453,6 +453,18 @@ class TestFusedStage:
         assert isinstance(fused, FusedStage)
         assert len(fused.sub_stages) == 2
 
+    def test_plus_operator_preserves_grouped_mode(self) -> None:
+        """Grouped mode should propagate through fused-stage composition."""
+        dyn1 = BaseDynamics(model=self.model, by_group=True)
+        dyn2 = BaseDynamics(model=self.model, by_group=True)
+        dyn3 = BaseDynamics(model=self.model, by_group=True)
+
+        fused = dyn1 + dyn2
+        appended = fused + dyn3
+
+        assert fused.by_group is True
+        assert appended.by_group is True
+
     def test_auto_assigned_status_codes(self) -> None:
         """Sub-stages should have auto-assigned status codes 0, 1, ..."""
         dyn1 = BaseDynamics(model=self.model)
