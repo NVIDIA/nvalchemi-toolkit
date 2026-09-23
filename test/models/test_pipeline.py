@@ -2563,11 +2563,11 @@ class TestAutoGradGroupHybridForces:
 # ===========================================================================
 
 
-class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
-    """Small qualified position-energy wrapper for pipeline derivatives."""
+class _QualifiedPipelineQuadratic(_QuadraticEnergyModel):
+    """Small position-energy wrapper with pipeline derivative support."""
 
     def __init__(self, scale: float = 1.0, output_kind: str = "normal") -> None:
-        super().__init__()
+        super().__init__(scale=0.5 * scale)
         self.scale = scale
         self.output_kind = output_kind
         self.forward_calls = 0
@@ -2579,13 +2579,6 @@ class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
             autograd_inputs=frozenset({"positions"}),
             active_outputs={"energy"},
         )
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
-
-    def compute_embeddings(self, data, **kwargs):
-        raise NotImplementedError
 
     def _validate_derivative_request(self, request) -> None:
         if request.execution == "local" and (
@@ -2602,26 +2595,18 @@ class _QualifiedPipelineQuadratic(nn.Module, BaseModelMixin):
             raise LookupError("injected pipeline derivative failure")
         if self.output_kind == "missing":
             return OrderedDict()
-        positions = data.positions
-        node_energy = 0.5 * self.scale * positions.square().sum(dim=-1, keepdim=True)
-        energy = torch.zeros(
-            data.num_graphs,
-            1,
-            dtype=positions.dtype,
-            device=positions.device,
-        ).scatter_add(0, data.batch_idx.long().unsqueeze(-1), node_energy)
-        return OrderedDict(energy=energy)
+        return super().forward(data, **kwargs)
 
 
 class _UnqualifiedPipelineQuadratic(_QualifiedPipelineQuadratic):
-    """Qualified-looking test model that retains the base rejection."""
+    """Test model that retains the base derivative rejection."""
 
     def _validate_derivative_request(self, request) -> None:
         BaseModelMixin._validate_derivative_request(self, request)
 
 
 class _LoopOnlyPipelineQuadratic(_QualifiedPipelineQuadratic):
-    """Qualified test wrapper that rejects vectorized dense rows."""
+    """Test wrapper that rejects vectorized dense rows."""
 
     def _validate_derivative_request(self, request) -> None:
         if request.operation == "dense_hessian" and request.strategy == "vmap":
@@ -2809,7 +2794,7 @@ def _nonlinear_chain_expected_hvp(
 
 
 class TestPipelineDerivatives:
-    """Second-order pipeline behavior through qualified synthetic wrappers."""
+    """Second-order pipeline behavior through supported synthetic wrappers."""
 
     def test_additive_hvp_prepared_and_dense_strategies(self):
         batch = _make_pipeline_derivative_batch(1, 3)
@@ -3004,7 +2989,7 @@ class TestPipelineDerivativeTopology:
             groups=[PipelineGroup(steps=[model], use_autograd=True)]
         )
 
-        with pytest.raises(DerivativeNotSupported, match="has not been qualified"):
+        with pytest.raises(DerivativeNotSupported, match="does not support"):
             pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
 
     @pytest.mark.parametrize("context", ["pipeline_distributed", "child_distributed"])

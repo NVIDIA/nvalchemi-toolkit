@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from urllib.error import URLError
 
 import pytest
 import torch
@@ -1222,41 +1223,65 @@ def _labelled_water_batch(
 
 
 @pytest.fixture(scope="session")
-def real_wrapper_cpu():
-    """Load the MACE-MP small checkpoint once per session (requires network).
+def small_checkpoint_path():
+    """Acquire the MACE-MP small checkpoint or skip on download failure."""
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
 
-    The fixture calls ``pytest.skip`` if the download fails (e.g. no internet),
-    so dependent tests are cleanly skipped rather than failing.
-
-    We use ``small-0b`` — the smallest foundation model — to keep download
-    time and memory usage low.
-    """
     try:
-        return MACEWrapper.from_checkpoint(
-            "small-0b", device=torch.device("cpu"), dtype=torch.float32
-        )
-    except Exception as e:
-        pytest.skip(f"Could not load MACE checkpoint (network unavailable?): {e}")
+        return download_mace_mp_checkpoint("small-0b")
+    except URLError as exc:
+        pytest.skip(f"Could not acquire MACE small-0b checkpoint: {exc}")
+    except RuntimeError as exc:
+        if "Model download failed, please check the URL" in str(exc):
+            pytest.skip(f"Could not acquire MACE small-0b checkpoint: {exc}")
+        raise
 
 
 @pytest.fixture(scope="session")
-def real_derivative_wrapper_cpu():
-    """Load the MACE-MP checkpoint in float64 for derivative qualification."""
+def real_wrapper_cpu(small_checkpoint_path):
+    """Load the MACE-MP small checkpoint once per session.
+
+    The checkpoint is acquired separately so only a recognized download
+    failure skips tests; loading and conversion errors remain failures.
+    """
     return MACEWrapper.from_checkpoint(
-        "small-0b", device=torch.device("cpu"), dtype=torch.float64
+        small_checkpoint_path, device=torch.device("cpu"), dtype=torch.float32
     )
 
 
 @pytest.fixture(scope="session")
-def real_derivative_wrapper_cueq_cuda():
-    """Load a CUDA cuEquivariance MACE checkpoint for derivative qualification."""
+def real_derivative_wrapper_cpu(small_checkpoint_path):
+    """Load the MACE-MP checkpoint in float64 for derivative support tests."""
+    return MACEWrapper.from_checkpoint(
+        small_checkpoint_path, device=torch.device("cpu"), dtype=torch.float64
+    )
+
+
+@pytest.fixture(scope="session")
+def real_derivative_wrapper_cuda(small_checkpoint_path):
+    """Load the eager MACE-MP checkpoint in float64 on CUDA for derivative tests."""
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for MACE derivative support tests")
+    return MACEWrapper.from_checkpoint(
+        small_checkpoint_path, device=torch.device("cuda"), dtype=torch.float64
+    )
+
+
+@pytest.fixture(scope="session")
+def real_derivative_wrapper_cueq_cuda(small_checkpoint_path):
+    """Load a CUDA cuEquivariance MACE checkpoint for derivative support tests."""
     pytest.importorskip(
-        "cuequivariance", reason="cuEquivariance is required for this qualification"
+        "cuequivariance",
+        reason="cuEquivariance is required for derivative support tests",
+    )
+    pytest.importorskip(
+        "cuequivariance_ops_torch",
+        reason="cuEquivariance CUDA kernels are required for derivative support tests",
     )
     if not torch.cuda.is_available():
-        pytest.skip("CUDA is required for cuEquivariance derivative qualification")
+        pytest.skip("CUDA is required for cuEquivariance derivative support tests")
     return MACEWrapper.from_checkpoint(
-        "small-0b",
+        small_checkpoint_path,
         device=torch.device("cuda"),
         dtype=torch.float32,
         enable_cueq=True,
@@ -1295,7 +1320,7 @@ def _fixed_topology_force_finite_difference(
 
 
 class TestMACEDerivatives:
-    """Mock preflight and real eager MACE derivative qualification."""
+    """Mock preflight and real eager MACE derivative support tests."""
 
     def test_mock_hvp_requests_energy_only(self, wrapper, single_batch):
         wrapper.hessian_vector_product(
@@ -1332,6 +1357,7 @@ class TestMACEDerivatives:
         ):
             wrapper.compute_hessian(single_batch, strategy="vmap")
 
+    @pytest.mark.slow
     def test_real_hvp_matches_fixed_topology_force_fd(
         self, real_derivative_wrapper_cpu
     ):
@@ -1346,6 +1372,7 @@ class TestMACEDerivatives:
 
         torch.testing.assert_close(hvp, finite_difference, rtol=5e-4, atol=5e-6)
 
+    @pytest.mark.slow
     def test_real_dense_loop_vmap_contraction_and_symmetry(
         self, real_derivative_wrapper_cpu
     ):
@@ -1371,16 +1398,38 @@ class TestMACEDerivatives:
             dense, dense.permute(1, 0, 3, 2), rtol=2e-6, atol=2e-8
         )
 
-    def test_real_pbc_hvp_is_finite(self, real_derivative_wrapper_cpu):
+    @pytest.mark.slow
+    def test_real_pbc_hvp_matches_fixed_topology_force_fd(
+        self, real_derivative_wrapper_cpu
+    ):
         model = real_derivative_wrapper_cpu
         batch = _pbc_water_batch_float64()
         vector = torch.randn_like(batch.positions)
 
         hvp = model.hessian_vector_product(batch, vector)
+        finite_difference = _fixed_topology_force_finite_difference(
+            model, batch, vector
+        )
 
-        assert torch.isfinite(hvp).all()
+        torch.testing.assert_close(hvp, finite_difference, rtol=5e-4, atol=5e-6)
+
+    @pytest.mark.slow
+    def test_real_cuda_hvp_matches_fixed_topology_force_fd(
+        self, real_derivative_wrapper_cuda
+    ):
+        model = real_derivative_wrapper_cuda
+        batch = _water_batch(dtype=torch.float64, device="cuda")
+        vector = torch.randn_like(batch.positions)
+
+        hvp = model.hessian_vector_product(batch, vector)
+        finite_difference = _fixed_topology_force_finite_difference(
+            model, batch, vector
+        )
+
+        torch.testing.assert_close(hvp, finite_difference, rtol=5e-4, atol=5e-6)
 
     @pytest.mark.requires_cueq
+    @pytest.mark.slow
     def test_real_cueq_hvp_matches_fixed_topology_force_fd(
         self, real_derivative_wrapper_cueq_cuda
     ):
@@ -1400,6 +1449,7 @@ class TestMACEDerivatives:
         torch.testing.assert_close(hvp, finite_difference, rtol=2e-2, atol=5e-3)
 
     @pytest.mark.requires_cueq
+    @pytest.mark.slow
     def test_real_cueq_dense_loop_contraction_and_symmetry(
         self, real_derivative_wrapper_cueq_cuda
     ):
@@ -1474,24 +1524,18 @@ class TestRealCheckpoint:
         out = real_wrapper_cpu.forward(batch)
         assert out["energy"].dtype == torch.float32
 
-    def test_dtype_float32_conversion(self):
+    def test_dtype_float32_conversion(self, small_checkpoint_path):
         """Loading with dtype=float32 produces float32 weights."""
-        try:
-            w = MACEWrapper.from_checkpoint(
-                "small-0b", device=torch.device("cpu"), dtype=torch.float32
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable: {e}")
+        w = MACEWrapper.from_checkpoint(
+            small_checkpoint_path, device=torch.device("cpu"), dtype=torch.float32
+        )
         assert w._model_dtype == torch.float32
 
-    def test_dtype_conversion_uniform(self):
+    def test_dtype_conversion_uniform(self, small_checkpoint_path):
         """All weights including atomic energy are converted to the target dtype."""
-        try:
-            w = MACEWrapper.from_checkpoint(
-                "small-0b", device=torch.device("cpu"), dtype=torch.float32
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable: {e}")
+        w = MACEWrapper.from_checkpoint(
+            small_checkpoint_path, device=torch.device("cpu"), dtype=torch.float32
+        )
         ae = w.model.atomic_energies_fn.atomic_energies
         assert ae.dtype == torch.float32
 
@@ -1509,13 +1553,12 @@ class TestRealCheckpoint:
         assert result.node_embeddings.shape[0] == 3
         assert result.graph_embeddings.shape == (1, result.node_embeddings.shape[1])
 
-    def test_fine_tuning_strategy_force_loss_updates_real_checkpoint(self):
-        try:
-            wrapper = MACEWrapper.from_checkpoint(
-                "small-0b", device=torch.device("cpu"), dtype=torch.float32
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable: {e}")
+    def test_fine_tuning_strategy_force_loss_updates_real_checkpoint(
+        self, small_checkpoint_path
+    ):
+        wrapper = MACEWrapper.from_checkpoint(
+            small_checkpoint_path, device=torch.device("cpu"), dtype=torch.float32
+        )
 
         initial = {
             name: parameter.detach().clone()
@@ -1543,7 +1586,7 @@ class TestRealCheckpoint:
         ]
         assert changed
 
-    def test_compile_inference(self):
+    def test_compile_inference(self, small_checkpoint_path):
         """torch.compile produces a working inference-only model.
 
         Requires MACE >= the patch in mace-org/mace@6a32999 that fixes
@@ -1551,15 +1594,12 @@ class TestRealCheckpoint:
         The test is skipped automatically when the known NotImplementedError
         from SEQUENCE_LENGTH guard creation is detected.
         """
-        try:
-            w = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=torch.device("cpu"),
-                dtype=torch.float32,
-                compile_model=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable or compile failed: {e}")
+        w = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            compile_model=True,
+        )
 
         batch = _water_batch(dtype=torch.float32)
         # compiled model is inference-only — disable force grad to match eval state
@@ -1575,30 +1615,33 @@ class TestRealCheckpoint:
             raise e
         assert out["energy"].shape == (1, 1)
 
-    def test_cueq_conversion(self):
+    def test_cueq_conversion(self, small_checkpoint_path):
         """cuEquivariance conversion produces a valid model (GPU + package required)."""
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
+        pytest.importorskip(
+            "cuequivariance_ops_torch",
+            reason="cuEquivariance CUDA kernels are required for this test",
+        )
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance conversion test")
         device = torch.device("cuda")
-        try:
-            w = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=device,
-                dtype=torch.float32,
-                enable_cueq=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+        w = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=device,
+            dtype=torch.float32,
+            enable_cueq=True,
+        )
 
         batch = _water_batch(dtype=torch.float32, device="cuda")
         out = w.forward(batch)
         assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
 
-    def test_cueq_strategy_ema_checkpoint_round_trip(self, tmp_path):
+    def test_cueq_strategy_ema_checkpoint_round_trip(
+        self, tmp_path, small_checkpoint_path
+    ):
         """Strategy checkpoints restore MACE + cuEq models and EMA hook state.
 
         This follows the documented user restart path: a strategy owns a
@@ -1609,18 +1652,19 @@ class TestRealCheckpoint:
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
+        pytest.importorskip(
+            "cuequivariance_ops_torch",
+            reason="cuEquivariance CUDA kernels are required for this test",
+        )
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
         device = torch.device("cuda", torch.cuda.current_device())
-        try:
-            source = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=device,
-                dtype=torch.float32,
-                enable_cueq=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+        source = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=device,
+            dtype=torch.float32,
+            enable_cueq=True,
+        )
 
         ema = EMAHook(model_key="main", decay=0.0)
         strategy = TrainingStrategy(
@@ -1668,7 +1712,7 @@ class TestRealCheckpoint:
         torch.testing.assert_close(actual["forces"], expected["forces"])
 
     def test_cueq_strategy_ema_checkpoint_round_trip_after_optimizer_step(
-        self, tmp_path
+        self, tmp_path, small_checkpoint_path
     ):
         """Reloaded MACE + cuEq checkpoints validate through post-step EMA weights.
 
@@ -1680,18 +1724,19 @@ class TestRealCheckpoint:
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
+        pytest.importorskip(
+            "cuequivariance_ops_torch",
+            reason="cuEquivariance CUDA kernels are required for this test",
+        )
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
         device = torch.device("cuda", torch.cuda.current_device())
-        try:
-            source = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=device,
-                dtype=torch.float32,
-                enable_cueq=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+        source = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=device,
+            dtype=torch.float32,
+            enable_cueq=True,
+        )
 
         train_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
         val_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
@@ -1804,26 +1849,27 @@ class TestRealCheckpoint:
             f"  ASE MACECalculator: {ase_forces.tolist()}"
         )
 
-    def test_cueq_then_compile(self):
+    def test_cueq_then_compile(self, small_checkpoint_path):
         """cuEq + torch.compile pipeline works end-to-end (GPU required).
 
         Requires MACE >= the patch in mace-org/mace@6a32999 that fixes
         e3nn.Irreps.__reduce__ incompatibility with torch._dynamo guards.
         """
         pytest.importorskip("cuequivariance")
+        pytest.importorskip(
+            "cuequivariance_ops_torch",
+            reason="cuEquivariance CUDA kernels are required for this test",
+        )
         if not torch.cuda.is_available():
             pytest.skip("CUDA required")
         device = torch.device("cuda")
-        try:
-            w = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=device,
-                dtype=torch.float32,
-                enable_cueq=True,
-                compile_model=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Could not build cueq+compiled model: {e}")
+        w = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=device,
+            dtype=torch.float32,
+            enable_cueq=True,
+            compile_model=True,
+        )
 
         batch = _water_batch(dtype=torch.float32, device="cuda")
         w.model_config.active_outputs = {"energy"}

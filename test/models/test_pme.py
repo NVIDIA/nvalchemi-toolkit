@@ -33,9 +33,12 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.data.level_storage import LevelSchema
-from nvalchemi.models import DerivativeNotSupported
 from nvalchemi.models.base import NeighborListFormat
+from test.models.test_ewald import (
+    _finite_difference_charge_gradient,
+    _make_charged_batch,
+    _PeriodicDerivativeCases,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -48,142 +51,6 @@ def _make_pme(**kwargs):
 
     kwargs.setdefault("cutoff", 10.0)
     return PMEModelWrapper(**kwargs)
-
-
-def _make_charged_batch(
-    n_atoms: int = 8,
-    box_size: float = 10.0,
-    device: str = "cpu",
-    dtype: torch.dtype = torch.float32,
-) -> Batch:
-    """Build a PBC batch with charges for PME tests."""
-    positions = torch.rand(n_atoms, 3, dtype=dtype, device=device) * box_size
-    atomic_numbers = torch.ones(n_atoms, dtype=torch.long, device=device)
-    # Alternating +1/-1 charges (charge-neutral)
-    charges = torch.tensor(
-        [1.0 if i % 2 == 0 else -1.0 for i in range(n_atoms)],
-        dtype=dtype,
-        device=device,
-    )
-
-    data = AtomicData(
-        positions=positions,
-        atomic_numbers=atomic_numbers,
-        charges=charges,
-        forces=torch.zeros(n_atoms, 3, dtype=dtype, device=device),
-        energy=torch.zeros(1, 1, dtype=dtype, device=device),
-        cell=torch.eye(3, dtype=dtype, device=device).unsqueeze(0) * box_size,
-        pbc=torch.tensor([[True, True, True]], device=device),
-    )
-    attr_map = None
-    if dtype == torch.float64:
-        attr_map = LevelSchema()
-        for key in ("positions", "forces", "charges", "cell", "stress", "virial"):
-            attr_map.set(key, attr_map.attr_to_group[key], dtype="float64")
-
-    batch = Batch.from_data_list([data], attr_map=attr_map)
-    return batch
-
-
-def _finite_difference_charge_gradient(
-    model,
-    batch: Batch,
-    build_nl,
-    eps: float = 1e-6,
-) -> torch.Tensor:
-    """Estimate dE/dq with central finite differences."""
-    build_nl(batch, model)
-    base_charges = batch.charges.detach().clone()
-    grad = torch.zeros_like(base_charges)
-
-    for atom_idx in range(base_charges.shape[0]):
-        batch.charges = base_charges.clone()
-        batch.charges[atom_idx] += eps
-        energy_plus = model(batch)["energy"].sum().item()
-
-        batch.charges = base_charges.clone()
-        batch.charges[atom_idx] -= eps
-        energy_minus = model(batch)["energy"].sum().item()
-
-        grad[atom_idx] = (energy_plus - energy_minus) / (2.0 * eps)
-
-    batch.charges = base_charges
-    return grad
-
-
-def _fixed_topology_force_finite_difference(
-    model,
-    batch: Batch,
-    vector: torch.Tensor,
-    eps: float = 1e-4,
-) -> torch.Tensor:
-    """Estimate ``H @ vector`` from forces while retaining the neighbor list."""
-    original_outputs = model.model_config.active_outputs
-    positions = batch.positions.detach().clone()
-    plus = batch.clone()
-    minus = batch.clone()
-    plus.positions = positions + eps * vector
-    minus.positions = positions - eps * vector
-    model.model_config.active_outputs = {"energy", "forces"}
-    try:
-        force_plus = model(plus)["forces"].detach()
-        force_minus = model(minus)["forces"].detach()
-    finally:
-        model.model_config.active_outputs = original_outputs
-    return -(force_plus - force_minus) / (2.0 * eps)
-
-
-def _mixed_position_charge_derivative(
-    model,
-    batch: Batch,
-    build_nl,
-    position_direction: torch.Tensor,
-    charge_direction: torch.Tensor,
-    eps: float = 1e-5,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compare an autograd mixed ``R-q`` derivative with a position FD."""
-    original_outputs = model.model_config.active_outputs
-    base_positions = batch.positions.detach().clone()
-    base_charges = batch.charges.detach().clone()
-    work = batch.clone()
-    work.positions = base_positions.clone().requires_grad_(True)
-    work.charges = base_charges.clone().requires_grad_(True)
-    build_nl(work, model)
-    model.model_config.active_outputs = {"energy"}
-    try:
-        energy = model(work)["energy"].sum()
-        charge_gradient = torch.autograd.grad(energy, work.charges, create_graph=True)[
-            0
-        ]
-        mixed = torch.autograd.grad(
-            (charge_gradient * charge_direction).sum(), work.positions
-        )[0]
-
-        plus = batch.clone()
-        minus = batch.clone()
-        plus.positions = base_positions + eps * position_direction
-        minus.positions = base_positions - eps * position_direction
-        for displaced in (plus, minus):
-            displaced.charges = base_charges.clone().requires_grad_(True)
-        plus_gradient = torch.autograd.grad(model(plus)["energy"].sum(), plus.charges)[
-            0
-        ]
-        minus_gradient = torch.autograd.grad(
-            model(minus)["energy"].sum(), minus.charges
-        )[0]
-        finite_difference = (plus_gradient - minus_gradient) / (2.0 * eps)
-    finally:
-        model.model_config.active_outputs = original_outputs
-    return (mixed * position_direction).sum(), (
-        finite_difference * charge_direction
-    ).sum()
-
-
-def _make_mixed_charged_batch(dtype: torch.dtype = torch.float64) -> Batch:
-    """Build two systems so dense derivatives exercise per-system blocks."""
-    first = _make_charged_batch(n_atoms=2, box_size=8.0, dtype=dtype).get_data(0)
-    second = _make_charged_batch(n_atoms=3, box_size=9.0, dtype=dtype).get_data(0)
-    return Batch.from_data_list([first, second])
 
 
 # ===========================================================================
@@ -959,138 +826,10 @@ class TestPMEIntegration:
 # ===========================================================================
 
 
-class TestPMEDerivatives:
-    """Qualified eager PME derivatives on fixed-topology CPU kernels."""
-
-    @pytest.fixture(autouse=True)
-    def _require_ops(self):
-        pytest.importorskip("nvalchemiops")
-
+class TestPMEDerivatives(_PeriodicDerivativeCases):
     @staticmethod
-    def _build_nl(batch, model):
-        from nvalchemi.neighbors import compute_neighbors
-
-        compute_neighbors(batch, config=model.model_config.neighbor_config)
-
-    def test_hvp_matches_fixed_topology_force_finite_difference(self):
-        model = _make_pme()
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        vector = torch.randn_like(batch.positions)
-
-        hvp = model.hessian_vector_product(batch, vector)
-        finite_difference = _fixed_topology_force_finite_difference(
-            model, batch, vector
-        )
-
-        torch.testing.assert_close(hvp, finite_difference, rtol=2e-4, atol=2e-6)
-
-    def test_dense_loop_vmap_contraction_and_symmetry(self):
-        model = _make_pme()
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        vector = torch.randn_like(batch.positions)
-
-        loop_batch = batch.clone()
-        vmap_batch = batch.clone()
-        model.compute_hessian(loop_batch, strategy="loop", row_chunk_size=2)
-        model.compute_hessian(vmap_batch, strategy="vmap", row_chunk_size=2)
-
-        torch.testing.assert_close(
-            loop_batch.hessian, vmap_batch.hessian, rtol=2e-5, atol=2e-7
-        )
-        dense = vmap_batch.hessian.reshape(3, 3, 3, 3)
-        contraction = torch.einsum("abij,bj->ai", dense, vector)
-        hvp = model.hessian_vector_product(batch, vector)
-        torch.testing.assert_close(contraction, hvp, rtol=2e-4, atol=2e-6)
-        torch.testing.assert_close(
-            dense, dense.permute(1, 0, 3, 2), rtol=2e-5, atol=2e-7
-        )
-
-    def test_mixed_size_dense_blocks_preserve_system_order(self):
-        model = _make_pme()
-        batch = _make_mixed_charged_batch()
-        self._build_nl(batch, model)
-
-        model.compute_hessian(batch, strategy="loop", row_chunk_size=2)
-
-        assert batch.level_ptr("atom_atom").tolist() == [0, 4, 13]
-        assert batch.get_data(0).hessian.shape == (2, 2, 3, 3)
-        assert batch.get_data(1).hessian.shape == (3, 3, 3, 3)
-
-    def test_energy_only_position_and_charge_gradients_are_connected(self):
-        model = _make_pme()
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        charge_finite_difference = _finite_difference_charge_gradient(
-            model, batch, self._build_nl
-        )
-        work = batch.clone()
-        work.positions = work.positions.detach().requires_grad_(True)
-        work.charges = work.charges.detach().requires_grad_(True)
-        model.model_config.active_outputs = {"energy"}
-        energy = model(work)["energy"].sum()
-        position_gradient, charge_gradient = torch.autograd.grad(
-            energy, (work.positions, work.charges)
-        )
-
-        assert torch.isfinite(position_gradient).all()
-        assert torch.isfinite(charge_gradient).all()
-        torch.testing.assert_close(
-            charge_gradient, charge_finite_difference, rtol=2e-4, atol=2e-6
-        )
-
-    def test_mixed_position_charge_derivative_matches_finite_difference(self):
-        model = _make_pme()
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        position_direction = torch.randn_like(batch.positions)
-        charge_direction = torch.randn_like(batch.charges)
-        analytic, finite_difference = _mixed_position_charge_derivative(
-            model,
-            batch,
-            self._build_nl,
-            position_direction,
-            charge_direction,
-        )
-
-        torch.testing.assert_close(analytic, finite_difference, rtol=2e-4, atol=2e-6)
-
-    def test_derivative_state_restores_and_subsequent_forward_uses_cache(self):
-        model = _make_pme()
-        model.eval()
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        active_outputs = model.model_config.active_outputs
-        model.hessian_vector_product(batch, torch.randn_like(batch.positions))
-
-        assert model.model_config.active_outputs is active_outputs
-        assert model.training is False
-        output = model(batch)
-        assert torch.isfinite(output["energy"]).all()
-        assert model._cache_valid is True
-
-    @pytest.mark.parametrize("strategy", ["hvp", "loop", "vmap"])
-    @pytest.mark.parametrize(
-        ("kwargs", "reason"),
-        [
-            ({"hybrid_forces": True}, "hybrid_forces=False"),
-            ({"slab_correction": True}, "slab_correction=True"),
-        ],
-    )
-    def test_unsupported_modes_reject_before_forward(
-        self, strategy, kwargs, reason, monkeypatch
-    ):
-        model = _make_pme(**kwargs)
-        batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
-        self._build_nl(batch, model)
-        monkeypatch.setattr(model, "forward", lambda *_args, **_kwargs: pytest.fail())
-
-        with pytest.raises(DerivativeNotSupported, match=reason):
-            if strategy == "hvp":
-                model.hessian_vector_product(batch, torch.randn_like(batch.positions))
-            else:
-                model.compute_hessian(batch, strategy=strategy)
+    def _make_model(**kwargs):
+        return _make_pme(**kwargs)
 
 
 class TestPMECrossModel:

@@ -379,9 +379,9 @@ def _fixed_topology_force_finite_difference(
 
 @pytest.fixture(scope="module")
 def real_aimnet2_derivative_wrapper():
-    """Load the CUDA AIMNet2 checkpoint for derivative qualification."""
+    """Load the CUDA AIMNet2 checkpoint for derivative support tests."""
     if not torch.cuda.is_available():
-        pytest.skip("CUDA required for the AIMNet2 derivative qualification")
+        pytest.skip("CUDA required for AIMNet2 derivative support tests")
     pytest.importorskip("aimnet")
     from nvalchemi.models.aimnet2 import AIMNet2Wrapper
 
@@ -391,25 +391,45 @@ def real_aimnet2_derivative_wrapper():
 
 
 class TestAIMNet2Derivatives:
-    """Mock preflight and real CUDA qualification for AIMNet2 derivatives."""
+    """Mock preflight and real CUDA tests for AIMNet2 derivative support."""
 
-    def test_mock_hvp_is_energy_only(self, mock_model, simple_batch):
+    def test_mock_derivatives_match_quadratic_energy_only(
+        self, mock_model, simple_batch, monkeypatch
+    ):
         wrapper = _make_wrapper(mock_model)
-        result = wrapper.hessian_vector_product(
-            simple_batch, torch.randn_like(simple_batch.positions)
-        )
+        active_outputs_seen = []
+        derivative_outputs_seen = []
+        original_forward = wrapper.forward
 
-        assert result.shape == simple_batch.positions.shape
-        assert not result.requires_grad
+        def record_active_outputs(data, **kwargs):
+            active_outputs = set(wrapper.model_config.active_outputs)
+            active_outputs_seen.append(active_outputs)
+            outputs = original_forward(data, **kwargs)
+            derivative_outputs_seen.append(outputs)
+            return outputs
 
-    def test_mock_dense_loop_and_vmap_agree(self, mock_model, simple_batch):
-        wrapper = _make_wrapper(mock_model)
+        monkeypatch.setattr(wrapper, "forward", record_active_outputs)
+        vector = torch.randn_like(simple_batch.positions)
+        hvp = wrapper.hessian_vector_product(simple_batch, vector)
+
+        torch.testing.assert_close(hvp, 2 * vector)
+        assert not hvp.requires_grad
+
         loop_batch = simple_batch.clone()
         vmap_batch = simple_batch.clone()
-        wrapper.compute_hessian(loop_batch, strategy="loop", row_chunk_size=2)
-        wrapper.compute_hessian(vmap_batch, strategy="vmap", row_chunk_size=2)
-
+        wrapper.compute_hessian(loop_batch, strategy="loop")
+        wrapper.compute_hessian(vmap_batch, strategy="vmap")
         torch.testing.assert_close(loop_batch.hessian, vmap_batch.hessian)
+        for index, size in enumerate(loop_batch.num_nodes_list):
+            expected = 2.0 * torch.eye(
+                3 * size, dtype=loop_batch.positions.dtype
+            ).reshape(size, 3, size, 3).permute(0, 2, 1, 3)
+            torch.testing.assert_close(loop_batch.get_data(index).hessian, expected)
+
+        assert active_outputs_seen
+        assert all(outputs == {"energy"} for outputs in active_outputs_seen)
+        assert derivative_outputs_seen
+        assert all(outputs.get("forces") is None for outputs in derivative_outputs_seen)
 
     def test_distributed_rejection_precedes_forward(self, mock_model, simple_batch):
         wrapper = _make_wrapper(mock_model, compile_model=True)

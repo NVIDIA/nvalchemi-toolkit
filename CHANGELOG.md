@@ -4,13 +4,13 @@
 
 ### Added
 
-- Local position-Hessian APIs on model wrappers: one-shot Hessian-vector
-  products, reusable prepared operators, and in-place dense materialization on
-  the canonical `atoms x atoms` product level. Dense results retain their
-  schema and packed per-system blocks through the `Batch` lifecycle and Zarr
-  persistence. Eager AIMNet2, MACE, differentiable-energy Ewald/PME,
-  and connected flat pipelines are qualified; DFT-D3, unsupported Coulomb
-  modes, and distributed execution reject before evaluation.
+- Add Hessian APIs to model wrappers: one-shot Hessian-vector products,
+  reusable prepared operators, and in-place dense materialization on the
+  canonical `atoms x atoms` product level. Dense results retain their schema
+  and packed per-system blocks through the `Batch` lifecycle and Zarr
+  persistence. Eager AIMNet2, MACE, differentiable-energy Ewald/PME, and
+  connected flat pipelines are supported; DFT-D3, unsupported Coulomb modes,
+  and distributed execution reject before evaluation.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
@@ -27,7 +27,7 @@
 - `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
   model output. Custom MACE modules that relied on the raw upstream value must
   use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
-  the canonical position Hessian.
+  the Hessian with respect to Cartesian positions.
 
 ### Fixed
 

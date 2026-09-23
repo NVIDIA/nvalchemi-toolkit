@@ -535,7 +535,7 @@ def _attach_hessian_blocks(
 
 
 class HessianOperator:
-    """Matrix-free position Hessian for repeated products at one geometry.
+    """Matrix-free Hessian for repeated products at one geometry.
 
     Obtain an operator through
     :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`. Its
@@ -575,7 +575,7 @@ class HessianOperator:
         self._closed = False
 
     def matvec(self, vector: Tensor) -> Tensor:
-        """Multiply the retained position Hessian by one position-space vector.
+        """Multiply the retained Hessian by one position-space vector.
 
         Parameters
         ----------

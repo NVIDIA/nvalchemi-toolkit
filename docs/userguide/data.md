@@ -296,8 +296,8 @@ remains unchanged.
 ### Storing a Hessian
 
 {py:meth}`~nvalchemi.models.base.BaseModelMixin.compute_hessian` stores the
-canonical position Hessian on a product level whose left and right parents are
-both the built-in `atoms` level:
+Hessian of total energy with respect to Cartesian positions on a product level
+whose left and right parents are both the built-in `atoms` level:
 
 ```python
 result = model.compute_hessian(

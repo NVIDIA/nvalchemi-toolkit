@@ -377,7 +377,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         return _aimnet2_halo_spec()
 
     # ------------------------------------------------------------------
-    # Derivative qualification
+    # Derivative support
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:

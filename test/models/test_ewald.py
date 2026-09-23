@@ -736,8 +736,12 @@ class TestEwaldIntegration:
 # ===========================================================================
 
 
-class TestEwaldDerivatives:
-    """Qualified eager Ewald derivatives on fixed-topology CPU kernels."""
+class _PeriodicDerivativeCases:
+    """Shared eager Ewald/PME derivative behavior on fixed-topology CPU kernels."""
+
+    @staticmethod
+    def _make_model(**kwargs):
+        raise NotImplementedError
 
     @pytest.fixture(autouse=True)
     def _require_ops(self):
@@ -750,7 +754,7 @@ class TestEwaldDerivatives:
         compute_neighbors(batch, config=model.model_config.neighbor_config)
 
     def test_hvp_matches_fixed_topology_force_finite_difference(self):
-        model = _make_ewald()
+        model = self._make_model()
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
         vector = torch.randn_like(batch.positions)
@@ -763,7 +767,7 @@ class TestEwaldDerivatives:
         torch.testing.assert_close(hvp, finite_difference, rtol=2e-4, atol=2e-6)
 
     def test_dense_loop_vmap_contraction_and_symmetry(self):
-        model = _make_ewald()
+        model = self._make_model()
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
         vector = torch.randn_like(batch.positions)
@@ -785,7 +789,7 @@ class TestEwaldDerivatives:
         )
 
     def test_mixed_size_dense_blocks_preserve_system_order(self):
-        model = _make_ewald()
+        model = self._make_model()
         batch = _make_mixed_charged_batch()
         self._build_nl(batch, model)
 
@@ -796,7 +800,7 @@ class TestEwaldDerivatives:
         assert batch.get_data(1).hessian.shape == (3, 3, 3, 3)
 
     def test_energy_only_position_and_charge_gradients_are_connected(self):
-        model = _make_ewald()
+        model = self._make_model()
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
         charge_finite_difference = _finite_difference_charge_gradient(
@@ -818,7 +822,7 @@ class TestEwaldDerivatives:
         )
 
     def test_mixed_position_charge_derivative_matches_finite_difference(self):
-        model = _make_ewald()
+        model = self._make_model()
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
         position_direction = torch.randn_like(batch.positions)
@@ -834,7 +838,7 @@ class TestEwaldDerivatives:
         torch.testing.assert_close(analytic, finite_difference, rtol=2e-4, atol=2e-6)
 
     def test_derivative_state_restores_and_subsequent_forward_uses_cache(self):
-        model = _make_ewald()
+        model = self._make_model()
         model.eval()
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
@@ -858,7 +862,7 @@ class TestEwaldDerivatives:
     def test_unsupported_modes_reject_before_forward(
         self, strategy, kwargs, reason, monkeypatch
     ):
-        model = _make_ewald(**kwargs)
+        model = self._make_model(**kwargs)
         batch = _make_charged_batch(n_atoms=3, box_size=8.0, dtype=torch.float64)
         self._build_nl(batch, model)
         monkeypatch.setattr(model, "forward", lambda *_args, **_kwargs: pytest.fail())
@@ -868,6 +872,12 @@ class TestEwaldDerivatives:
                 model.hessian_vector_product(batch, torch.randn_like(batch.positions))
             else:
                 model.compute_hessian(batch, strategy=strategy)
+
+
+class TestEwaldDerivatives(_PeriodicDerivativeCases):
+    @staticmethod
+    def _make_model(**kwargs):
+        return _make_ewald(**kwargs)
 
 
 class TestEwaldHybridForces:

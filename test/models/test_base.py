@@ -199,7 +199,7 @@ class _QualifiedQuadraticDerivativeWrapper(_QuadraticDerivativeWrapperBase):
 
 
 class _LoopOnlyQuadraticDerivativeWrapper(_QualifiedQuadraticDerivativeWrapper):
-    """Test wrapper that deliberately leaves vectorized dense rows unqualified."""
+    """Test wrapper that deliberately rejects vectorized dense rows."""
 
     def _validate_derivative_request(self, request) -> None:
         if request.operation == "dense_hessian" and request.strategy == "vmap":
@@ -506,10 +506,7 @@ class TestDerivativeCapability:
         assert error.operation == ("hvp" if operation == "hvp" else "dense_hessian")
         assert error.execution == "local"
         assert error.strategy == strategy
-        assert (
-            error.reason
-            == "the wrapper has not been qualified for second-order derivatives"
-        )
+        assert error.reason == "the wrapper does not support second-order derivatives"
 
     def test_distributed_wrapper_reports_public_error_details(self, simple_batch):
         model = _QualifiedQuadraticDerivativeWrapper()
@@ -770,23 +767,6 @@ class TestHessianVectorProduct:
         assert model.model_config.gradient_keys is gradient_keys
         assert model.training is False
 
-    @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
-    def test_hvp_restores_outer_autograd_mode(self, outer_mode):
-        batch = _make_derivative_batch(2)
-        model = _QualifiedQuadraticDerivativeWrapper()
-        vector = torch.randn_like(batch.positions)
-        context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
-
-        with context:
-            expected_grad = torch.is_grad_enabled()
-            expected_inference = torch.is_inference_mode_enabled()
-            result = model.hessian_vector_product(batch, vector)
-            assert torch.is_grad_enabled() is expected_grad
-            assert torch.is_inference_mode_enabled() is expected_inference
-            assert not result.is_inference()
-
-        torch.testing.assert_close(result, 2 * vector)
-
     @pytest.mark.parametrize("context_kind", ["base", "distributed"])
     def test_capability_rejection_occurs_before_forward(
         self, simple_batch, context_kind
@@ -949,26 +929,6 @@ class TestHessianOperator:
         gc.collect()
         assert model.working_batch_ref() is None
         assert not hasattr(model, "_hessian_operator")
-
-    @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
-    def test_operator_restores_outer_autograd_mode(self, outer_mode):
-        batch = _make_derivative_batch(2)
-        model = _QualifiedQuadraticDerivativeWrapper()
-        vector = torch.randn_like(batch.positions)
-        context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
-
-        with context:
-            expected_grad = torch.is_grad_enabled()
-            expected_inference = torch.is_inference_mode_enabled()
-            operator = model.prepare_hessian(batch)
-            assert torch.is_grad_enabled() is expected_grad
-            assert torch.is_inference_mode_enabled() is expected_inference
-            result = operator.matvec(vector)
-            assert torch.is_grad_enabled() is expected_grad
-            assert torch.is_inference_mode_enabled() is expected_inference
-            operator.close()
-
-        torch.testing.assert_close(result, 2 * vector)
 
     def test_public_import_does_not_load_optional_model_packages(self):
         code = """
@@ -1367,18 +1327,38 @@ class TestDenseHessian:
         assert model.training is False
 
     @pytest.mark.parametrize("outer_mode", ["no_grad", "inference"])
-    def test_restores_outer_autograd_mode(self, outer_mode):
+    @pytest.mark.parametrize("operation", ["hvp", "prepared", "dense"])
+    def test_public_derivative_apis_restore_outer_autograd_mode(
+        self, outer_mode, operation
+    ):
         batch = _make_derivative_batch(2)
         model = _QualifiedQuadraticDerivativeWrapper()
+        vector = torch.randn_like(batch.positions)
         context = torch.no_grad() if outer_mode == "no_grad" else torch.inference_mode()
 
         with context:
             expected_grad = torch.is_grad_enabled()
             expected_inference = torch.is_inference_mode_enabled()
-            model.compute_hessian(batch)
+            if operation == "hvp":
+                result = model.hessian_vector_product(batch, vector)
+            elif operation == "prepared":
+                with model.prepare_hessian(batch) as operator:
+                    result = operator.matvec(vector)
+            else:
+                model.compute_hessian(batch)
+                result = batch.hessian
+
             assert torch.is_grad_enabled() is expected_grad
             assert torch.is_inference_mode_enabled() is expected_inference
-            assert not batch.hessian.is_inference()
+            assert not result.is_inference()
+
+        if operation == "dense":
+            expected_hessian = 2.0 * torch.eye(6, dtype=batch.positions.dtype).reshape(
+                2, 3, 2, 3
+            ).permute(0, 2, 1, 3)
+            torch.testing.assert_close(batch.get_data(0).hessian, expected_hessian)
+        else:
+            torch.testing.assert_close(result, 2 * vector)
 
     @pytest.mark.parametrize("context_kind", ["base", "distributed"])
     def test_capability_rejection_occurs_before_forward(self, context_kind):

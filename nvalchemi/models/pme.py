@@ -461,7 +461,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.invalidate_cache()
 
     # ------------------------------------------------------------------
-    # Derivative qualification
+    # Derivative support
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:

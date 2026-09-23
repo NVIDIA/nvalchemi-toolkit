@@ -507,8 +507,8 @@ The standard output shapes are:
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
 
-For position Hessians and Hessian-vector products, see
-{ref}`Position Hessians and Hessian-vector products <position-hessians>`.
+For Hessians and Hessian-vector products, see
+{ref}`Hessians and Hessian-vector products <hessians>`.
 
 ### Step 6 --- Implement `compute_embeddings`
 
@@ -890,11 +890,12 @@ outputs.
 See {doc}`about/conventions` for the project-wide virial, stress, and pressure
 sign conventions.
 
-(position-hessians)=
+(hessians)=
 
-### Position Hessians and Hessian-vector products
+### Hessians and Hessian-vector products
 
-Qualified wrappers expose the energy Hessian with respect to packed positions,
+Here, the Hessian is the matrix of second derivatives of total energy with
+respect to Cartesian positions:
 
 $$H = \frac{\partial^2 E}{\partial R^2}.$$
 
@@ -947,9 +948,11 @@ blocks, packed as `[sum(N_i**2), 3, 3]`; it does not store padded cross-system
 zeros. Returned HVPs and dense Hessians are detached.
 
 `strategy="vmap"` evaluates a chunk of Cartesian rows with batched
-vector-Jacobian products. `strategy="loop"` evaluates one row at a time.
-`row_chunk_size` counts flattened Cartesian rows, not atoms, and no strategy
-silently falls back to another.
+vector-Jacobian products. `strategy="loop"` evaluates one row at a time: a
+system with `N` atoms has `3N` Cartesian rows and requires `3N`
+second-derivative traversals of the retained model graph. The graph is built
+once, not rebuilt for each row. `row_chunk_size` counts flattened Cartesian
+rows, not atoms, and no strategy silently falls back to another.
 
 Both APIs differentiate the energy for the neighbor topology already supplied on
 the batch. They do not run neighbor hooks, rebuild lists, or differentiate the
@@ -958,7 +961,7 @@ the geometry changes; hold topology fixed when comparing to finite differences.
 
 #### Supported configurations
 
-The initial release qualifies local, uncompiled execution as follows:
+The table shows support in this release. "Yes" applies to local eager execution:
 
 | Configuration | HVP | Dense loop | Dense vmap |
 |---|---:|---:|---:|
@@ -972,19 +975,20 @@ The initial release qualifies local, uncompiled execution as follows:
 | Compiled execution | No | No | No |
 | Explicitly nested pipelines | No | No | No |
 
-cuEquivariance dense `vmap` is rejected because
-`cuequivariance::uniform_1d` does not provide the required batching rule; request
-`strategy="loop"` explicitly. Ewald and PME require differentiable-energy mode:
+cuEquivariance dense `vmap` is unsupported because `cuequivariance::uniform_1d`
+does not provide the required batching rule; use `strategy="loop"`. Ewald and
+PME require differentiable-energy mode:
 `hybrid_forces=True` supplies analytical first derivatives from detached geometry
-and cannot produce the complete position Hessian. Slab correction has not been
-qualified. DFT-D3's current analytical Warp derivative path does not expose the
-required energy double backward.
+and cannot produce the complete Hessian with respect to positions. Slab
+correction is not supported. DFT-D3's current analytical Warp derivative path
+does not expose the required energy double backward.
 
-Toolkit does not try to identify compiled modules or reject them before model
-evaluation. PyTorch's current AOTAutograd path raises when these APIs request the
-required double backward. Supporting compilation would require tracing and
-compiling a function that contains both the model forward and its first
-derivative; that integration remains future work.
+Compiled derivative execution is not supported. Toolkit does not identify
+compiled modules, reject them before evaluation, or fall back to eager
+execution. A call may fail after model evaluation begins when PyTorch requests
+a second derivative. The first-gradient connectivity guard rejects a wholly
+disconnected position gradient; it does not establish correctness for every
+model contribution.
 
 A flat {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` differentiates
 one connected total-energy graph. Wired outputs remain connected, so an

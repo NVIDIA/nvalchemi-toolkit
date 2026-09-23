@@ -806,8 +806,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                         self,
                         request,
                         "nested PipelineModelWrapper at "
-                        f"group[{group_index}].step[{step_index}] is not qualified; "
-                        "flatten the pipeline before requesting derivatives",
+                        f"group[{group_index}].step[{step_index}] does not support "
+                        "derivative requests; flatten the pipeline before requesting "
+                        "derivatives",
                     )
 
         plan = self._build_derivative_plan()

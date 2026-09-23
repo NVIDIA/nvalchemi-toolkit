@@ -665,7 +665,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         return cached
 
     # ------------------------------------------------------------------
-    # Derivative qualification
+    # Derivative support
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:

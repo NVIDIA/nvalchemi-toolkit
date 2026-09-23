@@ -538,7 +538,7 @@ class BaseModelMixin(abc.ABC):
         """
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Reject second-order derivatives until a wrapper is qualified.
+        """Reject second-order derivatives until a wrapper supports them.
 
         Parameters
         ----------
@@ -548,12 +548,12 @@ class BaseModelMixin(abc.ABC):
         Raises
         ------
         DerivativeNotSupported
-            Always, unless a qualified wrapper overrides this method.
+            Always, unless a wrapper that supports derivatives overrides it.
         """
         _reject_derivative_request(
             self,
             request,
-            "the wrapper has not been qualified for second-order derivatives",
+            "the wrapper does not support second-order derivatives",
         )
 
     def _derivative_energy(self, data: Batch) -> torch.Tensor:
@@ -583,13 +583,14 @@ class BaseModelMixin(abc.ABC):
         return output["energy"]
 
     def prepare_hessian(self, batch: Batch) -> HessianOperator:
-        """Prepare an immediately active matrix-free position Hessian.
+        """Prepare an immediately active matrix-free Hessian.
 
-        The operator represents ``d^2 E / dR^2`` at the supplied geometry. It
-        copies the batch inputs and retains a derivative graph evaluated with
-        the current model. Keep model parameters, buffers, execution mode, and
-        pipeline wiring unchanged while using it. Close the operator explicitly
-        or use it as a context manager.
+        The operator represents the second derivative of total energy with
+        respect to Cartesian positions, ``d^2 E / dR^2``, at the supplied
+        geometry. It copies the batch inputs and retains a derivative graph
+        evaluated with the current model. Keep model parameters, buffers,
+        execution mode, and pipeline wiring unchanged while using it. Close the
+        operator explicitly or use it as a context manager.
 
         Parameters
         ----------
@@ -607,7 +608,7 @@ class BaseModelMixin(abc.ABC):
         TypeError
             If ``batch`` is not a :class:`Batch`.
         DerivativeNotSupported
-            If this wrapper or execution context has not been qualified for HVPs.
+            If this wrapper or execution context does not support HVPs.
         RuntimeError
             If energy does not satisfy the connected derivative contract.
         """
@@ -626,7 +627,7 @@ class BaseModelMixin(abc.ABC):
         strategy: Literal["vmap", "loop"] = "vmap",
         row_chunk_size: int | None = None,
     ) -> Batch:
-        """Materialize the dense position Hessian on a batch in place.
+        """Materialize the dense Hessian on a batch in place.
 
         The model evaluates an independent snapshot, then attaches or replaces
         ``batch["hessian"]`` on the ``atoms x atoms`` product level. To keep a
@@ -634,8 +635,8 @@ class BaseModelMixin(abc.ABC):
         required neighbor data already prepared. For system ``i``, the logical
         field shape is ``[N_i, N_i, 3, 3]`` with axes
         ``[atom_out, atom_in, xyz_out, xyz_in]``; the packed batch shape is
-        ``[sum(N_i**2), 3, 3]``. The detached result is the energy Hessian
-        ``d^2 E / dR^2``, so the directional force Jacobian is ``-H @ v``.
+        ``[sum(N_i**2), 3, 3]``. The detached result is ``d^2 E / dR^2``, so
+        the directional force Jacobian is ``-H @ v``.
 
         Neighbor membership is held fixed at the topology supplied by
         ``batch``. The method does not run neighbor-list hooks or differentiate
@@ -667,8 +668,8 @@ class BaseModelMixin(abc.ABC):
             If tensor layout, storage declarations, strategy, or chunk size is
             incompatible with dense Hessian materialization.
         DerivativeNotSupported
-            If this wrapper or execution context has not been qualified for
-            the requested dense strategy.
+            If this wrapper or execution context does not support the requested
+            dense strategy.
         RuntimeError
             If energy does not satisfy the connected derivative contract.
         """
@@ -704,7 +705,7 @@ class BaseModelMixin(abc.ABC):
         batch: Batch,
         vectors: torch.Tensor,
     ) -> torch.Tensor:
-        """Compute a detached position Hessian-vector product.
+        """Compute a detached Hessian-vector product.
 
         This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed
         neighbor topology. It does not rebuild neighbors or differentiate
@@ -732,7 +733,7 @@ class BaseModelMixin(abc.ABC):
         ValueError
             If vector shape, dtype, or device does not match positions.
         DerivativeNotSupported
-            If this wrapper or execution context has not been qualified for HVPs.
+            If this wrapper or execution context does not support HVPs.
         """
         if not isinstance(batch, Batch):
             raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")

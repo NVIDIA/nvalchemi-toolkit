@@ -574,7 +574,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         )
 
     # ------------------------------------------------------------------
-    # Derivative qualification
+    # Derivative support
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:

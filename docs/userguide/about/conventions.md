@@ -4,10 +4,10 @@
 
 This page documents the project-wide sign conventions used by `nvalchemi`.
 
-## Position Hessian
+## Hessian
 
-The position Hessian is the second derivative of total energy with respect to
-Cartesian positions:
+Here, the Hessian is the matrix of second derivatives of total energy with
+respect to Cartesian positions:
 
 $$
 H_{ia,jb} = \frac{\partial^2 E}
