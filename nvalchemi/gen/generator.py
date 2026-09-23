@@ -376,9 +376,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     enable_inference_mode: bool = Field(
         default=True,
         description=(
-            "Run the session under torch.inference_mode: no autograd history "
-            "on generated batches. Set False when training on or "
-            "backpropagating through them."
+            "Run generation under `torch.inference_mode` in the context manager. "
+            "This disables gradient tracking, and so for generative workflows that "
+            "do require them, disable this field."
         ),
     )
     step_count: int = Field(
