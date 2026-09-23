@@ -552,45 +552,6 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 f"torch.compile; valid options: {sorted(valid)}."
             )
 
-    @field_validator("hooks", mode="before")
-    @classmethod
-    def _validate_hooks(cls, hooks: list[Any]) -> list[Any]:
-        """Validate each hook has the required members (frequency, stage, __call__).
-
-        Parameters
-        ----------
-        hooks
-            List of hook objects.
-
-        Returns
-        -------
-        list
-            The validated hooks.
-
-        Raises
-        ------
-        TypeError
-            If a hook is missing required members.
-        """
-        for i, hook in enumerate(hooks):
-            if isinstance(hook, dict):
-                continue  # a spec payload; the deserialization layer builds it
-            missing = []
-            if not hasattr(hook, "frequency"):
-                missing.append("frequency")
-            if not hasattr(hook, "stage"):
-                missing.append("stage")
-            if not callable(hook):
-                missing.append("__call__")
-            if missing:
-                raise TypeError(
-                    f"Hook at index {i} ({type(hook).__name__}) is missing "
-                    f"required members: {', '.join(missing)}. "
-                    f"A hook must have 'frequency' (int), 'stage' (Enum | None), "
-                    f"and be callable."
-                )
-        return hooks
-
     @model_validator(mode="after")
     def _validate_compile_kwargs(self) -> AtomisticGenerator:
         """Check ``compile_kwargs`` against the installed ``torch.compile`` signature.
