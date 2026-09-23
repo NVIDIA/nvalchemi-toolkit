@@ -926,7 +926,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 raise RuntimeError(
                     "PipelineModelWrapper: planned multiple neighbor-list sources, "
                     "but the batch has no captured pipeline neighbor sources. "
-                    "Ensure make_neighbor_hooks() hooks are registered."
+                    "Run the pipeline's neighbor hooks on this batch before evaluation."
                 )
             return None
         for source in sources:
@@ -934,8 +934,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 return source
         raise RuntimeError(
             "PipelineModelWrapper: missing neighbor source "
-            f"{plan.source_id} on batch. Ensure make_neighbor_hooks() hooks "
-            "are registered."
+            f"{plan.source_id} on batch. Run the pipeline's neighbor hooks "
+            "on this batch before evaluation."
         )
 
     @staticmethod
