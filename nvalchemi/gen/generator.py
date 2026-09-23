@@ -633,7 +633,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             payloads.append(create_model_spec(cls, **kwargs).model_dump(mode="json"))
         return payloads
 
-    @field_serializer("consumes_fields", "produces_fields")
+    @field_serializer("required_inputs", "outputs")
     def _serialize_field_declarations(
         self, value: frozenset[str] | None
     ) -> list[str] | None:

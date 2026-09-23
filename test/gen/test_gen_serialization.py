@@ -121,8 +121,8 @@ class TestAtomisticGeneratorDirectSerialization:
         """A fully wired generator round-trips through JSON and rebuilds."""
         gen = self._generator(
             hooks=[ScaleSampleHook(factor=3.0)],
-            consumes_fields=frozenset({"positions"}),
-            produces_fields=frozenset({"positions", "atomic_numbers"}),
+            required_inputs=frozenset({"positions"}),
+            outputs=frozenset({"positions", "atomic_numbers"}),
             num_samples=2,
             seed=11,
             device="cpu",
@@ -137,8 +137,8 @@ class TestAtomisticGeneratorDirectSerialization:
         assert rebuilt.device == torch.device("cpu")
         assert rebuilt.dedicated_stream is False
         assert rebuilt.compile_kwargs == {"backend": "eager"}
-        assert rebuilt.consumes_fields == frozenset({"positions"})
-        assert rebuilt.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert rebuilt.required_inputs == frozenset({"positions"})
+        assert rebuilt.outputs == frozenset({"positions", "atomic_numbers"})
         hook = rebuilt.hooks[0]
         assert isinstance(hook, ScaleSampleHook)
         assert hook.factor == 3.0
@@ -164,15 +164,15 @@ class TestAtomisticGeneratorDirectSerialization:
         """The JSON payload uses dotted paths and hook class captures."""
         gen = self._generator(
             hooks=[ScaleSampleHook(factor=3.0)],
-            consumes_fields=frozenset({"positions"}),
+            required_inputs=frozenset({"positions"}),
         )
         raw = json.loads(gen.model_dump_json())
         func = raw["generator_func"]
         assert func["cls_path"].endswith("_return_importable")
         assert func["path"].endswith("batch_generate")
         assert "batch_mapping" not in raw  # the field was removed
-        assert raw["consumes_fields"] == ["positions"]
-        assert raw["produces_fields"] is None
+        assert raw["required_inputs"] == ["positions"]
+        assert raw["outputs"] is None
         assert len(raw["hooks"]) == 1
         assert raw["hooks"][0]["cls_path"].endswith("ScaleSampleHook")
         assert raw["hooks"][0]["factor"] == 3.0
@@ -218,8 +218,8 @@ class TestAtomisticGeneratorDirectSerialization:
         blob = gen.model_dump_json()
         rebuilt = AtomisticGenerator.model_validate_json(blob)
         # The object captured itself as a make_demo_gan_generate factory spec.
-        assert rebuilt.consumes_fields == frozenset()
-        assert rebuilt.produces_fields == frozenset({"positions", "atomic_numbers"})
+        assert rebuilt.required_inputs == frozenset()
+        assert rebuilt.outputs == frozenset({"positions", "atomic_numbers"})
         assert rebuilt(make_batch(num_graphs=2)).num_graphs == 2
 
 
@@ -241,8 +241,8 @@ class TestGenerationPipelineDirectSerialization:
         """
         return AtomisticGenerator(
             generator_func=batch_generate,
-            consumes_fields=kwargs.pop("consumes_fields", frozenset()),
-            produces_fields=kwargs.pop("produces_fields", frozenset({"positions"})),
+            required_inputs=kwargs.pop("required_inputs", frozenset()),
+            outputs=kwargs.pop("outputs", frozenset({"positions"})),
             **kwargs,
         )
 
