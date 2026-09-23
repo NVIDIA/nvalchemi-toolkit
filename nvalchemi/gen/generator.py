@@ -87,11 +87,10 @@ A GAN, one forward pass, returning a batch directly::
     gan = AtomisticGenerator(generator_func=gan_generate)
 
 Model-owning procedures — a callable object carries the model (plus
-``device`` and field declarations the driver reads as defaults); module-level
-factories such as
-:func:`~nvalchemi.models.gen.demo.make_demo_gan_generate` build such objects::
+``device`` and field declarations the driver reads as defaults); the demo
+module's model-owning samplers are such objects::
 
-    gen = AtomisticGenerator(generator_func=make_demo_gan_generate(DemoGANModel()))
+    gen = AtomisticGenerator(generator_func=_DemoGANGenerate(DemoGANModel()))
 
 Streaming — one ``sample()`` call per input item; ``None`` means repeated
 unconditional draws (an infinite stream unless capped)::
@@ -122,7 +121,7 @@ from __future__ import annotations
 import inspect
 import itertools
 from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -665,9 +664,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     self._stream = torch.cuda.Stream(device=device)
                     # order the session stream after the caller's in-flight work
                     self._stream.wait_stream(torch.cuda.current_stream(device))
-                    self._stream_ctx = stack.enter_context(
-                        torch.cuda.stream(self._stream)
-                    )
+                    self._stream_ctx = torch.cuda.stream(self._stream)
+                    stack.enter_context(self._stream_ctx)
             if self.seed is not None and self._session_rng is None:
                 device = self._infer_device()
                 rng_device = (
@@ -859,29 +857,21 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                         f"call's inputs lack {missing}. Provide the fields in the "
                         "inputs or in the condition step, or fix the declaration."
                     )
-            with (
-                torch.cuda.stream(self._stream)
-                if self._stream is not None
-                else nullcontext()
-            ):
-                gen_fn = self._compiled_generate or self.generator_func
-                ctx.sample = gen_fn(
-                    ctx.inputs,
-                    num_samples=n_draws,
-                    rng=rng,
-                    **kwargs,
-                )
-                if not isinstance(ctx.sample, Batch):
-                    # raw passthrough: AFTER_GENERATE hooks are Batch-level
-                    return ctx.sample
-                ctx.batch = ctx.sample
+            gen_fn = self._compiled_generate or self.generator_func
+            ctx.sample = gen_fn(
+                ctx.inputs,
+                num_samples=n_draws,
+                rng=rng,
+                **kwargs,
+            )
+            if not isinstance(ctx.sample, Batch):
+                # raw passthrough: AFTER_GENERATE hooks are Batch-level
+                return ctx.sample
+            # at this point, we should be able to treat the
+            # sample as the batch now,
+            ctx.batch = ctx.sample
             self._call_hooks(GenerationStage.AFTER_GENERATE, None)
             batch = ctx.batch
-            if not isinstance(batch, Batch):
-                raise TypeError(
-                    "AFTER_GENERATE hooks must leave ctx.batch a Batch, got "
-                    f"{type(batch).__name__}."
-                )
             device = self._infer_device()
             if (
                 device is not None

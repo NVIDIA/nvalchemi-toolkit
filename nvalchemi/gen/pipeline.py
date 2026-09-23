@@ -261,7 +261,8 @@ class GenerationPipeline(BaseModel):
                 self._stream = torch.cuda.Stream(device=device)
                 # order the session stream after the caller's in-flight work
                 self._stream.wait_stream(torch.cuda.current_stream(device))
-                self._stream_ctx = stack.enter_context(torch.cuda.stream(self._stream))
+                self._stream_ctx = torch.cuda.stream(self._stream)
+                stack.enter_context(self._stream_ctx)
             for stage in self.stages:
                 if isinstance(stage, AtomisticGenerator):
                     if stage.dedicated_stream and (

@@ -26,15 +26,12 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from nvalchemi.data import Batch
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
-from nvalchemi.models.gen import (
-    DemoGANModel,
-    demo_nonparametric_generation,
-    make_demo_gan_generate,
-)
+from nvalchemi.models.gen import DemoGANModel
+from nvalchemi.models.gen.demo import _DemoGANGenerate
 from test.gen.conftest import (
     make_batch,
     trivial_generate,
@@ -65,10 +62,10 @@ def _generator(
     Returns
     -------
     AtomisticGenerator
-        A declared generator backed by a factory-built demo procedure.
+        A declared generator backed by a demo sampler.
     """
     return AtomisticGenerator(
-        generator_func=make_demo_gan_generate(DemoGANModel().to(device)),
+        generator_func=_DemoGANGenerate(DemoGANModel().to(device)),
         required_inputs=frozenset() if consumes is None else consumes,
         outputs=frozenset() if produces is None else produces,
         hooks=hooks or [],
@@ -302,9 +299,7 @@ class TestFieldContractValidation:
 
     def test_function_attributes_default_into_pipeline_validation(self) -> None:
         """Declarations carried by the generating function satisfy the contract."""
-        declared = AtomisticGenerator(
-            generator_func=make_demo_gan_generate(DemoGANModel())
-        )
+        declared = AtomisticGenerator(generator_func=_DemoGANGenerate(DemoGANModel()))
         assert declared.required_inputs == frozenset()
         pipe = GenerationPipeline(stages=[declared, _generator()])
         assert isinstance(pipe, GenerationPipeline)
@@ -459,10 +454,25 @@ def _dynamics_batch(num_graphs: int = 2) -> Batch:
     return batch
 
 
-def _nonparametric_cuda(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch:
-    """The nonparametric source with the function-owned device move."""
+def _synthetic_structures(num_samples: int, rng=None) -> Batch:
+    """Small synthetic point-cloud batch with leaf tensors (dynamics-ready)."""
+    positions = torch.rand(num_samples, 3, 3, generator=rng)
+    numbers = torch.full((3,), 6, dtype=torch.long)
+    return Batch.from_data_list(
+        [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
+    )
+
+
+def _synthetic_source(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch:
+    """Synthetic-structure source stage for session-less folds."""
     del inputs, kwargs
-    return demo_nonparametric_generation(num_samples=num_samples, rng=rng).to("cuda")
+    return _synthetic_structures(num_samples, rng)
+
+
+def _nonparametric_cuda(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch:
+    """A synthetic-structure source with the function-owned device move."""
+    del inputs, kwargs
+    return _synthetic_structures(num_samples, rng).to("cuda")
 
 
 class _RunRecorder:
@@ -500,7 +510,7 @@ class TestDynamicsStages:
         from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
         gen = AtomisticGenerator(
-            generator_func=demo_nonparametric_generation,
+            generator_func=_synthetic_source,
             required_inputs=frozenset(),
             outputs=frozenset({"positions", "atomic_numbers"}),
         )
