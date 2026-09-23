@@ -232,7 +232,7 @@ class TestFoldAndStream:
 
 
 class TestMappinglessStages:
-    """A mapping-less generator yields its raw sample — terminal stages only."""
+    """A generator returning a non-Batch sample yields it raw — terminal stages only."""
 
     def test_mappingless_terminal_stage_returns_raw_sample(self) -> None:
         """A terminal AtomisticGenerator without ``batch_mapping`` ends the fold with
@@ -248,8 +248,8 @@ class TestMappinglessStages:
         assert out.batch_size[0] == 2
 
     def test_mappingless_mid_pipeline_feeds_raw_sample_downstream(self) -> None:
-        """A mid-pipeline mapping-less stage hands its raw sample to the next
-        stage untouched (no validation, no materialization)."""
+        """A mid-pipeline non-Batch stage hands its raw sample to the next
+        stage untouched (no hooks, no field checks)."""
         seen: list = []
 
         def _spy(inputs=None, *, num_samples=1, rng=None, **kwargs):
