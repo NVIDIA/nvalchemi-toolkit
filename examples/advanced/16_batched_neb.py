@@ -50,7 +50,7 @@ Run on a single CUDA 12 GPU through ``uv``:
 .. code-block:: bash
 
    uv run --extra cu12 --extra aimnet python \
-       examples/advanced/11_batched_neb.py
+       examples/advanced/16_batched_neb.py
 
 For CUDA 13, replace ``--extra cu12`` with ``--extra cu13``.
 

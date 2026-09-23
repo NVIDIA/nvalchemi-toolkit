@@ -249,6 +249,35 @@ class TestInterpolatePaths:
         assert "energy" not in paths
         assert "forces" in initial
 
+    def test_discards_neighbor_storage_and_edge_counts(self, device: str) -> None:
+        """Remove edge metadata together with stale neighbor tensors."""
+        initial = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=torch.zeros(2, 3),
+                    atomic_numbers=torch.tensor([1, 8]),
+                    neighbor_list=torch.tensor([[0, 1], [1, 0]]),
+                    shifts=torch.zeros(2, 3),
+                )
+            ]
+        ).to(device)
+        final = _batch(
+            [torch.ones(2, 3)],
+            [torch.tensor([1, 8])],
+            device=device,
+        )
+
+        paths = interpolate_paths(initial, final, 3)
+
+        assert initial.num_edges_list == [2]
+        assert paths.num_edges == 0
+        assert paths.num_edges_list == []
+        assert paths.num_edges_per_graph.numel() == 0
+        assert paths.model_dump()["num_edges_list"] == []
+        assert "edges" not in paths._storage.groups
+        assert "neighbor_list" not in paths
+        assert "shifts" not in paths
+
     def test_uses_minimum_image_displacement_per_graph_and_keeps_endpoints(
         self, device: str
     ) -> None:
