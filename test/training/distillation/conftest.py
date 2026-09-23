@@ -116,10 +116,17 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         return {"node_embeddings": (self.model.hidden_dim,)}
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect the tensors the underlying model's forward expects."""
+        """Collect the tensors the underlying model's forward expects, at its dtype.
+
+        Positions are cast to the parameter dtype, which is what lets a
+        reduced-precision copy of this model run over an ordinary float32 batch.
+        """
         model_inputs = super().adapt_input(data, **kwargs)
         model_inputs["batch_indices"] = (
             data.batch_idx if isinstance(data, Batch) else None
+        )
+        model_inputs["positions"] = model_inputs["positions"].to(
+            next(self.model.parameters()).dtype
         )
         return model_inputs
 
@@ -129,7 +136,10 @@ class _DirectForceTeacher(nn.Module, BaseModelMixin):
         """Write per-node embeddings onto *data* in place."""
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
-        features = self.model.features(data.atomic_numbers, data.positions)
+        features = self.model.features(
+            data.atomic_numbers,
+            data.positions.to(next(self.model.parameters()).dtype),
+        )
         atoms_group = data._atoms_group
         if atoms_group is not None:
             atoms_group["node_embeddings"] = features
