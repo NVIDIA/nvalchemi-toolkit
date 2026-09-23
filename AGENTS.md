@@ -222,7 +222,7 @@ chains are documented in `.claude/skills/README.md`.
 
 | Skill | Use when |
 |-------|----------|
-| `nvalchemi-data-structures` | Building or batching atomic systems; shape, dtype, or device errors |
+| `nvalchemi-data-structures` | Building, batching, or grouping atomic systems; shape, dtype, or device errors |
 | `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
 | `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
 | `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |

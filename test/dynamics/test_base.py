@@ -517,6 +517,39 @@ class TestBaseDynamics:
         )
         assert dynamics.convergence_hook is hook
 
+    def test_compute_publishes_only_active_graph_and_node_rows(self) -> None:
+        """Active rows convert model outputs and inactive rows stay unchanged."""
+        self.model.double()
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+        batch.energy.fill_(-11.0)
+        batch.forces.fill_(-13.0)
+        active_graph_mask = torch.tensor([True, False])
+        active_node_mask = active_graph_mask[batch.batch_idx]
+
+        outputs = dynamics.compute(batch, active_graph_mask)
+
+        assert outputs["energy"].dtype == torch.float64
+        assert outputs["forces"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        assert batch.forces.dtype == torch.float32
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            outputs["energy"][active_graph_mask].to(batch.energy.dtype),
+        )
+        torch.testing.assert_close(
+            batch.forces[active_node_mask],
+            outputs["forces"][active_node_mask].to(batch.forces.dtype),
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -11.0),
+        )
+        torch.testing.assert_close(
+            batch.forces[~active_node_mask],
+            torch.full_like(batch.forces[~active_node_mask], -13.0),
+        )
+
     def test_compute_restores_requires_grad_on_autograd_inputs(self) -> None:
         """Verify compute() restores requires_grad on positions after forwarding.
 
@@ -867,6 +900,23 @@ class TestConvergenceHook:
 
         assert result is not None
         assert result.tolist() == [0]
+
+    def test_by_group_requires_all_graphs_to_converge(self) -> None:
+        """Grouped convergence should return either every group member or none."""
+        batch = create_simple_batch()
+        batch.set_group_layout(torch.tensor([0, 0]))
+        batch["fmax"] = torch.tensor([0.01, 0.10])
+        hook = self.ConvergenceHook(
+            criteria={"key": "fmax", "threshold": 0.05},
+            by_group=True,
+        )
+
+        assert hook.evaluate(batch) is None
+
+        batch["fmax"] = torch.tensor([0.01, 0.02])
+        converged = hook.evaluate(batch)
+        assert converged is not None
+        assert converged.tolist() == [0, 1]
 
     def test_multi_criteria_and_semantics(self) -> None:
         """Verify two criteria (fmax AND energy_change) require both to converge."""

@@ -1,0 +1,608 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""NEB force hook configuration."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from enum import Enum
+from typing import Literal
+from uuid import uuid4
+
+import torch
+from torch import Tensor
+
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
+from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
+from nvalchemi.dynamics.paths.neb._ops.modes import ENDPOINT, REGULAR_NEB
+from nvalchemi.dynamics.paths.neb._ops.registry import (
+    get_neb_method,
+    register_neb_method,
+)
+from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
+from nvalchemi.dynamics.paths.neb.configs import (
+    ConstantSpringConfig,
+    NEBMethod,
+    SpringConfig,
+    SpringContext,
+)
+from nvalchemi.dynamics.paths.validate import validate_paths
+from nvalchemi.hooks import DynamicsContext
+
+
+@dataclass
+class _NEBWorkspace:
+    """Persistent buffers resolved for a NEB batch containing multiple
+    paths.
+
+    Attributes
+    ----------
+    image_ptr : Tensor
+        Int32 atom offsets delimiting packed images, shape ``(num_images + 1,)``.
+        Copied from the batch so the kernel receives its required index dtype.
+    path_ptr : Tensor
+        Int32 image offsets delimiting packed paths, shape ``(num_paths + 1,)``.
+        Copied from the group layout for the kernel's required index dtype.
+    image_path_idx : Tensor
+        Int32 path index for each packed image, shape ``(num_images,)``.
+        Copied from the group layout for the kernel's required index dtype and
+        stable workspace ownership.
+    link_source_image_idx : Tensor
+        Image index owning each forward link, shape
+        ``(num_images - num_paths,)``. The final image in every path is omitted.
+    spring_constants : Tensor
+        Per-link spring constants, shape ``(num_images - num_paths,)``.
+    fixed_node_mask : Tensor
+        Boolean mask of atoms that must not be updated, shape
+        ``(num_atoms,)``.
+    cell : Tensor
+        Representative cell per path, shape ``(num_paths, 3, 3)``.
+    pbc : Tensor
+        Periodic-boundary flags per path, shape ``(num_paths, 3)``.
+    mic : PreparedMIC
+        Reduced-lattice MIC buffers prepared once during admission.
+    effective_forces : Tensor
+        Per-atom output force buffer, shape ``(num_atoms, 3)``.
+    link_lengths : Tensor
+        Per-link distance buffer, shape ``(num_images - num_paths,)``.
+    vector_scratch : Tensor
+        Per-atom vector scratch buffer, shape ``(num_atoms, 3)``.
+    """
+
+    image_ptr: Tensor
+    path_ptr: Tensor
+    image_path_idx: Tensor
+    link_source_image_idx: Tensor
+
+    spring_constants: Tensor
+    fixed_node_mask: Tensor
+    cell: Tensor
+    pbc: Tensor
+    mic: PreparedMIC
+    effective_forces: Tensor
+    link_lengths: Tensor
+    vector_scratch: Tensor
+
+
+def _resolve_neb_method(method: str | NEBMethod) -> str:
+    """Resolve a registered method name or validate a method configuration.
+
+    Parameters
+    ----------
+    method : str or NEBMethod
+        Registered built-in name or an explicit equation configuration.
+
+    Returns
+    -------
+    str
+        The validated or newly registered method name.
+
+    Raises
+    ------
+    TypeError
+        If ``method`` is neither a string nor an :class:`NEBMethod`.
+    ValueError
+        If a string does not name a registered method.
+    """
+    if isinstance(method, NEBMethod):
+        method_name = method.name or f"__runtime_neb_method_{uuid4().hex}"
+        register_neb_method(
+            name=method_name,
+            tangent_fn=method.tangent_weights_fn,
+            force_fn=method.effective_force_fn,
+            climbing_force_fn=method.climbing_force_fn,
+        )
+        return method_name
+    if not isinstance(method, str):
+        raise TypeError(
+            "method must be a registered method name or an NEBMethod; "
+            f"got {type(method).__name__}"
+        )
+    get_neb_method(method)
+    return method
+
+
+class NEBForceHook:
+    """Configure optimizer-facing forces for nudged elastic band dynamics.
+
+    The hook prepares structural state at :attr:`DynamicsStage.ON_ADMISSION` and
+    publishes the combined endpoint and user-fixed node mask for a
+    :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`. At
+    :attr:`DynamicsStage.AFTER_COMPUTE`, it refreshes the spring constants and
+    then replaces physical forces with the selected NEB force formulation.
+    Energy extrema and image force modes come from hooks registered before this
+    hook.
+
+    Parameters
+    ----------
+    energy_stats_hook : PathEnergyStatsHook
+        Shared path-energy statistics hook registered before this hook.
+    spring : float or SpringConfig, optional
+        Positive constant spring value or a policy that resolves one
+        spring constant for every adjacent image pair. Default is ``0.1``.
+    method : str or NEBMethod, optional
+        Registered method name or a custom set of Warp equation functions.
+        Default is ``"improved_tangent"``.
+    endpoint_mode : {"fixed", "relaxed"}, optional
+        Whether path endpoint images remain fixed or use their physical
+        forces. Default is ``"fixed"``.
+    fixed_atom_indices : mapping of int to sequence of int, optional
+        Image-local atom indices that must remain fixed in every image of each
+        keyed path. Keys are zero-based path indices; omitted paths have no
+        additional fixed atoms. All three Cartesian components of every selected
+        atom are fixed. Atoms in fixed endpoint images are added automatically.
+
+    Attributes
+    ----------
+    stage : DynamicsStage
+        Primary hook stage, :attr:`DynamicsStage.AFTER_COMPUTE`. The hook also
+        runs at :attr:`DynamicsStage.ON_ADMISSION` for batch preparation.
+    frequency : int
+        Always ``1``. NEB forces must be refreshed after every model-force
+        evaluation.
+
+    Notes
+    -----
+    Component-level constraints, such as fixing only one Cartesian axis, are
+    not supported.
+
+    Examples
+    --------
+    Use the registered improved-tangent method with a constant spring::
+
+        energy_stats = PathEnergyStatsHook()
+        hook = NEBForceHook(
+            energy_stats_hook=energy_stats,
+            spring=0.1,
+            method="improved_tangent",
+            fixed_atom_indices={0: [0, 2], 1: [1]},
+        )
+
+    Pass a custom equation configuration directly::
+
+        method = NEBMethod(
+            tangent_weights_fn=my_tangent_weights,
+            effective_force_fn=my_effective_force,
+            climbing_force_fn=my_climbing_force,
+        )
+        hook = NEBForceHook(energy_stats_hook=energy_stats, method=method)
+    """
+
+    stage = DynamicsStage.AFTER_COMPUTE
+    frequency = 1
+
+    def __init__(
+        self,
+        *,
+        energy_stats_hook: PathEnergyStatsHook,
+        spring: float | SpringConfig = 0.1,
+        method: str | NEBMethod = "improved_tangent",
+        endpoint_mode: Literal["fixed", "relaxed"] = "fixed",
+        fixed_atom_indices: Mapping[int, Sequence[int]] | None = None,
+    ) -> None:
+        """Initialize the NEB force hook.
+
+        Raises
+        ------
+        TypeError
+            If an argument has an unsupported type.
+        ValueError
+            If the spring, spring refresh stage, method name, or endpoint mode
+            is invalid.
+        """
+        if not isinstance(energy_stats_hook, PathEnergyStatsHook):
+            raise TypeError("energy_stats_hook must be a PathEnergyStatsHook")
+
+        # Normalize numeric springs into the common policy interface and reject
+        # refresh stages that this multi-stage hook cannot handle.
+        if isinstance(spring, (int, float)):
+            spring = ConstantSpringConfig(spring)
+        elif not isinstance(spring, SpringConfig):
+            raise TypeError(
+                "spring must be a number or implement SpringConfig.resolve; "
+                f"got {type(spring).__name__}"
+            )
+        if not isinstance(spring.refresh, DynamicsStage):
+            raise TypeError("SpringConfig.refresh must be a DynamicsStage")
+        if spring.refresh not in {
+            DynamicsStage.ON_ADMISSION,
+            DynamicsStage.AFTER_COMPUTE,
+        }:
+            raise ValueError(
+                "SpringConfig.refresh must be DynamicsStage.ON_ADMISSION or "
+                "DynamicsStage.AFTER_COMPUTE"
+            )
+
+        # Resolve registered names during setup so invalid methods fail early.
+        resolved_method = _resolve_neb_method(method)
+
+        # Validate endpoint behavior and image-local atom constraints together.
+        if endpoint_mode not in {"fixed", "relaxed"}:
+            raise ValueError("endpoint_mode must be 'fixed' or 'relaxed'")
+        if fixed_atom_indices is not None:
+            if not isinstance(fixed_atom_indices, Mapping):
+                raise TypeError(
+                    "fixed_atom_indices must map path indices to atom-index sequences"
+                )
+            try:
+                fixed_atom_indices = {
+                    path_index: tuple(atom_indices)
+                    for path_index, atom_indices in fixed_atom_indices.items()
+                }
+            except TypeError as error:
+                raise TypeError(
+                    "fixed_atom_indices values must be sequences of integers"
+                ) from error
+            if any(
+                isinstance(path_index, bool) or not isinstance(path_index, int)
+                for path_index in fixed_atom_indices
+            ):
+                raise TypeError("fixed_atom_indices keys must be integer path indices")
+            if any(
+                isinstance(atom_index, bool) or not isinstance(atom_index, int)
+                for atom_indices in fixed_atom_indices.values()
+                for atom_index in atom_indices
+            ):
+                raise TypeError("fixed_atom_indices values must contain only integers")
+
+        self.energy_stats_hook = energy_stats_hook
+        self.spring = spring
+        self.method = resolved_method
+        self.endpoint_mode = endpoint_mode
+        self.fixed_atom_indices = fixed_atom_indices
+        self._workspace: _NEBWorkspace | None = None
+
+    def on_register(self, workflow: object) -> None:
+        """Require group-aware dynamics for NEB force construction.
+
+        Parameters
+        ----------
+        workflow : object
+            Workflow on which this hook is being registered.
+
+        Raises
+        ------
+        ValueError
+            If the workflow does not enable group-aware dynamics.
+        """
+        if not getattr(workflow, "by_group", False):
+            raise ValueError(
+                f"{type(self).__name__} requires dynamics configured with by_group=True"
+            )
+
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        """Return whether the hook participates in a dynamics stage.
+
+        Parameters
+        ----------
+        stage : Enum
+            Stage currently being dispatched by the hook registry.
+
+        Returns
+        -------
+        bool
+            Whether to run structural preparation or force construction.
+        """
+        return stage in {
+            DynamicsStage.ON_ADMISSION,
+            DynamicsStage.AFTER_COMPUTE,
+        }
+
+    @torch.compiler.disable
+    def _prepare_batch(self, ctx: DynamicsContext) -> None:
+        """Validate and initialize private state for a new batch structure.
+
+        This helper is reached only through the ``ON_ADMISSION`` branch of
+        :meth:`__call__` and is typically called once for a batch.
+
+        Parameters
+        ----------
+        ctx : DynamicsContext
+            Context containing the newly admitted grouped path batch.
+
+        Raises
+        ------
+        ValueError
+            If the batch has no valid group layout, or if the paths, fixed atom
+            indices, cells, or PBC flags are incompatible with NEB evaluation.
+        """
+        batch = ctx.batch
+        validate_paths(batch)
+        layout = batch.group_layout
+        dtype = batch.positions.dtype
+        device = batch.device
+
+        # Each path's first and last images use endpoint force handling.
+        last_rank: Tensor = layout.num_graphs_per_group[layout.group_idx] - 1
+        is_terminal = layout.graph_rank == last_rank
+        is_endpoint = (layout.graph_rank == 0) | is_terminal
+        force_mode = torch.full_like(
+            layout.group_idx,
+            REGULAR_NEB,
+            dtype=torch.int32,
+        )
+        force_mode[is_endpoint] = ENDPOINT
+
+        # Identify fixed atoms including those in fixed endpoints.
+        fixed_atoms = torch.zeros(
+            batch.num_nodes,
+            dtype=torch.bool,
+            device=device,
+        )
+        if self.fixed_atom_indices is not None:
+            num_nodes_per_image = batch.num_nodes_per_graph
+            for path_index, atom_indices in self.fixed_atom_indices.items():
+                if path_index < 0 or path_index >= layout.num_groups:
+                    raise ValueError(
+                        "fixed_atom_indices keys must reference existing paths; "
+                        f"got {path_index}"
+                    )
+                path_start = layout.group_ptr[path_index].item()
+                path_end = layout.group_ptr[path_index + 1].item()
+                image_starts = batch.batch_ptr[path_start:path_end].long()
+                for atom_index in atom_indices:
+                    if atom_index < 0 or torch.any(
+                        num_nodes_per_image[path_start:path_end] <= atom_index
+                    ):
+                        raise ValueError(
+                            f"fixed_atom_indices[{path_index}] must contain valid "
+                            f"image-local atom indices; got {atom_index}"
+                        )
+                    fixed_atoms[image_starts + atom_index] = True
+        if self.endpoint_mode == "fixed":
+            fixed_atoms[is_endpoint[batch.batch_idx.long()]] = True
+
+        # `validate_paths` guarantees cell and PBC consistency within each path,
+        # so the kernels only need the first image's geometry. Missing cells use
+        # dense identity matrices rather than zero-stride expanded views.
+        cells = batch.cell if "cell" in batch else None
+        pbcs = batch.pbc if "pbc" in batch else None
+        # Graph indices selecting the first image of each path.
+        first_image_idx = layout.group_ptr[:-1]
+        if cells is None:
+            path_cell = (
+                torch.eye(3, dtype=dtype, device=device)
+                .unsqueeze(0)
+                .repeat(layout.num_groups, 1, 1)
+            )
+        else:
+            path_cell = cells[first_image_idx].to(dtype=dtype).contiguous()
+        if pbcs is None:
+            path_pbc = torch.zeros(
+                layout.num_groups, 3, dtype=torch.bool, device=device
+            )
+        else:
+            path_pbc = pbcs[first_image_idx].bool().contiguous()
+
+        n_links = batch.num_graphs - layout.num_groups
+        spring_constants = torch.empty(n_links, dtype=dtype, device=device)
+
+        # Normalize kernel index buffers to int32.
+        int32_max = torch.iinfo(torch.int32).max
+        if batch.num_graphs > int32_max or batch.num_nodes > int32_max:
+            raise ValueError("Path kernel layout exceeds int32 index capacity")
+        image_ptr = batch.batch_ptr.to(torch.int32).contiguous()
+        path_ptr = layout.group_ptr.to(torch.int32).contiguous()
+        image_path_idx = layout.group_idx.to(torch.int32).contiguous()
+        link_source_image_idx = torch.where(~is_terminal)[0].contiguous()
+
+        # Include fields shared with other hooks on `Batch`.
+        def set_batch_field(key: str, value: Tensor, level: str) -> None:
+            if key in batch:
+                target = getattr(batch, key)
+                if (
+                    target.shape == value.shape
+                    and target.dtype == value.dtype
+                    and target.device == value.device
+                ):
+                    target.copy_(value)
+                    return
+            values = (
+                list(value.unbind())
+                if level == "system"
+                else list(value.split(batch.num_nodes_list))
+            )
+            batch.add_key(key, values, level=level, overwrite=key in batch)
+
+        set_batch_field("force_mode", force_mode, "system")
+        set_batch_field(
+            "physical_forces",
+            torch.zeros_like(batch.positions),
+            "node",
+        )
+        set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
+        set_batch_field(
+            "forward_link_length",
+            torch.zeros(batch.num_graphs, dtype=dtype, device=device),
+            "system",
+        )
+
+        # Keep kernel-only masks and buffers private on workspace.
+        prepared_mic = prepare_batch_mic(batch, path_cell, path_pbc)
+        self._workspace = _NEBWorkspace(
+            spring_constants=spring_constants,
+            fixed_node_mask=batch.neb_fixed_node_mask,
+            cell=path_cell,
+            pbc=path_pbc,
+            mic=prepared_mic,
+            effective_forces=torch.empty_like(batch.positions),
+            link_lengths=torch.empty(n_links, dtype=dtype, device=device),
+            vector_scratch=torch.empty_like(batch.positions),
+            image_ptr=image_ptr,
+            path_ptr=path_ptr,
+            image_path_idx=image_path_idx,
+            link_source_image_idx=link_source_image_idx,
+        )
+
+        self._refresh_spring_constants(ctx, DynamicsStage.ON_ADMISSION)
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Prepare NEB state or construct NEB forces.
+
+        Parameters
+        ----------
+        ctx : DynamicsContext
+            Context containing the current grouped path batch.
+        stage : DynamicsStage
+            Current dynamics stage. Preparation occurs at ``ON_ADMISSION``
+            and force construction occurs at ``AFTER_COMPUTE``.
+
+        Raises
+        ------
+        RuntimeError
+            If the force phase runs before the batch has been prepared.
+        """
+        if stage == DynamicsStage.ON_ADMISSION:
+            self._prepare_batch(ctx)
+            return
+
+        if stage != DynamicsStage.AFTER_COMPUTE:
+            return
+
+        batch = ctx.batch
+        workspace = self._workspace
+        method_name = self.method
+        active_nodes = (
+            torch.ones_like(workspace.fixed_node_mask)
+            if ctx.active_graph_mask is None
+            else ctx.active_graph_mask[batch.batch_idx.long()]
+        )
+        active_fixed_nodes = active_nodes & workspace.fixed_node_mask
+        stats = self.energy_stats_hook.get_stats(ctx)
+        # Copy to `batch.physical_forces` before computation
+        torch.where(
+            active_nodes.unsqueeze(-1),
+            batch.forces,
+            batch.physical_forces,
+            out=batch.physical_forces,
+        )
+        batch.physical_forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
+        self._refresh_spring_constants(ctx, DynamicsStage.AFTER_COMPUTE)
+        neb_forces(
+            positions=batch.positions.contiguous(),
+            physical_forces=batch.physical_forces.contiguous(),
+            image_energies=batch.energy.reshape(-1).contiguous(),
+            image_ptr=workspace.image_ptr,
+            path_ptr=workspace.path_ptr,
+            image_path_idx=workspace.image_path_idx,
+            spring_constants=workspace.spring_constants,
+            image_force_mode=batch.force_mode,
+            path_energy_ref=stats.endpoint_reference_energy.contiguous(),
+            path_energy_max=stats.highest_interior_energy.contiguous(),
+            mic_mode=workspace.mic.mode,
+            periodic_basis=workspace.mic.periodic_basis,
+            cartesian_to_fractional=workspace.mic.cartesian_to_fractional,
+            mic_candidate_count=workspace.mic.candidate_count,
+            candidate_shifts=workspace.mic.candidate_shifts,
+            method=method_name,
+            vector_scratch=workspace.vector_scratch,
+            effective_forces=workspace.effective_forces,
+            link_lengths=workspace.link_lengths,
+        )
+        workspace.effective_forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
+        # Expand packed link lengths into the per-image field. Terminal entries
+        # are initialized to zero on admission and are not modified here.
+        batch.forward_link_length.index_copy_(
+            0,
+            workspace.link_source_image_idx,
+            workspace.link_lengths,
+        )
+        # Publish only the rows owned by this hook dispatch. Model evaluation
+        # preserves inactive rows, so other sub-stages and graduated paths retain
+        # their previously published effective forces.
+        torch.where(
+            active_nodes.unsqueeze(-1),
+            workspace.effective_forces,
+            batch.forces,
+            out=batch.forces,
+        )
+
+        # Newly entered paths skip both optimizer updates while these NEB forces
+        # are primed. Reset their carried velocity before the first real update.
+        velocities = getattr(batch, "velocities", None)
+        reprime_pending = getattr(batch, "reprime_pending", None)
+        if velocities is not None and reprime_pending is not None:
+            pending_graphs = reprime_pending.view(-1)[: batch.num_graphs]
+            pending_nodes = active_nodes & pending_graphs[batch.batch_idx.long()]
+            velocities.masked_fill_(pending_nodes.unsqueeze(-1), 0)
+
+    def _spring_context(
+        self,
+        ctx: DynamicsContext,
+        stage: DynamicsStage,
+    ) -> SpringContext:
+        """Build a read-only spring-policy view of the current NEB state.
+
+        The view exposes the fields a spring policy reads and omits workspace
+        buffers it does not need.
+        """
+        workspace = self._workspace
+        batch = ctx.batch
+        model_outputs_available = stage == DynamicsStage.AFTER_COMPUTE
+        return SpringContext(
+            energies=(batch.energy.squeeze(-1) if model_outputs_available else None),
+            positions=batch.positions,
+            physical_forces=(
+                batch.physical_forces if model_outputs_available else None
+            ),
+            image_ptr=workspace.image_ptr,
+            layout=batch.group_layout,
+            cell=workspace.cell,
+            pbc=workspace.pbc,
+            step_count=ctx.step_count,
+        )
+
+    def _refresh_spring_constants(
+        self,
+        ctx: DynamicsContext,
+        stage: DynamicsStage,
+    ) -> None:
+        """Resolve spring constants when requested by the configured policy."""
+        workspace = self._workspace
+        if self.spring.refresh is not stage:
+            return
+
+        resolved = self.spring.resolve(self._spring_context(ctx, stage))
+        if not isinstance(resolved, Tensor):
+            raise TypeError("SpringConfig.resolve must return a Tensor")
+        if resolved.shape != workspace.spring_constants.shape:
+            raise ValueError(
+                "SpringConfig.resolve must return shape "
+                f"{tuple(workspace.spring_constants.shape)}"
+            )
+        workspace.spring_constants.copy_(resolved)

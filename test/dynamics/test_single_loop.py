@@ -453,6 +453,18 @@ class TestFusedStage:
         assert isinstance(fused, FusedStage)
         assert len(fused.sub_stages) == 2
 
+    def test_plus_operator_preserves_grouped_mode(self) -> None:
+        """Grouped mode should propagate through fused-stage composition."""
+        dyn1 = BaseDynamics(model=self.model, by_group=True)
+        dyn2 = BaseDynamics(model=self.model, by_group=True)
+        dyn3 = BaseDynamics(model=self.model, by_group=True)
+
+        fused = dyn1 + dyn2
+        appended = fused + dyn3
+
+        assert fused.by_group is True
+        assert appended.by_group is True
+
     def test_auto_assigned_status_codes(self) -> None:
         """Sub-stages should have auto-assigned status codes 0, 1, ..."""
         dyn1 = BaseDynamics(model=self.model)
@@ -490,15 +502,18 @@ class TestFusedStage:
         assert model.forward_count == 1
 
     def test_masked_updates_correct_indices(self) -> None:
-        """FusedStage should dispatch updates to correct dynamics engines."""
+        """Dispatch updates and publish mixed-dtype outputs to active rows."""
+        self.model.double()
         dynamics0 = TrackingDynamics(model=self.model)
         dynamics1 = TrackingDynamics(model=self.model)
 
         fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
 
         batch = create_batch_with_status(n_graphs=4)
-        batch.status = torch.tensor([0, 1, 0, 1])
+        batch.status = torch.tensor([0, 1, 0, 2])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1, 0.1])
+        batch.energy.fill_(-13.0)
+        active_graph_mask = batch.status < fused.exit_status
 
         fused.step(batch)
 
@@ -509,8 +524,20 @@ class TestFusedStage:
 
         # dynamics1 should get mask for indices 1, 3
         assert len(dynamics1.updated_masks) == 1
-        expected_mask1 = torch.tensor([False, True, False, True])
+        expected_mask1 = torch.tensor([False, True, False, False])
         assert torch.equal(dynamics1.updated_masks[0], expected_mask1)
+
+        assert fused._last_outputs is not None
+        assert fused._last_outputs["energy"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            fused._last_outputs["energy"][active_graph_mask].to(batch.energy.dtype),
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -13.0),
+        )
 
     def test_reprime_on_entry_delays_only_transitioning_samples(self) -> None:
         """New samples wait one iteration for force repriming while other samples continue."""
@@ -2028,9 +2055,12 @@ class TestFusedStageSubstageHooks:
 
         original_compute = fused.compute
 
-        def recording_compute(batch: Batch) -> Any:
+        def recording_compute(
+            batch: Batch,
+            active_graph_mask: torch.Tensor | None = None,
+        ) -> Any:
             events.append("compute")
-            return original_compute(batch)
+            return original_compute(batch, active_graph_mask)
 
         with patch.object(
             fused, "compute", side_effect=recording_compute
@@ -2055,6 +2085,25 @@ class TestFusedStageSubstageHooks:
             assert hook.active_masks[0].tolist() == [True, False, False]
         for hook in (substage1_before, substage1_after):
             assert hook.active_masks[0].tolist() == [False, True, False]
+
+    def test_shared_compute_preserves_graduated_model_outputs(self) -> None:
+        """Fused shared forwards do not publish into globally inactive rows."""
+        model = CompilerFriendlyModel()
+        dynamics0 = _CompileNoOpDynamics(model=model)
+        dynamics1 = _CompileNoOpDynamics(model=model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 1, fused.exit_status])
+        batch.forces[2].fill_(-13.0)
+        batch.energy[2].fill_(-11.0)
+
+        fused.step(batch)
+
+        torch.testing.assert_close(batch.forces[2], torch.full((3,), -13.0))
+        torch.testing.assert_close(batch.energy[2], torch.full((1,), -11.0))
+        assert not torch.equal(batch.forces[0], torch.full((3,), -13.0))
+        assert not torch.equal(batch.forces[1], torch.full((3,), -13.0))
 
     def test_admission_hooks_ignore_frequency_across_runs(self) -> None:
         """Admission hooks refire across runs with stage-specific masks."""

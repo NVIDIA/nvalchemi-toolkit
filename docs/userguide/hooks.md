@@ -103,8 +103,12 @@ set. For node-level mutations, combine the hook's selection with
 `ctx.active_graph_mask[batch.batch_idx]`; for graph-level mutations, combine it
 with `ctx.active_graph_mask`. Otherwise, a hook registered on a fused sub-stage
 can mutate graphs owned by another sub-stage or graphs sitting out an integrator
-update during force repriming. Read-only observation hooks may instead inspect
-the full batch deliberately. For example, the `StatusSnapshotHook` in
+update during force repriming. Model outputs follow the same ownership rule: the
+forward pass may evaluate the whole batch, but dynamics publish graph-, atom-,
+and edge-level outputs only for
+the active graphs in that dispatch. Inactive rows retain their prior values.
+Read-only observation hooks may instead inspect the full batch deliberately. For
+example, the `StatusSnapshotHook` in
 {doc}`/examples/intermediate/01_multistage_pipeline` reads every graph to report
 the global status distribution.
 
@@ -246,6 +250,11 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 ```
 
 The hook implements the context manager protocol to manage its logger lifecycle.
+It writes one row per graph by default. For grouped workflows such as reaction
+paths, set `by_group=True` and return `(num_groups,)` tensors from
+`custom_scalars`. Group mode does not implicitly reduce graph-level energy,
+force, or temperature because those reductions are application dependent.
+
 It is the current built-in dynamics logger, not the full logging abstraction for
 all workflows.
 

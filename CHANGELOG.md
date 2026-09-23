@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add `GroupLayout` and `Batch.group_layout` for treating contiguous graphs as
+  logical groups, with graph/node mappings, group cardinalities, reductions,
+  broadcasts, selection, cache invalidation, and grouped-batch append support.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
@@ -14,6 +17,15 @@
   graphs skip one integrator update so the shared compute and target-stage
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
   before it advances them.
+- **Batched nudged elastic band (NEB) workflows** — the new
+  `nvalchemi.dynamics.paths` API provides grouped-path validation, endpoint
+  interpolation, and IDPP initialization, together with a GPU-first `NEB`
+  engine for regular and climbing-image optimization. It supports
+  improved-tangent forces, fixed or relaxed endpoints, per-path fixed atoms,
+  optional neighbor-list hooks, compiled fused steps, and diagnostics for
+  force maxima, barriers, path lengths, and highest-energy images. The
+  `examples/advanced/16_batched_neb.py` walkthrough demonstrates optimizing
+  multiple reaction paths concurrently.
 
 ### Fixed
 
