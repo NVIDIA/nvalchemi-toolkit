@@ -32,6 +32,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models import DerivativeNotSupported
 
 # ---------------------------------------------------------------------------
 # Import the functions under test
@@ -919,7 +920,7 @@ class TestDFTD3DerivativeCapability:
         )
         message = "analytical Warp.*energy double backward"
 
-        with pytest.raises(NotImplementedError, match=message):
+        with pytest.raises(DerivativeNotSupported, match=message):
             if operation == "hvp":
                 wrapper.hessian_vector_product(batch, torch.randn_like(batch.positions))
             else:

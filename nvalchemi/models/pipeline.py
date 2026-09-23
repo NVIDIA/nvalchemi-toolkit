@@ -61,6 +61,8 @@ from nvalchemi.hooks import Hook, NeighborListHook
 from nvalchemi.models._derivatives import (
     _DerivativeRequest,
     _reject_derivative_request,
+    _require_local_derivative_request,
+    _temporary_model_config,
 )
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
@@ -149,13 +151,6 @@ class _NeighborSourceData:
     neighbor_list: torch.Tensor | None = None
     edge_ptr: torch.Tensor | None = None
     neighbor_list_shifts: torch.Tensor | None = None
-
-
-@dataclass(frozen=True)
-class _DerivativePipelinePlan:
-    """Ordered output requirements for one flat pipeline derivative graph."""
-
-    requested_outputs: dict[PipelineStep, frozenset[str]]
 
 
 class _PipelineNeighborListHook:
@@ -762,7 +757,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 copy_tensor(value) if isinstance(value, torch.Tensor) else value
             )
 
-    def _build_derivative_plan(self) -> _DerivativePipelinePlan:
+    def _build_derivative_plan(self) -> dict[PipelineStep, frozenset[str]]:
         """Build the flat dependency closure for connected pipeline energy."""
         all_steps = [step for group in self.groups for step in group.steps]
         latest_producer: dict[str, tuple[PipelineStep, str]] = {}
@@ -797,22 +792,13 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 requested.setdefault(producer, set()).add(output_key)
                 pending.append(producer)
 
-        return _DerivativePipelinePlan(
-            requested_outputs={
-                step: frozenset(requested[step])
-                for step in all_steps
-                if step in requested
-            }
-        )
+        return {
+            step: frozenset(requested[step]) for step in all_steps if step in requested
+        }
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate one local derivative request across pipeline steps."""
-        if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed pipeline second-order derivatives are not supported",
-            )
+        _require_local_derivative_request(self, request)
         for group_index, group in enumerate(self.groups):
             for step_index, step in enumerate(group.steps):
                 if isinstance(step.model, PipelineModelWrapper):
@@ -825,14 +811,14 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     )
 
         plan = self._build_derivative_plan()
-        if not plan.requested_outputs:
+        if not plan:
             _reject_derivative_request(
                 self,
                 request,
                 "the pipeline has no energy-producing step",
             )
 
-        for step in plan.requested_outputs:
+        for step in plan:
             child_request = _DerivativeRequest(
                 operation=request.operation,
                 execution=(
@@ -842,6 +828,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 ),
                 strategy=request.strategy,
             )
+            _require_local_derivative_request(step.model, child_request)
             step.model._validate_derivative_request(child_request)
 
     def _call_step(
@@ -896,29 +883,18 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         neighbor_plan = self._step_neighbor_plans.get(step_id)
 
         saved_neighbors: dict[str, Any] | None = None
-        saved_active: set[str] | object = _MISSING
-        saved_gradient_keys: set[str] | object = _MISSING
-
         if neighbor_plan is not None:
             saved_neighbors = self._select_step_neighbors(data, neighbor_plan)
 
-        cfg = step.model.model_config
+        config_overrides = {}
         if override is not None:
-            saved_active = cfg.active_outputs
+            config_overrides["active_outputs"] = override
         if gradient_keys_override is not _MISSING:
-            saved_gradient_keys = cfg.gradient_keys
-
+            config_overrides["gradient_keys"] = gradient_keys_override
         try:
-            if override is not None:
-                cfg.active_outputs = override  # type: ignore[assignment]
-            if gradient_keys_override is not _MISSING:
-                cfg.gradient_keys = gradient_keys_override  # type: ignore[assignment]
-            return step.model(data, **kwargs)
+            with _temporary_model_config(step.model, **config_overrides):
+                return step.model(data, **kwargs)
         finally:
-            if saved_gradient_keys is not _MISSING:
-                cfg.gradient_keys = saved_gradient_keys  # type: ignore[assignment]
-            if saved_active is not _MISSING:
-                cfg.active_outputs = saved_active  # type: ignore[assignment]
             if saved_neighbors is not None:
                 self._restore_step_neighbors(data, saved_neighbors)
 
@@ -1141,7 +1117,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     def _derivative_energy(self, data: Batch) -> torch.Tensor:
         """Execute the flat pipeline as one connected total-energy graph."""
         plan = self._build_derivative_plan()
-        if not plan.requested_outputs:
+        if not plan:
             raise RuntimeError("Pipeline derivative execution found no energy output")
 
         context: dict[PipelineStep, ModelOutputs] = {}
@@ -1151,7 +1127,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             for group in self.groups:
                 step_outputs: list[ModelOutputs] = []
                 for step in group.steps:
-                    requested = plan.requested_outputs.get(step)
+                    requested = plan.get(step)
                     if requested is None:
                         continue
 

@@ -466,12 +466,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate PME's local differentiable-energy capability."""
-        if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed second-order derivatives are not supported",
-            )
         if self.hybrid_forces:
             _reject_derivative_request(
                 self,

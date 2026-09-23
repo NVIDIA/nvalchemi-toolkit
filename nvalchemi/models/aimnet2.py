@@ -72,10 +72,7 @@ from nvalchemi.distributed.helpers import (
     system_sum,
     to_local,
 )
-from nvalchemi.models._derivatives import (
-    _DerivativeRequest,
-    _reject_derivative_request,
-)
+from nvalchemi.models._derivatives import _DerivativeRequest
 from nvalchemi.models._utils import (
     autograd_forces_and_stresses,
     autograd_stresses,
@@ -384,13 +381,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Validate the local second-order AIMNet2 capability."""
-        if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed second-order derivatives are not supported",
-            )
+        """Accept local second-order derivatives after shared context checks."""
 
     # ------------------------------------------------------------------
     # BaseModelMixin required properties

@@ -33,6 +33,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import LevelSchema
+from nvalchemi.models import DerivativeNotSupported
 from nvalchemi.models.base import NeighborListFormat
 
 # ---------------------------------------------------------------------------
@@ -862,7 +863,7 @@ class TestEwaldDerivatives:
         self._build_nl(batch, model)
         monkeypatch.setattr(model, "forward", lambda *_args, **_kwargs: pytest.fail())
 
-        with pytest.raises(NotImplementedError, match=reason):
+        with pytest.raises(DerivativeNotSupported, match=reason):
             if strategy == "hvp":
                 model.hessian_vector_product(batch, torch.randn_like(batch.positions))
             else:

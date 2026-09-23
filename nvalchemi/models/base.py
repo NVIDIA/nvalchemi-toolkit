@@ -19,7 +19,6 @@ import abc
 import warnings
 from collections import OrderedDict
 from collections.abc import Mapping
-from contextlib import AbstractContextManager
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
@@ -33,16 +32,12 @@ from nvalchemi.models._derivatives import (
     HessianOperator,
     _attach_hessian_blocks,
     _dense_hessian_blocks,
-    _DerivativeGraph,
-    _DerivativeOperation,
     _DerivativeRequest,
-    _DerivativeStrategy,
     _position_gradient,
     _prepare_derivative_graph,
     _reject_derivative_request,
-    _validate_dense_hessian_inputs,
-    _validate_dense_hessian_storage,
     _validate_hessian_vector,
+    _ValidatedDenseHessianRequest,
 )
 
 if TYPE_CHECKING:
@@ -552,7 +547,7 @@ class BaseModelMixin(abc.ABC):
 
         Raises
         ------
-        NotImplementedError
+        DerivativeNotSupported
             Always, unless a qualified wrapper overrides this method.
         """
         _reject_derivative_request(
@@ -587,39 +582,6 @@ class BaseModelMixin(abc.ABC):
             )
         return output["energy"]
 
-    def _prepare_derivative_graph(
-        self,
-        batch: Batch,
-        *,
-        operation: _DerivativeOperation,
-        strategy: _DerivativeStrategy | None = None,
-    ) -> AbstractContextManager[_DerivativeGraph]:
-        """Prepare an independent graph-connected energy evaluation.
-
-        Parameters
-        ----------
-        batch : Batch
-            Caller-owned batch to snapshot without mutation.
-        operation : {"hvp", "dense_hessian"}
-            Derivative operation requiring the graph.
-        strategy : {"loop", "vmap"} | None, optional
-            Dense-Hessian execution strategy. HVP requests require ``None``.
-
-        Returns
-        -------
-        contextlib.AbstractContextManager[_DerivativeGraph]
-            Context yielding independent working data, a position leaf, and
-            connected per-system energy.
-        """
-        if not isinstance(batch, Batch):
-            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
-        request = _DerivativeRequest(
-            operation=operation,
-            execution="distributed" if self._dist_ctx is not None else "local",
-            strategy=strategy,
-        )
-        return _prepare_derivative_graph(self, batch, request)
-
     def prepare_hessian(self, batch: Batch) -> HessianOperator:
         """Prepare an immediately active matrix-free position Hessian.
 
@@ -644,12 +606,17 @@ class BaseModelMixin(abc.ABC):
         ------
         TypeError
             If ``batch`` is not a :class:`Batch`.
-        NotImplementedError
+        DerivativeNotSupported
             If this wrapper or execution context has not been qualified for HVPs.
         RuntimeError
             If energy does not satisfy the connected derivative contract.
         """
-        context = self._prepare_derivative_graph(batch, operation="hvp")
+        request = _DerivativeRequest(
+            operation="hvp",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=None,
+        )
+        context = _prepare_derivative_graph(self, batch, request)
         return HessianOperator(context)
 
     def compute_hessian(
@@ -699,41 +666,37 @@ class BaseModelMixin(abc.ABC):
         ValueError
             If tensor layout, storage declarations, strategy, or chunk size is
             incompatible with dense Hessian materialization.
-        NotImplementedError
+        DerivativeNotSupported
             If this wrapper or execution context has not been qualified for
             the requested dense strategy.
         RuntimeError
             If energy does not satisfy the connected derivative contract.
         """
-        positions, num_nodes = _validate_dense_hessian_inputs(
+        request = _ValidatedDenseHessianRequest.build(
             batch,
             strategy,
             row_chunk_size,
         )
-        _validate_dense_hessian_storage(
-            batch,
-            dtype=positions.dtype,
-            num_nodes=num_nodes,
+        derivative_request = _DerivativeRequest(
+            operation="dense_hessian",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=request.strategy,
         )
 
-        with self._prepare_derivative_graph(
-            batch,
-            operation="dense_hessian",
-            strategy=strategy,
-        ) as graph:
+        with _prepare_derivative_graph(self, batch, derivative_request) as graph:
             gradient = _position_gradient(graph)
             blocks = _dense_hessian_blocks(
                 graph,
                 gradient,
-                num_nodes,
-                strategy=strategy,
-                row_chunk_size=row_chunk_size,
+                request.num_nodes,
+                strategy=request.strategy,
+                row_chunk_size=request.row_chunk_size,
             )
 
         with torch.inference_mode(False):
             staging = batch.clone()
-            _attach_hessian_blocks(staging, blocks, dtype=positions.dtype)
-            _attach_hessian_blocks(batch, blocks, dtype=positions.dtype)
+            _attach_hessian_blocks(staging, blocks, dtype=request.positions.dtype)
+            _attach_hessian_blocks(batch, blocks, dtype=request.positions.dtype)
         return batch
 
     def hessian_vector_product(
@@ -768,7 +731,7 @@ class BaseModelMixin(abc.ABC):
             floating-point tensor.
         ValueError
             If vector shape, dtype, or device does not match positions.
-        NotImplementedError
+        DerivativeNotSupported
             If this wrapper or execution context has not been qualified for HVPs.
         """
         if not isinstance(batch, Batch):

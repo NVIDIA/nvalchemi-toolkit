@@ -31,6 +31,7 @@ import torch
 from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models import DerivativeNotSupported
 from nvalchemi.models.base import ModelConfig
 
 # ---------------------------------------------------------------------------
@@ -414,7 +415,7 @@ class TestAIMNet2Derivatives:
         wrapper = _make_wrapper(mock_model, compile_model=True)
         wrapper._dist_ctx = object()
 
-        with pytest.raises(NotImplementedError, match="distributed"):
+        with pytest.raises(DerivativeNotSupported, match="distributed"):
             wrapper.hessian_vector_product(
                 simple_batch, torch.randn_like(simple_batch.positions)
             )

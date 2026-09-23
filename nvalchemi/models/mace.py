@@ -670,12 +670,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate local MACE derivatives for the requested strategy."""
-        if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed second-order derivatives are not supported",
-            )
         if (
             _mace_uses_cueq(self.model)
             and request.operation == "dense_hessian"

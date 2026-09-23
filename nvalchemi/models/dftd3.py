@@ -578,13 +578,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
-        """Reject all second-order requests before entering the D3 kernel."""
-        if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed second-order derivatives are not supported",
-            )
+        """Reject second-order requests before entering the D3 kernel."""
         _reject_derivative_request(
             self,
             request,

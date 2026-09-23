@@ -27,7 +27,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import Batch
-from nvalchemi.data.level_storage import TORCH_DTYPE_MAP
+from nvalchemi.data.level_storage import effective_dtype
 
 if TYPE_CHECKING:
     from nvalchemi.models.base import BaseModelMixin
@@ -35,6 +35,89 @@ if TYPE_CHECKING:
 _DerivativeOperation = Literal["hvp", "dense_hessian"]
 _DerivativeStrategy = Literal["loop", "vmap"]
 _DerivativeExecutionKind = Literal["local", "distributed"]
+
+
+class DerivativeNotSupported(NotImplementedError):
+    """A model or execution context does not support a derivative request.
+
+    Attributes
+    ----------
+    model_name : str
+        Name of the model wrapper rejecting the request.
+    operation : {"hvp", "dense_hessian"}
+        Derivative operation requested by the caller.
+    execution : {"local", "distributed"}
+        Execution context in which the request was made.
+    strategy : {"loop", "vmap"} or None
+        Dense-Hessian strategy, or ``None`` for HVP requests.
+    reason : str
+        Explanation of why the request is unsupported.
+    """
+
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        operation: _DerivativeOperation,
+        execution: _DerivativeExecutionKind,
+        strategy: _DerivativeStrategy | None,
+        reason: str,
+    ) -> None:
+        """Initialize a contextual derivative capability error.
+
+        Parameters
+        ----------
+        model_name : str
+            Name of the model wrapper rejecting the request.
+        operation : {"hvp", "dense_hessian"}
+            Derivative operation requested by the caller.
+        execution : {"local", "distributed"}
+            Execution context in which the request was made.
+        strategy : {"loop", "vmap"} or None
+            Dense-Hessian strategy, or ``None`` for HVP requests.
+        reason : str
+            Explanation of why the request is unsupported.
+        """
+        self.model_name = model_name
+        self.operation = operation
+        self.execution = execution
+        self.strategy = strategy
+        self.reason = reason
+        strategy_text = strategy if strategy is not None else "none"
+        super().__init__(
+            f"{model_name} does not support derivative operation '{operation}' "
+            f"for execution='{execution}', strategy='{strategy_text}': {reason}"
+        )
+
+    def __reduce__(self) -> tuple[Any, tuple[str, str, str, str | None, str]]:
+        """Reconstruct the exception from its contextual fields when unpickled."""
+        return (
+            _reconstruct_derivative_not_supported,
+            (
+                self.model_name,
+                self.operation,
+                self.execution,
+                self.strategy,
+                self.reason,
+            ),
+        )
+
+
+def _reconstruct_derivative_not_supported(
+    model_name: str,
+    operation: _DerivativeOperation,
+    execution: _DerivativeExecutionKind,
+    strategy: _DerivativeStrategy | None,
+    reason: str,
+) -> DerivativeNotSupported:
+    """Rebuild the public exception using its keyword-only constructor."""
+    return DerivativeNotSupported(
+        model_name=model_name,
+        operation=operation,
+        execution=execution,
+        strategy=strategy,
+        reason=reason,
+    )
 
 
 def _reject_derivative_request(
@@ -54,12 +137,52 @@ def _reject_derivative_request(
     reason : str
         Configuration-specific explanation of the rejection.
     """
-    strategy = request.strategy if request.strategy is not None else "none"
-    raise NotImplementedError(
-        f"{type(model).__name__} does not support derivative operation "
-        f"'{request.operation}' for execution='{request.execution}', "
-        f"strategy='{strategy}': {reason}"
+    raise DerivativeNotSupported(
+        model_name=type(model).__name__,
+        operation=request.operation,
+        execution=request.execution,
+        strategy=request.strategy,
+        reason=reason,
     )
+
+
+def _require_local_derivative_request(
+    model: object,
+    request: _DerivativeRequest,
+) -> None:
+    """Reject distributed Hessian requests before wrapper-specific checks."""
+    if request.execution != "local":
+        _reject_derivative_request(
+            model,
+            request,
+            "distributed second-order derivatives are not supported",
+        )
+
+
+_CONFIG_OVERRIDE_UNSET = object()
+
+
+@contextmanager
+def _temporary_model_config(
+    model: BaseModelMixin,
+    *,
+    active_outputs: Any = _CONFIG_OVERRIDE_UNSET,
+    gradient_keys: Any = _CONFIG_OVERRIDE_UNSET,
+) -> Iterator[None]:
+    """Temporarily override selected config fields and restore their objects."""
+    config = model.model_config
+    saved: dict[str, Any] = {}
+    try:
+        if active_outputs is not _CONFIG_OVERRIDE_UNSET:
+            saved["active_outputs"] = config.active_outputs
+            config.active_outputs = active_outputs
+        if gradient_keys is not _CONFIG_OVERRIDE_UNSET:
+            saved["gradient_keys"] = config.gradient_keys
+            config.gradient_keys = gradient_keys
+        yield
+    finally:
+        for key, value in saved.items():
+            setattr(config, key, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +224,7 @@ class _DerivativeGraph:
     energy: Tensor
 
 
-def _validate_hessian_vector(vector: Any, positions: Tensor) -> Tensor:
+def _validate_hessian_vector(vector: Tensor, positions: Tensor) -> Tensor:
     """Validate one position-space vector against a reference tensor."""
     if not isinstance(vector, Tensor):
         raise TypeError(
@@ -216,114 +339,108 @@ def _gradient_vector_product(
         return product.detach()
 
 
-def _hessian_vector_product(
-    gradient: Tensor,
-    positions: Tensor,
-    vector: Tensor,
-) -> Tensor:
-    """Evaluate one HVP while retaining the graph for subsequent products."""
-    return _gradient_vector_product(
-        gradient,
-        positions,
-        vector,
-        is_grads_batched=False,
-    )
+@dataclass(frozen=True, slots=True)
+class _ValidatedDenseHessianRequest:
+    """Dense Hessian inputs validated before any model evaluation."""
 
+    positions: Tensor
+    num_nodes: list[int]
+    strategy: _DerivativeStrategy
+    row_chunk_size: int | None
 
-def _validate_dense_hessian_inputs(
-    batch: Batch,
-    strategy: Any,
-    row_chunk_size: Any,
-) -> tuple[Tensor, list[int]]:
-    """Validate dense-Hessian arguments before capability or model execution."""
-    if not isinstance(batch, Batch):
-        raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
-    if strategy not in ("loop", "vmap"):
-        raise ValueError(f"strategy must be 'loop' or 'vmap', got {strategy!r}")
-    if row_chunk_size is not None:
-        if not isinstance(row_chunk_size, int) or isinstance(row_chunk_size, bool):
-            raise TypeError("row_chunk_size must be a positive integer or None")
-        if row_chunk_size <= 0:
-            raise ValueError("row_chunk_size must be positive")
+    @classmethod
+    def build(
+        cls,
+        batch: Batch,
+        strategy: Any,
+        row_chunk_size: Any,
+    ) -> _ValidatedDenseHessianRequest:
+        """Validate dense-Hessian inputs before any model evaluation."""
+        if not isinstance(batch, Batch):
+            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+        if strategy not in ("loop", "vmap"):
+            raise ValueError(f"strategy must be 'loop' or 'vmap', got {strategy!r}")
+        if row_chunk_size is not None:
+            if not isinstance(row_chunk_size, int) or isinstance(row_chunk_size, bool):
+                raise TypeError("row_chunk_size must be a positive integer or None")
+            if row_chunk_size <= 0:
+                raise ValueError("row_chunk_size must be positive")
 
-    positions = getattr(batch, "positions", None)
-    if not isinstance(positions, Tensor):
-        raise RuntimeError("Dense Hessians require tensor positions")
-    if not positions.is_floating_point():
-        raise TypeError(
-            "Dense Hessian positions must have a floating-point dtype, "
-            f"got {positions.dtype}"
-        )
-    if positions.ndim != 2 or positions.shape[1] != 3:
-        raise ValueError(
-            "Dense Hessian positions must have shape [total_atoms, 3], "
-            f"got {tuple(positions.shape)}"
-        )
-
-    atomic_numbers = getattr(batch, "atomic_numbers", None)
-    if not isinstance(atomic_numbers, Tensor):
-        raise RuntimeError("Dense Hessians require tensor atomic_numbers")
-    if atomic_numbers.ndim != 1:
-        raise ValueError(
-            "Dense Hessian atomic_numbers must have shape [total_atoms], "
-            f"got {tuple(atomic_numbers.shape)}"
-        )
-
-    num_nodes = batch.num_nodes_list
-    expected_atoms = sum(num_nodes)
-    if positions.shape[0] != expected_atoms:
-        raise ValueError(
-            "Dense Hessian positions length must match active atom segmentation "
-            f"{expected_atoms}, got {positions.shape[0]}"
-        )
-    if atomic_numbers.shape[0] != expected_atoms:
-        raise ValueError(
-            "Dense Hessian atomic_numbers length must match active atom "
-            f"segmentation {expected_atoms}, got {atomic_numbers.shape[0]}"
-        )
-    return positions, num_nodes
-
-
-def _validate_dense_hessian_storage(
-    batch: Batch,
-    *,
-    dtype: torch.dtype,
-    num_nodes: list[int],
-) -> None:
-    """Preflight canonical product storage without mutating the batch."""
-    schema = batch.get_level_schema()
-    schema.add_product_level("atom_atom", left="atoms", right="atoms")
-
-    field_group = schema.attr_to_group.get("hessian")
-    if field_group is not None and field_group != "atom_atom":
-        raise ValueError(
-            f"Field 'hessian' must belong to level 'atom_atom', not '{field_group}'"
-        )
-    declared_dtype = schema.dtypes.get("hessian")
-    if declared_dtype is not None:
-        try:
-            expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-        except KeyError as exc:
+        positions = getattr(batch, "positions", None)
+        if not isinstance(positions, Tensor):
+            raise RuntimeError("Dense Hessians require tensor positions")
+        if not positions.is_floating_point():
+            raise TypeError(
+                "Dense Hessian positions must have a floating-point dtype, "
+                f"got {positions.dtype}"
+            )
+        if positions.ndim != 2 or positions.shape[1] != 3:
             raise ValueError(
-                f"Field 'hessian' has unsupported declared dtype '{declared_dtype}'"
-            ) from exc
-        if expected_dtype != dtype:
-            raise ValueError(
-                f"Field 'hessian' has declared dtype {declared_dtype}, expected {dtype}"
+                "Dense Hessian positions must have shape [total_atoms, 3], "
+                f"got {tuple(positions.shape)}"
             )
 
-    if "hessian" not in batch:
-        return
-    hessian = batch["hessian"]
-    expected_shape = (sum(count * count for count in num_nodes), 3, 3)
-    if tuple(hessian.shape) != expected_shape:
-        raise ValueError(
-            f"Existing 'hessian' field must have shape {expected_shape}, "
-            f"got {tuple(hessian.shape)}"
-        )
-    if hessian.dtype != dtype:
-        raise ValueError(
-            f"Existing 'hessian' field must have dtype {dtype}, got {hessian.dtype}"
+        atomic_numbers = getattr(batch, "atomic_numbers", None)
+        if not isinstance(atomic_numbers, Tensor):
+            raise RuntimeError("Dense Hessians require tensor atomic_numbers")
+        if atomic_numbers.ndim != 1:
+            raise ValueError(
+                "Dense Hessian atomic_numbers must have shape [total_atoms], "
+                f"got {tuple(atomic_numbers.shape)}"
+            )
+
+        num_nodes = batch.num_nodes_list
+        expected_atoms = sum(num_nodes)
+        if positions.shape[0] != expected_atoms:
+            raise ValueError(
+                "Dense Hessian positions length must match active atom segmentation "
+                f"{expected_atoms}, got {positions.shape[0]}"
+            )
+        if atomic_numbers.shape[0] != expected_atoms:
+            raise ValueError(
+                "Dense Hessian atomic_numbers length must match active atom "
+                f"segmentation {expected_atoms}, got {atomic_numbers.shape[0]}"
+            )
+
+        schema = batch.get_level_schema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        field_group = schema.attr_to_group.get("hessian")
+        if field_group is not None and field_group != "atom_atom":
+            raise ValueError(
+                f"Field 'hessian' must belong to level 'atom_atom', not '{field_group}'"
+            )
+        declared_dtype = schema.dtypes.get("hessian")
+        if declared_dtype is not None:
+            expected_dtype = effective_dtype(declared_dtype)
+            if isinstance(expected_dtype, str):
+                raise ValueError(
+                    f"Field 'hessian' has unsupported declared dtype '{declared_dtype}'"
+                )
+            if expected_dtype != positions.dtype:
+                raise ValueError(
+                    "Field 'hessian' has declared dtype "
+                    f"{declared_dtype}, expected {positions.dtype}"
+                )
+
+        if "hessian" in batch:
+            hessian = batch["hessian"]
+            expected_shape = (sum(count * count for count in num_nodes), 3, 3)
+            if tuple(hessian.shape) != expected_shape:
+                raise ValueError(
+                    f"Existing 'hessian' field must have shape {expected_shape}, "
+                    f"got {tuple(hessian.shape)}"
+                )
+            if hessian.dtype != positions.dtype:
+                raise ValueError(
+                    "Existing 'hessian' field must have dtype "
+                    f"{positions.dtype}, got {hessian.dtype}"
+                )
+
+        return cls(
+            positions=positions,
+            num_nodes=num_nodes,
+            strategy=strategy,
+            row_chunk_size=row_chunk_size,
         )
 
 
@@ -487,7 +604,12 @@ class HessianOperator:
         if graph is None or gradient is None:
             raise RuntimeError("HessianOperator has no active derivative graph")
         validated = _validate_hessian_vector(vector, graph.positions)
-        return _hessian_vector_product(gradient, graph.positions, validated)
+        return _gradient_vector_product(
+            gradient,
+            graph.positions,
+            validated,
+            is_grads_batched=False,
+        )
 
     def close(self) -> None:
         """Release the retained derivative graph; repeated calls are harmless."""
@@ -518,41 +640,6 @@ class HessianOperator:
         self.close()
 
 
-def _detach_batch_tensors(batch: Batch) -> None:
-    """Detach every materialized tensor in an already independent batch."""
-    for key, value in list(batch):
-        if isinstance(value, Tensor):
-            batch[key] = value.detach()
-
-
-def _validate_energy(energy: Any, batch: Batch, positions: Tensor) -> Tensor:
-    """Validate the graph-connected per-system energy contract."""
-    if not isinstance(energy, Tensor):
-        raise RuntimeError(
-            f"Derivative energy must be a torch.Tensor, got {type(energy).__name__}"
-        )
-    expected_shape = (batch.num_graphs, 1)
-    if tuple(energy.shape) != expected_shape:
-        raise RuntimeError(
-            "Derivative energy must have shape "
-            f"{expected_shape}, got {tuple(energy.shape)}"
-        )
-    if energy.device != positions.device:
-        raise RuntimeError(
-            "Derivative energy must be on the positions device "
-            f"{positions.device}, got {energy.device}"
-        )
-    if not energy.is_floating_point():
-        raise RuntimeError(
-            f"Derivative energy must have a floating-point dtype, got {energy.dtype}"
-        )
-    if not energy.requires_grad or energy.grad_fn is None:
-        raise RuntimeError(
-            "Derivative energy must retain a graph connected to the position leaf"
-        )
-    return energy
-
-
 @contextmanager
 def _prepare_derivative_graph(
     model: BaseModelMixin,
@@ -563,6 +650,7 @@ def _prepare_derivative_graph(
     if not isinstance(batch, Batch):
         raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
 
+    _require_local_derivative_request(model, request)
     model._validate_derivative_request(request)
 
     graph: _DerivativeGraph | None = None
@@ -572,7 +660,9 @@ def _prepare_derivative_graph(
     try:
         with torch.inference_mode(False), torch.enable_grad():
             working_batch = batch.clone()
-            _detach_batch_tensors(working_batch)
+            for key, value in list(working_batch):
+                if isinstance(value, Tensor):
+                    working_batch[key] = value.detach()
 
             stored_positions = getattr(working_batch, "positions", None)
             if not isinstance(stored_positions, Tensor):
@@ -588,18 +678,39 @@ def _prepare_derivative_graph(
             working_batch["positions"] = positions
             model._copy_derivative_runtime_data(batch, working_batch)
 
-            config = model.model_config
-            saved_active_outputs = config.active_outputs
-            saved_gradient_keys = config.gradient_keys
-            try:
-                config.active_outputs = {"energy"}
-                config.gradient_keys = {"positions"}
+            with _temporary_model_config(
+                model,
+                active_outputs={"energy"},
+                gradient_keys={"positions"},
+            ):
                 candidate_energy = model._derivative_energy(working_batch)
-            finally:
-                config.active_outputs = saved_active_outputs
-                config.gradient_keys = saved_gradient_keys
 
-            energy = _validate_energy(candidate_energy, working_batch, positions)
+            if not isinstance(candidate_energy, Tensor):
+                raise RuntimeError(
+                    "Derivative energy must be a torch.Tensor, "
+                    f"got {type(candidate_energy).__name__}"
+                )
+            expected_shape = (working_batch.num_graphs, 1)
+            if tuple(candidate_energy.shape) != expected_shape:
+                raise RuntimeError(
+                    "Derivative energy must have shape "
+                    f"{expected_shape}, got {tuple(candidate_energy.shape)}"
+                )
+            if candidate_energy.device != positions.device:
+                raise RuntimeError(
+                    "Derivative energy must be on the positions device "
+                    f"{positions.device}, got {candidate_energy.device}"
+                )
+            if not candidate_energy.is_floating_point():
+                raise RuntimeError(
+                    "Derivative energy must have a floating-point dtype, "
+                    f"got {candidate_energy.dtype}"
+                )
+            if not candidate_energy.requires_grad or candidate_energy.grad_fn is None:
+                raise RuntimeError(
+                    "Derivative energy must retain a graph connected to the position leaf"
+                )
+            energy = candidate_energy
             graph = _DerivativeGraph(
                 data=working_batch,
                 positions=positions,

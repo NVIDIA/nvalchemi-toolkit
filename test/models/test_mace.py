@@ -32,6 +32,7 @@ import torch
 pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE tests")
 
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
+from nvalchemi.models import DerivativeNotSupported  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
 from nvalchemi.training import (  # noqa: E402
@@ -1326,7 +1327,7 @@ class TestMACEDerivatives:
         )
 
         with pytest.raises(
-            NotImplementedError,
+            DerivativeNotSupported,
             match="cuequivariance::uniform_1d.*strategy='vmap'",
         ):
             wrapper.compute_hessian(single_batch, strategy="vmap")
