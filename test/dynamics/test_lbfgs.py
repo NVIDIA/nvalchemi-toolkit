@@ -628,6 +628,29 @@ class TestFusedStage:
         ) + FIRE2VariableCell(model=model, dt=0.05)
         fused.step(batch)
 
+    @staticmethod
+    def _skew_fused(hook):
+        model = _make_model(needs_stress=True)
+        batch = _cell_batch([_SKEW, None])
+        batch["status"] = torch.tensor([[0], [1]])
+        batch["fmax"] = torch.full((2, 1), float("inf"))
+        lbfgs = LBFGSVariableCell(model=model)
+        fused = lbfgs + FIRE2VariableCell(model=model, dt=0.05)
+        fused.register_hook(hook)  # on the FusedStage, after construction
+        return fused, lbfgs, batch
+
+    def test_fused_level_align_hook_is_recognized(self):
+        fused, lbfgs, batch = self._skew_fused(AlignCellHook())
+        expected = _aligned_periodic(batch)[1]
+        fused.step(batch)
+        torch.testing.assert_close(lbfgs._state.ref_cell, expected)
+        assert _aligned(batch.cell)
+
+    def test_fused_level_align_hook_frequency_must_be_one(self):
+        fused, _, batch = self._skew_fused(AlignCellHook(frequency=2))
+        with pytest.raises(ValueError, match="frequency=1"):
+            fused.step(batch)
+
 
 # ---------------------------------------------------------------------------
 # torch.compile (fullgraph)

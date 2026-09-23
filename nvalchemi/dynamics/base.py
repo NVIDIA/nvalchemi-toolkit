@@ -1589,6 +1589,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
 
+    # Hooks of the enclosing FusedStage, if any; set (live) by FusedStage.
+    _enclosing_hooks: Sequence[Hook] = ()
+
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
         "system_id": lambda n, dev: torch.full(
@@ -3185,6 +3188,8 @@ class FusedStage(BaseDynamics):
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
+        for _, dynamics in sub_stages:
+            dynamics._enclosing_hooks = self.hooks
 
         known_status_codes = {code for code, _ in sub_stages}
         requested_reprime = set() if reprime_on_entry is None else reprime_on_entry

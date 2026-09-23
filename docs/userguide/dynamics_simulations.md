@@ -83,8 +83,9 @@ with LBFGS(
 ```
 
 - `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: install
-  `AlignCellHook()` (`frequency=1`), as for `FIRE2VariableCell`. Under
-  `FusedStage` without the hook, every cell in the batch must already be aligned.
+  `AlignCellHook()` (`frequency=1`), as for `FIRE2VariableCell`, on the optimizer
+  or its `FusedStage`. Without the hook, every cell in the batch must already be
+  aligned.
 - Do not edit positions between steps (e.g. `WrapPeriodicHook`); the history
   differences consecutive positions. `FreezeAtomsHook` is supported.
 - The first step after admission moves the largest-force atom by `maxstep`.

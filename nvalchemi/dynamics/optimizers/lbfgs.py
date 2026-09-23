@@ -246,8 +246,8 @@ class LBFGSVariableCell(BaseDynamics):
 
     Relaxes atomic coordinates and the cell together, driven by the model's
     stress.  Cells must be aligned: install
-    :class:`~nvalchemi.dynamics.hooks.AlignCellHook` (``frequency=1``), or
-    pass pre-aligned cells.
+    :class:`~nvalchemi.dynamics.hooks.AlignCellHook` (``frequency=1``) on this
+    optimizer or its ``FusedStage``, or pass pre-aligned cells.
 
     Parameters
     ----------
@@ -332,7 +332,13 @@ class LBFGSVariableCell(BaseDynamics):
 
     def _reference_cells(self, batch: Batch, n: int) -> torch.Tensor:
         """Aligned cells of the last *n* systems, for the chart.  Never writes *batch*."""
-        align_hooks = [h for h in self.hooks if isinstance(h, AlignCellHook)]
+        # Own hooks, or those of an enclosing FusedStage: both run at
+        # BEFORE_STEP, before this stage's first pre_update.
+        align_hooks = [
+            h
+            for h in (*self.hooks, *self._enclosing_hooks)
+            if isinstance(h, AlignCellHook)
+        ]
         if any(h.frequency != 1 for h in align_hooks):
             raise ValueError(
                 "LBFGSVariableCell requires AlignCellHook(frequency=1): its "
@@ -353,8 +359,7 @@ class LBFGSVariableCell(BaseDynamics):
                 "AlignCellHook aligns only periodic systems; set pbc for "
                 "these, or align their cells before the run."
                 if align_hooks
-                else "Pass AlignCellHook() in this optimizer's hooks (a "
-                "FusedStage-level hook is not seen here), or align the cells "
+                else "Install AlignCellHook() in hooks, or align the cells "
                 "before the run."
             )
             raise ValueError(
