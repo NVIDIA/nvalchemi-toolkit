@@ -46,13 +46,13 @@ from torch.distributed import ProcessGroup, Work
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.level_storage import (
-    TORCH_DTYPE_MAP,
     LevelSchema,
     MultiLevelStorage,
     SegmentedLevelStorage,
     UniformLevelStorage,
     _checked_segment_metadata,
     _resolve_device,
+    effective_dtype,
 )
 
 # Edge-level keys whose values are node indices and therefore need
@@ -82,10 +82,7 @@ _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
 
 def _canonical_schema_dtype(schema: LevelSchema, key: str) -> torch.dtype | str | None:
     """Return the effective dtype for a schema field, preserving unknown names."""
-    declared = schema.dtypes.get(key)
-    if declared is None:
-        return None
-    return TORCH_DTYPE_MAP.get(declared, declared)
+    return effective_dtype(schema.dtypes.get(key))
 
 
 def _checked_product_lengths(
@@ -324,13 +321,12 @@ def _build_batch_storage(
 
             declared_dtype = attr_map.dtypes.get(key)
             if declared_dtype is not None:
-                try:
-                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-                except KeyError as exc:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has "
                         f"unsupported declared dtype '{declared_dtype}'"
-                    ) from exc
+                    )
                 if expected_dtype != first_value.dtype:
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has dtype "
@@ -2069,7 +2065,9 @@ class Batch(DataMixin):
             If a declaration conflicts with the batch's existing schema.
         """
         if not isinstance(schema, LevelSchema):
-            raise TypeError("schema must be a LevelSchema")
+            raise TypeError(
+                f"schema must be a LevelSchema, got {type(schema).__name__}"
+            )
         candidate = self._storage.attr_map._merged_with(schema)
         self._install_level_schema(candidate)
 
@@ -2090,7 +2088,7 @@ class Batch(DataMixin):
         segmented : bool
             Whether the level has variable per-system cardinality.
         """
-        candidate = self._storage.attr_map.clone()
+        candidate = self.get_level_schema()
         candidate.add_level(name, segmented=segmented)
         self._install_level_schema(candidate)
 
@@ -2113,7 +2111,7 @@ class Batch(DataMixin):
         right : str
             Registered segmented level for the right entity axis.
         """
-        candidate = self._storage.attr_map.clone()
+        candidate = self.get_level_schema()
         candidate.add_product_level(name, left=left, right=right)
         self._install_level_schema(candidate)
 
@@ -2604,15 +2602,15 @@ class Batch(DataMixin):
         kind = schema.level_kind(group_name)
 
         if not values:
+            # With no graphs, the schema cannot infer this field's shape or dtype.
             declared_dtype = schema.dtypes.get(key)
             if group_name not in _BUILTIN_LEVELS and declared_dtype is not None:
-                try:
-                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-                except KeyError as exc:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has "
                         f"unsupported declared dtype '{declared_dtype}'"
-                    ) from exc
+                    )
                 if expected_dtype != dtype:
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has dtype "
@@ -2754,13 +2752,12 @@ class Batch(DataMixin):
                 )
             declared_dtype = schema.dtypes.get(key)
             if declared_dtype is not None:
-                try:
-                    expected_dtype = TORCH_DTYPE_MAP[declared_dtype]
-                except KeyError as exc:
+                expected_dtype = effective_dtype(declared_dtype)
+                if not isinstance(expected_dtype, torch.dtype):
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has "
                         f"unsupported declared dtype '{declared_dtype}'"
-                    ) from exc
+                    )
                 if expected_dtype != first_dtype:
                     raise ValueError(
                         f"Custom field '{key}' in level '{group_name}' has dtype "

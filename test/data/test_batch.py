@@ -218,30 +218,6 @@ def _custom_uniform_schema() -> LevelSchema:
     return schema
 
 
-def _hessian_data(num_nodes: int) -> AtomicData:
-    """Build one plain atomic system for a Hessian-bearing batch."""
-    positions = torch.arange(num_nodes * 3, dtype=torch.float64).reshape(num_nodes, 3)
-    return AtomicData(
-        positions=positions,
-        atomic_numbers=torch.ones(num_nodes, dtype=torch.long),
-    )
-
-
-def _hessian_batch(*num_nodes: int, offset: float = 0.0) -> Batch:
-    """Build a Hessian-bearing batch with mixed graph sizes."""
-    data = [_hessian_data(nodes) for nodes in num_nodes]
-    batch = Batch.from_data_list(data)
-    batch.add_product_level("atom_atom", left="atoms", right="atoms")
-    blocks = [
-        torch.arange(nodes * nodes * 9, dtype=torch.float64)
-        .reshape(nodes, nodes, 3, 3)
-        .add(offset + index * 1000.0)
-        for index, nodes in enumerate(num_nodes)
-    ]
-    batch.add_key("hessian", blocks, level="atom_atom")
-    return batch
-
-
 def _assert_hessian_batch(batch: Batch, num_nodes: tuple[int, ...]) -> None:
     """Assert the canonical Hessian schema, packing, and logical shapes."""
     schema = batch.get_level_schema()
@@ -1521,11 +1497,34 @@ class TestBatchSchemaExtension:
         assert self._schema_state(batch.get_level_schema()) == before
         torch.testing.assert_close(batch.custom_values, values_before)
 
+    def test_unknown_dtype_aliases_remain_distinct(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        existing = LevelSchema()
+        existing.set("custom_values", "samples", dtype="custom_float")
+        batch.extend_level_schema(existing)
+        extension = LevelSchema()
+        extension.set("custom_values", "samples", dtype="other_float")
+
+        with pytest.raises(ValueError, match="custom_float vs other_float"):
+            batch.extend_level_schema(extension)
+
+    def test_from_data_list_preserves_unknown_dtype_error(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.set("custom_values", "metadata", dtype="custom_float")
+        data = _minimal_atomic_data(2)
+        data.custom_values = torch.ones(1, 1)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            Batch.from_data_list([data], attr_map=schema)
+
     def test_extension_rejects_non_schema_without_mutation(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
         before = self._schema_state(batch.get_level_schema())
 
-        with pytest.raises(TypeError, match="schema must be a LevelSchema"):
+        with pytest.raises(TypeError, match="got dict"):
             batch.extend_level_schema({})  # type: ignore[arg-type]
 
         assert self._schema_state(batch.get_level_schema()) == before
@@ -1860,6 +1859,37 @@ class TestBatchEmptyFieldInsertion:
             )
 
         assert self._metadata_state(batch) == before
+
+    def test_unknown_declared_dtype_keeps_caller_specific_errors(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("custom_values", "samples", dtype="custom_float")
+        empty = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        populated = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            empty.add_key(
+                "custom_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            populated.add_key(
+                "custom_values",
+                [torch.ones(2, 1)],
+                level="samples",
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -2407,8 +2437,8 @@ class TestBatchMutation:
 class TestHessianBatchLifecycle:
     """Test public lifecycle operations for dense Hessian result batches."""
 
-    def test_clone_is_independent_and_preserves_schema(self):
-        batch = _hessian_batch(2, 3)
+    def test_clone_is_independent_and_preserves_schema(self, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3)
         clone = batch.clone()
         clone.hessian[0, 0, 0] = -1.0
 
@@ -2419,16 +2449,20 @@ class TestHessianBatchLifecycle:
         assert batch.hessian[0, 0, 0].item() != -1.0
         torch.testing.assert_close(clone.get_data(1).hessian, batch.get_data(1).hessian)
 
-    def test_device_move_uses_public_data_fixture(self, device):
-        batch = _hessian_batch(2, 3).to(device)
+    def test_device_move_uses_public_data_fixture(self, device, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3).to(device)
 
         _assert_hessian_batch(batch, (2, 3))
         assert batch.hessian.device.type == torch.device(device).type
         assert batch.get_data(0).hessian.device.type == torch.device(device).type
-        torch.testing.assert_close(batch.hessian.cpu(), _hessian_batch(2, 3).hessian)
+        torch.testing.assert_close(
+            batch.hessian.cpu(), hessian_batch_factory(2, 3).hessian
+        )
 
-    def test_reordered_and_repeated_select_preserves_blocks(self):
-        batch = _hessian_batch(2, 3, 1)
+    def test_reordered_and_repeated_select_preserves_blocks(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3, 1)
         selected = batch.index_select([2, 0, 2])
 
         _assert_hessian_batch(selected, (1, 2, 1))
@@ -2438,8 +2472,10 @@ class TestHessianBatchLifecycle:
                 batch.get_data(source_index).hessian,
             )
 
-    def test_get_data_to_data_list_and_rebatch_preserve_exact_values(self):
-        batch = _hessian_batch(2, 3)
+    def test_get_data_to_data_list_and_rebatch_preserve_exact_values(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3)
         data_list = batch.to_data_list()
         rebuilt = Batch.from_data_list(data_list, attr_map=batch.get_level_schema())
 
@@ -2450,9 +2486,9 @@ class TestHessianBatchLifecycle:
             )
         torch.testing.assert_close(rebuilt.hessian, batch.hessian)
 
-    def test_append_compatible_hessian_batches(self):
-        left = _hessian_batch(2, 1)
-        right = _hessian_batch(3, 2, offset=5000.0)
+    def test_append_compatible_hessian_batches(self, hessian_batch_factory):
+        left = hessian_batch_factory(2, 1)
+        right = hessian_batch_factory(3, 2, offset=5000.0)
         expected = [data.hessian for data in left.to_data_list() + right.to_data_list()]
 
         left.append(right)

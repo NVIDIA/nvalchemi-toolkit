@@ -197,6 +197,26 @@ TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
     torch.bool: "bool",
 }
 
+
+def effective_dtype(declared: str | torch.dtype | None) -> torch.dtype | str | None:
+    """Resolve known dtype aliases while preserving unknown strings.
+
+    Parameters
+    ----------
+    declared : str, torch.dtype, or None
+        Dtype name or object declared by the schema.
+
+    Returns
+    -------
+    torch.dtype, str, or None
+        The resolved dtype for a known alias, or the original value when it is
+        ``None``, a ``torch.dtype``, or an unknown string.
+    """
+    if declared is None or isinstance(declared, torch.dtype):
+        return declared
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
+
 # ---------------------------------------------------------------------------
 # Domain-specific defaults (aligned with nvalchemi naming conventions)
 # ---------------------------------------------------------------------------
@@ -557,7 +577,9 @@ class LevelSchema:
             If an existing level, product, field owner, or dtype conflicts.
         """
         if not isinstance(extension, LevelSchema):
-            raise TypeError("extension must be a LevelSchema")
+            raise TypeError(
+                f"extension must be a LevelSchema, got {type(extension).__name__}"
+            )
 
         merged = self.clone()
         for level_name in extension.level_names:
@@ -579,10 +601,8 @@ class LevelSchema:
             existing_dtype = merged.dtypes.get(attr_name)
             extension_dtype = extension.dtypes.get(attr_name)
             if existing_dtype is not None and extension_dtype is not None:
-                existing_effective = TORCH_DTYPE_MAP.get(existing_dtype, existing_dtype)
-                extension_effective = TORCH_DTYPE_MAP.get(
-                    extension_dtype, extension_dtype
-                )
+                existing_effective = effective_dtype(existing_dtype)
+                extension_effective = effective_dtype(extension_dtype)
                 if existing_effective != extension_effective:
                     raise ValueError(
                         f"Field '{attr_name}' has incompatible declared dtypes: "
