@@ -38,8 +38,13 @@ from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoDiffusionModel, DemoGANModel
-from nvalchemi.models.gen.demo import _DemoDiffusionGenerate, _DemoGANGenerate
-from test.gen.conftest import make_batch, trivial_generate
+from test.gen.conftest import (
+    DemoDiffusionGenerate,
+    DemoGANGenerate,
+    make_batch,
+    tile_condition,
+    trivial_generate,
+)
 
 
 def make_trivial_generate():
@@ -151,8 +156,10 @@ class TestAtomisticGeneratorDirectSerialization:
 
     def test_condition_func_round_trip(self) -> None:
         """A driver-level ``condition_func`` is captured, serialized, and rebuilt."""
-        # Skip - condition_func attribute was removed from the demo samplers
-        pass
+        gen = self._generator(condition_func=tile_condition)
+        blob = gen.model_dump_json()
+        rebuilt = AtomisticGenerator.model_validate_json(blob)
+        assert rebuilt.condition_func is tile_condition
 
     def test_json_payload_structure(self) -> None:
         """The JSON payload uses dotted paths and hook class captures."""
@@ -205,12 +212,10 @@ class TestAtomisticGeneratorDirectSerialization:
 
     def test_object_to_spec_capture_round_trip(self) -> None:
         """A callable object's own ``to_spec`` drives capture (class spec)."""
-        gen = AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel()), seed=3
-        )
+        gen = AtomisticGenerator(generator_func=DemoGANGenerate(DemoGANModel()), seed=3)
         blob = gen.model_dump_json()
         rebuilt = AtomisticGenerator.model_validate_json(blob)
-        # The object captured itself as a _DemoGANGenerate spec.
+        # The object captured itself as a DemoGANGenerate spec.
         assert rebuilt.required_inputs == frozenset()
         assert rebuilt.outputs == frozenset({"positions", "atomic_numbers"})
         assert rebuilt(make_batch(num_graphs=2)).num_graphs == 2
@@ -241,7 +246,7 @@ class TestGenerationPipelineDirectSerialization:
 
     def test_pipeline_round_trip(self) -> None:
         """Pipelines serialize their generator stages and callable stages."""
-        pipe = self._stage() | _DemoDiffusionGenerate(DemoDiffusionModel())
+        pipe = self._stage() | DemoDiffusionGenerate(DemoDiffusionModel())
         blob = pipe.model_dump_json()
         rebuilt = GenerationPipeline.model_validate_json(blob)
         assert len(rebuilt.stages) == 2
