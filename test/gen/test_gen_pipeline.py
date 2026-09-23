@@ -31,8 +31,8 @@ from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel
-from nvalchemi.models.gen.demo import _DemoGANGenerate
 from test.gen.conftest import (
+    DemoGANGenerate,
     make_batch,
     trivial_generate,
 )
@@ -65,7 +65,7 @@ def _generator(
         A declared generator backed by a demo sampler.
     """
     return AtomisticGenerator(
-        generator_func=_DemoGANGenerate(DemoGANModel().to(device)),
+        generator_func=DemoGANGenerate(DemoGANModel().to(device)),
         required_inputs=frozenset() if consumes is None else consumes,
         outputs=frozenset() if produces is None else produces,
         hooks=hooks or [],
@@ -299,7 +299,7 @@ class TestFieldContractValidation:
 
     def test_function_attributes_default_into_pipeline_validation(self) -> None:
         """Declarations carried by the generating function satisfy the contract."""
-        declared = AtomisticGenerator(generator_func=_DemoGANGenerate(DemoGANModel()))
+        declared = AtomisticGenerator(generator_func=DemoGANGenerate(DemoGANModel()))
         assert declared.required_inputs == frozenset()
         pipe = GenerationPipeline(stages=[declared, _generator()])
         assert isinstance(pipe, GenerationPipeline)

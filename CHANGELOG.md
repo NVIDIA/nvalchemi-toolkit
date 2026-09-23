@@ -17,7 +17,7 @@
   driven through their own `run()` loop, with per-call options addressed
   per stage via `stage_kwargs`.
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
-  `DemoDiffusionModel` placeholders with model-owning sampler callables.
+  `DemoDiffusionModel` placeholders.
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,

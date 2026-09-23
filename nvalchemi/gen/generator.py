@@ -87,10 +87,10 @@ A GAN, one forward pass, returning a batch directly::
     gan = AtomisticGenerator(generator_func=gan_generate)
 
 Model-owning procedures — a callable object carries the model (plus
-``device`` and field declarations the driver reads as defaults); the demo
-module's model-owning samplers are such objects::
+``device`` and field declarations the driver reads as defaults); the tests
+and examples ship such objects::
 
-    gen = AtomisticGenerator(generator_func=_DemoGANGenerate(DemoGANModel()))
+    gen = AtomisticGenerator(generator_func=GANGenerate(gan_model))
 
 Streaming — one ``sample()`` call per input item; ``None`` means repeated
 unconditional draws (an infinite stream unless capped)::

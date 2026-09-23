@@ -22,10 +22,13 @@ make_batch``) instead of being redefined per module.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 from tensordict import TensorDict
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models.gen import DemoDiffusionModel, DemoGANModel
 
 
 def make_atomic_data(num_atoms: int = 3) -> AtomicData:
@@ -168,3 +171,222 @@ class DeviceAwareGenerate:
         del rng, kwargs
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
         return make_batch(n).to(self.device)
+
+
+class DemoGANGenerate:
+    """Model-owning GAN sampler: draw a latent, decode it.
+
+    Test utility carrying the attributes the
+    :class:`~nvalchemi.gen.generator.AtomisticGenerator` reads as defaults:
+    ``device`` (the model's parameter device) and the model config's field
+    declarations — plus ``condition``, the driver's optional pre-generation
+    step, tiling a conditioning batch by the draw count.
+
+    Parameters
+    ----------
+    model
+        The :class:`~nvalchemi.models.gen.demo.DemoGANModel` this sampler owns.
+    """
+
+    def __init__(self, model: "DemoGANModel") -> None:
+        self.model = model
+        self.required_inputs = model.model_config.required_inputs
+        self.outputs = model.model_config.outputs
+
+    @property
+    def device(self) -> torch.device:
+        """The model's parameter device."""
+        return next(self.model.parameters()).device
+
+    def condition(
+        self,
+        inputs: Any,
+        *,
+        num_samples: int | None = None,
+        rng: torch.Generator | None = None,
+    ) -> Any:
+        """Tile a conditioning batch by the draw count.
+
+        Parameters
+        ----------
+        inputs
+            The call's raw inputs.
+        num_samples
+            The resolved draw count for the call; ``None`` (standalone use)
+            falls back to a single draw per conditioning graph.
+        rng
+            The resolved RNG (unused).
+
+        Returns
+        -------
+        Any
+            The conditioned inputs for the generating call.
+        """
+        del rng
+        n = 1 if num_samples is None else num_samples
+        if inputs is None:
+            return None
+        if isinstance(inputs, Batch):
+            idx = torch.arange(inputs.num_graphs).repeat_interleave(n)
+            return inputs[idx.to(inputs.device)]
+        if isinstance(inputs, AtomicData):
+            return Batch.from_data_list([inputs] * n, device=inputs.device)
+        return inputs
+
+    def __call__(
+        self,
+        inputs: Batch | None = None,
+        *,
+        num_samples: int = 1,
+        rng: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> Batch:
+        """Draw latents from the prior and decode them (one forward pass).
+
+        Parameters
+        ----------
+        inputs
+            Conditioning batch, if any; one draw per conditioning graph.
+        num_samples
+            Number of draws (used only when ``inputs`` is not a batch).
+        rng
+            Optional generator for reproducible latents.
+        **kwargs
+            Ignored.
+
+        Returns
+        -------
+        Batch
+            One point-cloud graph per draw.
+        """
+        del kwargs
+        n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
+        z = torch.randn(n, self.model.latent_dim, generator=rng, device=self.device)
+        sample = TensorDict({"x1": self.model.decode(z)}, batch_size=[n])
+        return self.model.to_batch(sample, inputs)
+
+
+class DemoDiffusionGenerate:
+    """Model-owning diffusion sampler: a small self-contained EDM Euler loop.
+
+    Test utility carrying the attributes the
+    :class:`~nvalchemi.gen.generator.AtomisticGenerator` reads as defaults:
+    ``device`` (the model's parameter device) and the model config's field
+    declarations — plus ``condition``, the driver's optional pre-generation
+    step, tiling a conditioning batch by the draw count. The sampler
+    hyperparameters are constructor-bound; per-call kwargs of the same names
+    override them.
+
+    Parameters
+    ----------
+    model
+        The :class:`~nvalchemi.models.gen.demo.DemoDiffusionModel` this
+        sampler owns.
+    num_steps
+        Number of Euler steps in the EDM loop.
+    sigma_max, sigma_min
+        The noise-level endpoints.
+    """
+
+    def __init__(
+        self,
+        model: "DemoDiffusionModel",
+        *,
+        num_steps: int = 4,
+        sigma_max: float = 2.0,
+        sigma_min: float = 0.01,
+    ) -> None:
+        self.model = model
+        self.num_steps = num_steps
+        self.sigma_max = sigma_max
+        self.sigma_min = sigma_min
+        self.required_inputs = model.model_config.required_inputs
+        self.outputs = model.model_config.outputs
+
+    @property
+    def device(self) -> torch.device:
+        """The model's parameter device."""
+        return next(self.model.parameters()).device
+
+    def condition(
+        self,
+        inputs: Any,
+        *,
+        num_samples: int | None = None,
+        rng: torch.Generator | None = None,
+    ) -> Any:
+        """Tile a conditioning batch by the draw count.
+
+        Parameters
+        ----------
+        inputs
+            The call's raw inputs.
+        num_samples
+            The resolved draw count for the call; ``None`` (standalone use)
+            falls back to a single draw per conditioning graph.
+        rng
+            The resolved RNG (unused).
+
+        Returns
+        -------
+        Any
+            The conditioned inputs for the generating call.
+        """
+        del rng
+        n = 1 if num_samples is None else num_samples
+        if inputs is None:
+            return None
+        if isinstance(inputs, Batch):
+            idx = torch.arange(inputs.num_graphs).repeat_interleave(n)
+            return inputs[idx.to(inputs.device)]
+        if isinstance(inputs, AtomicData):
+            return Batch.from_data_list([inputs] * n, device=inputs.device)
+        return inputs
+
+    def __call__(
+        self,
+        inputs: Batch | None = None,
+        *,
+        num_samples: int = 1,
+        rng: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> Batch:
+        """Sample with a small EDM Euler loop (first-order, deterministic).
+
+        Starts from Gaussian noise at ``sigma_max`` and integrates
+        ``dx/dσ = (x − D(x, σ))/σ`` down to ``sigma_min``, where ``D`` is
+        the model's x0-prediction. With all randomness in the initial
+        noise, a seeded ``rng`` reproduces draws exactly.
+
+        Parameters
+        ----------
+        inputs
+            Conditioning batch, if any; one draw per conditioning graph.
+        num_samples
+            Number of draws (used only when ``inputs`` is not a batch).
+        rng
+            Optional generator for reproducible initial noise.
+        **kwargs
+            ``num_steps``, ``sigma_max``, and ``sigma_min`` override the
+            constructor-bound sampler settings for this call; any other
+            options are ignored.
+
+        Returns
+        -------
+        Batch
+            One point-cloud graph per draw.
+        """
+        num_steps = kwargs.pop("num_steps", self.num_steps)
+        sigma_max = kwargs.pop("sigma_max", self.sigma_max)
+        sigma_min = kwargs.pop("sigma_min", self.sigma_min)
+        n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
+        device = self.device
+        sigmas = torch.linspace(sigma_max, sigma_min, num_steps + 1, device=device)
+        x = torch.randn(n, self.model.num_atoms, 3, generator=rng, device=device)
+        x = x * sigmas[0]
+        for i in range(num_steps):
+            s_cur, s_next = sigmas[i], sigmas[i + 1]
+            drift = (x - self.model.forward(x, s_cur.expand(n))) / s_cur
+            x = x + (s_next - s_cur) * drift
+        sample = TensorDict({"x1": x}, batch_size=[n])
+        return self.model.to_batch(sample, inputs)

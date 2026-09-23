@@ -43,8 +43,8 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel
-from nvalchemi.models.gen.demo import _DemoGANGenerate
 from test.gen.conftest import (
+    DemoGANGenerate,
     DeviceAwareGenerate,
     batch_generate,
     make_batch,
@@ -97,7 +97,7 @@ class TestBaseGenerator:
     def test_conditional_generate_via_model_sampler(self, device: str) -> None:
         """A model-owning sampler runs and lands on its device."""
         gen = AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel().to(device))
+            generator_func=DemoGANGenerate(DemoGANModel().to(device))
         )
         out = gen(make_batch(num_graphs=3).to(device))
         assert isinstance(out, Batch)
@@ -220,14 +220,14 @@ class TestBaseGenerator:
 
     def test_field_declarations_default_from_function(self) -> None:
         """``required_inputs``/``outputs`` default from the function."""
-        gen = AtomisticGenerator(generator_func=_DemoGANGenerate(DemoGANModel()))
+        gen = AtomisticGenerator(generator_func=DemoGANGenerate(DemoGANModel()))
         assert gen.required_inputs == frozenset()
         assert gen.outputs == frozenset({"positions", "atomic_numbers"})
 
     def test_field_declarations_explicit_override(self) -> None:
         """Explicit declarations win over the function's attributes."""
         gen = AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel()),
+            generator_func=DemoGANGenerate(DemoGANModel()),
             required_inputs=frozenset({"charges"}),
         )
         assert gen.required_inputs == frozenset({"charges"})
@@ -840,7 +840,7 @@ class TestStreaming:
         AtomisticGenerator
             A demo-sampler-backed generator (extra kwargs forwarded).
         """
-        kwargs.setdefault("generator_func", _DemoGANGenerate(DemoGANModel()))
+        kwargs.setdefault("generator_func", DemoGANGenerate(DemoGANModel()))
         return AtomisticGenerator(**kwargs)
 
     def test_stream_caps_with_max_batches(self) -> None:
@@ -958,7 +958,7 @@ class TestCompile:
             A demo-GAN-backed generator.
         """
         return AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel()), **kwargs
+            generator_func=DemoGANGenerate(DemoGANModel()), **kwargs
         )
 
     def test_compile_wraps_generator_func(self) -> None:

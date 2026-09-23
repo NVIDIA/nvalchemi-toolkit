@@ -31,8 +31,7 @@ from nvalchemi.models.gen import (
     DemoGANModel,
     GenerativeModelMixin,
 )
-from nvalchemi.models.gen.demo import _DemoDiffusionGenerate, _DemoGANGenerate
-from test.gen.conftest import make_batch
+from test.gen.conftest import DemoDiffusionGenerate, DemoGANGenerate, make_batch
 
 
 class TestDemoGANModel:
@@ -50,7 +49,7 @@ class TestDemoGANModel:
     def test_sampler_generator_runs(self) -> None:
         """The model-owning sampler drives a bare ``AtomisticGenerator``."""
         gen = AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel(num_atoms=4))
+            generator_func=DemoGANGenerate(DemoGANModel(num_atoms=4))
         )
         out = gen(num_samples=3)
         assert isinstance(out, Batch)
@@ -59,7 +58,7 @@ class TestDemoGANModel:
 
     def test_condition_attribute_tiles_batch_input(self) -> None:
         """The sampler's ``condition`` tiles a Batch by ``num_samples``."""
-        fn = _DemoGANGenerate(DemoGANModel(num_atoms=4))
+        fn = DemoGANGenerate(DemoGANModel(num_atoms=4))
         source = make_batch(num_graphs=2)
         tiled = fn.condition(source, num_samples=3)
         assert isinstance(tiled, Batch)
@@ -68,7 +67,7 @@ class TestDemoGANModel:
     def test_driver_tiles_conditioning_batch_via_attribute(self) -> None:
         """Through the driver, a Batch input yields ``num_samples`` per graph."""
         gen = AtomisticGenerator(
-            generator_func=_DemoGANGenerate(DemoGANModel(num_atoms=4))
+            generator_func=DemoGANGenerate(DemoGANModel(num_atoms=4))
         )
         source = make_batch(num_graphs=2)
         out = gen(source, num_samples=3)
@@ -76,7 +75,7 @@ class TestDemoGANModel:
 
     def test_sampler_object_carries_device_and_fields(self) -> None:
         """The sampler object exposes the attributes the driver reads."""
-        fn = _DemoGANGenerate(DemoGANModel())
+        fn = DemoGANGenerate(DemoGANModel())
         assert fn.device == torch.device("cpu")
         assert callable(fn.condition)
         assert fn.required_inputs == frozenset()
@@ -89,7 +88,7 @@ class TestDemoGANModel:
     def test_seeded_sessions_reproduce(self) -> None:
         """Same model + same seed across sessions gives identical draws."""
         model = DemoGANModel()
-        gen = AtomisticGenerator(generator_func=_DemoGANGenerate(model), seed=7)
+        gen = AtomisticGenerator(generator_func=DemoGANGenerate(model), seed=7)
         with gen:
             first = gen.sample(num_samples=2)
         with gen:
@@ -103,7 +102,7 @@ class TestDemoDiffusionModel:
     def test_sampler_generator_runs(self) -> None:
         """The built-in EDM Euler loop drives a bare ``AtomisticGenerator``."""
         gen = AtomisticGenerator(
-            generator_func=_DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=5))
+            generator_func=DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=5))
         )
         out = gen(num_samples=2, num_steps=2)
         assert out.num_graphs == 2
@@ -112,7 +111,7 @@ class TestDemoDiffusionModel:
     def test_driver_tiles_conditioning_batch_via_attribute(self) -> None:
         """The diffusion sampler's ``condition`` tiles through the driver."""
         gen = AtomisticGenerator(
-            generator_func=_DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=5))
+            generator_func=DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=5))
         )
         source = make_batch(num_graphs=2)
         out = gen(source, num_samples=3, num_steps=2)
@@ -136,7 +135,7 @@ class TestDemoDiffusionModel:
     def test_seeded_sessions_reproduce(self) -> None:
         """All randomness is the initial noise, so seeds reproduce draws."""
         model = DemoDiffusionModel()
-        gen = AtomisticGenerator(generator_func=_DemoDiffusionGenerate(model), seed=3)
+        gen = AtomisticGenerator(generator_func=DemoDiffusionGenerate(model), seed=3)
         with gen:
             first = gen.sample(num_samples=2)
         with gen:
@@ -149,7 +148,7 @@ class TestDemoHelperLegs:
 
     def test_condition_wraps_a_single_structure(self) -> None:
         """An AtomicData condition tiles into a fresh Batch of ``num_samples``."""
-        fn = _DemoGANGenerate(DemoGANModel(num_atoms=3))
+        fn = DemoGANGenerate(DemoGANModel(num_atoms=3))
         data = AtomicData(
             positions=torch.randn(3, 3),
             atomic_numbers=torch.full((3,), 6, dtype=torch.long),
@@ -161,7 +160,7 @@ class TestDemoHelperLegs:
 
     def test_diffusion_per_call_sigma_overrides(self) -> None:
         """Per-call ``sigma_max``/``sigma_min`` override the constructor-bound values."""
-        fn = _DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=4), num_steps=2)
+        fn = DemoDiffusionGenerate(DemoDiffusionModel(num_atoms=4), num_steps=2)
         default = fn(num_samples=2, rng=torch.Generator().manual_seed(3))
         wider = fn(num_samples=2, rng=torch.Generator().manual_seed(3), sigma_max=20.0)
         assert not torch.allclose(default.positions, wider.positions)
