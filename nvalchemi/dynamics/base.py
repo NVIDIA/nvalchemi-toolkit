@@ -1431,6 +1431,13 @@ class _CommunicationMixin:
             wired when ``DistributedPipeline.setup()`` is called (e.g.
             via the context manager or ``run()``).
         """
+        if not isinstance(other, BaseDynamics):
+            raise TypeError(
+                f"Cannot chain {type(self).__name__} | {type(other).__name__}: "
+                "dynamics | builds a DistributedPipeline of dynamics objects. "
+                "To drive generation into dynamics, compose the other way: "
+                "generator | engine (a GenerationPipeline)."
+            )
         return DistributedPipeline(stages={0: self, 1: other})
 
     def __add__(self, other: BaseDynamics) -> FusedStage:
