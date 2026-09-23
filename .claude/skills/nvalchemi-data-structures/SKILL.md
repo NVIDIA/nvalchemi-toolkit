@@ -244,16 +244,17 @@ batch.append_data([more_atomic_data])
 
 A batch can tag contiguous runs of graphs as **groups** — a single logical
 unit distinct from the node/edge/system storage groups above (e.g. the images
-of one NEB path). Assign with `batch.set_group_layout(group_idx)` (integer
-labels per graph, normalized to dense zero-based IDs); read the derived
-`batch.group_layout` (a cached `GroupLayout` with `graph_rank`, `node_to_group`,
+of one NEB path). Use `batch.set_group_layout(group_idx)` to assign integer
+labels per graph, normalized to dense zero-based IDs. Read the derived
+`batch.group_layout`, a cached `GroupLayout` with `graph_rank`, `node_to_group`,
 `group_ptr`, `num_graphs_per_group`, and mask/broadcast helpers `reduce_all`,
-`reduce_any`, `broadcast`, `graph_mask`, `selected_group_idx`). The cache
-invalidates automatically whenever `group_idx` changes or graph membership
-mutates (`zero`, `defrag`, etc.). `append()` requires both batches grouped
-or both ungrouped and rebases labels. `put()` rejects a grouped source or
-destination because graph-level buffer masks can split logical groups;
-`append_data()` is also rejected on a grouped batch.
+`reduce_any`, `broadcast`, `graph_mask`, and `selected_group_idx`. The cache
+invalidates when `group_idx` is reassigned or graph membership changes, but not
+after in-place changes such as `batch.group_idx[3] = 2`. Call
+`batch.set_group_layout(batch.group_idx)` to validate and rebuild it. `append()`
+requires both batches grouped or both ungrouped and rebases labels. `put()`
+rejects a grouped source or destination because graph-level buffer masks can
+split logical groups. `append_data()` is also rejected on a grouped batch.
 
 ### Pre-allocated buffer operations
 
