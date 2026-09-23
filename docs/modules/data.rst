@@ -48,6 +48,12 @@ Dataset composition and sampling
    MultiDatasetSampler
    MultiDatasetBatchSampler
 
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   distributed_shard
+
 Write configuration
 -------------------
 
