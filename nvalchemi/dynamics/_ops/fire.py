@@ -580,6 +580,7 @@ def fire2_step_coord_cell(
     tmax: float = 0.08,
     tmin: float = 0.005,
     maxstep: float = 0.1,
+    cell_force_scale: float = 1.0,
 ) -> None:
     r"""Full FIRE2 variable-cell optimization step.
 
@@ -621,6 +622,8 @@ def fire2_step_coord_cell(
         Scratch buffer ``[M]`` for max force norm; allocated if None.
     delaystep, dtgrow, dtshrink, alphashrink, alpha0, tmax, tmin, maxstep
         FIRE2 hyperparameters (same semantics as :func:`fire2_step_coord`).
+    cell_force_scale : float
+        Multiplier on the atom count normalizing cell forces.  Default 1.0.
     """
     _fire2_coord_cell(
         positions,
@@ -645,4 +648,5 @@ def fire2_step_coord_cell(
         tmax=tmax,
         tmin=tmin,
         maxstep=maxstep,
+        cell_force_scale=cell_force_scale,
     )

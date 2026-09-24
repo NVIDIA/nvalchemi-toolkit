@@ -12,7 +12,8 @@ overview --- they generally differ only in what `pre_update` and `post_update` d
 
 Geometry optimization finds the nearest local energy minimum by iteratively moving
 atoms downhill on the potential energy surface. The toolkit provides the **FIRE**
-(Fast Inertial Relaxation Engine) algorithm in two variants.
+(Fast Inertial Relaxation Engine) algorithm and the quasi-Newton **L-BFGS**, each
+with fixed- and variable-cell variants.
 
 ### Fixed-cell optimization
 
@@ -26,7 +27,7 @@ with FIRE(
     model=model,
     dt=0.1,           # initial timestep (femtoseconds)
     n_steps=500,
-    hooks=[ConvergenceHook.from_fmax(0.05)],
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -52,7 +53,7 @@ with FIREVariableCell(
     model=model,
     dt=0.1,
     n_steps=500,
-    hooks=[ConvergenceHook.from_fmax(0.05)],
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -60,6 +61,41 @@ with FIREVariableCell(
 The cell degrees of freedom are propagated using an NPH-like scheme at zero target
 pressure. The model must return tensile-positive `stress` in addition
 to `forces`.
+
+### L-BFGS
+
+{py:class}`~nvalchemi.dynamics.optimizers.lbfgs.LBFGS` and
+{py:class}`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell` are drop-in
+alternatives to FIRE2: one force evaluation per step, usually far fewer steps.
+
+```python
+from nvalchemi.dynamics import ConvergenceHook
+from nvalchemi.dynamics.optimizers import LBFGS
+
+with LBFGS(
+    model=model,
+    history_size=6,     # stored curvature pairs
+    maxstep=0.2,        # largest displacement per step (angstroms)
+    n_steps=500,
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
+) as opt:
+    relaxed = opt.run(batch)
+```
+
+- `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: install
+  `AlignCellHook()` (`frequency=1`), as for `FIRE2VariableCell`, on the optimizer
+  or its `FusedStage`. Without the hook, every cell in the batch must already be
+  aligned.
+- Do not edit positions between steps (e.g. `WrapPeriodicHook`); the history
+  differences consecutive positions. `FreezeAtomsHook` is supported.
+- The first step after admission moves the largest-force atom by `maxstep`.
+- The cell reference is captured when a system is admitted. Under `FusedStage`, a
+  system entering the stage later keeps it; this stays correct but can take more
+  steps if another stage has since changed the cell shape.
+
+Both variable-cell optimizers accept `cell_force_scale` (default 1.0; larger moves
+the cell less). `FIRE2VariableCell` reads it every step; `LBFGSVariableCell` fixes
+it, like `history_size`, when state is allocated.
 
 ### Choosing between fixed and variable cell
 

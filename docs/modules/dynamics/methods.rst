@@ -228,3 +228,15 @@ evaluation.
 
    .. autofunction:: fire2_step_coord
    .. autofunction:: fire2_step_coord_cell
+
+L-BFGS steps along a quasi-Newton direction built from the last
+``history_size`` position/force differences, bounded by ``maxstep``.  Like
+FIRE2 it takes one force evaluation per step and places the whole step before
+the force evaluation.
+
+.. dropdown:: Underlying ``nvalchemiops`` kernels
+
+   .. currentmodule:: nvalchemiops.torch.lbfgs
+
+   .. autofunction:: lbfgs_step_coord
+   .. autofunction:: lbfgs_step_coord_cell

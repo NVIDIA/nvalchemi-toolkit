@@ -222,6 +222,16 @@ class TestStateLazyInit:
         self._run_step(dyn, batch)
         assert hasattr(dyn, "_state")
 
+    def test_lbfgs_state_initialized_on_first_step(self):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        model = _make_model()
+        batch = _make_batch(2)
+        dyn = LBFGS(model=model)
+        assert not hasattr(dyn, "_state")
+        self._run_step(dyn, batch)
+        assert hasattr(dyn, "_state")
+
     def test_npt_state_initialized_on_first_step(self):
         # NPT/NPH step() exercises warp kernels that require a GPU or a
         # specific dtype configuration not available in the CPU test env.
@@ -301,13 +311,13 @@ class TestStateShapes:
         _discover_dynamics_implementations(),
         ids=lambda cls: cls.__name__,
     )
-    def test_all_state_fields_are_system_major(self, dynamics_cls):
-        """Require every state tensor to have one leading row per graph.
+    def test_all_state_fields_are_entity_major(self, dynamics_cls):
+        """Require every state tensor to lead with its owning entity.
 
         BaseDynamics._save_state_fields clones every state field, and
-        BaseDynamics._restore_unmasked_state expands a graph mask across
-        each field's trailing dimensions. Both methods therefore require
-        state tensors to have shape [num_graphs, *trailing_dimensions].
+        index_select/append gather along dimension zero, so each field must
+        have shape [level cardinality, *trailing]: num_graphs for the system
+        level, the summed segment lengths for a segmented level.
 
         Implementations are discovered automatically so a newly added
         integrator or optimizer cannot be silently omitted. A new required
@@ -348,13 +358,28 @@ class TestStateShapes:
             assert dynamics._save_state_fields() == {}
             return
 
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
         saved = dynamics._save_state_fields()
         assert state.num_graphs == num_graphs
         assert saved.keys() == {key for key, _ in state}
+
+        # Expected leading dimension per level: graphs for a uniform level,
+        # total elements for a segmented one.
+        expected_leading = {}
+        for group in state._storage.groups.values():
+            leading = (
+                int(group.segment_lengths.sum())
+                if isinstance(group, SegmentedLevelStorage)
+                else num_graphs
+            )
+            for key in group.keys():
+                expected_leading[key] = leading
+
         for key, value in state:
             assert isinstance(value, torch.Tensor), key
             assert value.ndim > 0, key
-            assert value.shape[0] == num_graphs, key
+            assert value.shape[0] == expected_leading[key], key
             assert saved[key].shape == value.shape, key
             assert saved[key].data_ptr() != value.data_ptr(), key
 
@@ -487,6 +512,29 @@ class TestStateShapes:
         dyn = FIRE2VariableCell(model=model, dt=0.05)
         dyn._init_state(batch)
         assert dyn._state.cell_velocities.shape == (M, 3, 3)
+        assert dyn._state.num_graphs == M
+
+    @pytest.mark.parametrize("M", [1, 3])
+    def test_lbfgs_shapes(self, M):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        batch = _make_batch(M)
+        dyn = LBFGS(model=_make_model(), history_size=4)
+        dyn._init_state(batch)
+        assert dyn._state.s_history.shape == (batch.num_nodes, 4, 3)
+        assert dyn._state.ys.shape == (M, 4)
+        assert dyn._state.iteration.dtype == torch.int32
+        assert dyn._state.num_graphs == M
+
+    @pytest.mark.parametrize("M", [1, 2])
+    def test_lbfgs_variable_cell_shapes(self, M):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGSVariableCell
+
+        batch = _make_batch(M, with_cell=True)
+        dyn = LBFGSVariableCell(model=_make_model())
+        dyn._init_state(batch)
+        assert dyn._state.ref_cell.shape == (M, 3, 3)
+        assert dyn._state.x_base.shape == (batch.num_nodes + 2 * M, 3)
         assert dyn._state.num_graphs == M
 
     def test_nve_state_dtype_matches_positions(self):
@@ -704,6 +752,18 @@ class TestMakeNewState:
         assert state is not None
         assert state.alpha.shape == (n_new,)
         assert state.num_graphs == n_new
+
+    @pytest.mark.parametrize("n_new", [1, 2])
+    def test_lbfgs_make_new_state(self, n_new):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        template = self._template()
+        dyn = LBFGS(model=_make_model())
+        state = dyn._make_new_state(n_new, template)
+        assert state.num_graphs == n_new
+        # Fresh state: never evaluated, no history.
+        assert (state.iteration == -1).all()
+        assert (state.history_count == 0).all()
 
     def test_demo_dynamics_make_new_state_returns_none(self):
         from nvalchemi.dynamics.demo import DemoDynamics
