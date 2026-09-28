@@ -373,11 +373,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         description="Base seed for per-draw RNGs (seed + step_count per call).",
     )
     enable_inference_mode: bool = Field(
-        default=True,
+        default=False,
         description=(
             "Run generation under `torch.inference_mode` in the context manager. "
-            "This disables gradient tracking, and so for generative workflows that "
-            "do require them, disable this field."
+            "This disables gradient tracking; enable it for workflows that do "
+            "not need gradients."
         ),
     )
     step_count: int = Field(
