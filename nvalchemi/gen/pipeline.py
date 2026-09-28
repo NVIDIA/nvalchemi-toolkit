@@ -271,15 +271,22 @@ class GenerationPipeline(BaseModel):
                     ):
                         stage._stream = self._stream
                     stage.__enter__()
+                    # stages unwind with (None, None, None): the lifecycle
+                    # convention matches dynamics (no exception triple)
+                    stack.callback(stage.__exit__, None, None, None)
                 elif hasattr(stage, "__enter__"):
                     # Offer the shared stream to any stage that follows the
-                    # ``_stream`` convention (dynamics engines, fused stages).
+                    # ``_stream`` convention (dynamics engines, fused stages),
+                    # but only when the stage lives on the stream's device.
                     if hasattr(stage, "_stream"):
-                        stage._stream = self._stream
+                        stage_device = getattr(stage, "device", None)
+                        if self._stream is None or stage_device in (
+                            None,
+                            self._stream.device,
+                        ):
+                            stage._stream = self._stream
                     stage.__enter__()
-                # stages unwind with (None, None, None): the lifecycle convention
-                # matches dynamics (no exception triple)
-                stack.callback(stage.__exit__, None, None, None)
+                    stack.callback(stage.__exit__, None, None, None)
         except Exception:
             stack.close()
             self._stream = None

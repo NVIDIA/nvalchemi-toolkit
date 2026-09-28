@@ -1035,6 +1035,29 @@ class TestSession:
         kwargs.setdefault("generator_func", _rng_generate)
         return AtomisticGenerator(**kwargs)
 
+    def test_session_enters_inference_mode_by_default(self) -> None:
+        """A session runs under torch.inference_mode when the field is set."""
+        gen = self._generator()
+        assert not torch.is_inference_mode_enabled()
+        with gen:
+            assert torch.is_inference_mode_enabled()
+            gen()
+        assert not torch.is_inference_mode_enabled()
+
+    def test_session_inference_mode_opt_out(self) -> None:
+        """``enable_inference_mode=False`` leaves grad tracking live in a session."""
+        gen = self._generator(enable_inference_mode=False)
+        with gen:
+            assert not torch.is_inference_mode_enabled()
+
+    def test_session_inference_mode_skips_when_already_active(self) -> None:
+        """Nested in an outer inference mode, the session must not exit it."""
+        gen = self._generator()
+        with torch.inference_mode():
+            with gen:
+                assert torch.is_inference_mode_enabled()
+            assert torch.is_inference_mode_enabled()
+
     def test_session_stream_matches_resolved_device(self, device: str) -> None:
         """A CUDA-resolved generator gets a dedicated session stream; CPU does not."""
         gen = self._generator(device=device)

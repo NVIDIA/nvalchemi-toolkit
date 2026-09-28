@@ -643,6 +643,45 @@ class TestDuckTypedSessions:
             out = pipe(make_batch(num_graphs=1).to("cuda"))
             assert out.num_graphs == 1
 
+    def test_session_with_plain_callable_stage(self) -> None:
+        """A plain ``Batch -> Batch`` stage has no session lifecycle to enter."""
+
+        def _passthrough(batch: Batch) -> Batch:
+            """Pass the batch through unchanged."""
+            return batch
+
+        pipe = _generator() | _passthrough
+        with pipe:
+            out = pipe(make_batch(num_graphs=2))
+        assert out.num_graphs == 2
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="No CUDA device available."
+    )
+    def test_foreign_device_stage_not_offered_stream(self) -> None:
+        """A duck-typed stage on another device keeps its own (unset) stream."""
+
+        class _ForeignManaged:
+            _stream = None
+
+            def __init__(self) -> None:
+                self.device = torch.device("cpu")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+            def __call__(self, batch: Batch) -> Batch:
+                return batch
+
+        stage = _ForeignManaged()
+        pipe = _generator(device="cuda") | stage
+        with pipe:
+            assert pipe._stream is not None
+            assert stage._stream is None
+
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="No CUDA device available."
     )

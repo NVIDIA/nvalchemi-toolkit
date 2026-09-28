@@ -654,6 +654,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         """
         stack = ExitStack()
         try:
+            if self.enable_inference_mode and not torch.is_inference_mode_enabled():
+                # generation produces no autograd history inside a session
+                stack.enter_context(torch.inference_mode())
             if self._stream is None:
                 device = self._infer_device()
                 if (
