@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add `nvalchemi.csp` modules for molecular crystal-structure prediction
+  applications, including random rigid-molecule packing and fast, approximate
+  structure matching and duplicate filtering.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.

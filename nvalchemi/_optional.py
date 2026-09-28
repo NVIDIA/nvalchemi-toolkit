@@ -94,6 +94,7 @@ class OptionalDependency(Enum):
 
     ASE = ("ase", "nvalchemi-toolkit[ase]")
     PYMATGEN = ("pymatgen", "nvalchemi-toolkit[pymatgen]")
+    RDKIT = ("rdkit", "nvalchemi-toolkit[rdkit]")
     MACE = ("mace", "nvalchemi-toolkit[mace]")
     AIMNET = ("aimnet", "nvalchemi-toolkit[aimnet]")
     TENSORBOARD = ("tensorboard", "nvalchemi-toolkit[tensorboard]")
