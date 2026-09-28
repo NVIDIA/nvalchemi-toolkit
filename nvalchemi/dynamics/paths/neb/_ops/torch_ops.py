@@ -154,8 +154,14 @@ def _validate_neb_outputs(pos, a, num_links, forces, links, tangent=None):
             raise ValueError(f"{name} must have shape {shape}")
         if tensor.dtype != pos.dtype or tensor.device != pos.device:
             raise ValueError(f"{name} must match positions in dtype/device")
-        if name != "link_lengths" and tensor.stride(-1) != 1:
-            raise ValueError(f"{name} must have contiguous coordinates")
+        if name == "link_lengths":
+            if num_links > 1 and tensor.stride(0) == 0:
+                raise ValueError(f"{name} must not have overlapping elements")
+        else:
+            if tensor.stride(-1) != 1:
+                raise ValueError(f"{name} must have contiguous coordinates")
+            if a > 1 and tensor.stride(0) < 3:
+                raise ValueError(f"{name} must not have overlapping elements")
 
 
 # =============================================================================
