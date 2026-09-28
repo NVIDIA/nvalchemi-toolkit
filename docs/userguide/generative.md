@@ -148,8 +148,9 @@ Entering a session with `with gen:` performs four setup actions:
 2. **Session-scoped RNG**: Initializes a `torch.Generator` from `seed` that advances
    across draws. Outside a session, each call seeds independently using `seed +
    step_count`.
-3. **Inference mode**: Enables `torch.inference_mode` by default. Set
-   `enable_inference_mode=False` if your sampler requires gradients.
+3. **Inference mode**: Runs the session under `torch.inference_mode` when
+   `enable_inference_mode=True`. Off by default; enable it when your sampler
+   does not need gradients.
 4. **Hook lifecycles**: Calls `__enter__` on any context-manager hooks, ensuring clean
    teardown on exit.
 
