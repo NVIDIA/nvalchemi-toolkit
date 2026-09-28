@@ -23,20 +23,24 @@ from nvalchemi.data.datapipes import (
     BatchDatasetProtocol,
     DataLoader,
     Dataset,
+    FieldSchema,
     InMemoryDataset,
     Reader,
 )
+from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.data.transforms import Compose
 
 __all__ = [
     # Core
     "AtomicData",
     "Batch",
+    "LevelSchema",
     # Datapipes
     "Reader",
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
     "BatchDatasetProtocol",
+    "FieldSchema",
     "Dataset",
     "InMemoryDataset",
     "DataLoader",

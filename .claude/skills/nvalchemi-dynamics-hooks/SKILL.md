@@ -57,7 +57,8 @@ class Hook(Protocol):
 ```
 
 A hook fires when `step_count % hook.frequency == 0` (so all hooks fire at
-step 0).
+step 0), except `ON_ADMISSION`, which fires once per admission regardless of
+frequency.
 
 **HookContext** — base snapshot shared by hook-enabled workflows:
 
@@ -77,6 +78,7 @@ class HookContext:
 class DynamicsContext(HookContext):
     step_count: int = 0
     converged_mask: torch.Tensor | None = None
+    active_graph_mask: torch.Tensor | None = None
 ```
 
 Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
@@ -87,26 +89,61 @@ Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
 
 ### Dynamics — `DynamicsStage`
 
-Each `step()` call fires hooks at 9 stages in this order:
+Dynamics exposes 10 lifecycle stages. `ON_ADMISSION` fires once when a
+batch is admitted, while the remaining 9 stages fire within each `step()`:
 
 ```text
+ON_ADMISSION (-1)  ← once before force priming and the first step
 BEFORE_STEP (0)
   BEFORE_PRE_UPDATE (1)  →  pre_update()  →  AFTER_PRE_UPDATE (2)
   BEFORE_COMPUTE (3)     →  compute()      →  AFTER_COMPUTE (4)
   BEFORE_POST_UPDATE (5) →  post_update()  →  AFTER_POST_UPDATE (6)
 AFTER_STEP (7)
-ON_CONVERGE (8)   ← only if convergence detected
+ON_CONVERGE (8)   ← BaseDynamics: if detected; fused sub-stage: frequency-eligible steps
 ```
 
 **Stage selection guidelines (dynamics):**
 
 | Goal | Stage |
 |------|-------|
+| Validate or allocate for a newly admitted batch | `DynamicsStage.ON_ADMISSION` |
 | Modify forces/energy after model | `DynamicsStage.AFTER_COMPUTE` |
 | Observe final state (logging, snapshots) | `DynamicsStage.AFTER_STEP` |
 | Wrap positions after velocity update | `DynamicsStage.AFTER_POST_UPDATE` |
 | Instrument timing / profiling | `DynamicsStage.BEFORE_STEP` |
 | React to convergence | `DynamicsStage.ON_CONVERGE` |
+
+`ON_ADMISSION` is reset for every new `run()` and for managed membership
+changes such as refill or pipeline communication. In `FusedStage`, it runs
+outside compiled `_step_impl`, making it suitable for shape-dependent allocation
+and Python setup that per-step hooks cannot safely perform under `fullgraph=True`.
+It ignores the step-based frequency gate; a multi-stage hook's frequency still
+applies at its other stages.
+
+In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
+fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
+`AFTER_*` hooks run after it. Every hook receives `ctx.active_graph_mask` for
+the graphs participating at that boundary. Fused-level masks span all
+participating sub-stages; sub-stage masks are further restricted to graphs
+owned by that sub-stage.
+
+During a force-reprime iteration, a graph participates in the step and shared
+compute but skips both integrator updates. Therefore:
+
+- `BEFORE_STEP`, `BEFORE_COMPUTE`, `AFTER_COMPUTE`, and `AFTER_STEP` include
+  reprime-pending graphs.
+- `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
+  `AFTER_POST_UPDATE` exclude them, at both the fused and sub-stage level.
+
+Update masks are intentionally fixed at step start, so clearing
+`reprime_pending` after compute enables integrator updates on the next
+iteration without enabling post-update in the current one.
+
+`ON_CONVERGE` remains sub-stage-only because convergence is evaluated
+independently per sub-stage. Fused sub-stages evaluate convergence every step;
+registered `ON_CONVERGE` hooks run when allowed by `hook.frequency` and must
+inspect `ctx.converged_mask`. `BaseDynamics.step()` calls them only when
+convergence is detected.
 
 ---
 

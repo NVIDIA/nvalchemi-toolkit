@@ -19,9 +19,11 @@ from __future__ import annotations
 from nvalchemi.data.datapipes.backends.zarr import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    FieldSchema,
 )
 
 __all__ = [
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
+    "FieldSchema",
 ]

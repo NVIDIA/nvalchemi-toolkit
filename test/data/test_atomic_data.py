@@ -35,6 +35,8 @@ from nvalchemi.data.atomic_data import (
     to_one_hot,
     voigt_to_matrix,
 )
+from nvalchemi.data.batch import Batch
+from nvalchemi.data.level_storage import LevelSchema
 
 
 def _minimal_atomic_data(
@@ -923,3 +925,108 @@ class TestFromStructure:
         struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
         data = AtomicData.from_structure(struct)
         assert data.atomic_numbers.dtype == torch.int32
+
+
+class TestAtomicDataCustomSchemaDtypeConversion:
+    """Regression tests for private custom-schema metadata on ``AtomicData.to``."""
+
+    def test_to_updates_only_changed_present_custom_float_schema_fields(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("declared_values", "samples", dtype=torch.float64)
+        schema.set("inferred_values", "samples")
+        schema.set("integer_values", "samples", dtype=torch.int64)
+        schema.set("absent_values", "samples", dtype=torch.float64)
+        data = AtomicData(
+            positions=torch.ones(2, 3, dtype=torch.float64),
+            atomic_numbers=torch.ones(2, dtype=torch.int64),
+        )
+        data.declared_values = torch.tensor([[1.0], [2.0]], dtype=torch.float64)
+        data.inferred_values = torch.tensor([[3.0], [4.0]], dtype=torch.float64)
+        data.integer_values = torch.tensor([[5], [6]], dtype=torch.int64)
+        data._level_schema = schema
+
+        moved = data.to("cpu", dtype=torch.float32)
+
+        assert moved._level_schema is not schema
+        assert moved._level_schema.dtype("declared_values") == "float32"
+        assert moved._level_schema.dtype("inferred_values") == "float32"
+        assert moved._level_schema.dtype("integer_values") == "int64"
+        assert moved._level_schema.dtype("absent_values") == "float64"
+        assert schema.dtype("declared_values") == "float64"
+        assert "inferred_values" not in schema.dtypes
+        assert moved.declared_values.dtype == torch.float32
+        assert moved.integer_values.dtype == torch.int64
+
+        rebatch = Batch.from_data_list(
+            [moved, moved.clone()], attr_map=moved._level_schema
+        )
+        assert rebatch.declared_values.dtype == torch.float32
+        assert rebatch.inferred_values.dtype == torch.float32
+
+    def test_to_updates_batch_derived_uniform_segmented_and_product_fields(self):
+        """Batch-derived AtomicData keeps converted custom schema independent."""
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_samples", left="atoms", right="samples")
+        schema.set("metadata_values", "metadata", dtype=torch.float64)
+        schema.set("sample_values", "samples")
+        schema.set("atom_sample_values", "atom_samples", dtype=torch.float64)
+        schema.set("sample_ids", "samples", dtype=torch.int64)
+        data = AtomicData(
+            positions=torch.ones(2, 3, dtype=torch.float64),
+            atomic_numbers=torch.ones(2, dtype=torch.int64),
+        )
+        data.metadata_values = torch.tensor([[1.5]], dtype=torch.float64)
+        data.sample_values = torch.tensor([[2.5], [3.5]], dtype=torch.float64)
+        data.atom_sample_values = torch.tensor(
+            [[[4.5], [5.5]], [[6.5], [7.5]]], dtype=torch.float64
+        )
+        data.sample_ids = torch.tensor([[8], [9]], dtype=torch.int64)
+
+        batch = Batch.from_data_list([data], attr_map=schema)
+        source = batch.get_data(0)
+        source_schema = source._level_schema
+        moved = source.to("cpu", dtype=torch.float32)
+
+        assert moved._level_schema is not source_schema
+        assert source_schema.dtype("metadata_values") == "float64"
+        assert source_schema.dtype("sample_values") == "float64"
+        assert source_schema.dtype("atom_sample_values") == "float64"
+        assert moved._level_schema.dtype("metadata_values") == "float32"
+        assert moved._level_schema.dtype("sample_values") == "float32"
+        assert moved._level_schema.dtype("atom_sample_values") == "float32"
+        assert moved._level_schema.dtype("sample_ids") == "int64"
+        assert moved.metadata_values.dtype == torch.float32
+        assert moved.sample_values.dtype == torch.float32
+        assert moved.atom_sample_values.dtype == torch.float32
+        assert moved.sample_ids.dtype == torch.int64
+
+        rebatch = Batch.from_data_list(
+            [moved, moved.clone()], attr_map=moved._level_schema
+        )
+        assert rebatch.level_ptr("metadata").tolist() == [0, 1, 2]
+        assert rebatch.level_ptr("samples").tolist() == [0, 2, 4]
+        assert rebatch.level_ptr("atom_samples").tolist() == [0, 4, 8]
+        assert rebatch.metadata_values.dtype == torch.float32
+        assert rebatch.sample_values.dtype == torch.float32
+        assert rebatch.atom_sample_values.dtype == torch.float32
+        assert rebatch.sample_ids.dtype == torch.int64
+
+    def test_to_unsupported_custom_schema_dtype_leaves_source_unchanged(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("values", "samples", dtype=torch.float32)
+        data = AtomicData(
+            positions=torch.ones(1, 3), atomic_numbers=torch.ones(1, dtype=torch.int64)
+        )
+        data.values = torch.ones(1, 1)
+        data._level_schema = schema
+
+        with pytest.raises(ValueError, match="Unsupported torch dtype"):
+            data.to("cpu", dtype=torch.bfloat16)
+
+        assert data._level_schema is schema
+        assert schema.dtype("values") == "float32"
+        assert data.values.dtype == torch.float32

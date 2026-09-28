@@ -25,7 +25,7 @@ GPUs. It is built around four core ideas:
    with ``+`` or distribute across GPUs with ``|``.
 
 .. graphviz::
-   :caption: A single ``BaseDynamics.step()`` and its hook stages.
+   :caption: Batch admission followed by a ``BaseDynamics.step()``.
 
     digraph step_architecture {
         rankdir=LR
@@ -47,6 +47,7 @@ GPUs. It is built around four core ideas:
             pre -> comp -> post [style=bold]
         }
 
+        on_admission [label="ON_ADMISSION\n(once per admission)" fillcolor="#4a3315"]
         before_step [label="BEFORE_STEP" fillcolor="#4a3315"]
         after_step  [label="AFTER_STEP" fillcolor="#4a3315"]
         on_converge [label="ON_CONVERGE" fillcolor="#4a3315"]
@@ -55,6 +56,7 @@ GPUs. It is built around four core ideas:
         hook_comp [label="BEFORE / AFTER\n_COMPUTE"     fillcolor="#4a3315"]
         hook_post [label="BEFORE / AFTER\n_POST_UPDATE" fillcolor="#4a3315"]
 
+        on_admission -> before_step [style=dashed color="#999999"]
         before_step -> pre [style=dashed color="#999999"]
         post -> after_step [style=dashed color="#999999"]
         after_step -> on_converge [style=dashed color="#999999"]

@@ -18,6 +18,38 @@
   per stage via `stage_kwargs`.
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
   `DemoDiffusionModel` placeholders.
+
+- Add `DynamicsStage.ON_ADMISSION` to `BaseDynamics`, enabling hooks to
+  initialize per-system state once when a batch is admitted, before force
+  priming and outside compiled fused steps.
+- `FusedStage(reprime_on_entry=...)` — status codes whose newly entering
+  graphs skip one integrator update so the shared compute and target-stage
+  `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
+  before it advances them.
+
+### Fixed
+
+- **Dynamics hook lifecycle** — fused-level hooks now fire at the
+  `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
+  `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
+  fire. Fused-level `AFTER_COMPUTE` hooks now run after the sub-stage loop
+  instead of before it. Existing workarounds that register the same hook at
+  both fused and sub-stage levels will therefore invoke it twice at each
+  matching boundary and should remove the duplicate registration.
+- **`FusedStage` force priming** — a dynamics instance's own adaptive
+  optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
+  `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+
+### Deprecated
+
+- `FusedStage.register_fused_hook()`. Use the inherited `register_hook()`
+  method instead; hooks on a `FusedStage` already observe the complete fused
+  batch.
+
+## 0.2.0 — 2026-08-07
+
+### Added
+
 - Domain decomposition for distributed inference and dynamics: a spatial halo
   strategy and a graph-parallel strategy, both driven by a declarative
   `MLIPSpec` a model wrapper publishes as `distribution_spec`. Ewald, PME,
@@ -60,6 +92,11 @@
   step as before; metric-driven schedulers step only at validation
   checkpoints, where the validation summary supplies the metric.
 
+- Python 3.14 support across the core package and the cu12/cu13 CUDA extras,
+  including pure-`pip` installs: `requires-python` is now `>=3.11,<3.15`.
+  Python 3.15 is not publicly supported yet (upstream wheels missing).
+- numpy relaxed to `>=2,<3` — downstream users may use any numpy 2.x.
+
 ### Model Wrappers
 
 - **Pipeline neighbor-list adaptation policy** — `PipelineModelWrapper`
@@ -72,6 +109,13 @@
 
 ### Core Data Layer
 
+- **Extensible batch levels** - `LevelSchema` and `Batch` now support custom
+  uniform, segmented, and ordered product levels. Custom definitions,
+  fields, and product-derived cardinalities are preserved through construction,
+  reconstruction, selection, append, reusable buffers, point-to-point transport,
+  and Zarr persistence. Pointer-only levels remain available in direct `Batch` and
+  Zarr storage workflows. Existing atom, edge, and system APIs remain compatible,
+  and legacy-only Zarr stores retain their existing layout.
 - **In-memory datapipes** - new `InMemoryDataset` stores a fully materialized
   `Batch` in memory and serves graph-indexed `Batch` selections through the
   same `load_batches` / fused-prefetch interface used by `DataLoader`. It can
@@ -107,11 +151,117 @@
 
 ### Fixed
 
+- Cap `plotext<6`: plotext 6 removed `clf()`, which hooks/reporting and the
+  training CLI call; fresh resolves were silently installing 6.x and breaking
+  Rich dashboards and `nvalchemi-training` on all Python versions.
+
 - **UMA CUDA dependency resolution** — add standalone `uma-cu12` and
   `uma-cu13` extras. They select the matching torch build without installing
   PhysicsNeMo's RAPIDS extras, whose numba upper bound conflicts with Fairchem
   2.22.
 
+- **Segment expansion on a non-default GPU** — the Warp expansion kernel behind
+  `Batch.index_select` was launched against whichever CUDA device happened to be
+  current, so a batch whose storage records a bare `cuda` while its tensors live
+  on another GPU read unmapped memory (`an illegal memory access was
+  encountered`) on every host where the current device is not `cuda:0`, and the
+  launch left that device selected for the rest of the process. The kernel now
+  launches on the device the batch pointer lives on and restores the caller's
+  current device.
+- **Level storages recorded an unresolved device** — `to_device("cuda")` and
+  construction with `device="cuda"` stored the bare request while the tensors
+  landed on whichever GPU was current, so the storage's `device` disagreed with
+  its own data as soon as the current device changed and later pointer builds
+  and concatenations raised `Expected all tensors to be on the same device`. A
+  bare `cuda` is now resolved to the current device at the moment it is
+  recorded. A `Batch` built around a storage takes that storage's device rather
+  than resolving the request on its own, so `Batch(storage=..., device="cuda")`
+  no longer reports the current GPU while its data sits on another one; an
+  indexed device that contradicts the storage raises `ValueError`. A batch that
+  allocates its own storage builds it on the requested device too, so
+  `Batch(device="cuda:1")` no longer records `cuda:1` while every tensor
+  assigned to it lands on CPU.
+- **Merging batches held on different devices** — the bulk merge behind
+  `MultiLevelStorage.from_batches` and `MultiLevelStorage.concatenate` moved
+  every contributed tensor to the merge device except `segment_lengths`, which
+  it read where each group already held them, so folding a CPU storage into a
+  CUDA one raised `Expected all tensors to be on the same device` out of
+  `torch.cat`. The segment lengths are now moved like everything else.
+- **Low-precision graph-balanced losses** — `per_graph_sum` accumulated in the
+  input dtype, and CUDA scatter atomics round after every add, so a bf16 running
+  sum stopped growing at 256 and an fp16 one at 2048. A per-atom-normalized
+  force loss over 3000 atoms was wrong by a factor of 3.6 in bf16 and 10% in
+  fp16. Sums now accumulate in at least fp32 and are returned in fp32 for
+  half-precision inputs — on the padded `(B, V_max, 3)` force layout as well
+  as the dense `(V, 3)` one — so a per-graph total past the fp16 ceiling of
+  65504 no longer saturates to `inf` before the loss normalizes it, and a
+  half-precision force loss returns the same fp32 value whichever layout it is
+  given; fp32 and fp64 results are unchanged. The dense graph-balanced path sums
+  each atom's three Cartesian components in fp32 too, so a single fp16 residual
+  large enough to overflow that inner sum (components near 150) no longer makes
+  the dense loss `inf` where the padded loss is finite.
+- **Demo model embeddings on a batch** — `DemoModelWrapper.compute_embeddings`
+  set `node_embeddings` as a plain attribute, which a `Batch` routes to its
+  system group, so the per-atom tensor failed the batch-size check and the call
+  raised on every batch. Node embeddings are now written through
+  `Batch.add_key(..., level="node")`, which registers the field with the
+  storage's attribute map so a later plain `batch.node_embeddings = ...` routes
+  back to the atoms group instead of the system group. `MACEWrapper` writes its
+  node embeddings through the same path. The graph embeddings the same call
+  returns were also pooled with an unexpanded `(N, 1)` scatter index, which
+  `scatter_add_` does not broadcast over an `(N, H)` source, so every feature
+  but the first came back zero; the index is now expanded and all `H` features
+  are summed.
+- **Segfault on a cross-device buffer write** — `Batch.put` and the
+  `GPUBuffer.write` that calls it took the Warp launch device for their fit-mask
+  kernel from the *source* batch, so writing a CPU batch into a CUDA buffer ran
+  the kernel on the host against CUDA destination pointers and killed the
+  process with a segmentation fault rather than raising. `GPUBuffer.write` now
+  moves an incoming batch to the buffer's device, as `HostMemory.write` already
+  moves its items to CPU; `Batch.put` raises `ValueError` on a source held
+  elsewhere; and the put kernels launch on the destination and refuse a
+  mixed-device pair.
+- **Attribute writes routed past their own group** — a tensor assigned to a
+  `Batch` resolved its level through the attribute map alone, so any key the map
+  did not know about went to the system group even when the batch already held
+  it at node or edge level, leaving the same name at two levels and breaking the
+  next `to_data_list()`. A write now follows the group that already holds the
+  key, and `Batch.add_key` registers what it adds.
+- **Half-precision totals in the default loss reduction** — the validity-weighted
+  mean every loss leaf inherits from `BaseLossFunction.reduce` summed in the
+  residual's dtype, so a finite per-graph fp16 residual saturated the moment its
+  total passed 65504: an `EnergyMSELoss` over 64 graphs with a 40 eV residual
+  returned `inf`. Both sums now accumulate in at least fp32 and a half-precision
+  input returns an fp32 loss, as the force terms already did; fp32 and fp64 are
+  bit-identical.
+- **Validation summaries over half-precision losses** — the validation loss
+  accumulator kept its running sums in the loss's own dtype and widened only
+  when the summary was built, so a bf16 running sum stopped growing once each
+  batch's contribution fell below half an ulp: 500 batches averaging 0.8
+  reported 0.512, 36% low (fp16: 0.75% low). Every running sum is now widened to
+  float64 as it is taken.
+- **`TrainingStrategy.validate()` before `run()`** — models were moved to
+  `devices` only by `run()` and the checkpoint restore path, so a standalone
+  validation pass on a CUDA strategy fed GPU batches to CPU models and failed
+  with `Expected all tensors to be on the same device`. `validate()` now makes
+  the same (idempotent) move, and places a published `inference_model` the same
+  way, so an EMA slot filled before `devices` changed no longer meets batches on
+  a device it was never moved to.
+- **Checkpoint resume across devices** — a live restore loaded weights and
+  optimizer state onto the device recorded in the checkpoint rather than the one
+  the live strategy runs on, and `run()` reused resumed optimizer state without
+  following the models it had just moved. Resuming a `cuda:0` checkpoint on
+  another GPU, or on a rank a `DDPHook` re-pins, died in the first optimizer
+  step with `Expected all tensors to be on the same device`. Live restores now
+  target the live device, and the new
+  `nvalchemi.training.rehome_optimizer_state` helper (applied automatically
+  whenever a resumed optimizer is reused, by `run()` and by `train_batch()`)
+  moves resumed state onto its parameters, including tensors a custom optimizer
+  nests inside dicts, lists, or tuples. On that path `map_location` only stages
+  the load — the live strategy's `devices` still decide where the restored
+  objects come to rest — so the returned `strategy_metadata` now reports the
+  strategy's devices instead of the raw `map_location`, which could name a
+  device none of the restored models were on.
 - **Ewald charge gradients and cell derivatives** — the reciprocal term was only
   ever differentiated with respect to positions and charges, so a non-hybrid
   Ewald returned a wrong `dE/dq`, and strain-autograd through the detached
@@ -162,6 +312,14 @@
   will be removed in a future release.
 
 ### Breaking Changes
+
+- The `cu12`/`cu13` extras no longer install the RAPIDS stack (`cuml`, `cupy`,
+  `pylibraft`, NVIDIA DALI) or PhysicsNeMo's CUDA extras — they now provide the
+  CUDA torch build, `nvalchemi-toolkit-ops`, `cuequivariance-ops-torch`, and
+  PhysicsNeMo core. Nothing in `nvalchemi` imports the RAPIDS stack, and this
+  removes upstream pins that made `pip install nvalchemi-toolkit[cu12]`
+  unresolvable on Python 3.14. Users needing RAPIDS should install it
+  directly (`cuml-cuXX`, `cupy-cuda1Xx`).
 
 - `EwaldModelWrapper` and `PMEModelWrapper` now default to `hybrid_forces=False`.
   The analytic direct-output path (`hybrid_forces=True`) does not produce

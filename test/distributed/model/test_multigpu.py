@@ -358,6 +358,8 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
 
     local_seen: list[tuple[torch.Tensor | None, int]] = []
     global_seen: list[tuple[torch.Tensor | None, int]] = []
+    local_admission_seen: list[tuple[torch.Tensor | None, int]] = []
+    global_admission_seen: list[tuple[torch.Tensor | None, int]] = []
 
     class _Probe:
         stage = DynamicsStage.AFTER_STEP
@@ -377,6 +379,11 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
                 (mask.clone() if mask is not None else None, ctx.batch.num_graphs)
             )
 
+    class _AdmissionProbe(_Probe):
+        stage = DynamicsStage.ON_ADMISSION
+
+    dd.register_hook(_AdmissionProbe(local_admission_seen, HookScope.LOCAL))
+    dd.register_hook(_AdmissionProbe(global_admission_seen, HookScope.GLOBAL))
     dd.register_hook(_Probe(local_seen, HookScope.LOCAL))
     dd.register_hook(_Probe(global_seen, HookScope.GLOBAL))
     local_batch, _ = dd.step(local_batch)
@@ -394,6 +401,14 @@ def _test_prime_forces(rank: int, world_size: int) -> None:
     assert len(global_seen) == 1
     global_mask, _ = global_seen[-1]
     assert global_mask is None
+
+    assert len(local_admission_seen) == 1
+    local_admission_mask, _ = local_admission_seen[-1]
+    assert local_admission_mask is None
+
+    assert len(global_admission_seen) == 1
+    global_admission_mask, _ = global_admission_seen[-1]
+    assert global_admission_mask is None
 
 
 @pytest.mark.multigpu

@@ -661,6 +661,48 @@ class TestDemoModelWrapper:
         assert hasattr(result, "node_embeddings")
         assert hasattr(result, "graph_embeddings")
 
+    def test_compute_embeddings_on_multi_graph_batch(
+        self, demo_model, simple_batch
+    ) -> None:
+        """A batch gets its node embeddings in the atoms group, one row per atom."""
+        hidden_dim = demo_model.embedding_shapes["node_embeddings"][-1]
+
+        result = demo_model.compute_embeddings(simple_batch)
+
+        assert result.node_embeddings.shape == (5, hidden_dim)
+        assert result.graph_embeddings.shape == (2, hidden_dim)
+        assert "node_embeddings" in result._atoms_group
+
+    def test_graph_embeddings_pool_every_feature(
+        self, demo_model, simple_batch
+    ) -> None:
+        """Every graph-embedding feature is the sum of its graph's node rows."""
+        hidden_dim = demo_model.embedding_shapes["node_embeddings"][-1]
+        assert hidden_dim > 1
+
+        result = demo_model.compute_embeddings(simple_batch)
+
+        expected = torch.stack(
+            [
+                result.node_embeddings[:3].sum(dim=0),
+                result.node_embeddings[3:].sum(dim=0),
+            ]
+        )
+        torch.testing.assert_close(result.graph_embeddings, expected)
+
+    def test_node_embeddings_stay_at_node_level_after_reassignment(
+        self, demo_model, simple_batch
+    ) -> None:
+        """A public reassignment of the written key routes back to the atoms group."""
+        hidden_dim = demo_model.embedding_shapes["node_embeddings"][-1]
+        result = demo_model.compute_embeddings(simple_batch)
+
+        replacement = torch.ones(result.num_nodes, hidden_dim)
+        result.node_embeddings = replacement
+
+        torch.testing.assert_close(result.node_embeddings, replacement)
+        assert [d.node_embeddings.shape[0] for d in result.to_data_list()] == [3, 2]
+
     def test_export_model(self, demo_model, tmp_path):
         path = tmp_path / "demo.pt"
         demo_model.export_model(path)

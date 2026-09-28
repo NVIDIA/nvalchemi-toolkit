@@ -16,6 +16,7 @@ Core classes
 
    AtomicData
    Batch
+   LevelSchema
 
 I/O and pipelines
 -----------------
@@ -27,6 +28,7 @@ I/O and pipelines
 
    AtomicDataZarrWriter
    AtomicDataZarrReader
+   FieldSchema
    Dataset
    InMemoryDataset
    DataLoader

@@ -50,6 +50,38 @@ TORCH_TO_WP: dict[torch.dtype, type] = {
     torch.int64: wp.int64,
 }
 
+
+def _put_launch_device(source: torch.Tensor, dest: torch.Tensor) -> str:
+    """Return the Warp launch device for a put, rejecting a mixed-device pair.
+
+    A put writes through raw pointers, so a launch on the wrong device reads
+    unmapped memory and takes the process down with it rather than raising.
+
+    Parameters
+    ----------
+    source : torch.Tensor
+        Any tensor belonging to the source side of the put.
+    dest : torch.Tensor
+        The destination tensor the kernel writes through.
+
+    Returns
+    -------
+    str
+        The destination's device, as Warp names it.
+
+    Raises
+    ------
+    ValueError
+        If *source* and *dest* are on different devices.
+    """
+    if source.device != dest.device:
+        raise ValueError(
+            f"A buffer put needs its source and destination on one device; got "
+            f"source={str(source.device)!r}, dest={str(dest.device)!r}."
+        )
+    return str(dest.device)
+
+
 # =============================================================================
 # System-level: copy masked and coalesce (one row per system)
 # =============================================================================
@@ -507,7 +539,7 @@ def compute_put_fit_mask_segmented_impl(
 ) -> None:
     """Kernel path: write fit_mask in place for segmented put (call only when room)."""
     num_systems = source_batch_ptr.shape[0] - 1
-    device = str(source_batch_ptr.device)
+    device = _put_launch_device(source_batch_ptr, dest_batch_ptr)
     wp_source_batch_ptr = wp.from_torch(
         source_batch_ptr.to(torch.int32), dtype=wp.int32, return_ctype=True
     )
@@ -981,7 +1013,7 @@ def put_masked_per_system_impl(
     slots are copied. All counting and limit computation is done in kernels.
     Supports bool, float32, float64, int32, int64 2D tensors.
     """
-    device = str(source.device)
+    device = _put_launch_device(source, dest)
     source_dtype = source.dtype
     wp_dtype = TORCH_TO_WP[source_dtype]
 
@@ -1086,7 +1118,7 @@ def compute_put_fit_mask_per_system_impl(
     """Kernel path: write fit_mask in place for uniform put (call when num_src > 0)."""
     num_src = source_mask.shape[0]
     num_dest = dest_mask.shape[0]
-    device = str(source_mask.device)
+    device = _put_launch_device(source_mask, dest_mask)
     wp_source_mask = wp.from_torch(source_mask, dtype=wp.bool, return_ctype=True)
     wp_dest_mask = wp.from_torch(dest_mask, dtype=wp.bool, return_ctype=True)
     wp_fit_mask = wp.from_torch(fit_mask, dtype=wp.bool, return_ctype=True)
@@ -1344,7 +1376,7 @@ def put_masked_segmented_impl(
 ) -> None:
     """Copy masked segments from source into dest and append segment boundaries to dest_batch_ptr."""
     source_dtype = source.dtype
-    device = str(source.device)
+    device = _put_launch_device(source, dest)
     wp_dtype = TORCH_TO_WP[source_dtype]
 
     num_systems = source_batch_ptr.shape[0] - 1

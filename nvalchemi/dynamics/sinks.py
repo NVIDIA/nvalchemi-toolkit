@@ -316,7 +316,8 @@ class GPUBuffer(DataSink):
         in *batch* are copied.
 
         Uses :meth:`Batch.put` for efficient in-place copying without
-        tensor allocation.
+        tensor allocation. A batch arriving on another device is moved to the
+        buffer's device first, as :class:`HostMemory` moves its items to CPU.
 
         This method will set values for ``_copied_mask`` and ``_dest_mask``.
 
@@ -341,6 +342,11 @@ class GPUBuffer(DataSink):
         if num_total == 0:
             return
 
+        # Ensure buffer is allocated with full capacity (lazy init on first write)
+        self._ensure_buffer(template=batch)
+        if batch.device != self._buffer.device:
+            batch = batch.to(self._buffer.device)
+
         # Build mask if not provided
         if mask is None:
             mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
@@ -350,8 +356,6 @@ class GPUBuffer(DataSink):
                 raise ValueError(
                     f"mask length {mask.shape[0]} != num_graphs {num_total}"
                 )
-        # Ensure buffer is allocated with full capacity (lazy init on first write)
-        self._ensure_buffer(template=batch)
 
         # Count how many graphs we're trying to write
         num_to_write = int(mask.sum().item())

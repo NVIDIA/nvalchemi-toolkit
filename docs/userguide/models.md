@@ -45,9 +45,9 @@ break other imports.
 
 ````{note}
 **Install the UMA CUDA variant that matches the host.** Fairchem 2.22 uses
-torch 2.13.0 and numba 0.62 or newer, while PhysicsNeMo's standard CUDA extras
-pull a RAPIDS stack that requires older numba. The standalone `uma-cu12` and
-`uma-cu13` extras select the matching torch wheel without that RAPIDS stack.
+torch 2.13.0. The standalone `uma-cu12` and `uma-cu13` extras pair UMA with the
+matching torch wheel in its own environment; the standard CUDA extras no longer
+pull a RAPIDS stack.
 UMA also conflicts with MACE and the default `build` group, so keep it in its
 own environment, e.g.:
 

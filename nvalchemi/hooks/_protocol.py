@@ -55,8 +55,9 @@ class Hook(Protocol):
         ``_runs_on_stage(self, stage: Enum) -> bool`` method that returns
         ``True`` for each relevant stage.
 
-        Frequency gating is handled by the registry: hooks are only
-        called when ``step_count % frequency == 0``.
+        Frequency gating is handled by the registry. Recurring stages are
+        called when ``step_count % frequency == 0``; workflow engines may
+        exempt event-driven dispatches such as dynamics ``ON_ADMISSION``.
 
         Parameters
         ----------

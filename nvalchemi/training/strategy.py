@@ -101,6 +101,7 @@ from nvalchemi.training.optimizers import (
 from nvalchemi.training.runtime import (
     freeze_unconfigured_models,
     move_to_devices,
+    rehome_optimizer_state,
     train_configured_models,
 )
 
@@ -1025,8 +1026,20 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     def _setup_runtime_optimizers(
         self, *, rebuild: bool = False
     ) -> tuple[list[torch.optim.Optimizer], list[LRScheduler | None]]:
-        """Build or reuse flattened runtime optimizer/scheduler lists."""
+        """Build or reuse flattened runtime optimizer/scheduler lists.
+
+        Reused optimizers are rehomed before they are handed back. A resumed
+        optimizer holds state placed where the parameters sat at
+        ``load_state_dict`` time, and every entry point moves the models onto
+        ``devices`` just before asking for the optimizers, so that state can
+        predate the move — in :meth:`run`, in :meth:`train_batch`, or after a
+        :class:`~nvalchemi.training.hooks.DDPHook` re-pins a rank. Rehoming is
+        idempotent and only touches tensors whose device differs from their
+        parameter's, so freshly built optimizers pay nothing for it.
+        """
         if not rebuild and self._runtime_optimizers:
+            for optimizer in self._optimizers:
+                rehome_optimizer_state(optimizer)
             return self._optimizers, self._lr_schedulers
 
         records: list[_RuntimeOptimizer] = []
@@ -2053,6 +2066,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             summary is returned on every rank. The summary is also stored on
             :attr:`last_validation`.
 
+        Models are moved to :attr:`devices` first, so a standalone validation
+        pass on a freshly constructed strategy behaves like one taken during
+        :meth:`run`. The move is idempotent for models already in place. A
+        published :attr:`inference_model` that the configuration can select is
+        placed on ``devices[0]`` the same way :meth:`set_inference_model` places
+        it, so a slot filled before :attr:`devices` changed still meets batches
+        on the device they were moved to.
+
         Raises
         ------
         RuntimeError
@@ -2063,6 +2084,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             raise RuntimeError(
                 "TrainingStrategy.validate() requires a validation_config."
             )
+        self.models = move_to_devices(self.models, self.devices)
+        if (
+            self.inference_model is not None
+            and self.validation_config.use_ema != "never"
+        ):
+            self.inference_model.to(self.devices[0], non_blocking=True)
         with _validation.ValidationLoop.from_training_strategy(self) as loop:
             self.last_validation = loop.execute()
         # Fire AFTER_VALIDATION while the summary is still live, before any

@@ -25,6 +25,7 @@ migration, and trajectory gather.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -87,6 +88,16 @@ class DomainParallel(BaseDynamics):
         config: DomainConfig,
         **kwargs: Any,
     ) -> None:
+        requested_exit_status = kwargs.get("exit_status", dynamics.exit_status)
+        if requested_exit_status != dynamics.exit_status:
+            warnings.warn(
+                "DomainParallel requires exit_status to match the wrapped dynamics; "
+                f"overriding exit_status={requested_exit_status!r} with "
+                f"dynamics.exit_status={dynamics.exit_status!r}.",
+                UserWarning,
+                stacklevel=2,
+            )
+        kwargs["exit_status"] = dynamics.exit_status
         super().__init__(model=dynamics.model, **kwargs)
         self._dynamics: BaseDynamics = dynamics
         self._config: DomainConfig = config
@@ -263,6 +274,7 @@ class DomainParallel(BaseDynamics):
         # to their owners before any compute in step N.
         batch = self._resolve_pending_migrate(batch)
         active_graph_mask = self._active_graph_mask(batch)
+        self._ensure_admission_initialized(batch)
 
         if not self._forces_primed:
             self._prime_forces(batch, active_graph_mask)
@@ -705,6 +717,8 @@ class DomainParallel(BaseDynamics):
         stage: DynamicsStage,
         batch: Batch,
         active_graph_mask: torch.Tensor | None = None,
+        *,
+        ignore_frequency: bool = False,
     ) -> None:
         """Invoke hooks respecting their ``HookScope``.
 
@@ -724,7 +738,7 @@ class DomainParallel(BaseDynamics):
             elif stage != hook.stage:
                 continue
 
-            if self.step_count % hook.frequency != 0:
+            if not ignore_frequency and self.step_count % hook.frequency != 0:
                 continue
 
             scope = getattr(hook, "scope", HookScope.LOCAL)
@@ -778,6 +792,8 @@ class DomainParallel(BaseDynamics):
         self._validate_n_steps(resolved)
         self._open_hooks()
         try:
+            # Each run starts a fresh admission, even when reusing the same batch
+            self._admission_initialized = False
             self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)

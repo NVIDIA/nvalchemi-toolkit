@@ -13,6 +13,7 @@ to include, what version of CUDA Toolkit is available, and what environment mana
 The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
 one accelerator stack, then add any compatible optional extras.
 
+<!-- markdownlint-disable MD013 --><!-- raw install-matrix HTML: unbreakable attributes -->
 <div class="install-matrix" id="install-matrix">
   <div class="install-matrix-row">
     <div class="install-matrix-heading" id="package-manager-label">Package manager</div>
@@ -60,6 +61,7 @@ one accelerator stack, then add any compatible optional extras.
   </div>
   <p class="install-matrix-note" id="install-matrix-note" aria-live="polite"></p>
 </div>
+<!-- markdownlint-enable MD013 -->
 
 <noscript>
 Choose one accelerator extra and append any compatible optional extras, for
@@ -68,8 +70,8 @@ example: <code>pip install 'nvalchemi-toolkit[cu13,mace]'</code>.
 
 ```{note}
 The CUDA extras are mutually exclusive. Use `uma-cu12` or `uma-cu13` instead of
-combining `uma` with a standard CUDA extra; the UMA variants avoid an upstream
-RAPIDS/numba conflict. UMA remains mutually exclusive with `mace` and, for
+combining `uma` with a standard CUDA extra; the UMA variants keep the UMA and
+CUDA environments isolated. UMA remains mutually exclusive with `mace` and, for
 source installs, the default `build` dependency group.
 ```
 
@@ -127,8 +129,7 @@ $ uv pip install \
     'nvalchemi-toolkit[cu12,mace]'
 ```
 
-UMA uses standalone CUDA variants to avoid the standard PhysicsNeMo RAPIDS
-stack:
+UMA uses standalone CUDA variants to stay in its own environment:
 
 ```bash
 # CUDA 12 UMA stack

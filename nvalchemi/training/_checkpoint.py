@@ -1525,6 +1525,21 @@ def _with_strategy_device_override(
     return metadata
 
 
+def _with_live_strategy_devices(
+    strategy_metadata: Mapping[str, Any],
+    devices: Sequence[torch.device],
+) -> dict[str, Any]:
+    """Return strategy metadata whose devices are the live strategy's own.
+
+    A live restore stages weights through ``map_location`` and then re-homes
+    every model onto the strategy's ``devices``, so the strategy decides where
+    the restored objects end up and the returned metadata has to say so.
+    """
+    metadata = dict(strategy_metadata)
+    metadata["devices"] = [str(device) for device in devices]
+    return metadata
+
+
 def _build_model_from_checkpoint_spec(
     root: Path,
     name: str,
@@ -1753,7 +1768,10 @@ def load_checkpoint(
         each loaded model is additionally moved via
         ``model.to(map_location)``. Optimizers and schedulers have their
         state placed by ``torch.load`` alone (they lack a standard
-        ``.to()`` API).
+        ``.to()`` API). With ``strategy`` it only stages the load: the live
+        strategy's ``devices`` still decide where the restored models and
+        optimizer state come to rest, and the returned ``strategy_metadata``
+        reports those devices rather than ``map_location``.
     model_names
         If given, load only the models with these names together with the
         optimizers and schedulers wired to them through
@@ -1862,17 +1880,20 @@ def load_checkpoint(
                 "load_checkpoint(strategy=...) restores the complete live strategy; "
                 "model_names is not supported in this mode."
             )
+        # A live restore targets the live strategy, not the recorded device.
         loaded = _restore_checkpoint_into_strategy(
             root,
             manifest,
             checkpoint_index=checkpoint_index,
             strategy=strategy,
             strategy_metadata=strategy_metadata,
-            map_location=load_location,
+            map_location=(
+                load_location if map_location is not None else strategy.devices[0]
+            ),
         )
         if strategy_metadata is not None:
-            loaded["strategy_metadata"] = _with_strategy_device_override(
-                strategy_metadata, map_location
+            loaded["strategy_metadata"] = _with_live_strategy_devices(
+                strategy_metadata, strategy.devices
             )
         _run_validators(loaded, validators)
         return loaded

@@ -768,6 +768,18 @@ class TestComputeEmbeddings:
         expected_graph = result.node_embeddings.sum(dim=0)
         assert torch.allclose(result.graph_embeddings[0], expected_graph)
 
+    def test_node_embeddings_stay_at_node_level_after_reassignment(
+        self, wrapper, multi_batch
+    ) -> None:
+        """A public reassignment of the written key routes back to the atoms group."""
+        result = wrapper.compute_embeddings(multi_batch)
+
+        replacement = torch.ones(result.num_nodes, _HIDDEN_DIM)
+        result.node_embeddings = replacement
+
+        assert "node_embeddings" in result.keys["node"]
+        torch.testing.assert_close(result.node_embeddings.cpu(), replacement)
+
     def test_does_not_mutate_model_config(self, wrapper, single_batch):
         wrapper.model_config.active_outputs = {"energy", "forces", "stress"}
         wrapper.compute_embeddings(single_batch)

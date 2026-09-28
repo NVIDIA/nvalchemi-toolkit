@@ -931,9 +931,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         AtomicData | Batch
-            *data*, with ``node_embeddings`` ``[N, hidden_dim]`` and
-            ``graph_embeddings`` ``[B, hidden_dim]`` (sum-pooled) written in
-            place. ``model_config`` is not mutated.
+            *data*, with ``node_embeddings`` ``[N, hidden_dim]`` registered at
+            node level and ``graph_embeddings`` ``[B, hidden_dim]`` (sum-pooled)
+            written in place. ``model_config`` is not mutated.
         """
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
@@ -956,13 +956,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 "Ensure the model is a standard MACE variant."
             )
 
-        # Write to the atoms group directly: a plain attribute set would route to
-        # the system group and block the later per-graph graph_embeddings write.
-        atoms_group = data._atoms_group
-        if atoms_group is not None:
-            atoms_group["node_embeddings"] = node_feats
-        else:
-            data.node_embeddings = node_feats
+        data.add_key(
+            "node_embeddings",
+            list(node_feats.split(data.num_nodes_list)),
+            level="node",
+            overwrite=True,
+        )
 
         hidden_dim = node_feats.shape[-1]
         graph_embeddings = torch.zeros(

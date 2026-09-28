@@ -193,7 +193,9 @@ def _make_checkpoint_batch(n_atoms: int = 3, seed: int = 0) -> Batch:
     return Batch.from_data_list([data])
 
 
-def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
+def _make_checkpoint_strategy(
+    num_steps: int = 4, device: torch.device | str = "cpu"
+) -> TrainingStrategy:
     """Create a serializable demo training strategy for checkpoint tests."""
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
@@ -210,8 +212,18 @@ def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
         num_steps=num_steps,
         training_fn=checkpoint_training_fn,
         loss_fn=EnergyMSELoss(),
-        devices=[torch.device("cpu")],
+        devices=[torch.device(device)],
     )
+
+
+def _optimizer_state_devices(strategy: TrainingStrategy) -> set[str]:
+    """Return the devices every per-parameter optimizer state tensor sits on."""
+    return {
+        str(value.device)
+        for state in strategy._optimizers[0].state.values()
+        for value in state.values()
+        if isinstance(value, torch.Tensor)
+    }
 
 
 def _make_multi_optimizer_checkpoint_strategy() -> TrainingStrategy:
@@ -1851,3 +1863,96 @@ class TestStrategyCheckpoint:
         assert set(restored.models) == {"student", "teacher"}
         assert isinstance(restored.models["student"], DemoModelWrapper)
         assert isinstance(restored.models["teacher"], DemoModelWrapper)
+
+
+class TestCheckpointDeviceRestore:
+    """Restoring a checkpoint into a strategy that lives on another device."""
+
+    @staticmethod
+    def _save_trained_checkpoint(root: Path, device: torch.device | str) -> None:
+        """Train one step on *device* and save a strategy checkpoint under *root*."""
+        strategy = _make_checkpoint_strategy(num_steps=2, device=device)
+        strategy.run([_make_checkpoint_batch(seed=1), _make_checkpoint_batch(seed=2)])
+        save_checkpoint(root, strategy=strategy)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_live_restore_loads_onto_live_device(self, tmp_path: Path) -> None:
+        """A live restore follows the live strategy, not the recorded device."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        recorded = json.loads((tmp_path / "strategy.json").read_text())["devices"]
+        assert recorded == ["cuda:0"]
+
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path)
+
+        assert _optimizer_state_devices(live) == {"cpu"}
+        assert next(live.models["main"].parameters()).device.type == "cpu"
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_run_after_restore_rehomes_optimizer_state(self, tmp_path: Path) -> None:
+        """Resumed optimizer state follows a device change made after the restore."""
+        self._save_trained_checkpoint(tmp_path, "cpu")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path, map_location="cpu")
+        live.devices = [torch.device("cuda", 0)]
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:0", "cpu"}
+        assert next(live.models["main"].parameters()).device == torch.device("cuda", 0)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_train_batch_after_restore_rehomes_optimizer_state(
+        self, tmp_path: Path
+    ) -> None:
+        """A one-batch resume rehomes its optimizer just like a full run."""
+        self._save_trained_checkpoint(tmp_path, "cpu")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path, map_location="cpu")
+        live.devices = [torch.device("cuda", 0)]
+
+        live.train_batch(_make_checkpoint_batch(seed=3))
+
+        assert live.step_count == 3
+        assert _optimizer_state_devices(live) == {"cuda:0", "cpu"}
+        assert next(live.models["main"].parameters()).device == torch.device("cuda", 0)
+
+    @pytest.mark.multigpu
+    def test_run_after_restore_rehomes_state_across_gpus(self, tmp_path: Path) -> None:
+        """Re-pinning a restored strategy to a second GPU carries its state along."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cuda:0")
+        live.restore_checkpoint(tmp_path)
+        live.devices = [torch.device("cuda", 1)]
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:1", "cpu"}
+
+    @pytest.mark.multigpu
+    def test_live_restore_of_a_second_gpu_strategy(self, tmp_path: Path) -> None:
+        """A `cuda:0` checkpoint restored into a `cuda:1` strategy trains on."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cuda:1")
+        live.restore_checkpoint(tmp_path)
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:1", "cpu"}
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_restored_metadata_reports_the_live_devices(self, tmp_path: Path) -> None:
+        """An explicit map_location stages the load; the metadata reports the strategy."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+
+        loaded = live.restore_checkpoint(tmp_path, map_location="cuda:0")
+        live.train_batch(_make_checkpoint_batch(seed=3))
+
+        assert loaded["strategy_metadata"]["devices"] == ["cpu"]
+        assert live.devices == [torch.device("cpu")]
+        assert next(live.models["main"].parameters()).device.type == "cpu"
+        assert _optimizer_state_devices(live) == {"cpu"}
