@@ -613,6 +613,7 @@ def build_gram_stats_neb_kernel(
         local_dplus_sq = zero
         local_dplus_dot_dminus = zero
         local_dminus_sq = zero
+        local_tangent_sq = zero
         local_force_dot_dplus = zero
         local_force_dot_dminus = zero
         local_force_sq = zero
@@ -649,6 +650,8 @@ def build_gram_stats_neb_kernel(
                         d_plus, d_minus
                     )
                     local_dminus_sq = local_dminus_sq + wp.dot(d_minus, d_minus)
+                    tangent = weight_plus * d_plus + weight_minus * d_minus
+                    local_tangent_sq = local_tangent_sq + wp.dot(tangent, tangent)
                     local_force_dot_dplus = local_force_dot_dplus + wp.dot(
                         physical_force,
                         d_plus,
@@ -682,17 +685,13 @@ def build_gram_stats_neb_kernel(
 
         dplus_dot_dminus = wp.tile_sum(wp.tile(local_dplus_dot_dminus))[0]
         dminus_sq = wp.tile_sum(wp.tile(local_dminus_sq))[0]
+        tangent_sq = wp.tile_sum(wp.tile(local_tangent_sq))[0]
         force_dot_dplus = wp.tile_sum(wp.tile(local_force_dot_dplus))[0]
         force_dot_dminus = wp.tile_sum(wp.tile(local_force_dot_dminus))[0]
         force_sq = wp.tile_sum(wp.tile(local_force_sq))[0]
         dplus_norm = wp.sqrt(dplus_sq)
         dminus_norm = wp.sqrt(dminus_sq)
-        tangent_sq = (
-            weight_plus * weight_plus * dplus_sq
-            + type(dplus_sq)(2.0) * weight_plus * weight_minus * dplus_dot_dminus
-            + weight_minus * weight_minus * dminus_sq
-        )
-        tangent_norm = wp.sqrt(wp.max(tangent_sq, zero))
+        tangent_norm = wp.sqrt(tangent_sq)
 
         # --- Zero-tangent fallback ---
 

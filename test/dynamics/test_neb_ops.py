@@ -801,6 +801,7 @@ class TestImprovedTangentNumerics:
 class TestNEBKernelParity:
     """Compare equivalent NEB kernel strategies."""
 
+    @pytest.mark.parametrize("case", ["ordinary", "nearly-cancelling"])
     @pytest.mark.parametrize(
         "dtype",
         [
@@ -822,6 +823,7 @@ class TestNEBKernelParity:
     )
     def test_improved_tangent_kernel_strategies_match(
         self,
+        case: str,
         dtype: torch.dtype,
         device: str,
     ) -> None:
@@ -835,12 +837,34 @@ class TestNEBKernelParity:
             force_fn=neb_effective_force_from_gram_stats,
             climbing_force_fn=stored_method.climbing_force_fn,
         )
-        inputs = _inputs(device=device, dtype=dtype)
+        inputs = list(_inputs(device=device, dtype=dtype))
+        if case == "nearly-cancelling":
+            base = inputs[0].new_tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+            offset = 1.0e-4 if dtype == torch.float32 else 1.0e-8
+            forward = base + base.new_tensor([1.0, offset, 0.0])
+            backward = base + base.new_tensor([1.0, 0.0, 0.0])
+            inputs[0] = torch.cat((backward, base, forward)).contiguous()
+            inputs[1] = torch.zeros_like(inputs[0])
+            inputs[1][2:4, 1] = 1.0
+            inputs[2] = inputs[2].new_tensor([0.0, 1.0, 0.0])
+            inputs[6] = inputs[6].new_tensor([0.1, 0.1])
+            inputs[7][1] = REGULAR_NEB
 
         stored_tangent = neb_forces(*inputs, method="improved_tangent")
         gram_stats = neb_forces(*inputs, method=method)
 
         tolerance = 2.0e-5 if dtype == torch.float32 else 1.0e-11
+        if case == "nearly-cancelling":
+            expected = _naive_improved_tangent_neb_forces(*inputs)
+            torch.testing.assert_close(
+                expected[0][2:4],
+                torch.zeros_like(expected[0][2:4]),
+                atol=tolerance,
+                rtol=0,
+            )
+            torch.testing.assert_close(
+                gram_stats, expected, atol=tolerance, rtol=tolerance
+            )
         torch.testing.assert_close(
             stored_tangent,
             gram_stats,
