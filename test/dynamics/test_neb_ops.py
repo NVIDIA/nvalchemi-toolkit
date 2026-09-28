@@ -542,14 +542,51 @@ class TestNEBTorchAdapter:
         torch.testing.assert_close(actual, reference)
 
     @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is required"
+                ),
+            ),
+        ],
+    )
+    def test_neb_forces_accepts_strided_outer_dimensions(self, device: str) -> None:
+        inputs = _ragged_multi_path_inputs(device=device)
+        reference = neb_forces(*inputs)
+        strided_inputs = tuple(
+            torch.repeat_interleave(tensor, 2, dim=0)[::2] for tensor in inputs
+        )
+        assert all(not tensor.is_contiguous() for tensor in strided_inputs)
+
+        num_atoms = inputs[0].shape[0]
+        num_links = inputs[6].shape[0]
+        dtype = inputs[0].dtype
+        tangent = torch.empty((num_atoms * 2, 3), device=device, dtype=dtype)[::2]
+        forces = torch.empty((num_atoms * 2, 3), device=device, dtype=dtype)[::2]
+        links = torch.empty(num_links * 2, device=device, dtype=dtype)[::2]
+
+        actual = neb_forces(
+            *strided_inputs,
+            vector_scratch=tangent,
+            effective_forces=forces,
+            link_lengths=links,
+        )
+
+        assert actual == (forces, links)
+        torch.testing.assert_close(actual, reference)
+
+    @pytest.mark.parametrize(
         ("case", "match"),
         [
             ("position-shape", "positions must have shape"),
             ("position-dtype", "positions must have dtype"),
-            ("pointer-rank", "pointer tensors one-dimensional"),
+            ("pointer-rank", "pointer tensors must be one-dimensional"),
             ("invalid-batch-size", "invalid batch sizes"),
             ("float-shape", "physical_forces must have shape"),
-            ("float-layout", "physical_forces must match"),
+            ("float-layout", "physical_forces must have contiguous coordinates"),
             ("integer-dtype", "image_ptr must be"),
             ("candidate-shape", "candidate_shifts must be"),
         ],
@@ -587,7 +624,7 @@ class TestNEBTorchAdapter:
         ("case", "match"),
         [
             ("force-shape", "effective_forces must have shape"),
-            ("scratch-layout", "tangent_buffer must match"),
+            ("scratch-layout", "tangent_buffer must have contiguous coordinates"),
         ],
     )
     def test_rejects_invalid_writable_buffers(self, case: str, match: str) -> None:

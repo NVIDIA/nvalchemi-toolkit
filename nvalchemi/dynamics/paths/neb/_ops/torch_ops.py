@@ -83,10 +83,10 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
         raise ValueError("positions must have dtype float32 or float64")
     if pos.device.type not in {"cpu", "cuda"}:
         raise ValueError("NEB Torch adapters require CPU or CUDA tensors")
-    if not pos.is_contiguous() or image_ptr.ndim != 1 or path_ptr.ndim != 1:
-        raise ValueError(
-            "positions must be contiguous and pointer tensors one-dimensional"
-        )
+    if pos.stride(-1) != 1:
+        raise ValueError("positions must have contiguous coordinates")
+    if image_ptr.ndim != 1 or path_ptr.ndim != 1:
+        raise ValueError("pointer tensors must be one-dimensional")
     a, i, p = pos.shape[0], image_ptr.shape[0] - 1, path_ptr.shape[0] - 1
     num_links = i - p
     if min(i, p, num_links) < 0:
@@ -105,12 +105,14 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
     for name, (tensor, shape) in floats.items():
         if tensor.shape != shape:
             raise ValueError(f"{name} must have shape {shape}")
-        if (
-            tensor.dtype != pos.dtype
-            or tensor.device != pos.device
-            or not tensor.is_contiguous()
+        if tensor.dtype != pos.dtype or tensor.device != pos.device:
+            raise ValueError(f"{name} must match positions in dtype/device")
+        if name == "physical_forces" and tensor.stride(-1) != 1:
+            raise ValueError(f"{name} must have contiguous coordinates")
+        if name in {"periodic_basis", "cartesian_to_fractional"} and (
+            tensor.stride(-2) != 3 or tensor.stride(-1) != 1
         ):
-            raise ValueError(f"{name} must match positions in dtype/device/layout")
+            raise ValueError(f"{name} must have contiguous 3x3 matrix elements")
     ints = {
         "image_ptr": (image_ptr, (i + 1,)),
         "path_ptr": (path_ptr, (p + 1,)),
@@ -124,18 +126,18 @@ def _validate_neb_inputs(x: tuple[torch.Tensor, ...]) -> tuple[int, int]:
             tensor.shape != shape
             or tensor.dtype != torch.int32
             or tensor.device != pos.device
-            or not tensor.is_contiguous()
         ):
-            raise ValueError(f"{name} must be a matching contiguous int32 tensor")
+            raise ValueError(f"{name} must be a matching int32 tensor")
     if (
         candidate_shifts.shape != (p, 26, 3)
         or candidate_shifts.dtype != pos.dtype
         or candidate_shifts.device != pos.device
-        or not candidate_shifts.is_contiguous()
     ):
         raise ValueError(
-            "candidate_shifts must be a matching contiguous floating tensor of shape (num_paths, 26, 3)"
+            "candidate_shifts must be a matching floating tensor of shape (num_paths, 26, 3)"
         )
+    if candidate_shifts.stride(-1) != 1:
+        raise ValueError("candidate_shifts must have contiguous coordinates")
     return a, num_links
 
 
@@ -150,12 +152,10 @@ def _validate_neb_outputs(pos, a, num_links, forces, links, tangent=None):
     for name, tensor, shape in outputs:
         if tensor.shape != shape:
             raise ValueError(f"{name} must have shape {shape}")
-        if (
-            tensor.dtype != pos.dtype
-            or tensor.device != pos.device
-            or not tensor.is_contiguous()
-        ):
-            raise ValueError(f"{name} must match positions in dtype/device/layout")
+        if tensor.dtype != pos.dtype or tensor.device != pos.device:
+            raise ValueError(f"{name} must match positions in dtype/device")
+        if name != "link_lengths" and tensor.stride(-1) != 1:
+            raise ValueError(f"{name} must have contiguous coordinates")
 
 
 # =============================================================================
