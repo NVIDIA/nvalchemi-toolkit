@@ -26,7 +26,7 @@ from torch import Tensor
 
 from nvalchemi.data import GroupLayout
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.mep.equations import (
+from nvalchemi.dynamics.mep.neb_equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
     neb_effective_force,

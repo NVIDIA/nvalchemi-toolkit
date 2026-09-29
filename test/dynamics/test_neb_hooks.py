@@ -32,11 +32,11 @@ from nvalchemi.dynamics.mep import (
     NEBMethod,
     SpringContext,
 )
-from nvalchemi.dynamics.mep.equations import neb_effective_force_from_gram_stats
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
 )
+from nvalchemi.dynamics.mep.neb_equations import neb_effective_force_from_gram_stats
 from nvalchemi.dynamics.mep.neb_ops.methods import DEFAULT_NEB_METHOD_KEY
 from nvalchemi.dynamics.mep.neb_ops.modes import (
     CLIMBING_NEB,
