@@ -129,7 +129,7 @@ training and fine-tuning specs.
 
 ### The `method` equations
 
-`method="improved_tangent"` (the default and only named, serializable method)
+`method="improved_tangent"` (the default and only named method)
 implements the Henkelman--Jónsson improved tangent
 ([*J. Chem. Phys.* 113, 9978 (2000)](https://doi.org/10.1063/1.1323224)).
 For an interior image with neighbor energies $E^-, E, E^+$ and
@@ -192,10 +192,12 @@ beyond the stored-tangent projection above --- for example, to implement
 doubly-nudged elastic band (DNEB,
 [Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)).
 
-Custom `NEBMethod` objects are runtime-only and cannot round-trip through
-`to_spec_dict()`. Their importable Warp equations are prepared into a stable
-method key when the hook is constructed, including for compilation and CUDA
-graph capture.
+Custom `NEBMethod` objects round-trip through `to_spec_dict()` and
+`from_spec_dict()`. The spec stores a stable method key with the kernel kind and
+dotted import paths for all three Warp equations. Restoring the spec imports
+those equations and rebuilds the `NEBMethod`; each equation must therefore be
+defined at module level in an importable module. The same key selects the kernel
+for compilation and CUDA graph capture.
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.

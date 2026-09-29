@@ -400,15 +400,22 @@ class NEB(DynamicsStrategy):
             "serialized by NEB.to_spec_dict()"
         )
 
+    @field_validator("method", mode="before")
+    @classmethod
+    def _restore_method(cls, value: Any) -> Any:
+        """Restore custom equation functions from a prepared method key."""
+        if isinstance(value, str) and value.startswith(
+            ("stored_tangent|", "gram_stats|")
+        ):
+            return NEBMethod.from_key(value)
+        return value
+
     @field_serializer("method", when_used="json")
     def _serialize_method(self, method: str | NEBMethod) -> str:
-        """Serialize built-in method names and reject custom equations."""
+        """Serialize built-in names or a custom method's equation paths."""
         if isinstance(method, str):
             return method
-        raise ValueError(
-            "NEBMethod objects are runtime-only and cannot be serialized by "
-            "NEB.to_spec_dict()"
-        )
+        return method.to_key()
 
     @model_validator(mode="after")
     def _validate_configuration(self) -> NEB:

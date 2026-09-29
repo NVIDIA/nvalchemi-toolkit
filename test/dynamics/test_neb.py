@@ -20,10 +20,12 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 import torch
+import warp as wp
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import (
@@ -48,6 +50,10 @@ from nvalchemi.dynamics.mep.hooks import (
     PathEnergyStatsHook,
 )
 from nvalchemi.dynamics.mep.neb import _NEB_FIRE2_DEFAULTS
+from nvalchemi.dynamics.mep.neb_equations import (
+    neb_effective_force,
+    neb_effective_force_from_gram_stats,
+)
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -55,6 +61,13 @@ from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@wp.func
+def _custom_tangent_weights(energy_prev: Any, energy_curr: Any, energy_next: Any):
+    """Provide an importable custom equation for spec round-trip tests."""
+    one = type(energy_curr)(1.0)
+    return one, one
 
 
 class _CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
@@ -142,17 +155,45 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
 
-    def test_custom_method_runs_but_is_not_serializable(self) -> None:
-        strategy = NEB(model=_model(), method=NEBMethod())
-        force_hook = next(
-            hook
-            for hook in strategy.build_engine().hooks
-            if isinstance(hook, NEBForceHook)
+    @pytest.mark.parametrize(
+        ("effective_force_fn", "kernel_kind"),
+        [
+            (neb_effective_force, "stored_tangent"),
+            (neb_effective_force_from_gram_stats, "gram_stats"),
+        ],
+    )
+    def test_custom_method_spec_restores_equations(
+        self, effective_force_fn: wp.Function, kernel_kind: str
+    ) -> None:
+        method = NEBMethod(
+            tangent_weights_fn=_custom_tangent_weights,
+            effective_force_fn=effective_force_fn,
+        )
+        strategy = NEB(model=_model(), method=method)
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        key = spec["method"]
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+
+        assert key == method.to_key()
+        assert key.startswith(f"{kernel_kind}|")
+        assert "test_neb._custom_tangent_weights" in key
+        assert isinstance(restored.method, NEBMethod)
+        assert restored.method.tangent_weights_fn is _custom_tangent_weights
+        assert restored.method.effective_force_fn is effective_force_fn
+        assert restored.method.climbing_force_fn is method.climbing_force_fn
+        assert _force_hook(restored.build_engine()).method_key == key
+
+    def test_rejects_missing_custom_equation_in_spec(self) -> None:
+        method = NEBMethod(tangent_weights_fn=_custom_tangent_weights)
+        strategy = NEB(model=_model(), method=method)
+        spec = strategy.to_spec_dict()
+        spec["method"] = spec["method"].replace(
+            "._custom_tangent_weights", ".missing_tangent_weights"
         )
 
-        assert force_hook.method_key.startswith("stored_tangent|")
-        with pytest.raises(ValueError, match="NEBMethod objects are runtime-only"):
-            strategy.to_spec_dict()
+        with pytest.raises(ValueError, match="not importable"):
+            NEB.from_spec_dict(spec, model=strategy.model)
 
     def test_spec_round_trip_preserves_configuration(self) -> None:
         """JSON recipes preserve NEB-specific configuration."""
@@ -174,6 +215,7 @@ class TestNEBConfiguration:
         assert spec["optimizer"] == "nvalchemi.dynamics.optimizers.fire2.FIRE2"
         assert spec["climbing"]["regular_fmax"] == 0.5
         assert spec["spring"] == {"type": "constant", "value": 0.2}
+        assert spec["method"] == "improved_tangent"
 
         restored = NEB.from_spec_dict(spec, model=strategy.model)
 
