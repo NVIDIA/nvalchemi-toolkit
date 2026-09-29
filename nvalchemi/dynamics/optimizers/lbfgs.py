@@ -200,6 +200,14 @@ class _LBFGSMixin:
         convergence_hook: ConvergenceHook | dict | None = None,
         **kwargs: Any,
     ) -> None:
+        if (
+            not isinstance(history_size, int)
+            or isinstance(history_size, bool)
+            or history_size <= 0
+        ):
+            raise ValueError(
+                f"history_size must be a positive int; got {history_size!r}"
+            )
         super().__init__(
             model=model,
             n_steps=n_steps,
@@ -256,11 +264,16 @@ class LBFGS(_LBFGSMixin, BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     history_size : int
-        Stored curvature pairs.  Fixed once state is allocated.  Default 6.
+        Stored curvature pairs.  Must be a positive int; checked at
+        construction.  Fixed once state is allocated.  Default 6.
     curvature_eps : float, optional
         Curvature-pair acceptance floor.  Default ``None`` (by dtype).
     maxstep : float
-        Maximum displacement per step.  Default 0.2.
+        Maximum displacement per step.  Not validated: ``maxstep <= 0``
+        disables the trust region (unbounded step length per
+        :func:`nvalchemiops.dynamics.optimizers.lbfgs._alpha_cap`), which is
+        occasionally useful but easy to trigger by accident (e.g. a stray
+        negative sign) since nothing raises.  Default 0.2.
     n_steps : int, optional
         Total steps for :meth:`run`.
     hooks : list[Hook], optional
@@ -314,11 +327,16 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.  Must produce ``"stress"``.
     history_size : int
-        Stored curvature pairs.  Fixed once state is allocated.  Default 6.
+        Stored curvature pairs.  Must be a positive int; checked at
+        construction.  Fixed once state is allocated.  Default 6.
     curvature_eps : float, optional
         Curvature-pair acceptance floor.  Default ``None`` (by dtype).
     maxstep : float
-        Maximum displacement per step.  Default 0.2.
+        Maximum displacement per step.  Not validated: ``maxstep <= 0``
+        disables the trust region (unbounded step length per
+        :func:`nvalchemiops.dynamics.optimizers.lbfgs._alpha_cap`), which is
+        occasionally useful but easy to trigger by accident (e.g. a stray
+        negative sign) since nothing raises.  Default 0.2.
     n_steps : int, optional
         Total steps for :meth:`run`.
     hooks : list[Hook], optional

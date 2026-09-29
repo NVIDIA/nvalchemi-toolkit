@@ -222,6 +222,13 @@ class TestLBFGSState:
         with pytest.raises(AttributeError, match="fixed when optimizer state"):
             setattr(dynamics, name, 2)
 
+    @pytest.mark.parametrize("cls", [LBFGS, LBFGSVariableCell])
+    @pytest.mark.parametrize("history_size", [0, -1, 2.5])
+    def test_history_size_rejected_at_construction(self, cls, history_size):
+        kwargs = {"needs_stress": True} if cls is LBFGSVariableCell else {}
+        with pytest.raises(ValueError, match="history_size must be a positive int"):
+            cls(model=_make_model(**kwargs), history_size=history_size)
+
 
 # ---------------------------------------------------------------------------
 # Inflight batching
