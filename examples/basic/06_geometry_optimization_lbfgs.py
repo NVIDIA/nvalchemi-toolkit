@@ -80,7 +80,8 @@ def relax(optimizer) -> Batch:
     """Attach neighbor-list hooks and run *optimizer* on a fresh batch."""
     for hook in model.make_neighbor_hooks():
         optimizer.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
-    return optimizer.run(make_batch())
+    with optimizer:
+        return optimizer.run(make_batch())
 
 
 def fmax(batch: Batch) -> float:
