@@ -126,25 +126,37 @@ class TestApplyPairSwaps:
     """Labels move; rows do not."""
 
     def test_accepted_pairs_exchange_labels(self) -> None:
-        slots = torch.tensor([0, 1, 2, 3])
-        rows = {0: 0, 1: 1, 2: 2, 3: 3}
         new = apply_pair_swaps(
-            slots, [(0, 1), (2, 3)], torch.tensor([True, False]), rows
+            torch.tensor([0, 1, 2, 3]),
+            torch.tensor([0, 2]),
+            torch.tensor([1, 3]),
+            torch.tensor([True, False]),
         )
         assert new.tolist() == [1, 0, 2, 3]
 
     def test_the_input_is_not_modified(self) -> None:
         slots = torch.tensor([0, 1])
-        apply_pair_swaps(slots, [(0, 1)], torch.tensor([True]), {0: 0, 1: 1})
+        apply_pair_swaps(
+            slots, torch.tensor([0]), torch.tensor([1]), torch.tensor([True])
+        )
         assert slots.tolist() == [0, 1]
 
     def test_the_result_is_still_a_permutation(self) -> None:
         slots = torch.tensor([2, 0, 3, 1])
-        rows = {int(s): r for r, s in enumerate(slots.tolist())}
         new = apply_pair_swaps(
-            slots, [(0, 1), (2, 3)], torch.tensor([True, True]), rows
+            slots,
+            torch.tensor([1, 0]),
+            torch.tensor([3, 2]),
+            torch.tensor([True, True]),
         )
         assert sorted(new.tolist()) == [0, 1, 2, 3]
+
+    def test_omitting_the_mask_swaps_every_pair(self) -> None:
+        """What a rule needs to score the proposal before deciding on it."""
+        new = apply_pair_swaps(
+            torch.tensor([0, 1, 2, 3]), torch.tensor([0, 2]), torch.tensor([1, 3])
+        )
+        assert new.tolist() == [1, 0, 3, 2]
 
 
 # ===========================================================================

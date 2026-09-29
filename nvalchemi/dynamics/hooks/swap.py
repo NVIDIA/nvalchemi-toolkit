@@ -87,38 +87,43 @@ _PAIRINGS: dict[str, Callable[[int, int], list[tuple[int, int]]]] = {
 
 def apply_pair_swaps(
     slots: torch.Tensor,
-    pairs: list[tuple[int, int]],
-    accepted: torch.Tensor,
-    row_of_slot: Mapping[int, int],
+    rows_i: torch.Tensor,
+    rows_j: torch.Tensor,
+    accepted: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Return *slots* with the accepted pairs exchanged.
+    """Return *slots* with the accepted row pairs exchanged.
 
     Labels move, rows do not: a walker keeps its place in the batch and its
     slot assignment changes.  Nothing is copied between rows, which is what
     makes the move viable inside a batched GPU step.
 
+    Keyed by row rather than by slot because rows are what every caller
+    already holds — proposing a pair means naming the two rows that hold it —
+    and re-deriving them from a slot lookup is the step that can disagree
+    with the lookup the acceptance rule used.
+
     Parameters
     ----------
     slots:
         Current per-graph slot assignment, shape ``[B]``.
-    pairs:
-        The proposed ``(slot, slot)`` pairs.
+    rows_i, rows_j:
+        Graph rows holding each pair's two slots, shape ``[P]``.
     accepted:
-        One boolean per pair.
-    row_of_slot:
-        Slot to the graph row currently holding it.
+        One boolean per pair, or ``None`` to swap every pair — which is what
+        a rule needs when it has to evaluate the *proposal* before deciding
+        on it.
 
     Returns
     -------
     torch.Tensor
         A new assignment; *slots* is not modified.
     """
+    if accepted is None:
+        accepted = torch.ones(rows_i.numel(), dtype=torch.bool)
+    take = accepted.to(dtype=torch.bool, device=slots.device)
     new_slots = slots.clone()
-    for (slot_i, slot_j), take in zip(pairs, accepted.tolist(), strict=True):
-        if take:
-            row_i, row_j = row_of_slot[slot_i], row_of_slot[slot_j]
-            new_slots[row_i] = slot_j
-            new_slots[row_j] = slot_i
+    new_slots[rows_i[take]] = slots[rows_j[take]]
+    new_slots[rows_j[take]] = slots[rows_i[take]]
     return new_slots
 
 
@@ -339,7 +344,7 @@ class PairSwapHook:
         if not bool(accepted.any()):
             return
 
-        new_slots = apply_pair_swaps(slots, pairs, accepted, row_of_slot)
+        new_slots = apply_pair_swaps(slots, rows_i, rows_j, accepted)
         batch[self.slot_field] = new_slots
         if self.params_fn is not None:
             if self.dynamics is None:

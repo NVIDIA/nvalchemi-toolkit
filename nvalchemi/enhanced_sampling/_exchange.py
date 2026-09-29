@@ -437,18 +437,12 @@ class ReplicaExchange:
         # incremented, leaving the tallies corrupted by a call that failed.
         ids = self.validate_assignment(state_ids, source="state_ids")
         pairs = self.pair_schedule(segment)
-        walker_of_state = {int(state): row for row, state in enumerate(ids.tolist())}
 
         if not pairs:
             empty = torch.zeros(0, dtype=torch.bool, device=ids.device)
             return ids.clone(), pairs, empty
 
-        rows_i = torch.tensor(
-            [walker_of_state[i] for i, _ in pairs], device=ids.device, dtype=torch.long
-        )
-        rows_j = torch.tensor(
-            [walker_of_state[j] for _, j in pairs], device=ids.device, dtype=torch.long
-        )
+        rows_i, rows_j = self._pair_rows(ids, pairs)
         accepted = self._decide_rows(
             ids,
             rows_i,
@@ -457,8 +451,40 @@ class ReplicaExchange:
             bias_current=bias_current,
             bias_swapped=bias_swapped,
         )
-        new_ids = apply_pair_swaps(ids, pairs, accepted, walker_of_state)
+        new_ids = apply_pair_swaps(ids, rows_i, rows_j, accepted)
         return new_ids, pairs, accepted
+
+    @staticmethod
+    def _pair_rows(
+        state_ids: torch.Tensor, pairs: list[tuple[int, int]]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the graph rows holding each pair's two states.
+
+        Parameters
+        ----------
+        state_ids:
+            Assignment, shape ``[B]``.
+        pairs:
+            Neighbouring ``(state_id, state_id)`` pairs.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Row indices, shape ``[P]`` each.
+        """
+        row_of_state = {int(state): row for row, state in enumerate(state_ids.tolist())}
+        return (
+            torch.tensor(
+                [row_of_state[i] for i, _ in pairs],
+                device=state_ids.device,
+                dtype=torch.long,
+            ),
+            torch.tensor(
+                [row_of_state[j] for _, j in pairs],
+                device=state_ids.device,
+                dtype=torch.long,
+            ),
+        )
 
     def _decide_rows(
         self,
@@ -579,10 +605,8 @@ class ReplicaExchange:
             If *state_ids* is not a permutation of the ladder.
         """
         ids = self.validate_assignment(state_ids, source="state_ids")
-        walker_of_state = {int(state): row for row, state in enumerate(ids.tolist())}
-        pairs = self.pair_schedule(segment)
-        every = torch.ones(len(pairs), dtype=torch.bool, device=ids.device)
-        return apply_pair_swaps(ids, pairs, every, walker_of_state)
+        rows_i, rows_j = self._pair_rows(ids, self.pair_schedule(segment))
+        return apply_pair_swaps(ids, rows_i, rows_j)
 
     # ------------------------------------------------------------------
     # The PairSwapHook surface
@@ -692,9 +716,7 @@ class ReplicaExchange:
                     "energy under both the current and the proposed state "
                     "assignment, but no bias_energy_fn was supplied."
                 )
-            proposed = slots.clone()
-            proposed[rows_i] = slots[rows_j]
-            proposed[rows_j] = slots[rows_i]
+            proposed = apply_pair_swaps(slots, rows_i, rows_j)
             return self._decide_rows(
                 slots,
                 rows_i,
