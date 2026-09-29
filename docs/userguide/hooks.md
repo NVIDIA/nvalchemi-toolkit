@@ -500,8 +500,9 @@ workflow counters should stay out of hook checkpoints.
 
 ## Composing hooks
 
-Hooks are independent and composable. A typical production setup combines
-convergence, logging, and trajectory recording:
+Hooks are generally independent and composable. Some hooks depend on data
+produced by others and must be registered after them. A typical production
+setup combines convergence, logging, and trajectory recording:
 
 ```python
 from nvalchemi.dynamics import FIRE, ConvergenceHook

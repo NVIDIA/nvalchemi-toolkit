@@ -61,8 +61,9 @@ class PathEnergyStatsHook:
     :attr:`DynamicsStage.ON_ADMISSION` and refreshes them from ``batch.energy``
     at :attr:`DynamicsStage.AFTER_COMPUTE`.
 
-    Downstream hooks should call :meth:`get_stats` after this hook has run for the
-    current evaluation. In eager execution, :meth:`get_stats` raises if the
+    Pass this same registered instance to downstream hooks that consume the
+    statistics. They should call :meth:`get_stats` after this hook has run for
+    the current evaluation. In eager execution, :meth:`get_stats` raises if the
     energy tensor has changed since the statistics were refreshed. This check is
     skipped during compilation because tensor mutation versions are private eager
     metadata, so compiled hooks must still be registered in execution order.
