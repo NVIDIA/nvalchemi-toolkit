@@ -142,25 +142,28 @@ logger.info("Segment 1 pairs: %s", exchange.pair_schedule(1))
 # %%
 # Run
 # ---
-# The runner validates up front that the integrator can rebind a
+# The strategy validates up front that the engine can rebind a
 # thermodynamic state.  An integrator that could only accept the new label
 # would keep sampling the old temperature — wrong, and with no symptom the
 # run would show — so ``NVE`` and friends are rejected rather than silently
 # mis-sampled.
 
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=BASE_TEMPERATURE, friction=0.05)
-for hook in model.make_neighbor_hooks():
-    dynamics.register_hook(hook)
 
 sampling = EnhancedSampling(
-    dynamics=dynamics,
+    engine=NVTLangevin,
+    engine_kwargs={
+        "dt": 0.5,
+        "temperature": BASE_TEMPERATURE,
+        "friction": 0.05,
+    },
     biases={},  # pure temperature REMD; biases would compose here
     replica_exchange=exchange,
     steps_per_epoch=100,
+    extra_hooks=list(model.make_neighbor_hooks()),
 )
 
-batch = sampling.run(batch, n_steps=N_STEPS)
+batch = sampling.run(batch, model, n_steps=N_STEPS)
 
 # %%
 # Read the acceptance statistics
@@ -203,7 +206,8 @@ for index, rate in enumerate(exchange.pair_acceptance_rates()):
 # silently, so it is worth asserting rather than assuming.
 
 assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
-targets = (dynamics._state.temperature.reshape(-1) / KB_EV).tolist()
+engine = sampling.dynamics(model)
+targets = (engine._state.temperature.reshape(-1) / KB_EV).tolist()
 
 logger.info("")
 logger.info("Final assignment (walker -> state): %s", assignment)

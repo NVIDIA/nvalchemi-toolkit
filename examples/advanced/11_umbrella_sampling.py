@@ -158,26 +158,27 @@ wall = UpperWall(
 # %%
 # Run biased dynamics
 # -------------------
-# The runner registers one internal hook on the dynamics and otherwise leaves
-# it alone: the model, the integrator, and the thermostat are unchanged.
+# ``EnhancedSampling`` is a ``DynamicsStrategy``: a recipe for the engine
+# rather than a wrapper around a live one.  It contributes hooks and leaves
+# everything else alone — the model, the integrator, and the thermostat are
+# unchanged.
 
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=120.0, friction=0.05)
-
-# A cutoff model needs its neighbour list rebuilt at BEFORE_COMPUTE. The
-# runner fires that stage during priming too, so the first force evaluation
-# is as valid as every later one.
-for hook in model.make_neighbor_hooks():
-    dynamics.register_hook(hook)
 
 sampling = EnhancedSampling(
-    dynamics=dynamics,
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": 120.0, "friction": 0.05},
     biases={"umbrella": umbrella, "dissociation_wall": wall},
+    # A cutoff model needs its neighbour list rebuilt at BEFORE_COMPUTE.
+    # ``extra_hooks`` are registered after the strategy's own, and priming
+    # fires that stage too, so the first force evaluation is as valid as
+    # every later one.
+    extra_hooks=list(model.make_neighbor_hooks()),
 )
 
 logger.info("Initial CV per window: %s", bond_distance(batch).flatten().tolist())
 
-batch = sampling.run(batch, n_steps=N_STEPS)
+batch = sampling.run(batch, model, n_steps=N_STEPS)
 
 final_cv = bond_distance(batch).flatten().tolist()
 logger.info("Target centers:        %s", WINDOW_CENTERS)

@@ -27,6 +27,7 @@ it and the ideal-gas limit reports a flat PMF instead of ``-2 kB T ln r``.
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Mapping
 
 import pytest
 import torch
@@ -45,6 +46,7 @@ from nvalchemi.enhanced_sampling import (
 )
 from nvalchemi.hooks import BiasContext
 from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 
@@ -137,10 +139,29 @@ def _runner_batch(
     return Batch.from_data_list(items).to(device)
 
 
-def _make_dynamics(device: str = "cpu") -> NVTLangevin:
-    """Return a demo-model Langevin integrator."""
-    model = DemoModelWrapper(DemoModel()).to(device)
-    return NVTLangevin(model=model, dt=0.1, temperature=TEMPERATURE, friction=0.1)
+_ENGINE_KWARGS = {"dt": 0.1, "temperature": TEMPERATURE, "friction": 0.1}
+
+
+def _make_model(device: str = "cpu") -> DemoModelWrapper:
+    """Return the potential the engine calls."""
+    return DemoModelWrapper(DemoModel()).to(device)
+
+
+def _sampling(
+    device: str = "cpu",
+    biases: Mapping[str, BaseModelMixin] | None = None,
+    **kwargs: object,
+) -> tuple[EnhancedSampling, DemoModelWrapper]:
+    """Return a strategy over ``NVTLangevin`` and the model it drives."""
+    return (
+        EnhancedSampling(
+            engine=NVTLangevin,
+            engine_kwargs=_ENGINE_KWARGS,
+            biases=biases or {},
+            **kwargs,
+        ),
+        _make_model(device),
+    )
 
 
 # ===========================================================================
@@ -648,8 +669,8 @@ class TestRunnerIntegration:
             full_samples=0,
             name="abf",
         ).to(device)
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
-        runner.run(_runner_batch(device=device), n_steps=3)
+        runner, model = _sampling(device, {"abf": bias})
+        runner.run(_runner_batch(device=device), model, n_steps=3)
 
         physical = runner.last_outputs["physical/forces"]
         total = runner.last_outputs["total/forces"]
@@ -659,8 +680,8 @@ class TestRunnerIntegration:
 
     def test_contributes_no_energy_to_the_total(self, device: str) -> None:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
-        runner.run(_runner_batch(device=device), n_steps=4)
+        runner, model = _sampling(device, {"abf": bias})
+        runner.run(_runner_batch(device=device), model, n_steps=4)
 
         outputs = runner.last_outputs
         assert "bias/abf/energy" not in outputs
@@ -668,24 +689,24 @@ class TestRunnerIntegration:
 
     def test_samples_accumulate_over_a_run(self, device: str) -> None:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
+        runner, model = _sampling(device, {"abf": bias})
         batch = _runner_batch(device=device)
-        runner.run(batch, n_steps=6)
+        runner.run(batch, model, n_steps=6)
 
         # One sample per walker per step; two walkers.
         assert int(bias.bin_counts.sum()) == 6 * batch.num_graphs
 
     def test_frequency_is_respected(self, device: str) -> None:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf", frequency=3)
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
+        runner, model = _sampling(device, {"abf": bias})
         batch = _runner_batch(device=device)
-        runner.run(batch, n_steps=9)
+        runner.run(batch, model, n_steps=9)
         assert int(bias.bin_counts.sum()) == 3 * batch.num_graphs
 
     def test_no_sampling_during_priming(self, device: str) -> None:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
-        runner.prime_forces(_runner_batch(device=device))
+        runner, model = _sampling(device, {"abf": bias})
+        runner.prime_forces(_runner_batch(device=device), model)
         assert int(bias.bin_counts.sum()) == 0
 
     def test_below_threshold_updates_do_not_bump_the_version(self, device: str) -> None:
@@ -715,8 +736,8 @@ class TestRunnerIntegration:
             name="wall",
         ).to(device)
         bias = _abf(device, atom_indices=indices, name="abf")
-        runner = EnhancedSampling(_make_dynamics(device), {"abf": bias, "wall": wall})
-        runner.run(_runner_batch(device=device), n_steps=3)
+        runner, model = _sampling(device, {"abf": bias, "wall": wall})
+        runner.run(_runner_batch(device=device), model, n_steps=3)
 
         outputs = runner.last_outputs
         assert float(outputs["bias/wall/energy"].abs().sum()) > 0.0
@@ -758,8 +779,9 @@ class TestExchangeRejection:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
         with pytest.raises(ValueError, match="supplies no exchange energy"):
             EnhancedSampling(
-                _make_dynamics(device),
-                {"abf": bias},
+                engine=NVTLangevin,
+                engine_kwargs=_ENGINE_KWARGS,
+                biases={"abf": bias},
                 replica_exchange=self._ladder(),
             )
 
@@ -884,10 +906,8 @@ class TestRestart:
     ) -> None:
         """A mismatch must be caught through the runner, not only in memory."""
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        runner = EnhancedSampling(
-            _make_dynamics(device), {"abf": bias}, steps_per_epoch=4
-        )
-        batch = runner.run(_runner_batch(device=device), n_steps=4)
+        runner, model = _sampling(device, {"abf": bias}, steps_per_epoch=4)
+        batch = runner.run(_runner_batch(device=device), model, n_steps=4)
         path = tmp_path / "abf.zarr"
         runner.checkpoint(path, batch)
 
@@ -900,29 +920,23 @@ class TestRestart:
             full_samples=0,
             name="abf",
         ).to(device)
-        fresh = EnhancedSampling(
-            _make_dynamics(device), {"abf": wrong}, steps_per_epoch=4
-        )
+        fresh, model = _sampling(device, {"abf": wrong}, steps_per_epoch=4)
         with pytest.raises(ValueError, match="cv_range"):
-            fresh.restore(path, device=device)
+            fresh.restore(path, model, device=device)
 
     def test_checkpoint_round_trip_through_the_runner(
         self, tmp_path, device: str
     ) -> None:
         bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        runner = EnhancedSampling(
-            _make_dynamics(device), {"abf": bias}, steps_per_epoch=4
-        )
-        batch = runner.run(_runner_batch(device=device), n_steps=4)
+        runner, model = _sampling(device, {"abf": bias}, steps_per_epoch=4)
+        batch = runner.run(_runner_batch(device=device), model, n_steps=4)
 
         path = tmp_path / "abf.zarr"
         runner.checkpoint(path, batch)
 
         fresh_bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf")
-        fresh = EnhancedSampling(
-            _make_dynamics(device), {"abf": fresh_bias}, steps_per_epoch=4
-        )
-        fresh.restore(path, device=device)
+        fresh, model = _sampling(device, {"abf": fresh_bias}, steps_per_epoch=4)
+        fresh.restore(path, model, device=device)
 
         assert torch.equal(fresh_bias.bin_counts, bias.bin_counts)
         assert torch.allclose(fresh_bias.force_sum, bias.force_sum)

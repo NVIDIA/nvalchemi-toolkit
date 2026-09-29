@@ -170,8 +170,7 @@ class TestBiasIsAModel:
 
     def test_runner_rejects_a_non_model_bias(self) -> None:
         """An object that is not a BaseModelMixin is refused, by name."""
-        from unittest.mock import Mock
-
+        from nvalchemi.dynamics import NVTLangevin
         from nvalchemi.enhanced_sampling import EnhancedSampling
 
         class NotABias:
@@ -180,10 +179,8 @@ class TestBiasIsAModel:
             def __call__(self, batch: Batch) -> ModelOutputs:
                 return OrderedDict()
 
-        dynamics = Mock()
-        dynamics.hooks = []
         with pytest.raises(TypeError, match="not a BaseModelMixin"):
-            EnhancedSampling(dynamics=dynamics, biases={"not_a_bias": NotABias()})
+            EnhancedSampling(engine=NVTLangevin, biases={"not_a_bias": NotABias()})
 
     def test_diagnostics_ride_in_the_same_mapping(self) -> None:
         """A diagnostic is a namespaced key, not a second payload."""

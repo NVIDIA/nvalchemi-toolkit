@@ -176,26 +176,27 @@ wall = UpperWall(cv=bond_distance, threshold=9.0, stiffness=20.0, name="wall")
 # %%
 # Run
 # ---
-# The runner calls ``update()`` exactly once per due step, at ``AFTER_STEP``
-# so each hill marks the configuration the walker actually reached.  A
-# deposition bumps the bias state version, and the runner re-primes forces in
-# response, so a new hill is felt on the very next step rather than one step
-# late.
+# The bias hook calls ``update()`` exactly once per due step, at
+# ``AFTER_STEP`` so each hill marks the configuration the walker actually
+# reached.  A deposition bumps the bias state version, and the hook re-primes
+# forces in response, so a new hill is felt on the very next step rather than
+# one step late.
 
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=TEMPERATURE, friction=0.05)
 
-for hook in model.make_neighbor_hooks():
-    dynamics.register_hook(hook)
-
-sampling = EnhancedSampling(dynamics=dynamics, biases={"metad": metad, "wall": wall})
+sampling = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.05},
+    biases={"metad": metad, "wall": wall},
+    extra_hooks=list(model.make_neighbor_hooks()),
+)
 
 logger.info(
     "Initial CV per walker: %s",
     [round(v, 3) for v in bond_distance(batch).flatten().tolist()],
 )
 
-batch = sampling.run(batch, n_steps=N_STEPS)
+batch = sampling.run(batch, model, n_steps=N_STEPS)
 
 logger.info(
     "Final CV per walker:   %s",

@@ -17,6 +17,7 @@ Core classes
    :nosignatures:
 
    BaseDynamics
+   DynamicsStrategy
    DemoDynamics
    FusedStage
    DistributedPipeline

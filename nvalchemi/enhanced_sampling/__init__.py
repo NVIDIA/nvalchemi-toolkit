@@ -39,8 +39,14 @@ Public surface
   nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC
   (unreduced cells via LLL) is not yet implemented.
 * :func:`periodic_difference` — CV differences wrapped onto a circle.
-* :class:`EnhancedSampling` — the runner: walker identity, force-step
-  ordering, exactly-once ``update()``, and force priming.
+* :class:`EnhancedSampling` — the
+  :class:`~nvalchemi.dynamics.DynamicsStrategy` that configures an
+  engine to run biases, and owns restart: checkpoint, restore, warm start.
+* :class:`WalkerIdentityHook`, :class:`BiasHook`, :class:`EpochCommitHook`,
+  :class:`ReplicaExchangeHook` — what it installs on that engine.  Walker
+  identity, the force-step ordering, exactly-once ``update()``, force
+  priming, shared-history commits and exchange attempts are each a hook on
+  ``BaseDynamics``'s own stepping loop rather than a second loop around it.
 * :class:`ThermodynamicState`, :class:`ReplicaExchange` — synchronous
   replica exchange; swaps state labels, not coordinates.
 * Built-in static biases: :class:`HarmonicUmbrellaBias`,
@@ -130,13 +136,23 @@ from nvalchemi.enhanced_sampling.cv import (
     pair_distance,
     periodic_difference,
 )
+from nvalchemi.enhanced_sampling.hooks import (
+    BiasHook,
+    EpochCommitHook,
+    ReplicaExchangeHook,
+    WalkerIdentityHook,
+)
 
 __all__ = [
     # Core abstractions
     "ConservativeBias",
     "AdaptivePotentialMixin",
-    # Runner
+    # Strategy and the hooks it installs
     "EnhancedSampling",
+    "WalkerIdentityHook",
+    "BiasHook",
+    "EpochCommitHook",
+    "ReplicaExchangeHook",
     # Replica exchange
     "ThermodynamicState",
     "ReplicaExchange",

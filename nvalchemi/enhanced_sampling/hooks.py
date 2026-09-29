@@ -33,6 +33,12 @@ at ``frequency=N`` is dispatched at step *kN*, where ``step // N - 1`` is the
 index of the boundary that has just completed — the same index the lazy
 "did the epoch change" test used to produce.
 
+Where both are due on the same step, the exchange goes first:
+:meth:`EnhancedSampling.build_hooks` registers it ahead of the commit, and
+``checkpoint()`` drains them in the same order.  A commit publishes shared
+history, and publishing it before the swap would file it under labels that are
+about to change.
+
 Why the biases share one hook
 -----------------------------
 :class:`BiasHook` takes *all* the biases rather than each bias being

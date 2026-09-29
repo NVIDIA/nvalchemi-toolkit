@@ -503,11 +503,13 @@ class TestBuiltinBiasCompile:
             # is identical and any difference is attributable to the bias.
             torch.manual_seed(0)
             model = DemoModelWrapper(DemoModel()).to(device)
-            dynamics = NVTLangevin(model=model, dt=0.1, temperature=300.0, friction=0.1)
             runner = EnhancedSampling(
-                dynamics, {"u": self._umbrella()}, compile_biases=compile_biases
+                engine=NVTLangevin,
+                engine_kwargs={"dt": 0.1, "temperature": 300.0, "friction": 0.1},
+                biases={"u": self._umbrella()},
+                compile_biases=compile_biases,
             )
-            runner.prime_forces(batch)
+            runner.prime_forces(batch, model)
             results.append(batch.forces.clone())
         assert torch.allclose(results[0], results[1], atol=1e-5)
 

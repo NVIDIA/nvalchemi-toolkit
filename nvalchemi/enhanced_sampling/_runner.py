@@ -12,14 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The ``EnhancedSampling`` runner: orchestration around an existing dynamics.
+"""``EnhancedSampling``: the ``DynamicsStrategy`` that runs biased dynamics.
 
-The runner owns what a bias cannot: walker identity, the ordering of the
-force step, exactly-once ``update()`` delivery, and force priming after a
-bias changes.  Each of those is a hook — see
-:mod:`nvalchemi.enhanced_sampling.hooks` — and integration itself is
-delegated entirely to the wrapped ``BaseDynamics``, which owns the stepping
-loop.  The runner never touches an integrator.
+A biased run differs from a plain one only in *what it configures*: the same
+engine, plus hooks for walker identity, bias forces, shared-history commits
+and replica-exchange attempts.  That is exactly what a
+:class:`~nvalchemi.dynamics.DynamicsStrategy` expresses, so this
+module contributes a :meth:`~EnhancedSampling.build_hooks` override and the
+restart machinery around it — never a second stepping loop.  The hooks
+themselves live in :mod:`nvalchemi.enhanced_sampling.hooks`.
 """
 
 from __future__ import annotations
@@ -27,8 +28,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import torch
+from pydantic import Field, PrivateAttr, model_validator
 
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.strategy import DynamicsStrategy
 from nvalchemi.enhanced_sampling._checkpoint import (
     CheckpointManifest,
     _qualified_name,
@@ -91,24 +94,23 @@ def _register_identity_bookkeeping() -> None:
 _register_identity_bookkeeping()
 
 
-class EnhancedSampling:
-    """Run biased dynamics on top of an existing ``BaseDynamics``.
+class EnhancedSampling(DynamicsStrategy):
+    """Declarative recipe for biased dynamics on a ``BaseDynamics`` engine.
 
-    The runner installs the enhanced-sampling hook family and otherwise stays
-    out of the way: the model, the integrator, the thermostat, and every
-    other hook behave exactly as they would unbiased.
+    A sibling of any other :class:`~nvalchemi.dynamics.DynamicsStrategy`:
+    construction validates the configuration, :meth:`build_hooks` contributes
+    the enhanced-sampling hook family, and ``DynamicsStrategy.run`` drives the
+    engine.  The model, the integrator, the thermostat, and every other hook
+    behave exactly as they would unbiased.
 
-    Parameters
+    Attributes
     ----------
-    dynamics:
-        Any ``BaseDynamics``.  Not subclassed, not wrapped — the runner
-        registers hooks on it and calls its ``run``.
     biases:
         Mapping of unique name to bias.  A bias is any
         :class:`~nvalchemi.models.base.BaseModelMixin` that maps a ``Batch``
         to :data:`~nvalchemi._typing.ModelOutputs` and carries a ``name`` —
         there is no separate bias protocol.  May be empty, which reduces the
-        runner to identity stamping — what pure temperature replica exchange
+        strategy to identity stamping — what pure temperature replica exchange
         needs, since the ladder alone drives the sampling.
     steps_per_epoch:
         Steps per consistency epoch, the
@@ -125,68 +127,110 @@ class EnhancedSampling:
         that anything reading ``batch.forces`` between steps sees the current
         bias rather than the previous one.
     replica_exchange:
-        Optional ladder.  When given, the runner also installs
+        Optional ladder.  When given, the strategy also contributes
         :class:`~nvalchemi.enhanced_sampling.hooks.ReplicaExchangeHook`.
+        A runtime object rather than a declarative knob, so it is excluded
+        from :meth:`to_spec_dict` the way ``extra_hooks`` is.
 
     Raises
     ------
     TypeError
         If any value in *biases* is not a
-        :class:`~nvalchemi.models.base.BaseModelMixin`.
+        :class:`~nvalchemi.models.base.BaseModelMixin`, or if
+        *replica_exchange* is given for an engine that cannot rebind a
+        thermodynamic state.
     ValueError
         If ``steps_per_epoch`` is below 1, or a bias's ``name`` disagrees
         with its key in *biases*.
 
     Examples
     --------
-    >>> sampling = EnhancedSampling(              # doctest: +SKIP
-    ...     dynamics=md,
+    >>> sampling = EnhancedSampling(                 # doctest: +SKIP
+    ...     engine=NVTLangevin,
+    ...     engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.01},
     ...     biases={"umbrella": umbrella, "wall": lower_wall},
     ... )
-    >>> batch = sampling.run(batch, n_steps=1000)  # doctest: +SKIP
+    >>> batch = sampling.run(batch, model, n_steps=1000)  # doctest: +SKIP
 
     Notes
     -----
     Hook ordering
-        The runner's hooks are moved to the **front** of the dynamics hook
-        list, so that at ``AFTER_COMPUTE`` the bias contribution is applied
-        before any other hook runs.  A safety hook such as
+        :meth:`build_hooks` returns the strategy's own hooks before
+        ``extra_hooks``, so at ``AFTER_COMPUTE`` the bias contribution is
+        applied before any caller-supplied hook runs.  A safety hook such as
         ``MaxForceClampHook`` therefore clamps the *total* force, which is
         the physically meaningful quantity, rather than the model force
         alone.  Bias observations that need unbiased physical forces are
         captured inside :class:`~nvalchemi.enhanced_sampling.hooks.BiasHook`
-        before the contribution is applied, so they are unaffected by this
-        ordering.
+        before the contribution is applied, so they are unaffected.
 
-        Among the runner's own hooks the order is identity, bias, exchange,
+        Among the strategy's own hooks the order is identity, bias, exchange,
         commit.  Exchange precedes commit because the commit publishes shared
         history, and doing it before the swap would publish under labels that
         are about to change — the same order :meth:`checkpoint` drains in.
+
+    One strategy, one trajectory
+        The hook family is built once, at construction, because it holds the
+        run's bookkeeping: the walker counter, the committed epoch, the
+        attempted segment, and each bias's delivery record.  That is also
+        what a checkpoint saves and :meth:`restore` writes back.  Calling
+        ``build()`` more than once therefore hands a second engine the first
+        one's bookkeeping; construct a second strategy instead.
     """
 
-    def __init__(
-        self,
-        dynamics: BaseDynamics,
-        biases: Mapping[str, BaseModelMixin] | None = None,
-        *,
-        steps_per_epoch: int = 10_000,
-        compile_biases: bool = False,
-        prime_after_update: bool = True,
-        replica_exchange: ReplicaExchange | None = None,
-    ) -> None:
-        if int(steps_per_epoch) < 1:
+    biases: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Unique name to bias; each a BaseModelMixin whose name matches.",
+    )
+    steps_per_epoch: int = Field(
+        default=10_000, description="Steps per consistency epoch."
+    )
+    compile_biases: bool = Field(
+        default=False, description="torch.compile each conservative bias's energy()."
+    )
+    prime_after_update: bool = Field(
+        default=True, description="Re-prime forces when an update() changes a bias."
+    )
+    replica_exchange: ReplicaExchange | None = Field(
+        default=None,
+        exclude=True,
+        description="Optional ladder; a runtime object, not serialised.",
+    )
+
+    _bias_hook: BiasHook = PrivateAttr()
+    _identity_hook: WalkerIdentityHook = PrivateAttr()
+    _epoch_hook: EpochCommitHook = PrivateAttr()
+    _exchange_hook: ReplicaExchangeHook | None = PrivateAttr(default=None)
+    # One-shot: the empirical state-dependence probe runs at prime time.
+    _probed_state_dependence: bool = PrivateAttr(default=False)
+    _restored: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="after")
+    def _validate_and_build_hooks(self) -> EnhancedSampling:
+        """Check the configuration, then construct the hook family.
+
+        Returns
+        -------
+        EnhancedSampling
+            This strategy, with its hooks built.
+
+        Raises
+        ------
+        TypeError
+            If a bias is not a ``BaseModelMixin``, or the engine cannot
+            rebind a thermodynamic state under a configured ladder.
+        ValueError
+            If ``steps_per_epoch`` is below 1, or a bias's ``name`` disagrees
+            with its key.
+        """
+        if self.steps_per_epoch < 1:
             raise ValueError(
                 f"EnhancedSampling: steps_per_epoch must be at least 1, got "
-                f"{steps_per_epoch}. It is a divisor — the epoch index is "
+                f"{self.steps_per_epoch}. It is a divisor — the epoch index is "
                 "step // steps_per_epoch and the checkpoint boundary is "
                 "step % steps_per_epoch — so zero raises deep in a run and a "
                 "negative value makes both meaningless."
             )
-        self.dynamics = dynamics
-        self.biases: dict[str, BaseModelMixin] = dict(biases or {})
-        self.steps_per_epoch = int(steps_per_epoch)
-        self.replica_exchange = replica_exchange
-
         for key, bias in self.biases.items():
             if not isinstance(bias, BaseModelMixin):
                 raise TypeError(
@@ -205,42 +249,83 @@ class EnhancedSampling:
                     "output dict and in checkpoint group names respectively."
                 )
 
-        if replica_exchange is not None:
-            replica_exchange.validate_for(self.biases)
+        if self.replica_exchange is not None:
+            self.replica_exchange.validate_for(self.biases)
             self._validate_exchange_capability()
-
-        # One-shot: the empirical state-dependence probe runs at prime time.
-        self._probed_state_dependence = False
-        self._restored = False
 
         self._bias_hook = BiasHook(
             self.biases,
-            prime_after_update=prime_after_update,
-            compile_biases=compile_biases,
+            prime_after_update=self.prime_after_update,
+            compile_biases=self.compile_biases,
         )
         self._identity_hook = WalkerIdentityHook(
-            steps_per_epoch=self.steps_per_epoch, exchange=replica_exchange
+            steps_per_epoch=self.steps_per_epoch, exchange=self.replica_exchange
         )
         self._epoch_hook = EpochCommitHook(
             [self._bias_hook], frequency=self.steps_per_epoch
         )
         self._exchange_hook = (
-            ReplicaExchangeHook(replica_exchange, self._bias_hook)
-            if replica_exchange is not None
+            ReplicaExchangeHook(self.replica_exchange, self._bias_hook)
+            if self.replica_exchange is not None
             else None
         )
-        self._hooks: list[Hook] = [
+        return self
+
+    def _validate_exchange_capability(self) -> None:
+        """Reject an engine that cannot rebind a thermodynamic state.
+
+        An accepted swap must change the target temperature, rescale
+        velocities, and transform any thermostat memory as one indivisible
+        move.  An integrator that only accepts the new label would keep
+        sampling the old temperature, which breaks detailed balance with no
+        symptom the run would show — so this fails at construction rather
+        than producing a plausible-looking wrong trajectory.
+
+        Checked against the engine *class*, since a strategy holds a recipe
+        rather than a live engine.  That is also the stricter test:
+        ``BaseDynamics`` defines ``apply_thermodynamic_state`` only to raise,
+        so presence is not enough and the subclass must override it.
+
+        Raises
+        ------
+        TypeError
+            If the engine does not implement the rebinding adapters.
+        """
+        for method in ("apply_thermodynamic_state", "rescale_velocities_for_state"):
+            if not callable(getattr(self.engine, method, None)):
+                raise TypeError(
+                    f"EnhancedSampling: replica exchange needs "
+                    f"{self.engine.__name__} to implement {method}(), "
+                    "so an accepted swap can rebind temperature, velocities, "
+                    "and thermostat state together. NVTLangevin and "
+                    "NVTNoseHoover implement this; other integrators can run "
+                    "biased dynamics without exchange."
+                )
+        if self.engine.apply_thermodynamic_state is (
+            BaseDynamics.apply_thermodynamic_state
+        ):
+            raise TypeError(
+                f"EnhancedSampling: {self.engine.__name__} does not "
+                "support thermodynamic-state rebinding, so it cannot take part "
+                "in replica exchange."
+            )
+
+    def build_hooks(self) -> list[Hook]:
+        """Return the enhanced-sampling hooks, then ``extra_hooks``.
+
+        Returns
+        -------
+        list[Hook]
+            Identity, bias, exchange (when configured) and epoch-commit
+            hooks, followed by whatever the base contributes.
+        """
+        return [
             self._identity_hook,
             self._bias_hook,
             *([self._exchange_hook] if self._exchange_hook is not None else []),
             self._epoch_hook,
+            *super().build_hooks(),
         ]
-        for index, hook in enumerate(self._hooks):
-            dynamics.register_hook(hook)
-            # Move to the front, preserving relative order: see the "Hook
-            # ordering" note in the class docstring.
-            dynamics.hooks.remove(hook)
-            dynamics.hooks.insert(index, hook)
 
     @property
     def last_outputs(self) -> dict[str, torch.Tensor]:
@@ -262,49 +347,28 @@ class EnhancedSampling:
         """
         return self._bias_hook.adaptive_biases()
 
-    # ------------------------------------------------------------------
-    # Setup helpers
-    # ------------------------------------------------------------------
+    def _require_engine(self) -> BaseDynamics:
+        """Return the built engine, or explain that there is not one yet.
 
-    def _validate_exchange_capability(self) -> None:
-        """Reject a dynamics that cannot rebind a thermodynamic state.
-
-        An accepted swap must change the target temperature, rescale
-        velocities, and transform any thermostat memory as one indivisible
-        move.  An integrator that only accepts the new label would keep
-        sampling the old temperature, which breaks detailed balance with no
-        symptom the run would show — so this fails at construction rather
-        than producing a plausible-looking wrong trajectory.
+        Returns
+        -------
+        BaseDynamics
+            The engine this strategy has been driving.
 
         Raises
         ------
-        TypeError
-            If the dynamics does not implement the rebinding adapters.
+        RuntimeError
+            If no engine has been built, meaning nothing has been run,
+            primed, or restored.
         """
-        for method in ("apply_thermodynamic_state", "rescale_velocities_for_state"):
-            if not callable(getattr(self.dynamics, method, None)):
-                raise TypeError(
-                    f"EnhancedSampling: replica exchange needs "
-                    f"{type(self.dynamics).__name__} to implement {method}(), "
-                    "so an accepted swap can rebind temperature, velocities, "
-                    "and thermostat state together. NVTLangevin and "
-                    "NVTNoseHoover implement this; other integrators can run "
-                    "biased dynamics without exchange."
-                )
-        # BaseDynamics defines apply_thermodynamic_state only to raise, so
-        # presence is not enough — probe it.
-        try:
-            self.dynamics.apply_thermodynamic_state(
-                torch.zeros(0, dtype=torch.long), torch.zeros(0)
+        if self._engine is None:
+            raise RuntimeError(
+                "EnhancedSampling: no engine has been built yet. run(), "
+                "prime_forces() and restore() all take the model the engine "
+                "calls; pass it to one of those before asking for state that "
+                "only a live engine has."
             )
-        except NotImplementedError as exc:
-            raise TypeError(
-                f"EnhancedSampling: {type(self.dynamics).__name__} does not "
-                "support thermodynamic-state rebinding, so it cannot take part "
-                "in replica exchange."
-            ) from exc
-        except Exception:  # noqa: S110 - any other failure means it is implemented
-            pass
+        return self._engine
 
     def _probe_state_dependence(self, batch: Batch) -> None:
         """Reject a state-dependent bias under a temperature ladder.
@@ -381,7 +445,7 @@ class EnhancedSampling:
     # Public API
     # ------------------------------------------------------------------
 
-    def prime_forces(self, batch: Batch) -> Batch:
+    def prime_forces(self, batch: Batch, model: BaseModelMixin) -> Batch:
         """Run one force evaluation without advancing dynamics.
 
         Populates ``batch.energy`` / ``forces`` / ``stress`` with the total
@@ -393,6 +457,8 @@ class EnhancedSampling:
         ----------
         batch:
             The batch to prime.
+        model:
+            The potential the engine calls.
 
         Returns
         -------
@@ -427,12 +493,13 @@ class EnhancedSampling:
                 "stress (any periodic batch, unless the bias was built with "
                 "compute_stress=False)."
             )
-        self._identity_hook.stamp(batch, self.dynamics.step_count)
+        engine = self.dynamics(model)
+        self._identity_hook.stamp(batch, engine.step_count)
         self._bias_hook.reprime_from_scratch(batch)
         self._probe_state_dependence(batch)
         return batch
 
-    def warm_start(self, frames: Batch) -> None:
+    def warm_start(self, frames: Batch, model: BaseModelMixin) -> None:
         """Replay prior frames into every adaptive bias, in order.
 
         Approximate by construction: it reconstructs bias history but not
@@ -443,6 +510,9 @@ class EnhancedSampling:
         ----------
         frames:
             Prior frames in chronological order, one graph per frame.
+        model:
+            The potential the engine calls; a replayed frame's context names
+            it the same way a live one does.
 
         Raises
         ------
@@ -454,14 +524,20 @@ class EnhancedSampling:
         if self._restored:
             raise RuntimeError(
                 "EnhancedSampling: warm_start() and restore() are mutually "
-                "exclusive. This runner has already been restored from a "
+                "exclusive. This strategy has already been restored from a "
                 "checkpoint; warm-starting over it would replay history the "
                 "restored state already contains."
             )
+        self.dynamics(model)
         self._bias_hook.replay(frames)
 
     def run(
-        self, batch: Batch, n_steps: int | None = None, *, prime: bool = True
+        self,
+        batch: Batch,
+        model: BaseModelMixin,
+        n_steps: int | None = None,
+        *,
+        prime: bool = True,
     ) -> Batch:
         """Run biased dynamics.
 
@@ -475,8 +551,10 @@ class EnhancedSampling:
         ----------
         batch:
             The initial batch.
+        model:
+            The potential the engine calls.
         n_steps:
-            Number of steps; falls back to the dynamics' own ``n_steps``.
+            Number of steps; falls back to :attr:`n_steps`.
         prime:
             Set ``False`` to skip priming when the caller has already
             evaluated forces at these coordinates.
@@ -487,11 +565,16 @@ class EnhancedSampling:
             The batch after all steps.
         """
         if prime:
-            self.prime_forces(batch)
-        return self.dynamics.run(batch, n_steps=n_steps)
+            self.prime_forces(batch, model)
+        return super().run(batch, model, n_steps=n_steps)
 
-    def _components(self) -> dict[str, dict[str, Any]]:
+    def _components(self, engine: BaseDynamics) -> dict[str, dict[str, Any]]:
         """Collect every component's state for a checkpoint.
+
+        Parameters
+        ----------
+        engine:
+            The live engine.
 
         Returns
         -------
@@ -499,7 +582,7 @@ class EnhancedSampling:
             Component name to state mapping.
         """
         components: dict[str, dict[str, Any]] = {
-            "dynamics": dict(self.dynamics.state_dict()),
+            "dynamics": dict(engine.state_dict()),
             "runner": {
                 "steps_per_epoch": self.steps_per_epoch,
                 "next_walker_id": self._identity_hook.next_walker_id,
@@ -532,16 +615,19 @@ class EnhancedSampling:
         path:
             Destination Zarr store.
         batch:
-            The batch to save.  Defaults to the one last seen by the runner.
+            The batch to save.  Defaults to the one last seen by the identity
+            hook.
 
         Raises
         ------
         RuntimeError
-            If no batch is available, meaning nothing has been run or primed.
+            If no engine has been built or no batch is available, meaning
+            nothing has been run or primed.
         ValueError
             If the current step is not an epoch boundary; the message names
             the next valid step.
         """
+        engine = self._require_engine()
         target = batch if batch is not None else self._identity_hook.current_batch
         if target is None:
             raise RuntimeError(
@@ -549,7 +635,7 @@ class EnhancedSampling:
                 "the sampler first, or pass batch= explicitly."
             )
 
-        step = self.dynamics.step_count
+        step = engine.step_count
         if step % self.steps_per_epoch != 0:
             next_step = ((step // self.steps_per_epoch) + 1) * self.steps_per_epoch
             raise ValueError(
@@ -565,10 +651,10 @@ class EnhancedSampling:
         # boundary — so at step N neither has run for the epoch that just
         # ended, and a checkpoint taken here would record pre-exchange labels
         # and a shared-history bias with its deposits still pending rather
-        # than merged.  Drain both, in the same order the hooks are
-        # registered: exchange first, because the commit publishes shared
-        # history and doing it before the swap would publish under labels that
-        # are about to change.
+        # than merged.  Drain both, in the same order build_hooks() registers
+        # them: exchange first, because the commit publishes shared history
+        # and doing it before the swap would publish under labels that are
+        # about to change.
         if self._exchange_hook is not None:
             interval = self._exchange_hook.frequency
             self._exchange_hook.attempt_segment(target, step // interval - 1)
@@ -577,12 +663,12 @@ class EnhancedSampling:
         write_checkpoint(
             path,
             target,
-            self._components(),
+            self._components(engine),
             sampling_step=step,
             sampling_epoch=step // self.steps_per_epoch,
             steps_per_epoch=self.steps_per_epoch,
-            model_class=_qualified_name(self.dynamics.model),
-            dynamics_class=_qualified_name(self.dynamics),
+            model_class=_qualified_name(engine.model),
+            dynamics_class=_qualified_name(engine),
             bias_classes={
                 name: _qualified_name(bias) for name, bias in self.biases.items()
             },
@@ -594,12 +680,15 @@ class EnhancedSampling:
         )
 
     def restore(
-        self, path: str | Path, device: torch.device | str | None = None
+        self,
+        path: str | Path,
+        model: BaseModelMixin,
+        device: torch.device | str | None = None,
     ) -> Batch:
         """Restore a checkpoint exactly, and prime forces before returning.
 
-        The caller must have reconstructed the same model, dynamics, and
-        biases first; this validates that they match what was saved.  **Model
+        The caller must have reconstructed the same model, engine and biases
+        first; this validates that they match what was saved.  **Model
         weights are not restored** — load them through the model's own API
         before calling here.  The compatibility metadata proves the
         architecture agrees, not that the weights do.
@@ -608,8 +697,10 @@ class EnhancedSampling:
         ----------
         path:
             Source Zarr store.
+        model:
+            The potential the engine calls.
         device:
-            Device for the restored batch.  Defaults to the dynamics' device.
+            Device for the restored batch.  Defaults to the model's own.
 
         Returns
         -------
@@ -620,16 +711,17 @@ class EnhancedSampling:
         ------
         ValueError
             If the checkpoint is uncommitted, fails a checksum, or was
-            written by a different model, dynamics, or bias set.
+            written by a different model, engine, or bias set.
         """
-        target_device = device if device is not None else self._model_device()
+        engine = self.dynamics(model)
+        target_device = device if device is not None else self._model_device(engine)
         batch, states, manifest = read_checkpoint(path, target_device)
-        self._validate_compatibility(manifest)
+        self._validate_compatibility(manifest, engine)
 
         self.steps_per_epoch = int(manifest.steps_per_epoch)
         # The divisor lives on the hooks that use it, so a checkpoint written
         # with a different epoch length re-cadences them rather than leaving
-        # the runner's copy and the hooks' copies disagreeing.
+        # the strategy's copy and the hooks' copies disagreeing.
         self._identity_hook.steps_per_epoch = self.steps_per_epoch
         self._epoch_hook.frequency = self.steps_per_epoch
 
@@ -659,14 +751,15 @@ class EnhancedSampling:
         # The integrator's per-system state must exist before it can be
         # restored into, and its shapes come from the batch — so initialise
         # against the restored batch first, then overwrite.
-        self.dynamics._ensure_state_initialized(batch)
-        self.dynamics.load_state_dict(states.get("dynamics", {}))
+        engine._ensure_state_initialized(batch)
+        engine.load_state_dict(states.get("dynamics", {}))
 
         self._restored = True
-        self.prime_forces(batch)
+        self.prime_forces(batch, model)
         return batch
 
-    def _model_device(self) -> torch.device:
+    @staticmethod
+    def _model_device(engine: BaseDynamics) -> torch.device:
         """Return the device the model's own tensors live on.
 
         ``BaseDynamics.device`` reports the process's compute device, which
@@ -675,24 +768,33 @@ class EnhancedSampling:
         the model on different devices.  The model's own parameters are the
         authority.
 
+        Parameters
+        ----------
+        engine:
+            The live engine, which holds the model.
+
         Returns
         -------
         torch.device
-            The model's device, falling back to the dynamics' device when the
+            The model's device, falling back to the engine's device when the
             model holds no tensors (a pure-physics wrapper such as LJ).
         """
-        model = self.dynamics.model
+        model = engine.model
         for tensor in list(model.parameters()) + list(model.buffers()):
             return tensor.device
-        return self.dynamics.device
+        return engine.device
 
-    def _validate_compatibility(self, manifest: CheckpointManifest) -> None:
+    def _validate_compatibility(
+        self, manifest: CheckpointManifest, engine: BaseDynamics
+    ) -> None:
         """Reject a checkpoint written by a different configuration.
 
         Parameters
         ----------
         manifest:
             The committed manifest.
+        engine:
+            The live engine, which names the model and dynamics classes.
 
         Raises
         ------
@@ -700,17 +802,17 @@ class EnhancedSampling:
             If the model class, dynamics class, or bias set disagrees.
         """
         problems: list[str] = []
-        actual_model = _qualified_name(self.dynamics.model)
+        actual_model = _qualified_name(engine.model)
         if manifest.model_class and manifest.model_class != actual_model:
             problems.append(
                 f"  model: checkpoint has {manifest.model_class}, "
-                f"this runner has {actual_model}"
+                f"this strategy has {actual_model}"
             )
-        actual_dynamics = _qualified_name(self.dynamics)
+        actual_dynamics = _qualified_name(engine)
         if manifest.dynamics_class and manifest.dynamics_class != actual_dynamics:
             problems.append(
                 f"  dynamics: checkpoint has {manifest.dynamics_class}, "
-                f"this runner has {actual_dynamics}"
+                f"this strategy has {actual_dynamics}"
             )
         actual_biases = {
             name: _qualified_name(bias) for name, bias in self.biases.items()
@@ -718,7 +820,7 @@ class EnhancedSampling:
         if manifest.bias_classes != actual_biases:
             problems.append(
                 f"  biases: checkpoint has {manifest.bias_classes}, "
-                f"this runner has {actual_biases}"
+                f"this strategy has {actual_biases}"
             )
         # The ladder decides what a swap means, so a mismatch — including
         # exchange-versus-none in either direction — changes the semantics of
@@ -743,7 +845,7 @@ class EnhancedSampling:
             )
 
     def __repr__(self) -> str:
-        """Return a concise description of the runner."""
+        """Return a concise description of the strategy."""
         names = ", ".join(self.biases) or "none"
         exchange = (
             f", exchange={self.replica_exchange!r}"
@@ -751,13 +853,13 @@ class EnhancedSampling:
             else ""
         )
         return (
-            f"{type(self).__name__}(dynamics={type(self.dynamics).__name__}, "
+            f"{type(self).__name__}(engine={self.engine.__name__}, "
             f"biases=[{names}], steps_per_epoch={self.steps_per_epoch}"
             f"{exchange})"
         )
 
     def state_dict(self) -> Mapping[str, Any]:
-        """Return runner counters plus each adaptive bias's state.
+        """Return sampling counters plus each adaptive bias's state.
 
         Returns
         -------
@@ -775,3 +877,21 @@ class EnhancedSampling:
             if callable(getter):
                 state["biases"][name] = getter()
         return state
+
+    def to_spec_dict(self) -> dict[str, Any]:
+        """Serialise the declarative knobs to a JSON-ready dict.
+
+        ``biases`` and ``replica_exchange`` are excluded alongside
+        ``extra_hooks``: all three are live objects rather than knobs.
+
+        Returns
+        -------
+        dict[str, Any]
+            JSON-ready bundle suitable for :func:`json.dumps`.
+        """
+        return {
+            **super().to_spec_dict(),
+            "steps_per_epoch": self.steps_per_epoch,
+            "compile_biases": self.compile_biases,
+            "prime_after_update": self.prime_after_update,
+        }

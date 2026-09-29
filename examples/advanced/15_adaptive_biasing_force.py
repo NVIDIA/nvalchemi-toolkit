@@ -186,19 +186,20 @@ abf = AdaptiveBiasingForce(
 # %%
 # Run
 # ---
-# The runner hands ABF its observation at ``AFTER_COMPUTE``, where
+# The bias hook hands ABF its observation at ``AFTER_COMPUTE``, where
 # ``batch.forces`` still holds the **unbiased** physical force.  This is not
 # a detail: an estimator shown its own output converges to whatever it had
 # already decided, and the resulting profile looks perfectly smooth.
 
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=TEMPERATURE, friction=0.05)
 
-for hook in model.make_neighbor_hooks():
-    dynamics.register_hook(hook)
-
-sampling = EnhancedSampling(dynamics=dynamics, biases={"abf": abf})
-batch = sampling.run(batch, n_steps=N_STEPS)
+sampling = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.05},
+    biases={"abf": abf},
+    extra_hooks=list(model.make_neighbor_hooks()),
+)
+batch = sampling.run(batch, model, n_steps=N_STEPS)
 
 logger.info("")
 logger.info(

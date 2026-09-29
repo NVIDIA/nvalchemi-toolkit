@@ -8,8 +8,8 @@ into regions it would not visit on its own, so that a fixed budget of model
 evaluations buys more of the physics you actually care about.
 
 `nvalchemi.enhanced_sampling` provides the bias abstractions, a set of
-built-in biases, and the `EnhancedSampling` runner that wires them into an
-existing dynamics object.
+built-in biases, and the `EnhancedSampling` strategy that configures a
+`BaseDynamics` engine to run them.
 
 ```{contents}
 :local:
@@ -35,17 +35,26 @@ umbrella = HarmonicUmbrellaBias(
     name="umbrella",
 )
 
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=300.0, friction=0.05)
-sampling = EnhancedSampling(dynamics, {"umbrella": umbrella})
+sampling = EnhancedSampling(
+    engine=NVTLangevin,                             # the class, not an instance
+    engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
+    biases={"umbrella": umbrella},
+)
 
 # One window per graph. batch already carries forces/energy buffers — see
-# "Batch requirements" below.
+# "Batch requirements" below. `model` is any BaseModelMixin.
 batch["thermodynamic_state_id"] = torch.tensor([0, 1, 2], device=device)
-batch = sampling.run(batch, n_steps=10_000)
+batch = sampling.run(batch, model, n_steps=10_000)
 ```
 
 Every window is a row of one batch, so all three are advanced by a single
 batched force evaluation per step rather than three separate simulations.
+
+`EnhancedSampling` is a {class}`~nvalchemi.dynamics.DynamicsStrategy`: it holds
+a *recipe* for the engine — the class and its constructor arguments — rather
+than a live engine, and `run()` builds one on first use and drives it.
+`sampling.dynamics(model)` returns that engine if you need it directly; it is
+cached, so consecutive `run()` calls continue one trajectory.
 
 ## Collective variables
 
@@ -221,7 +230,8 @@ temperature ladder is rejected rather than run under an acceptance rule that
 does not cover it; see [Acceptance](#acceptance).
 
 `"state"` and `"walker"` read `thermodynamic_state_id` and `walker_id` off the
-batch, and **raise** if the field is absent or the wrong length. The runner
+batch, and **raise** if the field is absent or the wrong length. The
+identity hook
 stamps both on every step, so this only affects a bias you evaluate directly.
 The alternative — defaulting a missing field to zero — would file every hill
 under one key and silently collapse the per-owner histories into a single
@@ -292,7 +302,7 @@ nothing about the conformer.
 
 Both biases deposit at `AFTER_STEP`, so a hill marks the configuration the
 walker actually reached rather than the one it started from. A deposition
-bumps the bias state version, and the runner re-primes forces in response, so
+bumps the bias state version, and the bias hook re-primes forces in response, so
 a new hill is felt on the very next step rather than one step late.
 
 Neither deposits during `prime_forces()`: priming evaluates forces, it does
@@ -372,7 +382,7 @@ awkward geometry can do while its average settles.
 `stage` is `AFTER_COMPUTE`, where `batch.forces` still holds the
 **unbiased** physical force. This is load-bearing: an estimator shown its own
 output converges to whatever it had already decided, and the resulting profile
-looks perfectly smooth. The runner captures the frame before applying any bias
+looks perfectly smooth. The bias hook captures the frame before applying any bias
 contribution, so this holds even with several biases registered.
 
 For the same reason, an `update()` that only lands in a bin still below its
@@ -436,7 +446,7 @@ derivation — but nothing forces you to.
 `ModelOutputs` is an open mapping, and two general conventions ride in it:
 
 - **`diagnostics/<key>`** — arbitrary reported tensors, no shape contract,
-  never summed and never applied. The runner surfaces them as
+  never summed and never applied. The bias hook surfaces them as
   `bias/<name>/<key>`. A per-atom energy decomposition belongs here: it is a
   diagnostic, not a contribution to `batch.energy`.
 - **`state_version`** — integer revision IDs, shape `[B]`, saying which
@@ -446,17 +456,17 @@ derivation — but nothing forces you to.
 Neither is enhanced-sampling-specific; both are documented on `ModelOutputs`
 and checked by `validate_contribution`.
 
-#### What the runner will actually apply
+#### What the bias hook will actually apply
 
 Only `energy`, `forces`, and `stress` are added into the batch. For each one
-the runner has to know the destination buffer, whether it is per-graph or
+the bias hook has to know the destination buffer, whether it is per-graph or
 per-atom, and how it combines across biases. An unrecognised *applied* key has
 none of that, so `_check_destinations` raises rather than dropping a
 contribution in silence.
 
 The cost is real: a method producing a genuinely new applied output cannot
 express it without editing the framework. That is accepted, because the
-alternative is a contribution the runner silently drops. Anything you only
+alternative is a contribution the bias hook silently drops. Anything you only
 want to *see* goes under `diagnostics/`, which is unconstrained.
 
 ### The batteries: mixins
@@ -472,7 +482,7 @@ class MyABF(AdaptivePotentialMixin, nn.Module, BaseModelMixin): ...  # adaptive,
 A non-conservative bias has no energy to differentiate, so it does not inherit
 `ConservativeBias` — but it is still a `BaseModelMixin`. `AdaptiveBiasingForce`
 declares `outputs={"forces"}` and returns no `"energy"` key. *Non-conservative
-does not mean non-model*, and that is what lets the runner type-check, apply,
+does not mean non-model*, and that is what lets the bias hook type-check, apply,
 and distribute every bias the same way.
 
 :::{important}
@@ -501,7 +511,7 @@ Notes:
 - **Stress, not virial.** `ConservativeBias` emits tensile-positive Cauchy
   stress, matching every model wrapper in the toolkit, so bias output sums
   directly with model output. A `"virial"` key exists for hand-written biases
-  that produce a virial directly, but the runner will reject it — convert with
+  that produce a virial directly, but the bias hook will reject it — convert with
   `sigma = -W/V` first.
 - **Partial dependence is fine.** An energy that depends only on the cell (a
   volume restraint) yields zero forces and real stress; one that returns a
@@ -548,7 +558,7 @@ class MyMetaD(AdaptivePotentialMixin, ConservativeBias):
 
     def update(self, ctx, stage):            # called once per due step
         self.deposit_hill(ctx.batch)
-        self.bump_state_version()            # tells the runner forces are stale
+        self.bump_state_version()            # forces are now stale
 
     def commit(self):                        # StatefulHook sync boundary
         ...                                  # publish shared history, if any
@@ -580,16 +590,40 @@ A bias is also an `nn.Module`, whose `__call__` is the model forward that
 `BaseDynamics` and `PipelineModelWrapper` both invoke; one name cannot be both.
 This is the resolution `TrainingUpdateHook` already uses — a domain hook family
 keeps the signature its semantics need, and an orchestrator owns protocol
-compliance on its behalf. Here that orchestrator is the single composite hook
+compliance on its behalf. Here that orchestrator is the `BiasHook`
 `EnhancedSampling` installs, which reads `frequency` and `stage` and dispatches
 `update` and `commit`.
 :::
 
-## The runner
+## The strategy
 
-`EnhancedSampling` installs one internal hook on the dynamics and otherwise
-leaves it alone — the model, integrator, thermostat, and every other hook
-behave exactly as they would unbiased.
+`EnhancedSampling` contributes hooks to the engine it builds and otherwise
+leaves it alone — the model, integrator, thermostat, and every caller-supplied
+hook behave exactly as they would unbiased. `BaseDynamics` owns the stepping
+loop; there is no second one.
+
+### The hooks it installs
+
+`build_hooks()` returns four, in this order, ahead of any `extra_hooks` you
+pass:
+
+| Hook | Stage | Cadence | Does |
+|------|-------|---------|------|
+| `WalkerIdentityHook` | `BEFORE_STEP` | every step | stamps the five identity fields |
+| `BiasHook` | `AFTER_COMPUTE`, `AFTER_STEP` | every step | evaluates and applies biases, delivers `update()` |
+| `ReplicaExchangeHook` | `BEFORE_STEP` | `attempt_interval` | attempts the completed segment's swaps |
+| `EpochCommitHook` | `BEFORE_STEP` | `steps_per_epoch` | fires `commit()` on the completed epoch |
+
+The last two carry their cadence as `Hook.frequency`, so the hook registry
+gates them: dispatched at step *kN*, each acts on boundary `step // N - 1`,
+the one that has just completed. Exchange precedes commit because a commit
+publishes shared history and doing it before the swap would publish under
+labels that are about to change.
+
+All the biases share **one** `BiasHook` rather than one hook each. Registered
+separately, the second bias would evaluate against a batch already carrying
+the first one's forces, and hook registration order is user-owned, so the
+total would depend on it.
 
 ### What it guarantees
 
@@ -603,9 +637,9 @@ behave exactly as they would unbiased.
    integrator reads `batch.forces` in its first half-step, before any model
    call; without priming, step 0 would be the one step that ignores the bias.
 
-The bias hook is inserted at the **front** of the hook list, so a safety hook
-such as `MaxForceClampHook` clamps the *total* force rather than the model
-force alone.
+The strategy's hooks come **before** `extra_hooks`, so a safety hook such as
+`MaxForceClampHook` passed as an extra clamps the *total* force rather than
+the model force alone.
 
 ### Diagnostics
 
@@ -617,10 +651,11 @@ sampling.last_outputs["total/forces"]          # physical + bias
 ```
 
 `total/*` is read back from the batch after the bias is applied, so
-`total == physical + bias_total`. Note that this is the state as the *runner*
-leaves it, not necessarily what the integrator consumed: the runner's hook runs
-first at `AFTER_COMPUTE` (so a force clamp acts on the total rather than the
-model force alone), which means a later hook can still modify `batch.forces`.
+`total == physical + bias_total`. Note that this is the state as the *bias
+hook* leaves it, not necessarily what the integrator consumed: that hook runs
+ahead of any `extra_hooks` at `AFTER_COMPUTE` (so a force clamp acts on the
+total rather than the model force alone), which means a later hook can still
+modify `batch.forces`.
 Read the batch directly if you need the exact value the integrator used.
 
 For WHAM or MBAR you want `physical/energy` and the per-bias energies
@@ -641,7 +676,7 @@ AtomicData(
 )
 ```
 
-The runner raises a named `ValueError` naming the field, the biases that
+The bias hook raises a named `ValueError` naming the field, the biases that
 produced it, and how to allocate the buffer — rather than skipping the field
 and letting the contribution vanish. Because `run()` primes before the first
 step, this surfaces at setup, not part-way through a trajectory.
@@ -659,7 +694,7 @@ is a deliberate choice; a missing buffer is not.
 
 ### Walker identity
 
-The runner stamps five graph-level fields each step. Batch *position* is not
+`WalkerIdentityHook` stamps five graph-level fields each step. Batch *position* is not
 an identity — selection and refill can move a walker to a different row — so
 anything that must follow a physical configuration is carried as data:
 
@@ -681,9 +716,13 @@ since there are no exchange segments to count.
 sampling.checkpoint("run.zarr")          # only at an epoch boundary
 
 # ... later, in a fresh process ...
-sampling2 = EnhancedSampling(dynamics, {"umbrella": umbrella})
-batch = sampling2.restore("run.zarr")    # returns a force-primed batch
-batch = sampling2.run(batch, n_steps=10_000, prime=False)
+sampling2 = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
+    biases={"umbrella": umbrella},
+)
+batch = sampling2.restore("run.zarr", model)   # returns a force-primed batch
+batch = sampling2.run(batch, model, n_steps=10_000, prime=False)
 ```
 
 Resuming reproduces the **identical trajectory**. `NVTLangevin` derives its
@@ -748,7 +787,7 @@ run.zarr/
     manifest               written last — the commit; holds every checksum
     dynamics/              step counter, RNG seed, per-system integrator state
     biases/<name>/         each bias's state_dict()
-    runner/                walker-id allocation, epoch counters
+    runner/                walker-id allocation, epoch and segment counters
 ```
 
 ### Bias configuration is validated, not just bias class
@@ -770,7 +809,7 @@ Every adaptive bias therefore records a `config_fingerprint()` inside its own
 | `RMSDMetaDynamicsBias` | `k_push`, `alpha`, `storage`, `history`, `ramp_depositions`, `atom_indices` |
 
 Because the check lives in `load_state_dict` rather than in the manifest, it
-covers a bias restored directly as well as one restored through the runner.
+covers a bias restored directly as well as one restored through the strategy.
 
 Capacity (`max_hills`, `max_references`) is deliberately **not** checked:
 `storage="grow"` legitimately reaches a size the constructor never had, and
@@ -818,16 +857,21 @@ exchange = ReplicaExchange(
     attempt_interval=100,                # steps per exchange segment
     random_seed=2024,
 )
-sampling = EnhancedSampling(dynamics, biases={}, replica_exchange=exchange)
-batch = sampling.run(batch, n_steps=100_000)
+sampling = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
+    biases={},
+    replica_exchange=exchange,
+)
+batch = sampling.run(batch, model, n_steps=100_000)
 ```
 
 ### One walker per rung
 
 Exchange presumes a bijection: every walker holds exactly one state and every
 state exactly one walker, because pairing looks up "which walker holds state
-*k*". The runner validates that on the first step, whether the assignment came
-from `initial_state_ids` or was already on the batch:
+*k*". `WalkerIdentityHook` validates that on the first stamp, whether the
+assignment came from `initial_state_ids` or was already on the batch:
 
 ```text
 ReplicaExchange: the ladder has 4 state(s) but the batch has 2 walker(s).
@@ -849,8 +893,8 @@ inside a batched GPU step.
 The swap is **indivisible**: the label, the integrator's target temperature,
 the velocity rescaling, and the forces all move together. A walker labelled
 one rung while its thermostat targets another samples the wrong ensemble with
-no symptom, so the runner refuses at construction any integrator that cannot
-rebind:
+no symptom, so the strategy refuses at construction any engine class that
+cannot rebind:
 
 ```text
 TypeError: replica exchange needs NVE to implement
@@ -884,7 +928,7 @@ it is therefore **rejected**, twice over:
 
 - A bias that sets `state_dependent_for_exchange` is refused at construction.
   `HarmonicUmbrellaBias` sets it whenever it has more than one window.
-- At prime time the runner **probes** every bias empirically: it evaluates
+- At prime time the strategy **probes** every bias empirically: it evaluates
   each one under the current assignment and under a rotated one, at identical
   coordinates. A bias whose energy is independent of the assignment returns
   the same number twice; one that reads `thermodynamic_state_id` does not.
@@ -925,7 +969,7 @@ directions of exchange-versus-none:
 ```text
 EnhancedSampling.restore: the checkpoint was written by a different configuration:
   exchange temperatures: checkpoint has [300.0, 350.0, 400.0],
-                         this runner has [100.0, 200.0, 900.0]
+                         this strategy has [100.0, 200.0, 900.0]
 ```
 
 This is not pedantry. The ladder decides what a swap *means*: restoring into
@@ -986,5 +1030,5 @@ removes.
 ## See also
 
 - {doc}`Conventions <about/conventions>` — virial, stress, and pressure signs.
-- {doc}`Hooks <hooks>` — the hook protocol the runner builds on.
+- {doc}`Hooks <hooks>` — the hook protocol the strategy builds on.
 - {doc}`Dynamics <dynamics>` — integrators and the step sequence.

@@ -4,13 +4,30 @@
 
 ### Added
 
-- `EnhancedSampling` runner for biased dynamics, plus the first built-in
-  biases. The runner installs one internal hook on an existing `BaseDynamics`
-  and owns what a bias cannot: walker identity stamping (`walker_id`,
+- `DynamicsStrategy` — a declarative recipe that configures a `BaseDynamics`
+  it does not own. Construction validates the whole configuration, `build()`
+  turns it into a live engine, `to_spec_dict()` serialises the knobs, and
+  `run()` delegates to `BaseDynamics.run`. It mirrors `TrainingStrategy`, with
+  one deliberate difference: `TrainingStrategy` owns its loop because nothing
+  below it does, whereas a dynamics strategy has an engine that already owns
+  one. A workflow built on top of dynamics — enhanced sampling, NEB, a
+  relaxation schedule, an equation-of-state scan — differs from plain dynamics
+  only in *what it configures*, so it becomes a subclass overriding
+  `build_hooks()` rather than a second runner with a second stepping loop that
+  every future workflow would have to choose between.
+
+- `EnhancedSampling`, the first `DynamicsStrategy`, plus the first built-in
+  biases. It contributes four hooks to the engine it builds and owns what a
+  bias cannot: `WalkerIdentityHook` stamps identity and counters (`walker_id`,
   `thermodynamic_state_id`, `sampling_step`, `exchange_segment`,
-  `sampling_epoch`), the force-step ordering, exactly-once `update()`
-  delivery, and force priming. Every bias is evaluated against the same
-  unmodified model output and the contributions summed once, so no bias can
+  `sampling_epoch`); `BiasHook` owns the force-step ordering, exactly-once
+  `update()` delivery and force priming; `EpochCommitHook` fires `commit()` on
+  a `steps_per_epoch` cadence; `ReplicaExchangeHook` attempts swaps on an
+  `attempt_interval` one. The last two carry their cadence as
+  `Hook.frequency`, so the hook registry gates them and nothing re-implements
+  "has the boundary been crossed". Every bias is evaluated against the same
+  unmodified model output and the contributions summed once — which is why
+  they share **one** `BiasHook` rather than one hook each — so no bias can
   observe another's forces and the total is independent of registration
   order. Built-ins: `HarmonicUmbrellaBias` (per-window centers and stiffness
   selected by `thermodynamic_state_id`, validated symmetric
@@ -39,9 +56,9 @@
   `nn.Module.state_dict` shadow it and drop bias history from checkpoints.
   `update` is spelled `update(ctx, stage)` rather than `__call__(ctx, stage)`
   because a bias is also an `nn.Module`, whose `__call__` is the model forward
-  that `BaseDynamics` and `PipelineModelWrapper` invoke; the runner's single
-  composite hook owns protocol compliance on its behalf, exactly as
-  `TrainingUpdateOrchestrator` does for `TrainingUpdateHook`.
+  that `BaseDynamics` and `PipelineModelWrapper` invoke; `BiasHook` owns
+  protocol compliance on its behalf, exactly as `TrainingUpdateOrchestrator`
+  does for `TrainingUpdateHook`.
   `periodic_difference` wraps CV differences onto a circle. `warm_start()`
   gives approximate continuation from prior frames; for exact resumption see
   the checkpoint entry below.
@@ -69,7 +86,7 @@
   rates are reported for ladder tuning. Asynchronous exchange and force-only
   (ABF-style) biases are rejected explicitly, as is the unimplemented
   combined temperature-plus-window rule: a bias declaring
-  `state_dependent_for_exchange` is refused at construction, and the runner
+  `state_dependent_for_exchange` is refused at construction, and the strategy
   additionally probes every bias empirically at prime time by evaluating it
   under a permuted assignment, which catches a user bias that declares
   nothing. A single-window `HarmonicUmbrellaBias` now ignores
@@ -97,8 +114,8 @@
   and raise if it is missing or the wrong length, rather than defaulting to a
   single owner — that fallback filed every hill under one key and produced
   energies numerically identical to `history="shared"`, silently delivering
-  the opposite of what was configured. The runner stamps both fields on every
-  step, so only a directly evaluated bias has to supply them.
+  the opposite of what was configured. `WalkerIdentityHook` stamps both fields
+  on every step, so only a directly evaluated bias has to supply them.
   `periods` wraps the hill difference onto a circle so a hill near a branch
   cut repels from both sides. `sigma` and `periods` are checked against the
   CV on first evaluation rather than broadcast against it: a mismatched
@@ -132,7 +149,7 @@
   `free_energy()` — it is a structure generator, not an estimator.
 
   Both deposit at `AFTER_STEP`, so a hill marks the configuration the walker
-  reached; both bump the state version so the runner re-primes forces and the
+  reached; both bump the state version so `BiasHook` re-primes forces and the
   new hill is felt on the next step rather than one late; and neither deposits
   during `prime_forces()`.
 
@@ -171,7 +188,7 @@
   `forward()` returns `forces` and no `energy`: there is no potential to
   report, which is what non-conservative means here. It is still a
   `BaseModelMixin` declaring `outputs={"forces"}` — non-conservative does not
-  mean non-model, which is what lets the runner treat every bias alike. `supplies_exchange_energy`
+  mean non-model, which is what lets `BiasHook` treat every bias alike. `supplies_exchange_energy`
   is `False`, so `ReplicaExchange` refuses the combination at construction
   rather than dropping the bias from the acceptance exponent. `mean_force()`
   and `free_energy()` report unvisited bins as `nan` rather than zero, and
@@ -194,7 +211,7 @@
   checkpoint's rather than leaving it unvalidated. `AdaptivePotentialMixin`
   gains `config_fingerprint()` (empty by default, so other biases are
   unaffected) and checks it before delegating, so the guard covers a bias
-  restored directly as well as through the runner. Capacity is deliberately
+  restored directly as well as through the strategy. Capacity is deliberately
   excluded, since `storage="grow"` legitimately reaches a size the
   constructor never had.
 
@@ -245,7 +262,7 @@
 - Exact checkpoint and restore for enhanced sampling.
   `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
   extends the existing `AtomicData` layout with a `sampling/` group holding
-  integrator, bias, and runner state; `restore()` reads it back and returns a
+  integrator, bias, and hook-family state; `restore()` reads it back and returns a
   force-primed batch that reproduces the identical trajectory. The manifest is
   written last and is the commit marker, so an interrupted write has none and
   is refused rather than half-restored. Integrity cover is total: each

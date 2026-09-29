@@ -169,20 +169,21 @@ rmsd_bias = RMSDMetaDynamicsBias(
 # ---
 
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
-dynamics = NVTLangevin(model=model, dt=0.5, temperature=TEMPERATURE, friction=0.02)
 
-for hook in model.make_neighbor_hooks():
-    dynamics.register_hook(hook)
+sampling = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.02},
+    biases={"rmsd": rmsd_bias},
+    extra_hooks=list(model.make_neighbor_hooks()),
+)
 
-sampling = EnhancedSampling(dynamics=dynamics, biases={"rmsd": rmsd_bias})
-
-initial = sampling.prime_forces(batch)
+initial = sampling.prime_forces(batch, model)
 logger.info(
     "Initial potential energy: %s",
     [round(v, 4) for v in sampling.last_outputs["physical/energy"].flatten().tolist()],
 )
 
-batch = sampling.run(batch, n_steps=N_STEPS, prime=False)
+batch = sampling.run(batch, model, n_steps=N_STEPS, prime=False)
 
 logger.info(
     "Depositions: %d, references retained: %d of %d (written: %d)",
@@ -232,12 +233,6 @@ control_batch = Batch.from_data_list([make_cluster() for _ in range(N_WALKERS)])
 control_model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(
     DEVICE
 )
-control_dynamics = NVTLangevin(
-    model=control_model, dt=0.5, temperature=TEMPERATURE, friction=0.02
-)
-for hook in control_model.make_neighbor_hooks():
-    control_dynamics.register_hook(hook)
-
 # A "bias" that only records where the unbiased trajectory went. Same
 # deposition schedule, no k_push acting on the dynamics.
 recorder = RMSDMetaDynamicsBias(
@@ -247,8 +242,13 @@ recorder = RMSDMetaDynamicsBias(
     max_references=24,
     name="rmsd",
 )
-control = EnhancedSampling(dynamics=control_dynamics, biases={"rmsd": recorder})
-control.run(control_batch, n_steps=N_STEPS)
+control = EnhancedSampling(
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.02},
+    biases={"rmsd": recorder},
+    extra_hooks=list(control_model.make_neighbor_hooks()),
+)
+control.run(control_batch, control_model, n_steps=N_STEPS)
 
 control_refs = recorder.reference_coords[: int(recorder.reference_count)]
 control_mean, control_max = spread(control_refs)

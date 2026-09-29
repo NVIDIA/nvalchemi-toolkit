@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
+from collections.abc import Mapping
 
 import pytest
 import torch
@@ -41,6 +42,7 @@ from nvalchemi.enhanced_sampling import (
 )
 from nvalchemi.enhanced_sampling.biases.rmsd_metad import _squared_rmsd
 from nvalchemi.hooks import BiasContext
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 
@@ -94,10 +96,29 @@ def _random_batch(
     return Batch.from_data_list(data_list).to(device)
 
 
-def _make_dynamics(device: str = "cpu") -> NVTLangevin:
-    """Return a demo-model Langevin integrator."""
-    model = DemoModelWrapper(DemoModel()).to(device)
-    return NVTLangevin(model=model, dt=0.1, temperature=300.0, friction=0.1)
+_ENGINE_KWARGS = {"dt": 0.1, "temperature": 300.0, "friction": 0.1}
+
+
+def _make_model(device: str = "cpu") -> DemoModelWrapper:
+    """Return the potential the engine calls."""
+    return DemoModelWrapper(DemoModel()).to(device)
+
+
+def _sampling(
+    device: str = "cpu",
+    biases: Mapping[str, BaseModelMixin] | None = None,
+    **kwargs: object,
+) -> tuple[EnhancedSampling, DemoModelWrapper]:
+    """Return a strategy over ``NVTLangevin`` and the model it drives."""
+    return (
+        EnhancedSampling(
+            engine=NVTLangevin,
+            engine_kwargs=_ENGINE_KWARGS,
+            biases=biases or {},
+            **kwargs,
+        ),
+        _make_model(device),
+    )
 
 
 def _pair_cv(indices: tuple[int, int] = (0, 1)):
@@ -759,8 +780,8 @@ class TestMultiWalkerHistory:
     def test_runner_supplies_the_owner_fields(self, device: str) -> None:
         """The stamp is what makes walker-private history work in a real run."""
         bias = _metad(device, name="meta", history="walker", frequency=1)
-        runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
-        runner.run(_random_batch(device=device), n_steps=2)
+        runner, model = _sampling(device, {"meta": bias})
+        runner.run(_random_batch(device=device), model, n_steps=2)
 
         assert int(bias.deposits) == 2
         assert sorted(bias.hill_owner[:2].tolist()) == [0, 1]
@@ -1699,8 +1720,8 @@ class TestRunnerIntegration:
 
     def test_deposition_follows_frequency(self, device: str) -> None:
         bias = _metad(device, name="meta", frequency=3, max_hills=64)
-        runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
-        runner.run(_random_batch(device=device), n_steps=9)
+        runner, model = _sampling(device, {"meta": bias})
+        runner.run(_random_batch(device=device), model, n_steps=9)
 
         # Two walkers deposit one hill each per due step.
         assert int(bias.deposits) == 3
@@ -1709,8 +1730,8 @@ class TestRunnerIntegration:
     def test_no_deposition_during_priming(self, device: str) -> None:
         """Priming evaluates forces; it must not advance the history."""
         bias = _metad(device, name="meta", frequency=1)
-        runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
-        runner.prime_forces(_random_batch(device=device))
+        runner, model = _sampling(device, {"meta": bias})
+        runner.prime_forces(_random_batch(device=device), model)
         assert int(bias.deposits) == 0
 
     def test_hills_are_deposited_at_post_step_coordinates(self, device: str) -> None:
@@ -1720,21 +1741,19 @@ class TestRunnerIntegration:
     def test_new_hill_is_felt_on_the_next_step(self, device: str) -> None:
         """Depositing bumps the state version, so the runner re-primes forces."""
         bias = _metad(device, name="meta", frequency=1, sigma=0.6, height=0.5)
-        runner = EnhancedSampling(
-            _make_dynamics(device), {"meta": bias}, prime_after_update=True
-        )
+        runner, model = _sampling(device, {"meta": bias}, prime_after_update=True)
         batch = _random_batch(device=device)
-        runner.prime_forces(batch)
+        runner.prime_forces(batch, model)
         before = int(bias.state_version)
 
-        runner.run(batch, n_steps=1, prime=False)
+        runner.run(batch, model, n_steps=1, prime=False)
         assert int(bias.state_version) > before
         assert float(runner.last_outputs["bias/meta/energy"].abs().sum()) > 0.0
 
     def test_total_is_physical_plus_bias(self, device: str) -> None:
         bias = _metad(device, name="meta", frequency=1, sigma=0.6)
-        runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
-        runner.run(_random_batch(device=device), n_steps=4)
+        runner, model = _sampling(device, {"meta": bias})
+        runner.run(_random_batch(device=device), model, n_steps=4)
 
         outputs = runner.last_outputs
         assert float(outputs["total/energy"].sum()) == pytest.approx(
@@ -1751,8 +1770,8 @@ class TestRunnerIntegration:
             frequency=2,
             name="rmsd",
         ).to(device)
-        runner = EnhancedSampling(_make_dynamics(device), {"rmsd": bias})
-        runner.run(_random_batch(device=device), n_steps=6)
+        runner, model = _sampling(device, {"rmsd": bias})
+        runner.run(_random_batch(device=device), model, n_steps=6)
 
         assert int(bias.deposits) == 3
         assert int(bias.reference_count) == 6
@@ -1768,8 +1787,8 @@ class TestRunnerIntegration:
             frequency=3,
             name="rmsd",
         ).to(device)
-        runner = EnhancedSampling(_make_dynamics(device), {"meta": meta, "rmsd": rmsd})
-        runner.run(_random_batch(device=device), n_steps=6)
+        runner, model = _sampling(device, {"meta": meta, "rmsd": rmsd})
+        runner.run(_random_batch(device=device), model, n_steps=6)
 
         assert int(meta.deposits) == 3
         assert int(rmsd.deposits) == 2
@@ -1779,20 +1798,16 @@ class TestRunnerIntegration:
     ) -> None:
         """The runner's Zarr checkpoint must carry the hill table."""
         bias = _metad(device, name="meta", frequency=1, max_hills=32)
-        runner = EnhancedSampling(
-            _make_dynamics(device), {"meta": bias}, steps_per_epoch=4
-        )
+        runner, model = _sampling(device, {"meta": bias}, steps_per_epoch=4)
         batch = _random_batch(device=device)
-        batch = runner.run(batch, n_steps=4)
+        batch = runner.run(batch, model, n_steps=4)
 
         path = tmp_path / "metad.zarr"
         runner.checkpoint(path, batch)
 
         fresh_bias = _metad(device, name="meta", frequency=1, max_hills=32)
-        fresh = EnhancedSampling(
-            _make_dynamics(device), {"meta": fresh_bias}, steps_per_epoch=4
-        )
-        restored = fresh.restore(path, device=device)
+        fresh, model = _sampling(device, {"meta": fresh_bias}, steps_per_epoch=4)
+        restored = fresh.restore(path, model, device=device)
 
         assert int(fresh_bias.hill_count) == int(bias.hill_count)
         assert int(fresh_bias.deposits) == int(bias.deposits)

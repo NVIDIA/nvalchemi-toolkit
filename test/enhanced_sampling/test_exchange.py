@@ -23,6 +23,7 @@ checkpoint round-trips.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 
 import pytest
 import torch
@@ -41,6 +42,7 @@ from nvalchemi.enhanced_sampling import (
     pair_distance,
 )
 from nvalchemi.enhanced_sampling._exchange import log_acceptance_is_accepted
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -77,13 +79,29 @@ def _make_batch(
     return Batch.from_data_list(data_list).to(device)
 
 
-def _make_dynamics(device: str = "cpu", seed: int = 0) -> NVTLangevin:
+_ENGINE_KWARGS = {"dt": 0.1, "temperature": 300.0, "friction": 0.1}
+
+
+def _make_model(device: str = "cpu", seed: int = 0) -> DemoModelWrapper:
+    """Return the potential the engine calls."""
     torch.manual_seed(seed)
-    return NVTLangevin(
-        model=DemoModelWrapper(DemoModel()).to(device),
-        dt=0.1,
-        temperature=300.0,
-        friction=0.1,
+    return DemoModelWrapper(DemoModel()).to(device)
+
+
+def _sampling(
+    device: str = "cpu",
+    biases: Mapping[str, BaseModelMixin] | None = None,
+    **kwargs: object,
+) -> tuple[EnhancedSampling, DemoModelWrapper]:
+    """Return a strategy over ``NVTLangevin`` and the model it drives."""
+    return (
+        EnhancedSampling(
+            engine=NVTLangevin,
+            engine_kwargs=_ENGINE_KWARGS,
+            biases=biases or {},
+            **kwargs,
+        ),
+        _make_model(device),
     )
 
 
@@ -155,9 +173,9 @@ class TestLadderValidation:
         inside the batch storage, naming neither the ladder nor the batch.
         """
         exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
-        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
         with pytest.raises(ValueError, match="4 state.*but the batch has 2 walker"):
-            runner.run(_make_batch(n_graphs=2, device=device), n_steps=2)
+            runner.run(_make_batch(n_graphs=2, device=device), model, n_steps=2)
 
     def test_batch_supplied_duplicate_assignment_rejected(self, device: str) -> None:
         """A batch can carry an assignment the constructor never saw.
@@ -166,29 +184,29 @@ class TestLadderValidation:
         bare KeyError from the pair lookup.
         """
         exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
-        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
         batch = _make_batch(n_graphs=4, device=device)
         batch["thermodynamic_state_id"] = torch.tensor([0, 0, 1, 2], device=device)
         with pytest.raises(ValueError, match="batch.thermodynamic_state_id"):
-            runner.run(batch, n_steps=2)
+            runner.run(batch, model, n_steps=2)
 
     def test_batch_supplied_out_of_range_assignment_rejected(self, device: str) -> None:
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
         batch = _make_batch(n_graphs=3, device=device)
         batch["thermodynamic_state_id"] = torch.tensor([0, 1, 9], device=device)
         with pytest.raises(ValueError, match="permutation"):
-            runner.run(batch, n_steps=2)
+            runner.run(batch, model, n_steps=2)
 
     def test_valid_batch_supplied_permutation_accepted(self, device: str) -> None:
         """A caller-chosen starting assignment is legitimate."""
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(
-            _make_dynamics(device), {}, steps_per_epoch=8, replica_exchange=exchange
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=8, replica_exchange=exchange
         )
         batch = _make_batch(n_graphs=3, device=device)
         batch["thermodynamic_state_id"] = torch.tensor([2, 0, 1], device=device)
-        batch = runner.run(batch, n_steps=4)
+        batch = runner.run(batch, model, n_steps=4)
         assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
 
     def test_validate_assignment_shared_by_both_paths(self) -> None:
@@ -287,22 +305,23 @@ class TestMixedExchangeRejected:
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
         with pytest.raises(ValueError, match="per-state parameters"):
             EnhancedSampling(
-                _make_dynamics(device),
-                {"u": self._umbrella(3, device)},
+                engine=NVTLangevin,
+                engine_kwargs=_ENGINE_KWARGS,
+                biases={"u": self._umbrella(3, device)},
                 replica_exchange=exchange,
             )
 
     def test_single_window_bias_is_allowed(self, device: str) -> None:
         """The guard must not block a legitimate combination."""
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(
-            _make_dynamics(device),
+        runner, model = _sampling(
+            device,
             {"u": self._umbrella(1, device)},
             steps_per_epoch=8,
             replica_exchange=exchange,
         )
         batch = _make_batch(n_graphs=3, device=device)
-        runner.run(batch, n_steps=6)
+        runner.run(batch, model, n_steps=6)
         assert exchange.attempts > 0
 
     def test_undeclared_bias_caught_by_probe(self, device: str) -> None:
@@ -319,14 +338,11 @@ class TestMixedExchangeRejected:
                 return (ids * 0.5).unsqueeze(-1) + 0.0 * current.positions.sum()
 
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {"sneaky": _Sneaky()},
-            steps_per_epoch=8,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {"sneaky": _Sneaky()}, steps_per_epoch=8, replica_exchange=exchange
         )
         with pytest.raises(ValueError, match="permuted"):
-            runner.run(_make_batch(n_graphs=3, device=device), n_steps=4)
+            runner.run(_make_batch(n_graphs=3, device=device), model, n_steps=4)
 
     def test_probe_fires_before_any_exchange(self, device: str) -> None:
         """Failing at prime time, not after a wrong swap has been accepted."""
@@ -342,14 +358,11 @@ class TestMixedExchangeRejected:
                 return ids.unsqueeze(-1) + 0.0 * current.positions.sum()
 
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=1)
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {"sneaky": _Sneaky()},
-            steps_per_epoch=8,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {"sneaky": _Sneaky()}, steps_per_epoch=8, replica_exchange=exchange
         )
         with pytest.raises(ValueError):
-            runner.run(_make_batch(n_graphs=3, device=device), n_steps=10)
+            runner.run(_make_batch(n_graphs=3, device=device), model, n_steps=10)
         assert exchange.attempts == 0, "an exchange was decided before the probe"
 
     def test_state_independent_bias_passes_the_probe(self, device: str) -> None:
@@ -357,13 +370,10 @@ class TestMixedExchangeRejected:
         idx = torch.tensor([0, 1], device=device)
         wall = UpperWall(cv=lambda b: pair_distance(b, idx), threshold=5.0, name="wall")
         exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {"wall": wall},
-            steps_per_epoch=8,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {"wall": wall}, steps_per_epoch=8, replica_exchange=exchange
         )
-        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        runner.run(_make_batch(n_graphs=3, device=device), model, n_steps=6)
         assert exchange.attempts > 0
 
     def test_umbrella_ladder_still_allowed_with_equal_temperatures(
@@ -371,13 +381,13 @@ class TestMixedExchangeRejected:
     ) -> None:
         """The multi-window bias is fine — with the umbrella rule."""
         exchange = ReplicaExchange(_flat_ladder(3), torch.arange(3), attempt_interval=2)
-        runner = EnhancedSampling(
-            _make_dynamics(device),
+        runner, model = _sampling(
+            device,
             {"u": self._umbrella(3, device)},
             steps_per_epoch=8,
             replica_exchange=exchange,
         )
-        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        runner.run(_make_batch(n_graphs=3, device=device), model, n_steps=6)
         assert exchange.acceptance == "umbrella"
         assert exchange.attempts > 0
 
@@ -652,27 +662,26 @@ class TestRunnerIntegration:
         exchange = ReplicaExchange(
             _ladder(n), torch.arange(n), attempt_interval=interval, random_seed=seed
         )
-        return (
-            EnhancedSampling(
-                _make_dynamics(device),
-                {},
-                steps_per_epoch=8,
-                replica_exchange=exchange,
-            ),
-            exchange,
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=8, replica_exchange=exchange
         )
+        return runner, model, exchange
 
     def test_integrator_without_rebinding_is_rejected(self, device: str) -> None:
         """A label-only swap would sample the state the walker just left."""
-        dynamics = NVE(model=DemoModelWrapper(DemoModel()).to(device), dt=0.1)
         exchange = ReplicaExchange(_ladder(2), torch.arange(2))
         with pytest.raises(TypeError, match="replica exchange needs"):
-            EnhancedSampling(dynamics, {}, replica_exchange=exchange)
+            EnhancedSampling(
+                engine=NVE,
+                engine_kwargs={"dt": 0.1},
+                biases={},
+                replica_exchange=exchange,
+            )
 
     def test_assignment_stays_a_permutation(self, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        batch = runner.run(batch, n_steps=20)
+        runner, model, _ = self._runner(device)
+        batch = runner.run(batch, model, n_steps=20)
         assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [
             0,
             1,
@@ -685,8 +694,8 @@ class TestRunnerIntegration:
         exchange = ReplicaExchange(
             _ladder(3), torch.tensor([2, 0, 1]), attempt_interval=100
         )
-        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
-        runner.prime_forces(batch)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        runner.prime_forces(batch, model)
         assert batch.thermodynamic_state_id.reshape(-1).tolist() == [2, 0, 1]
 
     def test_integrator_target_follows_the_assignment(self, device: str) -> None:
@@ -696,12 +705,12 @@ class TestRunnerIntegration:
         the old temperature would sample the wrong ensemble with no symptom.
         """
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device)
-        batch = runner.run(batch, n_steps=20)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, model, n_steps=20)
 
         ladder = exchange.temperatures.tolist()
         assigned = batch.thermodynamic_state_id.reshape(-1).tolist()
-        targets = _target_temperatures(runner.dynamics)
+        targets = _target_temperatures(runner.dynamics(model))
         for walker, state in enumerate(assigned):
             assert abs(targets[walker] - ladder[state]) < 1e-3, (
                 f"walker {walker} is labelled state {state} "
@@ -710,14 +719,14 @@ class TestRunnerIntegration:
 
     def test_exchange_segment_is_stamped(self, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device, interval=4)
-        runner.run(batch, n_steps=12)
+        runner, model, _ = self._runner(device, interval=4)
+        runner.run(batch, model, n_steps=12)
         assert int(batch.exchange_segment.reshape(-1)[0]) == 11 // 4
 
     def test_no_exchange_before_the_first_segment_completes(self, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device, interval=10)
-        runner.run(batch, n_steps=3)
+        runner, model, exchange = self._runner(device, interval=10)
+        runner.run(batch, model, n_steps=3)
         assert exchange.attempts == 0
 
     @staticmethod
@@ -740,9 +749,9 @@ class TestRunnerIntegration:
         entirely.
         """
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device, interval=2)
+        runner, model, exchange = self._runner(device, interval=2)
         seen = self._record_segments(exchange)
-        runner.run(batch, n_steps=6)
+        runner.run(batch, model, n_steps=6)
         assert seen[:2] == [0, 1], f"segments attempted: {seen}"
 
     def test_two_state_ladder_swaps_at_the_first_interval(self, device: str) -> None:
@@ -756,35 +765,32 @@ class TestRunnerIntegration:
         exchange = ReplicaExchange(
             _ladder(2), torch.arange(2), attempt_interval=interval, random_seed=1
         )
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {},
-            steps_per_epoch=100,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=100, replica_exchange=exchange
         )
-        runner.prime_forces(batch)
+        runner.prime_forces(batch, model)
         for _ in range(interval + 1):
-            runner.run(batch, n_steps=1, prime=False)
+            runner.run(batch, model, n_steps=1, prime=False)
             if exchange.attempts:
                 break
         assert exchange.attempts == 1
-        assert runner.dynamics.step_count == interval + 1, (
+        assert runner.dynamics(model).step_count == interval + 1, (
             "the first swap did not land at attempt_interval"
         )
 
     def test_segments_attempted_in_order_without_gaps(self, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device, interval=2)
+        runner, model, exchange = self._runner(device, interval=2)
         seen = self._record_segments(exchange)
-        runner.run(batch, n_steps=12)
+        runner.run(batch, model, n_steps=12)
         assert seen == list(range(len(seen))), f"out of order or gapped: {seen}"
 
     def test_a_segment_is_never_attempted_twice(self, device: str) -> None:
         """An accepted swap re-primes, which re-enters the stamp."""
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device, interval=1)
+        runner, model, exchange = self._runner(device, interval=1)
         seen = self._record_segments(exchange)
-        runner.run(batch, n_steps=8)
+        runner.run(batch, model, n_steps=8)
         assert len(seen) == len(set(seen)), f"repeated segment: {seen}"
 
     def test_velocities_rescaled_on_accepted_swap(self, device: str) -> None:
@@ -794,8 +800,8 @@ class TestRunnerIntegration:
         exchange = ReplicaExchange(
             _ladder(2, 300.0, 4.0), torch.arange(2), attempt_interval=1
         )
-        runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
-        runner.prime_forces(batch)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        runner.prime_forces(batch, model)
         before = batch.velocities.clone()
         runner._exchange_hook._attempt(batch, segment=0)
         if exchange.accepted:
@@ -816,29 +822,26 @@ class TestRunnerIntegration:
         exchange = ReplicaExchange(
             _flat_ladder(3), torch.arange(3), attempt_interval=2, random_seed=3
         )
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {"u": bias},
-            steps_per_epoch=8,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {"u": bias}, steps_per_epoch=8, replica_exchange=exchange
         )
-        batch = runner.run(batch, n_steps=10)
+        batch = runner.run(batch, model, n_steps=10)
         assert exchange.attempts > 0
         assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
 
     def test_nose_hoover_participates(self, device: str) -> None:
         batch = _make_batch(n_graphs=2, device=device)
-        dynamics = NVTNoseHoover(
-            model=DemoModelWrapper(DemoModel()).to(device),
-            dt=0.1,
-            temperature=300.0,
-            thermostat_time=10.0,
-        )
+        model = _make_model(device)
         exchange = ReplicaExchange(
             _ladder(2, 300.0, 1.5), torch.arange(2), attempt_interval=2
         )
-        runner = EnhancedSampling(dynamics, {}, replica_exchange=exchange)
-        batch = runner.run(batch, n_steps=6)
+        runner = EnhancedSampling(
+            engine=NVTNoseHoover,
+            engine_kwargs={"dt": 0.1, "temperature": 300.0, "thermostat_time": 10.0},
+            biases={},
+            replica_exchange=exchange,
+        )
+        batch = runner.run(batch, model, n_steps=6)
         assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1]
 
 
@@ -855,15 +858,10 @@ class TestExchangeCheckpoint:
         exchange = ReplicaExchange(
             _ladder(4), torch.arange(4), attempt_interval=2, random_seed=seed
         )
-        return (
-            EnhancedSampling(
-                _make_dynamics(device),
-                {},
-                steps_per_epoch=4,
-                replica_exchange=exchange,
-            ),
-            exchange,
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
         )
+        return runner, model, exchange
 
     def test_state_dict_round_trip(self) -> None:
         exchange = ReplicaExchange(_ladder(4), torch.arange(4), random_seed=11)
@@ -883,8 +881,8 @@ class TestExchangeCheckpoint:
         from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
 
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -896,15 +894,15 @@ class TestExchangeCheckpoint:
     def test_restore_resumes_the_rng_position(self, tmp_path, device: str) -> None:
         """Acceptance is seeded per attempt, so the counter must survive."""
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device)
-        batch = runner.run(batch, n_steps=4)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
         saved_id = exchange.exchange_id
         assert saved_id > 0
 
-        runner2, exchange2 = self._runner(device)
-        runner2.restore(path)
+        runner2, model, exchange2 = self._runner(device)
+        runner2.restore(path, model)
         assert exchange2.exchange_id == saved_id
         assert exchange2.attempts == exchange.attempts
         # The segment cursor must survive too, or the resumed run would
@@ -916,17 +914,17 @@ class TestExchangeCheckpoint:
 
     def test_restored_run_reproduces_decisions(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device)
-        batch = runner.run(batch, n_steps=4)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        batch = runner.run(batch, n_steps=4, prime=False)
+        batch = runner.run(batch, model, n_steps=4, prime=False)
         reference = batch.thermodynamic_state_id.reshape(-1).tolist()
 
-        runner2, _ = self._runner(device)
-        resumed = runner2.restore(path)
-        resumed = runner2.run(resumed, n_steps=4, prime=False)
+        runner2, model, _ = self._runner(device)
+        resumed = runner2.restore(path, model)
+        resumed = runner2.run(resumed, model, n_steps=4, prime=False)
         assert resumed.thermodynamic_state_id.reshape(-1).tolist() == reference
 
     def test_restore_rejects_a_different_ladder(self, tmp_path, device: str) -> None:
@@ -937,8 +935,8 @@ class TestExchangeCheckpoint:
         future swap is decided on.
         """
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -946,48 +944,48 @@ class TestExchangeCheckpoint:
             ThermodynamicState(state_id=i, temperature=1000.0 + 100.0 * i)
             for i in range(4)
         ]
-        other = EnhancedSampling(
-            _make_dynamics(device),
+        other, model = _sampling(
+            device,
             {},
             steps_per_epoch=4,
             replica_exchange=ReplicaExchange(hot, torch.arange(4), attempt_interval=2),
         )
         with pytest.raises(ValueError, match="exchange temperatures"):
-            other.restore(path)
+            other.restore(path, model)
 
     def test_restore_rejects_missing_exchange(self, tmp_path, device: str) -> None:
         """A REMD checkpoint into a runner with replica_exchange=None."""
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
         with pytest.raises(ValueError, match="replica_exchange=None"):
-            plain.restore(path)
+            plain.restore(path, model)
 
     def test_restore_rejects_unexpected_exchange(self, tmp_path, device: str) -> None:
         """And the reverse: a plain checkpoint into a REMD runner."""
         batch = _make_batch(device=device)
-        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
-        plain.run(batch, n_steps=4)
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
+        plain.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         plain.checkpoint(path)
 
-        runner, _ = self._runner(device)
+        runner, model, _ = self._runner(device)
         with pytest.raises(ValueError, match="written without replica"):
-            runner.restore(path)
+            runner.restore(path, model)
 
     def test_restore_rejects_a_different_interval(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        other = EnhancedSampling(
-            _make_dynamics(device),
+        other, model = _sampling(
+            device,
             {},
             steps_per_epoch=4,
             replica_exchange=ReplicaExchange(
@@ -995,14 +993,14 @@ class TestExchangeCheckpoint:
             ),
         )
         with pytest.raises(ValueError, match="exchange attempt_interval"):
-            other.restore(path)
+            other.restore(path, model)
 
     def test_manifest_records_the_ladder(self, tmp_path, device: str) -> None:
         from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
 
         batch = _make_batch(device=device)
-        runner, exchange = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, exchange = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -1019,8 +1017,8 @@ class TestExchangeCheckpoint:
         from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
 
         batch = _make_batch(device=device)
-        plain = EnhancedSampling(_make_dynamics(device), {}, steps_per_epoch=4)
-        plain.run(batch, n_steps=4)
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
+        plain.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         plain.checkpoint(path)
         _, _, manifest = read_checkpoint(path, device)
@@ -1046,13 +1044,13 @@ class TestExchangeCheckpoint:
     def test_matching_ladder_still_restores(self, tmp_path, device: str) -> None:
         """The guard must not reject a correctly-reconstructed runner."""
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        runner2, exchange2 = self._runner(device)
-        restored = runner2.restore(path)
+        runner2, model, exchange2 = self._runner(device)
+        restored = runner2.restore(path, model)
         assert restored.num_graphs == 4
         assert exchange2.exchange_id > 0
 
@@ -1069,14 +1067,11 @@ class TestExchangeCheckpoint:
         exchange = ReplicaExchange(
             _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
         )
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {},
-            steps_per_epoch=4,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
         )
-        batch = runner.run(_make_batch(device=device), n_steps=4)
-        assert runner.dynamics.step_count == 4
+        batch = runner.run(_make_batch(device=device), model, n_steps=4)
+        assert runner.dynamics(model).step_count == 4
         assert runner._exchange_hook.attempted_segment == 0, (
             "precondition: segment 1 is due"
         )
@@ -1092,7 +1087,7 @@ class TestExchangeCheckpoint:
 
         # Advancing one step would have drained the same segment; the labels
         # must already agree.
-        runner.run(batch, n_steps=1, prime=False)
+        runner.run(batch, model, n_steps=1, prime=False)
         assert on_disk == batch.thermodynamic_state_id.reshape(-1).tolist(), (
             "checkpoint captured pre-exchange labels"
         )
@@ -1126,11 +1121,8 @@ class TestExchangeCheckpoint:
         exchange = ReplicaExchange(
             _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
         )
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {"rec": _Recording()},
-            steps_per_epoch=4,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {"rec": _Recording()}, steps_per_epoch=4, replica_exchange=exchange
         )
         original = exchange.decide
 
@@ -1140,7 +1132,7 @@ class TestExchangeCheckpoint:
 
         exchange.decide = _spy  # type: ignore[method-assign]
 
-        runner.run(_make_batch(device=device), n_steps=4)
+        runner.run(_make_batch(device=device), model, n_steps=4)
         order.clear()
         runner.checkpoint(tmp_path / "ck.zarr")
         assert order[:2] == ["exchange", "commit"], f"drain order was {order}"
@@ -1152,25 +1144,22 @@ class TestExchangeCheckpoint:
         exchange = ReplicaExchange(
             _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
         )
-        runner = EnhancedSampling(
-            _make_dynamics(device),
-            {},
-            steps_per_epoch=4,
-            replica_exchange=exchange,
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
         )
-        batch = runner.run(_make_batch(device=device), n_steps=4)
+        batch = runner.run(_make_batch(device=device), model, n_steps=4)
         runner.checkpoint(tmp_path / "ck.zarr")
         after_drain = exchange.attempts
 
-        runner.run(batch, n_steps=1, prime=False)
+        runner.run(batch, model, n_steps=1, prime=False)
         assert exchange.attempts == after_drain, (
             "the segment drained at checkpoint time was attempted again"
         )
 
     def test_state_assignment_survives_restore(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
-        runner, _ = self._runner(device)
-        batch = runner.run(batch, n_steps=4)
+        runner, model, _ = self._runner(device)
+        batch = runner.run(batch, model, n_steps=4)
 
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
@@ -1179,6 +1168,6 @@ class TestExchangeCheckpoint:
         # a quiescent point, which can advance the assignment.
         assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
 
-        runner2, _ = self._runner(device)
-        restored = runner2.restore(path)
+        runner2, model, _ = self._runner(device)
+        restored = runner2.restore(path, model)
         assert restored.thermodynamic_state_id.reshape(-1).tolist() == assignment
