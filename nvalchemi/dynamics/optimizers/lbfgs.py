@@ -171,38 +171,23 @@ def _ops_cell_state(state: Batch) -> LBFGSCellState:
     )
 
 
-class LBFGS(BaseDynamics):
-    """Fixed-cell L-BFGS geometry optimizer.
+class _LBFGSMixin:
+    """Allocation-time contract shared by ``LBFGS`` and ``LBFGSVariableCell``.
 
-    Parameters
-    ----------
-    model : BaseModelMixin
-        The neural network potential model.
-    history_size : int
-        Stored curvature pairs.  Fixed once state is allocated.  Default 6.
-    curvature_eps : float, optional
-        Curvature-pair acceptance floor.  Default ``None`` (by dtype).
-    maxstep : float
-        Maximum displacement per step.  Default 0.2.
-    n_steps : int, optional
-        Total steps for :meth:`run`.
-    hooks : list[Hook], optional
-        Initial hooks.
-    convergence_hook : ConvergenceHook or dict, optional
-        Convergence criterion.
-    **kwargs
-        Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
+    Not a :class:`~nvalchemi.dynamics.base.BaseDynamics` subclass on its
+    own — mixed into both concrete optimizers (which supply that base)
+    rather than being one itself, so the state-shape test's
+    ``BaseDynamics`` subclass scan
+    (``test_state_management._discover_dynamics_implementations``) doesn't
+    pick up an incomplete class missing ``__needs_keys__`` /
+    ``__provides_keys__``.
 
-    Attributes
-    ----------
-    __needs_keys__ : set[str]
-        ``{"forces"}``.
-    __provides_keys__ : set[str]
-        ``{"positions"}``.
+    Holds the constructor envelope both optimizers share, the
+    ``history_size`` fixed-at-allocation property, and the
+    ``_init_state`` / ``_make_new_state`` / ``post_update`` bodies, which
+    are otherwise identical between the two and differ only in the cell
+    kwargs :meth:`_extra_state_kwargs` supplies.
     """
-
-    __needs_keys__: set[str] = {"forces"}
-    __provides_keys__: set[str] = {"positions"}
 
     def __init__(
         self,
@@ -235,6 +220,11 @@ class LBFGS(BaseDynamics):
     def history_size(self, value: int) -> None:
         _refuse("history_size")
 
+    def _extra_state_kwargs(self, batch: Batch, n: int) -> dict[str, Any]:
+        """Extra ``_build_state`` kwargs; overridden by ``LBFGSVariableCell``."""
+        del batch, n
+        return {}
+
     def _init_state(self, batch: Batch) -> None:
         _warn_if_wraps_positions(self)
         self._state = _build_state(
@@ -242,6 +232,7 @@ class LBFGS(BaseDynamics):
             self.history_size,
             batch.positions.dtype,
             batch.device,
+            **self._extra_state_kwargs(batch, batch.num_graphs),
         )
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
@@ -250,7 +241,45 @@ class LBFGS(BaseDynamics):
             self.history_size,
             template_batch.positions.dtype,
             template_batch.device,
+            **self._extra_state_kwargs(template_batch, n),
         )
+
+    def post_update(self, batch: Batch) -> None:
+        """No-op; forces from new positions are used on the next step."""
+
+
+class LBFGS(_LBFGSMixin, BaseDynamics):
+    """Fixed-cell L-BFGS geometry optimizer.
+
+    Parameters
+    ----------
+    model : BaseModelMixin
+        The neural network potential model.
+    history_size : int
+        Stored curvature pairs.  Fixed once state is allocated.  Default 6.
+    curvature_eps : float, optional
+        Curvature-pair acceptance floor.  Default ``None`` (by dtype).
+    maxstep : float
+        Maximum displacement per step.  Default 0.2.
+    n_steps : int, optional
+        Total steps for :meth:`run`.
+    hooks : list[Hook], optional
+        Initial hooks.
+    convergence_hook : ConvergenceHook or dict, optional
+        Convergence criterion.
+    **kwargs
+        Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
+
+    Attributes
+    ----------
+    __needs_keys__ : set[str]
+        ``{"forces"}``.
+    __provides_keys__ : set[str]
+        ``{"positions"}``.
+    """
+
+    __needs_keys__: set[str] = {"forces"}
+    __provides_keys__: set[str] = {"positions"}
 
     def pre_update(self, batch: Batch) -> None:
         """Full L-BFGS step using current forces.
@@ -271,11 +300,8 @@ class LBFGS(BaseDynamics):
             curvature_eps=self.curvature_eps,
         )
 
-    def post_update(self, batch: Batch) -> None:
-        """No-op; forces from new positions are used on the next step."""
 
-
-class LBFGSVariableCell(BaseDynamics):
+class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
     """Variable-cell L-BFGS geometry optimizer.
 
     Relaxes atomic coordinates and the cell together, driven by the model's
@@ -336,24 +362,15 @@ class LBFGSVariableCell(BaseDynamics):
             )
         super().__init__(
             model=model,
+            history_size=history_size,
+            curvature_eps=curvature_eps,
+            maxstep=maxstep,
             n_steps=n_steps,
             hooks=hooks,
             convergence_hook=convergence_hook,
             **kwargs,
         )
-        self._history_size = history_size
-        self.curvature_eps = curvature_eps
-        self.maxstep = maxstep
         self._cell_force_scale = cell_force_scale
-
-    @property
-    def history_size(self) -> int:
-        """Stored curvature pairs; fixed once state is allocated."""
-        return self._history_size
-
-    @history_size.setter
-    def history_size(self, value: int) -> None:
-        _refuse("history_size")
 
     @property
     def cell_force_scale(self) -> float:
@@ -402,24 +419,9 @@ class LBFGSVariableCell(BaseDynamics):
             )
         return cell
 
-    def _init_state(self, batch: Batch) -> None:
-        _warn_if_wraps_positions(self)
-        self._state = _build_state(
-            batch.num_nodes_per_graph,
-            self.history_size,
-            batch.positions.dtype,
-            batch.device,
-            cell=self._reference_cells(batch, batch.num_graphs),
-            cell_force_scale=self.cell_force_scale,
-        )
-
-    def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
-        return _build_state(
-            template_batch.num_nodes_per_graph[-n:],
-            self.history_size,
-            template_batch.positions.dtype,
-            template_batch.device,
-            cell=self._reference_cells(template_batch, n),
+    def _extra_state_kwargs(self, batch: Batch, n: int) -> dict[str, Any]:
+        return dict(
+            cell=self._reference_cells(batch, n),
             cell_force_scale=self.cell_force_scale,
         )
 
@@ -444,6 +446,3 @@ class LBFGSVariableCell(BaseDynamics):
             maxstep=self.maxstep,
             curvature_eps=self.curvature_eps,
         )
-
-    def post_update(self, batch: Batch) -> None:
-        """No-op; forces from new positions are used on the next step."""
