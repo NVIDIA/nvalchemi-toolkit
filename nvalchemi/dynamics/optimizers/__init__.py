@@ -16,7 +16,15 @@
 
 from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2, FIRE2VariableCell
-from nvalchemi.dynamics.optimizers.lbfgs import LBFGS, LBFGSVariableCell
+
+try:
+    from nvalchemi.dynamics.optimizers.lbfgs import LBFGS, LBFGSVariableCell
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "LBFGS and LBFGSVariableCell require nvalchemi-toolkit-ops>=0.5.0 "
+        "(nvalchemiops.torch.lbfgs is missing from your installed version). "
+        "Upgrade with `pip install --upgrade nvalchemi-toolkit-ops`."
+    ) from exc
 
 __all__ = [
     "FIRE",
