@@ -31,8 +31,8 @@ import torch
 from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
-from nvalchemi.dynamics.mep.neb import NEB, ClimbingImageConfig
 from nvalchemi.dynamics.mep.interpolate import interpolate_paths
+from nvalchemi.dynamics.mep.neb import NEB, ClimbingImageConfig
 
 CASE_ROOT = Path(__file__).parent / "cases"
 FIXTURES = ("cu-vacancy", "al100-au")

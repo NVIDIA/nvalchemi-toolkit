@@ -44,6 +44,7 @@ from nvalchemi.dynamics.mep.neb_configs import (
     ConstantSpringConfig,
     NEBMethod,
     SpringConfig,
+    TorchNEBMethod,
 )
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.strategy import (
@@ -176,9 +177,12 @@ class NEB(DynamicsStrategy):
         default=0.1,
         description="Spring configuration used by the shared NEB force hook.",
     )
-    method: str | NEBMethod = Field(
+    method: str | NEBMethod | TorchNEBMethod = Field(
         default="improved_tangent",
-        description="NEB tangent and spring-force formulation.",
+        description=(
+            "Method for computing NEB forces: 'improved_tangent', custom Warp "
+            "equations, or a Torch callable."
+        ),
     )
     climbing: ClimbingImageConfig | None = Field(
         default=None,
@@ -403,19 +407,36 @@ class NEB(DynamicsStrategy):
     @field_validator("method", mode="before")
     @classmethod
     def _restore_method(cls, value: Any) -> Any:
-        """Restore custom equation functions from a prepared method key."""
+        """Restore Warp equations or a Torch method from its constructor spec."""
         if isinstance(value, str) and value.startswith(
             ("stored_tangent|", "gram_stats|")
         ):
             return NEBMethod.from_key(value)
+        if isinstance(value, Mapping) and value.get("type") == "torch":
+            if set(value) != {"type", "spec"}:
+                raise ValueError("Torch NEB method spec must contain type and spec")
+            method = _build_spec_component(value["spec"], label="Torch NEB method")
+            if not isinstance(method, TorchNEBMethod):
+                raise TypeError(
+                    "Torch NEB method spec must build a callable; got "
+                    f"{type(method).__name__}"
+                )
+            return method
         return value
 
     @field_serializer("method", when_used="json")
-    def _serialize_method(self, method: str | NEBMethod) -> str:
-        """Serialize built-in names or a custom method's equation paths."""
+    def _serialize_method(
+        self, method: str | NEBMethod | TorchNEBMethod
+    ) -> str | dict[str, Any]:
+        """Serialize named, Warp-equation, or Torch NEB methods."""
         if isinstance(method, str):
             return method
-        return method.to_key()
+        if isinstance(method, NEBMethod):
+            return method.to_key()
+        return {
+            "type": "torch",
+            "spec": _component_spec_dict(method, label="Torch NEB method"),
+        }
 
     @model_validator(mode="after")
     def _validate_configuration(self) -> NEB:

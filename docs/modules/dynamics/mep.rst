@@ -45,6 +45,7 @@ Spring and method configuration
    :nosignatures:
 
    NEBMethod
+   TorchNEBMethod
    SpringConfig
    ConstantSpringConfig
    SpringContext

@@ -40,9 +40,11 @@ from nvalchemi.dynamics.mep import (
     ConstantSpringConfig,
     IDPPModel,
     NEBMethod,
+    TorchNEBMethod,
     interpolate_paths,
     prepare_idpp_targets,
 )
+from nvalchemi.dynamics.mep._geometry import PreparedMIC
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
@@ -138,6 +140,26 @@ def _force_hook(engine: FusedStage) -> NEBForceHook:
     return next(hook for hook in engine.hooks if isinstance(hook, NEBForceHook))
 
 
+class _ScaleTorchMethod:
+    """Simple importable Torch method for strategy spec tests."""
+
+    def __init__(self, factor: float = 1.0) -> None:
+        self.factor = factor
+
+    def __call__(
+        self,
+        batch: Batch,
+        *,
+        spring_constants: torch.Tensor,
+        path_energy_ref: torch.Tensor,
+        path_energy_max: torch.Tensor,
+        mic: PreparedMIC,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Scale physical forces and return one length per forward link."""
+        del path_energy_ref, path_energy_max, mic
+        return self.factor * batch.physical_forces, torch.ones_like(spring_constants)
+
+
 def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
     """Return the NEB-owned fixed-node constraint hook."""
     return next(
@@ -154,6 +176,22 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
+
+    def test_torch_method_round_trips_constructor_spec(self) -> None:
+        """The API accepts a Torch method and restores its constructor state."""
+        method = _ScaleTorchMethod(factor=2.0)
+        strategy = NEB(model=_model(), method=method)
+
+        assert isinstance(strategy.method, TorchNEBMethod)
+        assert _force_hook(strategy.build_engine()).method is method
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+
+        assert spec["method"]["type"] == "torch"
+        assert isinstance(restored.method, _ScaleTorchMethod)
+        assert restored.method.factor == 2.0
+        assert _force_hook(restored.build_engine()).method_key is None
 
     @pytest.mark.parametrize(
         ("effective_force_fn", "kernel_kind"),

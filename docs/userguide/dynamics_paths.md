@@ -96,7 +96,7 @@ Key fields:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `spring` | `0.1` | Constant spring force, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig` |
-| `method` | `"improved_tangent"` | Named or custom `NEBMethod` (tangent, effective force, climbing force) |
+| `method` | `"improved_tangent"` | Named method, custom Warp `NEBMethod`, or callable `TorchNEBMethod` |
 | `climbing` | `None` | `None` runs regular NEB only; set a `ClimbingImageConfig` to enable climbing-image NEB |
 | `optimizer` / `optimizer_kwargs` | `FIRE2` | Optimizer driving each image; kwargs forwarded to it |
 | `fmax` | `0.05` | Force threshold for the final (or only) stage |
@@ -198,6 +198,15 @@ dotted import paths for all three Warp equations. Restoring the spec imports
 those equations and rebuilds the `NEBMethod`; each equation must therefore be
 defined at module level in an importable module. The same key selects the kernel
 for compilation and CUDA graph capture.
+
+If you prefer to implement an NEB method entirely in PyTorch, pass a callable
+matching {py:class}`~nvalchemi.dynamics.mep.TorchNEBMethod` as `method`. It
+receives the current batch, link spring constants, path energy statistics, and
+prepared minimum-image geometry. It returns effective forces for every atom
+and one minimum-image length per forward image link. Importable classes whose
+constructor arguments are stored as attributes also round-trip through
+`to_spec_dict()` and `from_spec_dict()`; other callables can be used at runtime.
+
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.

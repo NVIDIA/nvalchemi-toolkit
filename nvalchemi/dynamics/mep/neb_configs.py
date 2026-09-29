@@ -26,6 +26,7 @@ from torch import Tensor
 
 from nvalchemi.data import Batch, GroupLayout
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.mep._geometry import PreparedMIC
 from nvalchemi.dynamics.mep.neb_equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
@@ -35,7 +36,6 @@ from nvalchemi.dynamics.mep.neb_ops.methods import (
     prepare_neb_method_key,
     resolve_neb_method,
 )
-from nvalchemi.dynamics.mep._geometry import PreparedMIC
 
 __all__ = [
     "ConstantSpringConfig",
