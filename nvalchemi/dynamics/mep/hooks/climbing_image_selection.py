@@ -23,8 +23,8 @@ from typing import Literal
 import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.mep.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.mep.neb_ops.modes import CLIMBING_NEB, REGULAR_NEB
-from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.hooks import DynamicsContext
 
 

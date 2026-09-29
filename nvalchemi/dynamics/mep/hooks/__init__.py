@@ -13,11 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Hooks for nudged elastic band dynamics."""
+"""Hooks for minimum-energy path dynamics."""
 
 from nvalchemi.dynamics.mep.hooks.climbing_image_selection import (
     ClimbingImageSelectionHook,
 )
 from nvalchemi.dynamics.mep.hooks.neb_force import NEBForceHook
+from nvalchemi.dynamics.mep.hooks.path_diagnostics import (
+    PathDiagnostics,
+    PathDiagnosticsHook,
+)
+from nvalchemi.dynamics.mep.hooks.path_energy_stats import (
+    PathEnergyStats,
+    PathEnergyStatsHook,
+)
 
-__all__ = ["ClimbingImageSelectionHook", "NEBForceHook"]
+__all__ = [
+    "ClimbingImageSelectionHook",
+    "NEBForceHook",
+    "PathDiagnostics",
+    "PathDiagnosticsHook",
+    "PathEnergyStats",
+    "PathEnergyStatsHook",
+]

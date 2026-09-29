@@ -22,7 +22,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
 from nvalchemi.dynamics.hooks import LoggingHook
-from nvalchemi.dynamics.paths.hooks import (
+from nvalchemi.dynamics.mep.hooks import (
     PathDiagnosticsHook,
     PathEnergyStatsHook,
 )

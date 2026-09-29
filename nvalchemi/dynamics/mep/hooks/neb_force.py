@@ -26,6 +26,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.mep.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.mep.neb_configs import (
     ConstantSpringConfig,
     NEBMethod,
@@ -39,7 +40,6 @@ from nvalchemi.dynamics.paths._geometry import (
     PreparedMIC,
     prepare_batch_mic,
 )
-from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
 

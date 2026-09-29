@@ -37,6 +37,7 @@ from nvalchemi.dynamics.mep import (
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
+    PathEnergyStatsHook,
 )
 from nvalchemi.dynamics.mep.neb_equations import neb_effective_force_from_gram_stats
 from nvalchemi.dynamics.mep.neb_ops.methods import DEFAULT_NEB_METHOD_KEY
@@ -49,7 +50,6 @@ from nvalchemi.dynamics.paths._geometry import (
     minimum_image_displacement,
     prepare_batch_mic,
 )
-from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.hooks import DynamicsContext
 
 

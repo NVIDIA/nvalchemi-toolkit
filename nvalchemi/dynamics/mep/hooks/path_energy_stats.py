@@ -44,7 +44,7 @@ class PathEnergyStats:
         shape ``(num_paths,)``. The tensor has dtype ``torch.int32``. Ties
         select the first interior image. Unlike
         :attr:`PathDiagnostics.highest_interior_image_idx
-        <nvalchemi.dynamics.paths.hooks.PathDiagnostics.highest_interior_image_idx>`,
+        <nvalchemi.dynamics.mep.hooks.PathDiagnostics.highest_interior_image_idx>`,
         this index is batch-global rather than path-local.
     """
 

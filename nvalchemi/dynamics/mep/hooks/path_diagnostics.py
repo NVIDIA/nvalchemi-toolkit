@@ -24,7 +24,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
+from nvalchemi.dynamics.mep.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
 
@@ -45,7 +45,7 @@ class PathDiagnostics:
         Zero-based path-local index of the highest-energy interior image for
         each path, shape (num_paths,) and dtype torch.int32. Unlike
         :attr:`PathEnergyStats.highest_interior_image_idx
-        <nvalchemi.dynamics.paths.hooks.PathEnergyStats.highest_interior_image_idx>`,
+        <nvalchemi.dynamics.mep.hooks.PathEnergyStats.highest_interior_image_idx>`,
         this index is relative to the start of its path rather than the batch.
     path_length : Tensor
         Sum of minimum-image forward-link lengths for each path, shape
