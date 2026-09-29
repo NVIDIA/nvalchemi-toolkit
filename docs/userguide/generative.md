@@ -289,7 +289,6 @@ class ToyDecoder(nn.Module, GenerativeModelMixin):
             nn.Linear(64, num_atoms * 3),
         )
         self.model_config = GenerativeModelConfig(
-            supports_variable_atoms=False,
             required_inputs=frozenset(),  # unconditional
             outputs=frozenset({"positions", "atomic_numbers"}),
             prediction_outputs=("positions",),
