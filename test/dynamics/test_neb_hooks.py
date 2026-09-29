@@ -27,20 +27,23 @@ import torch._dynamo as dynamo
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
-from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
-from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
-from nvalchemi.dynamics.paths.neb import (
+from nvalchemi.dynamics.mep import (
     ConstantSpringConfig,
+    NEBMethod,
     SpringContext,
 )
-from nvalchemi.dynamics.paths.neb._ops.modes import (
+from nvalchemi.dynamics.mep._ops.methods import DEFAULT_NEB_METHOD_KEY
+from nvalchemi.dynamics.mep._ops.modes import (
     CLIMBING_NEB,
     ENDPOINT,
 )
-from nvalchemi.dynamics.paths.neb.hooks import (
+from nvalchemi.dynamics.mep.equations import neb_effective_force_from_gram_stats
+from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
 )
+from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
+from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.hooks import DynamicsContext
 
 
@@ -270,6 +273,29 @@ class TestClimbingImageSelection:
 class TestNEBForceHook:
     """Test field preparation and the existing tensor-op boundary."""
 
+    def test_prepares_builtin_and_gram_statistic_method_keys(self) -> None:
+        builtin = _force_hook()
+        gram = _force_hook(
+            method=NEBMethod(effective_force_fn=neb_effective_force_from_gram_stats)
+        )
+
+        assert builtin.method_key == DEFAULT_NEB_METHOD_KEY
+        assert gram.method_key.startswith("gram_stats|")
+
+        batch = _bands([0.0, 2.0, 1.0, 0.0], [0] * 4)
+        ctx = DynamicsContext(batch=batch)
+        gram.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        gram(ctx, DynamicsStage.ON_ADMISSION)
+        assert gram._workspace is not None
+        assert gram._workspace.vector_scratch is None
+        gram.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        gram(ctx, DynamicsStage.AFTER_COMPUTE)
+        assert torch.isfinite(batch.forces).all()
+
+    def test_rejects_unknown_method_name(self) -> None:
+        with pytest.raises(ValueError, match="Unknown NEB method"):
+            _force_hook(method="unknown")
+
     def test_registration_requires_group_aware_dynamics(self) -> None:
         hook = _force_hook()
 
@@ -317,7 +343,7 @@ class TestNEBForceHook:
             kwargs["link_lengths"].fill_(1.0)
             return kwargs["effective_forces"], kwargs["link_lengths"]
 
-        module = importlib.import_module("nvalchemi.dynamics.paths.neb.hooks.neb_force")
+        module = importlib.import_module("nvalchemi.dynamics.mep.hooks.neb_force")
         monkeypatch.setattr(module, "neb_forces", fake_neb_forces)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
@@ -357,6 +383,7 @@ class TestNEBForceHook:
         assert seen["cartesian_to_fractional"] is workspace.mic.cartesian_to_fractional
         assert seen["mic_candidate_count"] is workspace.mic.candidate_count
         assert seen["candidate_shifts"] is workspace.mic.candidate_shifts
+        assert seen["method"] == DEFAULT_NEB_METHOD_KEY
         assert seen["image_force_mode"][1] == CLIMBING_NEB
         assert seen["image_force_mode"][[0, 3]].tolist() == [ENDPOINT] * 2
 
@@ -397,7 +424,7 @@ class TestNEBForceHook:
             kwargs["link_lengths"].zero_()
             return kwargs["effective_forces"], kwargs["link_lengths"]
 
-        module = importlib.import_module("nvalchemi.dynamics.paths.neb.hooks.neb_force")
+        module = importlib.import_module("nvalchemi.dynamics.mep.hooks.neb_force")
         monkeypatch.setattr(module, "neb_forces", fake_neb_forces)
 
         hook(ctx, DynamicsStage.AFTER_COMPUTE)

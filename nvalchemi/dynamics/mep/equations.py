@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from nvalchemi.dynamics.paths.neb._ops.equations import (
+from nvalchemi.dynamics.mep._ops.equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
     neb_effective_force,

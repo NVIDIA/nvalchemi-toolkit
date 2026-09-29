@@ -15,9 +15,9 @@
 
 """Hooks for nudged elastic band dynamics."""
 
-from nvalchemi.dynamics.paths.neb.hooks.climbing_image_selection import (
+from nvalchemi.dynamics.mep.hooks.climbing_image_selection import (
     ClimbingImageSelectionHook,
 )
-from nvalchemi.dynamics.paths.neb.hooks.neb_force import NEBForceHook
+from nvalchemi.dynamics.mep.hooks.neb_force import NEBForceHook
 
 __all__ = ["ClimbingImageSelectionHook", "NEBForceHook"]

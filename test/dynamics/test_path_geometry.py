@@ -22,11 +22,11 @@ import pytest
 import torch
 import warp as wp
 
+from nvalchemi.dynamics.mep._ops.kernels import _mic
 from nvalchemi.dynamics.paths._geometry import (
     minimum_image_displacement,
     prepare_mic,
 )
-from nvalchemi.dynamics.paths.neb._ops.kernels import _mic
 
 
 def _enumerated_mic(

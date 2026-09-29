@@ -26,17 +26,17 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
-from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
-from nvalchemi.dynamics.paths.neb._ops.modes import ENDPOINT, REGULAR_NEB
-from nvalchemi.dynamics.paths.neb._ops.registry import get_neb_method
-from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
-from nvalchemi.dynamics.paths.neb.configs import (
+from nvalchemi.dynamics.mep._ops.methods import prepare_neb_method_key
+from nvalchemi.dynamics.mep._ops.modes import ENDPOINT, REGULAR_NEB
+from nvalchemi.dynamics.mep._ops.torch_ops import neb_forces
+from nvalchemi.dynamics.mep.configs import (
     ConstantSpringConfig,
     NEBMethod,
     SpringConfig,
     SpringContext,
 )
+from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
+from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
 
@@ -76,8 +76,8 @@ class _NEBWorkspace:
         Per-atom output force buffer, shape ``(num_atoms, 3)``.
     link_lengths : Tensor
         Per-link distance buffer, shape ``(num_images - num_paths,)``.
-    vector_scratch : Tensor
-        Per-atom vector scratch buffer, shape ``(num_atoms, 3)``.
+    vector_scratch : Tensor or None
+        Per-atom vector scratch for stored-tangent methods; otherwise ``None``.
     """
 
     image_ptr: Tensor
@@ -92,38 +92,7 @@ class _NEBWorkspace:
     mic: PreparedMIC
     effective_forces: Tensor
     link_lengths: Tensor
-    vector_scratch: Tensor
-
-
-def _resolve_neb_method(method: str | NEBMethod) -> NEBMethod:
-    """Resolve a registered method name or validate a method configuration.
-
-    Parameters
-    ----------
-    method : str or NEBMethod
-        Registered built-in name or an explicit equation configuration.
-
-    Returns
-    -------
-    NEBMethod
-        The normalized method configuration.
-
-    Raises
-    ------
-    TypeError
-        If ``method`` is neither a string nor an :class:`NEBMethod`.
-    ValueError
-        If a string does not name a registered method.
-    """
-    if isinstance(method, NEBMethod):
-        return method
-    if not isinstance(method, str):
-        raise TypeError(
-            "method must be a registered method name or an NEBMethod; "
-            f"got {type(method).__name__}"
-        )
-    get_neb_method(method)
-    return NEBMethod(name=method)
+    vector_scratch: Tensor | None
 
 
 class NEBForceHook:
@@ -145,7 +114,7 @@ class NEBForceHook:
         Positive constant spring value or a policy that resolves one
         spring constant for every adjacent image pair. Default is ``0.1``.
     method : str or NEBMethod, optional
-        Registered method name or a custom set of Warp equation functions.
+        Built-in method name or a custom set of Warp equation functions.
         Default is ``"improved_tangent"``.
     endpoint_mode : {"fixed", "relaxed"}, optional
         Whether path endpoint images remain fixed or use their physical
@@ -172,7 +141,7 @@ class NEBForceHook:
 
     Examples
     --------
-    Use the registered improved-tangent method with a constant spring::
+    Use the improved-tangent method with a constant spring::
 
         energy_stats = PathEnergyStatsHook()
         hook = NEBForceHook(
@@ -237,8 +206,19 @@ class NEBForceHook:
                 "DynamicsStage.AFTER_COMPUTE"
             )
 
-        # Resolve registered names during setup so invalid methods fail early.
-        resolved_method = _resolve_neb_method(method)
+        if isinstance(method, str):
+            if method != "improved_tangent":
+                raise ValueError(f"Unknown NEB method: {method!r}")
+            method = NEBMethod()
+        elif not isinstance(method, NEBMethod):
+            raise TypeError(
+                f"method must be 'improved_tangent' or an NEBMethod; got {type(method).__name__}"
+            )
+        method_key = prepare_neb_method_key(
+            method.tangent_weights_fn,
+            method.effective_force_fn,
+            method.climbing_force_fn,
+        )
 
         # Validate endpoint behavior and image-local atom constraints together.
         if endpoint_mode not in {"fixed", "relaxed"}:
@@ -271,7 +251,8 @@ class NEBForceHook:
 
         self.energy_stats_hook = energy_stats_hook
         self.spring = spring
-        self.method = resolved_method
+        self.method = method
+        self.method_key = method_key
         self.endpoint_mode = endpoint_mode
         self.fixed_atom_indices = fixed_atom_indices
         self._workspace: _NEBWorkspace | None = None
@@ -451,7 +432,11 @@ class NEBForceHook:
             mic=prepared_mic,
             effective_forces=torch.empty_like(batch.positions),
             link_lengths=torch.empty(n_links, dtype=dtype, device=device),
-            vector_scratch=torch.empty_like(batch.positions),
+            vector_scratch=(
+                torch.empty_like(batch.positions)
+                if self.method_key.startswith("stored_tangent|")
+                else None
+            ),
             image_ptr=image_ptr,
             path_ptr=path_ptr,
             image_path_idx=image_path_idx,
@@ -485,7 +470,6 @@ class NEBForceHook:
 
         batch = ctx.batch
         workspace = self._workspace
-        method_name = self.method.name
         active_nodes = (
             torch.ones_like(workspace.fixed_node_mask)
             if ctx.active_graph_mask is None
@@ -518,7 +502,7 @@ class NEBForceHook:
             cartesian_to_fractional=workspace.mic.cartesian_to_fractional,
             mic_candidate_count=workspace.mic.candidate_count,
             candidate_shifts=workspace.mic.candidate_shifts,
-            method=method_name,
+            method=self.method_key,
             vector_scratch=workspace.vector_scratch,
             effective_forces=workspace.effective_forces,
             link_lengths=workspace.link_lengths,

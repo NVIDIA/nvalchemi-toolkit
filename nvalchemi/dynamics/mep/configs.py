@@ -26,10 +26,10 @@ from torch import Tensor
 
 from nvalchemi.data import GroupLayout
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.paths.neb.equations import (
+from nvalchemi.dynamics.mep.equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
-    neb_effective_force_from_gram_stats,
+    neb_effective_force,
 )
 
 __all__ = [
@@ -148,10 +148,8 @@ class ConstantSpringConfig:
 class NEBMethod:
     """Configure the device equations used to construct NEB forces.
 
-    Equation functions must be module-level functions decorated with
-    :func:`warp.func`. They are injected into a specialized Warp kernel when
-    the method is bound during NEB setup; they are not passed through the Torch
-    custom-operator boundary at runtime.
+    Equation functions must be importable module-level functions decorated with
+    :func:`warp.func`. The hook prepares their kernel key during setup.
 
     Parameters
     ----------
@@ -160,13 +158,9 @@ class NEBMethod:
         tangent from adjacent image displacements.
     effective_force_fn : wp.Function, optional
         Construct the effective force for an active, non-climbing interior
-        image from the full Gram-statistics kernel contract.
+        image using the stored-tangent or Gram-statistics signature.
     climbing_force_fn : wp.Function, optional
         Construct the effective force for a climbing image.
-    name : str or None, optional
-        Stable registry name. Named methods can participate in serializable
-        configurations when the same registration is available on restore;
-        unnamed methods are runtime-only.
 
     Examples
     --------
@@ -175,7 +169,7 @@ class NEBMethod:
 
         import warp as wp
 
-        from nvalchemi.dynamics.paths.neb.methods import NEBMethod
+        from nvalchemi.dynamics.mep import NEBMethod
 
         @wp.func
         def central_tangent_weights(
@@ -189,9 +183,8 @@ class NEBMethod:
     """
 
     tangent_weights_fn: wp.Function = improved_tangent_weights
-    effective_force_fn: wp.Function = neb_effective_force_from_gram_stats
+    effective_force_fn: wp.Function = neb_effective_force
     climbing_force_fn: wp.Function = climbing_image_effective_force
-    name: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the setup-time method configuration."""
@@ -206,11 +199,3 @@ class NEBMethod:
                     f"{field_name} must be a function decorated with warp.func; "
                     f"got {type(value).__name__}"
                 )
-
-        if self.name is not None:
-            if not isinstance(self.name, str):
-                raise TypeError(
-                    f"name must be a string or None; got {type(self.name).__name__}"
-                )
-            if not self.name.strip():
-                raise ValueError("name must not be empty or contain only whitespace")

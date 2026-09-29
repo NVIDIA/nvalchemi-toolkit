@@ -14,7 +14,7 @@
 # limitations under the License.
 """Nudged elastic band utilities."""
 
-from nvalchemi.dynamics.paths.neb.configs import (
+from nvalchemi.dynamics.mep.configs import (
     ConstantSpringConfig,
     NEBMethod,
     SpringConfig,
