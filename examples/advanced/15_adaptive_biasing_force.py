@@ -63,11 +63,8 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.hooks._utils import KB_EV
-from nvalchemi.enhanced_sampling import (
-    AdaptiveBiasingForce,
-    BiasResult,
-    EnhancedSampling,
-)
+from nvalchemi.enhanced_sampling import AdaptiveBiasingForce, EnhancedSampling
+from nvalchemi.hooks import BiasContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -114,7 +111,7 @@ demo = AdaptiveBiasingForce(
     full_samples=0,
     name="demo",
 ).to(DEVICE)
-demo.update(free_batch, BiasResult())
+demo.update(BiasContext(batch=free_batch), demo.stage)
 
 measured = float(demo.mean_force()[int(demo.bin_index(torch.tensor([3.0]))[0])])
 logger.info("Two non-interacting particles at r = 3.0 A:")
@@ -182,7 +179,7 @@ abf = AdaptiveBiasingForce(
     min_samples=20,
     full_samples=60,
     max_force=0.5,  # eV/A
-    update_frequency=1,  # every uncorrelated sample helps
+    frequency=1,  # every uncorrelated sample helps
     name="abf",
 )
 

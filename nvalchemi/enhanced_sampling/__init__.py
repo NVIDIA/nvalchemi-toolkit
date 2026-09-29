@@ -14,17 +14,27 @@
 # limitations under the License.
 """Enhanced-sampling subpackage for nvalchemi-toolkit.
 
+What a bias is
+--------------
+A bias is an **additive potential**: a
+:class:`~nvalchemi.models.base.BaseModelMixin` that maps a ``Batch`` to
+:data:`~nvalchemi._typing.ModelOutputs`, exactly like ``DFTD3ModelWrapper`` or
+``LennardJonesModelWrapper``.  There is no bias-specific protocol and no
+bias-specific result type: diagnostics ride as ``diagnostics/<key>`` entries
+and the producer's state revision as ``state_version``, both general
+``ModelOutputs`` conventions.  A bias whose state evolves during sampling adds
+the :class:`~nvalchemi.hooks.StatefulHook` lifecycle — ``frequency``,
+``stage``, ``read_only``, ``commit`` — through
+:class:`AdaptivePotentialMixin`.
+
 Public surface
 --------------
-* :class:`BiasResult` — frozen dataclass; fully-detached bias outputs.
-* :class:`BiasPotential` — ``@runtime_checkable`` Protocol; structural
-  interface every bias must satisfy.
 * :class:`ConservativeBias` — autograd helper; subclass and override
   :meth:`~ConservativeBias.energy` to get forces and tensile-positive
   Cauchy stress for free.
-* :class:`AdaptivePotentialMixin` — battery for biases whose state evolves
-  during sampling; supplies ``update`` / ``commit_epoch`` / state versioning.
-* :func:`aggregate_bias_results` — sums a list of ``BiasResult`` objects.
+* :class:`AdaptivePotentialMixin` — the ``StatefulHook`` battery for biases
+  whose state evolves during sampling; supplies ``update`` / ``commit`` /
+  state versioning.
 * :func:`pair_distance` — differentiable pair-distance CV; supports
   nonperiodic and Minkowski-reduced triclinic MIC.  General triclinic MIC
   (unreduced cells via LLL) is not yet implemented.
@@ -44,6 +54,13 @@ Public surface
 * :class:`AdaptiveBiasingForce` — measures and cancels the mean force along
   a pair distance, including the metric correction that a naive Cartesian
   projection omits.  Force-only, so it is excluded from replica exchange.
+
+Two helpers this subpackage relies on live in shared code rather than here,
+because neither is specific to sampling: :class:`~nvalchemi.hooks.BiasContext`
+(the ``DynamicsContext`` subclass handed to ``update``, placed beside
+``TrainContext``) and
+:func:`~nvalchemi.models._utils.aggregate_contributions` (the strict
+counterpart to ``sum_outputs``).
 
 Not yet implemented
 -------------------
@@ -67,38 +84,33 @@ code keeps working; no removal date is set.
 ============================  ==============================  ==========================================
 Concern                       ``BiasedPotentialHook``         ``enhanced_sampling``
 ============================  ==============================  ==========================================
-Contract                      ``bias_fn(batch) -> (E, F)``    ``BiasPotential.evaluate -> BiasResult``
+Contract                      ``bias_fn(batch) -> (E, F)``    ``BaseModelMixin -> ModelOutputs``
 Forces                        written by hand                 autograd, from one energy definition
 Cell response                 none                            symmetric-strain ``stress``
 Composing several biases      in-place, sequential            summed against unmodified model output
-Diagnostics                   none                            namespaced ``observables``
+Diagnostics                   none                            namespaced ``diagnostics/<key>``
 Evolving bias state           closure-held, ad hoc            ``update()`` exactly once per due step
 ============================  ==============================  ==========================================
 
 Which to use
-    :class:`ConservativeBias` (or :class:`BiasPotential` directly), run
-    through :class:`EnhancedSampling`, for everything new.  The cell
-    response is the substantive difference: a ``bias_fn`` bias contributes
-    no stress, so under NPT/NPH the barostat reads a ``batch.stress`` the
-    bias never touched and the cell evolves as if the bias were absent —
-    with no error raised.  Existing hook-based code is correct under NVE and
-    NVT, where nothing reads the stress, and can be migrated when convenient
-    rather than urgently.
+    :class:`ConservativeBias` (or any ``BaseModelMixin`` returning
+    ``ModelOutputs``), run through :class:`EnhancedSampling`, for everything
+    new.  The cell response is the substantive difference: a ``bias_fn`` bias
+    contributes no stress, so under NPT/NPH the barostat reads a
+    ``batch.stress`` the bias never touched and the cell evolves as if the
+    bias were absent — with no error raised.  Existing hook-based code is
+    correct under NVE and NVT, where nothing reads the stress, and can be
+    migrated when convenient rather than urgently.
 
 No adapter is provided
-    Bridging a :class:`BiasPotential` onto ``bias_fn`` would have to drop
-    :attr:`BiasResult.stress` on the floor, since the hook has nowhere to
-    put it — reintroducing the exact failure the new API exists to remove.
-    A silent adapter would be worse than none.
+    Bridging a bias onto ``bias_fn`` would have to drop its ``stress`` on the
+    floor, since the hook has nowhere to put it — reintroducing the exact
+    failure the new API exists to remove.  A silent adapter would be worse
+    than none.
 """
 
 from nvalchemi.enhanced_sampling._adaptive import AdaptivePotentialMixin
-from nvalchemi.enhanced_sampling._bias import (
-    BiasPotential,
-    BiasResult,
-    ConservativeBias,
-    aggregate_bias_results,
-)
+from nvalchemi.enhanced_sampling._bias import ConservativeBias
 from nvalchemi.enhanced_sampling._exchange import (
     ReplicaExchange,
     ThermodynamicState,
@@ -121,11 +133,8 @@ from nvalchemi.enhanced_sampling.cv import (
 
 __all__ = [
     # Core abstractions
-    "BiasResult",
-    "BiasPotential",
     "ConservativeBias",
     "AdaptivePotentialMixin",
-    "aggregate_bias_results",
     # Runner
     "EnhancedSampling",
     # Replica exchange

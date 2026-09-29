@@ -76,7 +76,7 @@ class BiasedPotentialHook:
         * **Sequential in-place composition.**  Each hook mutates
           ``batch.forces`` in turn, so a second bias that reads
           ``batch.forces`` observes the first one's contribution.
-          :func:`~nvalchemi.enhanced_sampling.aggregate_bias_results` sums
+          :func:`~nvalchemi.models._utils.aggregate_contributions` sums
           every bias against the same unmodified model output instead.
 
     This hook enables enhanced sampling techniques by composing an
@@ -181,7 +181,7 @@ class BiasedPotentialHook:
     ) -> None:
         warnings.warn(
             "BiasedPotentialHook is deprecated in favour of "
-            "nvalchemi.enhanced_sampling (BiasPotential / ConservativeBias), "
+            "nvalchemi.enhanced_sampling (EnhancedSampling / ConservativeBias), "
             "which derives forces and stress from a single energy definition. "
             "bias_fn returns only (energy, forces), so a bias applied through "
             "this hook contributes no stress and is invisible to the NPT/NPH "

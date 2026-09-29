@@ -30,9 +30,9 @@ from torch import Tensor
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin, NVTNoseHoover
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.enhanced_sampling import (
     AdaptivePotentialMixin,
-    BiasResult,
     ConservativeBias,
     EnhancedSampling,
     HarmonicUmbrellaBias,
@@ -45,6 +45,7 @@ from nvalchemi.enhanced_sampling._checkpoint import (
     _encode_state,
     read_checkpoint,
 )
+from nvalchemi.hooks import BiasContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -110,7 +111,7 @@ class _CountingBias(AdaptivePotentialMixin, ConservativeBias):
             + 0.0 * current.positions.sum()
         )
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         self.deposits += 1
         self.bump_state_version()
 
@@ -132,13 +133,13 @@ class _QuietBias(AdaptivePotentialMixin, ConservativeBias):
             + 0.0 * current.positions.sum()
         )
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         if self._bump:
             self.bump_state_version()
 
 
 class _SharedHistoryBias(AdaptivePotentialMixin, ConservativeBias):
-    """Deposits accumulate as pending; commit_epoch merges them.
+    """Deposits accumulate as pending; commit() merges them.
 
     Models the shared-history multi-walker case: the published state only
     becomes correct once the epoch commit has run, so a checkpoint taken
@@ -157,10 +158,10 @@ class _SharedHistoryBias(AdaptivePotentialMixin, ConservativeBias):
             + 0.0 * current.positions.sum()
         )
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         self.pending += 1
 
-    def commit_epoch(self) -> None:
+    def commit(self) -> None:
         self.commit_calls += 1
         self.published += self.pending
         self.pending.zero_()
@@ -788,7 +789,7 @@ class TestRunnerCheckpointRestore:
     def test_checkpoint_drains_the_epoch_commit(self, tmp_path, device: str) -> None:
         """Boundary-aligned is not quiescent unless the commit has run.
 
-        commit_epoch() normally fires lazily, when the *next* step notices
+        commit() normally fires lazily, when the *next* step notices
         the epoch advanced. At step N that has not happened, so without an
         explicit drain the checkpoint records a shared-history bias with its
         deposits still pending rather than merged.

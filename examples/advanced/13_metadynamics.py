@@ -38,7 +38,7 @@ evaluation per step, not ``B`` separate simulations.
 
 Key concepts demonstrated
 -------------------------
-* Depositing hills on a schedule with ``update_frequency``, driven by
+* Depositing hills on a schedule with ``frequency``, driven by
   :class:`~nvalchemi.enhanced_sampling.EnhancedSampling`.
 * Shared multi-walker history, and how it differs from private history.
 * Choosing a storage policy, and why ``preallocated`` raises rather than
@@ -144,7 +144,7 @@ def bond_distance(atoms: Batch) -> torch.Tensor:
 #     of the CV is ``gamma * T``.  Larger explores further and converges
 #     slower.  Passing ``None`` gives standard, non-converging metadynamics.
 #
-# ``update_frequency``
+# ``frequency``
 #     Steps between depositions.  Depositing faster than the system
 #     decorrelates biases the estimate; the usual choice is a few hundred
 #     steps.
@@ -161,7 +161,7 @@ metad = WellTemperedMetaDynamicsBias(
     sigma=0.25,  # angstrom
     temperature=TEMPERATURE,
     bias_factor=8.0,
-    update_frequency=25,
+    frequency=25,
     storage="preallocated",
     max_hills=512,
     history="shared",  # multiple-walker: every walker feels every hill

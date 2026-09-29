@@ -30,7 +30,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from nvalchemi.data import Batch
-    from nvalchemi.enhanced_sampling._bias import BiasResult
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.enhanced_sampling._adaptive import BiasContext
 
 __all__ = ["WellTemperedMetaDynamicsBias"]
 
@@ -77,8 +78,10 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         ``gamma > 1``, or ``None`` for standard metadynamics.
     name:
         Unique bias identifier.
-    update_frequency:
-        Dynamics steps between depositions (the deposition pace).
+    frequency:
+        Dynamics steps between depositions (the deposition pace).  The
+        :class:`~nvalchemi.hooks.Hook` attribute, with the meaning it has
+        everywhere else.
     storage:
         ``"preallocated"``, ``"grow"``, or ``"fifo"`` — see Notes.
     max_hills:
@@ -182,7 +185,7 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         *,
         bias_factor: float | None = None,
         name: str = "metadynamics",
-        update_frequency: int = 500,
+        frequency: int = 500,
         storage: Literal["preallocated", "grow", "fifo"] = "preallocated",
         max_hills: int | None = None,
         history: Literal["shared", "state", "walker"] = "shared",
@@ -214,10 +217,10 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
                 f"than 1, got {bias_factor}. gamma = 1 divides by zero in the "
                 "well-tempered height; pass None for standard metadynamics."
             )
-        if int(update_frequency) < 1:
+        if int(frequency) < 1:
             raise ValueError(
-                f"WellTemperedMetaDynamicsBias: update_frequency must be at "
-                f"least 1, got {update_frequency}."
+                f"WellTemperedMetaDynamicsBias: frequency must be at least 1, "
+                f"got {frequency}."
             )
         if int(ramp_depositions) < 0:
             raise ValueError(
@@ -248,7 +251,7 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         self.cv = cv
         self.storage = storage
         self.history = history
-        self.update_frequency = int(update_frequency)
+        self.frequency = int(frequency)
         self.ramp_depositions = int(ramp_depositions)
         self.height = float(height)
         self.temperature = float(temperature)
@@ -589,7 +592,7 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
                 raise RuntimeError(
                     f"WellTemperedMetaDynamicsBias {self.name!r}: hill storage "
                     f"is full ({capacity} hills) and storage='preallocated'. "
-                    f"Raise max_hills, lengthen update_frequency, or switch to "
+                    f"Raise max_hills, lengthen frequency, or switch to "
                     "storage='grow' (recompiles when it resizes) or "
                     "storage='fifo' (bounded memory, but discards the oldest "
                     "hills and so is no longer a converging well-tempered run)."
@@ -599,15 +602,16 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
 
         return torch.arange(count, device=self.hill_heights.device) + written
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         """Deposit one hill per walker at its current CV value.
 
         Parameters
         ----------
-        frames:
-            Post-step frame captured by the runner.
-        result:
-            The bias's own result from the preceding force evaluation.
+        ctx:
+            The capture.  ``ctx.batch`` is the post-step frame; the bias's own
+            preceding contribution is on ``ctx.contribution``.
+        stage:
+            The stage being dispatched, always :attr:`stage`.
 
         Raises
         ------
@@ -617,6 +621,7 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             If the CV changes dimension part-way through a run, which would
             silently invalidate every hill already deposited.
         """
+        frames = ctx.batch
         with torch.no_grad():
             values = self.cv(frames).detach()  # [B, D]
             owner = self._owner_key(frames, values.shape[0])

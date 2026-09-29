@@ -12,19 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Battery for biases whose internal state evolves during sampling.
+"""The ``StatefulHook`` battery for biases whose state evolves during sampling.
 
-``AdaptivePotentialMixin`` is one of the composable mixins described in the
-``BiasPotential`` docstring: a bias mixes in only what applies to it.  It
-carries no energy, no forces, and no model half — a bias that is adaptive
+``AdaptivePotentialMixin`` supplies the
+:class:`~nvalchemi.hooks.StatefulHook` half of a bias: ``frequency``,
+``stage``, ``read_only``, ``commit``, ``state_dict`` and ``load_state_dict``.
+It deliberately invents none of those names.  "Read-only while forces are
+computed, mutate after the step, synchronise occasionally" is not specific to
+enhanced sampling — it is equally the shape of NEB's climbing-image promotion,
+an adaptive thermostat, and an adaptive neighbour skin — so the vocabulary
+lives in :mod:`nvalchemi.hooks` and this module only fills it in.
+
+It carries no energy, no forces, and no model half.  A bias that is adaptive
 *and* conservative mixes in both this and
-:class:`~nvalchemi.enhanced_sampling.ConservativeBias`; a bias that is
-adaptive and non-conservative (ABF) mixes in only this one.
-
-The mixin exists to make one guarantee enforceable by the runner: **evaluation
-never mutates state**.  ``evaluate()`` is read-only and compile-friendly;
-every history-dependent change happens in :meth:`update`, which the runner
-calls exactly once per due step, after the integration step has finished.
+:class:`~nvalchemi.enhanced_sampling.ConservativeBias`; a bias that is adaptive
+and non-conservative (ABF) mixes in only this one.
 """
 
 from __future__ import annotations
@@ -32,15 +34,18 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
+import torch
 from torch import nn
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.models._utils import STATE_VERSION_KEY
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from nvalchemi.data import Batch
-    from nvalchemi.enhanced_sampling._bias import BiasResult
+    from nvalchemi._typing import ModelOutputs
+    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.hooks import BiasContext
 
 __all__ = ["AdaptivePotentialMixin"]
 
@@ -81,49 +86,67 @@ class AdaptivePotentialMixin:
         class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             ...   # conservative and adaptive
 
-        class AdaptiveBiasingForce(AdaptivePotentialMixin):
+        class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module, BaseModelMixin):
             ...   # adaptive, but no energy to differentiate
 
     Order matters and is enforced.  :class:`ConservativeBias` inherits
     ``nn.Module``, which already defines ``state_dict`` / ``load_state_dict``
-    for buffers; putting this mixin second would let those shadow the ones
-    here and silently drop the bias history from every checkpoint.  With the
-    mixin first, :meth:`state_dict` calls up the MRO and merges both.
+    for buffers; putting this mixin second would let those shadow the ones here
+    and silently drop the bias history from every checkpoint.  With the mixin
+    first, :meth:`state_dict` calls up the MRO and merges both.
     ``__init_subclass__`` raises ``TypeError`` on the wrong order rather than
     letting a checkpoint quietly lose data.
 
-    The runner detects the capability with ``hasattr(bias, "update")``; there
-    is no registration and no requirement to inherit this class.  A bias may
-    implement ``update`` structurally instead.
-
     Attributes
     ----------
-    update_frequency:
-        Dynamics steps between :meth:`update` calls.  ``1`` means every step.
-    observation_stage:
-        Which stage the frame handed to :meth:`update` is captured at.
+    frequency:
+        Dynamics steps between :meth:`update` calls; ``1`` means every step.
+        The :class:`~nvalchemi.hooks.Hook` attribute, with the meaning it has
+        everywhere else.
+    stage:
+        Which :class:`~nvalchemi.dynamics.base.DynamicsStage` the frame handed
+        to :meth:`update` is captured at.
 
-        * ``AFTER_STEP`` (default) — post-step coordinates.  What
-          metadynamics wants: a hill is deposited at the configuration the
-          system actually reached.
+        * ``AFTER_STEP`` (default) — post-step coordinates.  What metadynamics
+          wants: a hill is deposited at the configuration the system actually
+          reached.
         * ``AFTER_COMPUTE`` — captured while ``batch.forces`` still holds the
-          **unbiased** physical forces, before any bias contribution is
-          added.  What ABF requires; observing biased forces would feed the
-          estimator its own output.
+          **unbiased** physical forces, before any bias contribution is added.
+          What ABF requires; observing biased forces would feed the estimator
+          its own output.
+    read_only:
+        ``False``: :meth:`update` mutates bias state, so the runner delivers it
+        exactly once per due step and never during force priming or a
+        speculative re-evaluation.
 
     Notes
     -----
+    Why ``update`` rather than ``__call__``
+        A ``Hook`` is dispatched through ``__call__(ctx, stage)``, but a bias
+        is also an ``nn.Module`` whose ``__call__`` is the model forward that
+        ``BaseDynamics`` and ``PipelineModelWrapper`` both invoke.  One name
+        cannot be both.  The house resolution is the one
+        :class:`~nvalchemi.training.hooks.update.TrainingUpdateHook` already
+        uses: a domain hook family keeps the signature its semantics need, and
+        an orchestrator owns protocol compliance on its behalf.  Here that
+        orchestrator is the single composite hook ``EnhancedSampling``
+        installs, which reads :attr:`frequency` and :attr:`stage` and
+        dispatches :meth:`update` and :meth:`commit`.
+
     State version
         :meth:`bump_state_version` records that the bias changed.  The runner
         reads :attr:`state_version` to decide whether forces in the batch are
-        stale and need re-priming.  It is also checkpointed per bias, ready
-        for validating that an accepted replica-exchange state assignment is
-        coherent — which the exchange does not consume yet.  A bias that
-        mutates state inside :meth:`update` must call it.
+        stale and need re-priming, and :meth:`stamp_state_version` publishes it
+        per graph as the ``state_version`` entry of the bias's
+        :data:`~nvalchemi._typing.ModelOutputs`.  It is also checkpointed per
+        bias, ready for validating that an accepted replica-exchange state
+        assignment is coherent — which the exchange does not consume yet.  A
+        bias that mutates state inside :meth:`update` must call it.
     """
 
-    update_frequency: int = 1
-    observation_stage: DynamicsStage = DynamicsStage.AFTER_STEP
+    frequency: int = 1
+    stage: DynamicsStage = DynamicsStage.AFTER_STEP
+    read_only: bool = False
 
     # Incremented by bump_state_version(); never reset.
     _state_version: int = 0
@@ -166,29 +189,79 @@ class AdaptivePotentialMixin:
         """Record that the bias state changed.
 
         Call from :meth:`update` whenever the change affects the energy the
-        next :meth:`evaluate` will return.  An update that only accumulates
+        next forward pass will return.  An update that only accumulates
         statistics without changing the applied bias (an ABF bin below its
-        minimum-sample threshold, say) should **not** bump — bumping forces
-        the runner to re-prime forces for no reason.
+        minimum-sample threshold, say) should **not** bump — bumping forces the
+        runner to re-prime forces for no reason.
         """
         self._state_version += 1
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
-        """Consume a captured frame after the integration step finishes.
-
-        Called by the runner exactly once per due step.  Free to mutate
-        state, allocate, grow storage, and communicate — none of this is on
-        the compiled path.
+    def stamp_state_version(
+        self, outputs: ModelOutputs, data: AtomicData | Batch
+    ) -> ModelOutputs:
+        """Add this bias's state revision to *outputs*, one entry per graph.
 
         Parameters
         ----------
-        frames:
-            The captured observation, stamped by the runner with
-            ``walker_id``, ``thermodynamic_state_id``, and ``sampling_step``.
-            Captured at :attr:`observation_stage`.
-        result:
-            The detached :class:`BiasResult` this bias returned during the
-            preceding force evaluation.
+        outputs:
+            The contribution to stamp; mutated in place and returned.
+        data:
+            The batch the contribution was computed for, read for
+            ``num_graphs`` and device.
+
+        Returns
+        -------
+        ModelOutputs
+            *outputs*, with a ``state_version`` entry of shape ``[B]``.
+        """
+        outputs[STATE_VERSION_KEY] = torch.full(
+            (int(getattr(data, "num_graphs", 1)),),
+            self._state_version,
+            dtype=torch.long,
+            device=data.positions.device,
+        )
+        return outputs
+
+    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
+        """Stamp the state version onto the contribution from further up the MRO.
+
+        Cooperative: mixed in before :class:`ConservativeBias` this calls that
+        class's ``forward`` and adds ``state_version`` to what it returned.  A
+        bias with no conservative half defines its own ``forward`` and calls
+        :meth:`stamp_state_version` directly.
+
+        Parameters
+        ----------
+        data:
+            The live batch.
+        **kwargs:
+            Forwarded to the next ``forward`` in the MRO.
+
+        Returns
+        -------
+        ModelOutputs
+            The contribution, with ``state_version`` added.
+        """
+        outputs: ModelOutputs = super().forward(data, **kwargs)  # type: ignore[misc]
+        return self.stamp_state_version(outputs, data)
+
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+        """Consume a captured frame, once per due step.
+
+        Called by the runner's composite hook when
+        ``step % frequency == 0`` and ``stage is self.stage``.  Free to mutate
+        state, allocate, grow storage, and communicate — none of this is on the
+        compiled path.
+
+        Parameters
+        ----------
+        ctx:
+            The capture.  ``ctx.batch`` is the observed frame, stamped by the
+            runner with ``walker_id``, ``thermodynamic_state_id`` and
+            ``sampling_step``; ``ctx.contribution`` is what this bias returned
+            during the preceding force evaluation.
+        stage:
+            The stage being dispatched, always equal to :attr:`stage`.
 
         Raises
         ------
@@ -197,16 +270,17 @@ class AdaptivePotentialMixin:
         """
         raise NotImplementedError(
             f"{type(self).__name__} mixes in AdaptivePotentialMixin but does "
-            "not implement update(frames, result)."
+            "not implement update(ctx, stage)."
         )
 
-    def commit_epoch(self) -> None:
+    def commit(self) -> None:
         """Synchronise pending state at a consistency-epoch boundary.
 
+        The :class:`~nvalchemi.hooks.StatefulHook` synchronisation boundary.
         Default is a no-op: a bias whose history is local to one walker needs
         no synchronisation.  Multi-walker shared-history biases override this
         to publish and merge.  Called only at epoch boundaries, never on the
-        hot path.
+        hot path, and at most once per boundary.
         """
         return None
 
@@ -218,22 +292,21 @@ class AdaptivePotentialMixin:
         override this and list them.
 
         The distinction is between *state* and *configuration*.  An ABF
-        histogram is state; the ``cv_range`` that decides what its bins mean
-        is configuration.  Restoring the first without the second silently
+        histogram is state; the ``cv_range`` that decides what its bins mean is
+        configuration.  Restoring the first without the second silently
         reinterprets every bin — bin 5 stops meaning ``r = 1.55`` and starts
         meaning ``r = 3.1``, with the same numbers in it.
 
-        Include configuration held as a **buffer** too.  ``nn.Module``
-        restores buffers by overwriting, so without the check a mismatched
-        setting is not merely unvalidated: the caller's value is silently
-        replaced by the checkpoint's, which is the opposite of what asking
-        for it meant.
+        Include configuration held as a **buffer** too.  ``nn.Module`` restores
+        buffers by overwriting, so without the check a mismatched setting is
+        not merely unvalidated: the caller's value is silently replaced by the
+        checkpoint's, which is the opposite of what asking for it meant.
 
         Returns
         -------
         Mapping[str, Any]
-            Zarr-representable scalars, strings, ``None``, or flat sequences
-            of those.  Tensors must be converted to lists.
+            Zarr-representable scalars, strings, ``None``, or flat sequences of
+            those.  Tensors must be converted to lists.
         """
         return {}
 
@@ -303,11 +376,11 @@ class AdaptivePotentialMixin:
         """Restore bias state produced by :meth:`state_dict`.
 
         Strips the mixin's own keys before delegating, so that
-        ``nn.Module.load_state_dict`` does not reject them as unexpected
-        under its default ``strict=True``.  A recorded
-        :meth:`config_fingerprint` is checked *before* delegating, since the
-        delegate overwrites buffers and a check afterwards would come too
-        late to stop the caller's configuration being replaced.
+        ``nn.Module.load_state_dict`` does not reject them as unexpected under
+        its default ``strict=True``.  A recorded :meth:`config_fingerprint` is
+        checked *before* delegating, since the delegate overwrites buffers and
+        a check afterwards would come too late to stop the caller's
+        configuration being replaced.
 
         Parameters
         ----------

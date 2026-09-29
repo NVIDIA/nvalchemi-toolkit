@@ -15,14 +15,36 @@
   order. Built-ins: `HarmonicUmbrellaBias` (per-window centers and stiffness
   selected by `thermodynamic_state_id`, validated symmetric
   positive-semidefinite), `UpperWall`, `LowerWall`, and
-  `FlatBottomRestraint`. `AdaptivePotentialMixin` supplies the
-  `update`/`commit_epoch`/state-version battery for biases whose state
-  evolves during sampling; it must precede `nn.Module` in the base list, and
-  raises `TypeError` otherwise rather than letting `nn.Module.state_dict`
-  shadow it and drop bias history from checkpoints. `periodic_difference`
-  wraps CV differences onto a circle. `warm_start()` gives approximate
-  continuation from prior frames; for exact resumption see the checkpoint
-  entry below.
+  `FlatBottomRestraint`.
+
+  A bias is an ordinary **additive potential**: a `BaseModelMixin` whose
+  `forward` returns `ModelOutputs`, the same shape as `DFTD3ModelWrapper` and
+  `LennardJonesModelWrapper`. There is no bias-specific protocol and no
+  bias-specific result type — "produces `ModelOutputs` from a `Batch`" is what
+  `BaseModelMixin` already means, and a second name for it would only be a
+  second thing to keep in sync. `ConservativeBias` adds the autograd
+  derivation on top of that and nothing else; the isolation it used to own
+  now lives in `nvalchemi.models._utils.isolated_energy_derivatives`, where an
+  NEB spring term or a hand-written wall can reach it without depending on the
+  enhanced-sampling package.
+
+  `AdaptivePotentialMixin` supplies the `StatefulHook` half for biases whose
+  state evolves during sampling — `frequency`, `stage`, `read_only`, `update`,
+  `commit`, and state versioning — reusing the hook vocabulary rather than
+  inventing a parallel lifecycle. The context it receives, `BiasContext`,
+  lives in `nvalchemi/hooks/_context.py` beside `DynamicsContext` and
+  `TrainContext`, matching how training's own context is placed. The mixin
+  must precede `nn.Module` in the base list, and raises `TypeError` otherwise
+  rather than letting
+  `nn.Module.state_dict` shadow it and drop bias history from checkpoints.
+  `update` is spelled `update(ctx, stage)` rather than `__call__(ctx, stage)`
+  because a bias is also an `nn.Module`, whose `__call__` is the model forward
+  that `BaseDynamics` and `PipelineModelWrapper` invoke; the runner's single
+  composite hook owns protocol compliance on its behalf, exactly as
+  `TrainingUpdateOrchestrator` does for `TrainingUpdateHook`.
+  `periodic_difference` wraps CV differences onto a circle. `warm_start()`
+  gives approximate continuation from prior frames; for exact resumption see
+  the checkpoint entry below.
 
 - Synchronous replica exchange. `ReplicaExchange` and `ThermodynamicState`
   advance a ladder of states as one batch and periodically swap which walker
@@ -140,14 +162,16 @@
   classic hard-threshold form and what `min_samples=0` gives by default, so it
   is handled as its own case rather than falling through the linear formula
   and arriving a sample late; `max_force` optionally caps what a bin visited once
-  at an awkward geometry can do. `observation_stage` is `AFTER_COMPUTE`, where
+  at an awkward geometry can do. Its `stage` is `AFTER_COMPUTE`, where
   `batch.forces` still holds the unbiased physical force — an estimator shown
   its own output converges to whatever it had already decided. An update
   landing in a bin still below its threshold does not bump the state version,
   since the applied force has not changed.
 
-  `evaluate()` returns forces with `energy=None`: there is no potential to
-  report, which is what non-conservative means here. `supplies_exchange_energy`
+  `forward()` returns `forces` and no `energy`: there is no potential to
+  report, which is what non-conservative means here. It is still a
+  `BaseModelMixin` declaring `outputs={"forces"}` — non-conservative does not
+  mean non-model, which is what lets the runner treat every bias alike. `supplies_exchange_energy`
   is `False`, so `ReplicaExchange` refuses the combination at construction
   rather than dropping the bias from the acceptance exponent. `mean_force()`
   and `free_energy()` report unvisited bins as `nan` rather than zero, and
@@ -174,6 +198,45 @@
   excluded, since `storage="grow"` legitimately reaches a size the
   constructor never had.
 
+- `isolated_energy_derivatives`, `validate_contribution` and
+  `aggregate_contributions` in `nvalchemi/models/_utils.py`, alongside the
+  existing `autograd_*` helpers and `sum_outputs`. The last is the strict
+  counterpart to `sum_outputs`: the same element-wise sum, but a key collision
+  that would silently drop a producer's value is an error rather than
+  last-write-wins, `stress`/`virial` may not be mixed, and `state_version` is
+  dropped because an aggregate over several producers has no single revision.
+  All four contribution helpers now sit together rather than one of them
+  living in `enhanced_sampling/`.
+  The first evaluates an energy function against a *detached view* of a live
+  `Batch` and returns detached forces and tensile-positive Cauchy stress,
+  restoring every field it substituted in a `finally` block so the caller's
+  batch never carries a `grad_fn` afterwards. That isolation is what anything
+  differentiating against a batch it does not own needs — an enhanced-sampling
+  bias, an NEB spring term, a hand-written wall potential — so it is a shared
+  helper rather than a method on one class. The second checks a `ModelOutputs`
+  mapping meant as an additive *contribution*: detachment, shapes,
+  stress/virial mutual exclusion, batch-size consistency, and finiteness, with
+  a `source=` label naming the producer in the error.
+
+- `ModelOutputs` gains two general conventions beyond the physical keys.
+  `state_version` (`[B]`, integer) identifies which revision of a producer's
+  internal state generated the rest of the mapping, for components whose state
+  evolves during a run. Keys under `diagnostics/` are arbitrary reported
+  tensors with no shape contract, never summed and never applied — for
+  quantities a consumer displays or records rather than acts on. Both are
+  documented on the type alias and checked by `validate_contribution`.
+
+- `StatefulHook` in `nvalchemi/hooks/_protocol.py`, composing the existing
+  `Hook` and `CheckpointableHook` and adding only `read_only` and `commit()`.
+  `Hook` already says "every N steps, at this stage" and `CheckpointableHook`
+  already carries `state_dict`/`load_state_dict`; what neither said is whether
+  a dispatch may *change* anything and when accumulated changes become visible
+  to other workers. The pattern recurs well beyond any one workflow — an
+  adaptive bias depositing hills, NEB promoting its climbing image, an
+  adaptive thermostat retuning its coupling, a neighbour list widening its
+  skin — and without a shared protocol each invents its own vocabulary for the
+  same three ideas.
+
 - `pair_displacement` — the vector form of `pair_distance`, exposed for
   methods that work with the CV gradient rather than its value.
   `pair_distance` is now its norm, so the two cannot drift apart in their
@@ -198,7 +261,7 @@
   execute code. Checkpoints are permitted
   only at a consistency-epoch boundary, the one point with no pending
   `update()` or in-flight epoch commit; the error names the next valid step.
-  `checkpoint()` also drains the completed epoch's `commit_epoch()` before
+  `checkpoint()` also drains the completed epoch's `commit()` before
   collecting state, since that normally fires lazily on the next step — so a
   shared-history bias is saved merged rather than mid-merge. The drain is
   tracked per epoch index and cannot double-count.
@@ -361,8 +424,8 @@
   hook now emits a `DeprecationWarning`. It remains functional so existing
   code keeps working, and no removal date is set; `EnhancedSampling` (also in
   this release) covers everything it does. No adapter is provided:
-  bridging a `BiasPotential` onto `bias_fn` would have to discard
-  `BiasResult.stress`, reintroducing the exact failure the new API removes.
+  bridging a bias onto `bias_fn` would have to discard its `stress`,
+  reintroducing the exact failure the new API removes.
 
 - `cells_inv` argument on `_cell_kinetic_energy`. Cell kinetic energy
   is computed directly from the strain rate `ε̇` and no longer needs

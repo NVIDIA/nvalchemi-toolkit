@@ -24,6 +24,7 @@ schedule both get from :class:`EnhancedSampling`.
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 
 import pytest
 import torch
@@ -33,14 +34,24 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
-    BiasResult,
     EnhancedSampling,
     RMSDMetaDynamicsBias,
     WellTemperedMetaDynamicsBias,
     pair_distance,
 )
 from nvalchemi.enhanced_sampling.biases.rmsd_metad import _squared_rmsd
+from nvalchemi.hooks import BiasContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+
+def _ctx(frames: Batch, contribution=None) -> BiasContext:
+    """Build the capture an adaptive bias's ``update`` is handed.
+
+    The runner builds this itself; tests that drive ``update`` directly need
+    the same shape.
+    """
+    return BiasContext(batch=frames, contribution=contribution or OrderedDict())
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -171,9 +182,9 @@ class TestWellTemperedConstruction:
         assert bias.capacity > 0
 
     @pytest.mark.parametrize("frequency", [0, -1])
-    def test_non_positive_update_frequency_raises(self, frequency: int) -> None:
-        with pytest.raises(ValueError, match="update_frequency must be at least 1"):
-            _metad(update_frequency=frequency)
+    def test_non_positive_frequency_raises(self, frequency: int) -> None:
+        with pytest.raises(ValueError, match="frequency must be at least 1"):
+            _metad(frequency=frequency)
 
     def test_negative_ramp_raises(self) -> None:
         with pytest.raises(ValueError, match="ramp_depositions must be non-negative"):
@@ -198,18 +209,18 @@ class TestWellTemperedEnergy:
     def test_empty_history_is_exactly_zero(self, device: str) -> None:
         """A bias with no hills must contribute nothing, not a small number."""
         bias = _metad(device)
-        result = bias.evaluate(_pair_batch([1.0, 2.0], device))
-        assert torch.count_nonzero(result.energy) == 0
-        assert torch.count_nonzero(result.forces) == 0
+        result = bias(_pair_batch([1.0, 2.0], device))
+        assert torch.count_nonzero(result.get("energy")) == 0
+        assert torch.count_nonzero(result.get("forces")) == 0
 
     def test_single_hill_matches_closed_form(self, device: str) -> None:
         """V(s) = h * exp(-(s - c)^2 / 2 sigma^2) for one deposited hill."""
         bias = _metad(device, sigma=0.5)
         deposit = _pair_batch([1.0], device)
-        bias.update(deposit, bias.evaluate(deposit))
+        bias.update(_ctx(deposit, bias(deposit)), bias.stage)
 
         probe = _pair_batch([1.0, 1.5, 3.0], device)
-        got = bias.evaluate(probe).energy.reshape(-1)
+        got = bias(probe)["energy"].reshape(-1)
         expected = torch.tensor(
             [
                 0.05 * math.exp(-((s - 1.0) ** 2) / (2 * 0.5**2))
@@ -226,11 +237,11 @@ class TestWellTemperedEnergy:
         bias = _metad(device, bias_factor=gamma, temperature=temperature, height=h0)
         deposit = _pair_batch([1.0], device)
 
-        bias.update(deposit, bias.evaluate(deposit))
+        bias.update(_ctx(deposit, bias(deposit)), bias.stage)
         assert float(bias.hill_heights[0]) == pytest.approx(h0, abs=1e-9)
 
         # The second hill lands on top of the first, so V = h0 there.
-        bias.update(deposit, bias.evaluate(deposit))
+        bias.update(_ctx(deposit, bias(deposit)), bias.stage)
         expected = h0 * math.exp(-h0 / (KB_EV * temperature * (gamma - 1.0)))
         assert float(bias.hill_heights[1]) == pytest.approx(expected, rel=1e-6)
 
@@ -239,7 +250,7 @@ class TestWellTemperedEnergy:
         bias = _metad(device, max_hills=8)
         deposit = _pair_batch([1.0], device)
         for _ in range(8):
-            bias.update(deposit, bias.evaluate(deposit))
+            bias.update(_ctx(deposit, bias(deposit)), bias.stage)
         heights = bias.hill_heights.tolist()
         assert heights == sorted(heights, reverse=True)
         assert heights[-1] < heights[0]
@@ -249,7 +260,7 @@ class TestWellTemperedEnergy:
         bias = _metad(device, bias_factor=None, max_hills=8)
         deposit = _pair_batch([1.0], device)
         for _ in range(4):
-            bias.update(deposit, bias.evaluate(deposit))
+            bias.update(_ctx(deposit, bias(deposit)), bias.stage)
         assert torch.allclose(
             bias.hill_heights[:4], torch.full_like(bias.hill_heights[:4], 0.05)
         )
@@ -259,10 +270,10 @@ class TestWellTemperedEnergy:
         bias = _metad(device, sigma=0.4, max_hills=8)
         for d in (1.0, 1.4):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         batch = _pair_batch([1.2], device)
-        result = bias.evaluate(batch)
+        result = bias(batch)
 
         eps = 1e-4
         step = _pair_batch([1.2 + eps], device)
@@ -271,17 +282,17 @@ class TestWellTemperedEnergy:
             float(bias.energy(step).sum()) - float(bias.energy(back).sum())
         ) / (2 * eps)
         # Atom 1 carries the whole +x displacement of the pair distance.
-        assert float(result.forces[1, 0]) == pytest.approx(-numerical, abs=1e-4)
+        assert float(result.get("forces")[1, 0]) == pytest.approx(-numerical, abs=1e-4)
 
     def test_bias_is_repulsive(self, device: str) -> None:
         """The force must push the walker away from a deposited hill."""
         bias = _metad(device, sigma=0.3)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
-        outward = bias.evaluate(_pair_batch([1.1], device))
+        outward = bias(_pair_batch([1.1], device))
         # Sitting just beyond the hill, the pair is pushed further apart.
-        assert float(outward.forces[1, 0]) > 0.0
+        assert float(outward.get("forces")[1, 0]) > 0.0
 
     def test_multidimensional_cv(self, device: str) -> None:
         """A 2-component CV uses one sigma per component."""
@@ -304,9 +315,9 @@ class TestWellTemperedEnergy:
             temperature=300.0,
             max_hills=4,
         ).to(device)
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert tuple(bias.hill_centers.shape) == (4, 2)
-        assert float(bias.evaluate(batch).energy.sum()) == pytest.approx(0.05, abs=1e-6)
+        assert float(bias(batch)["energy"].sum()) == pytest.approx(0.05, abs=1e-6)
 
 
 # ===========================================================================
@@ -332,12 +343,12 @@ class TestCVDimensionality:
         """
         bias = _metad(device, sigma=torch.tensor([0.2, 0.4]))
         with pytest.raises(ValueError, match="cv returns 1 component"):
-            bias.evaluate(_pair_batch([1.0], device))
+            bias(_pair_batch([1.0], device))
 
     def test_scalar_cv_with_multi_component_periods_raises(self, device: str) -> None:
         bias = _metad(device, periods=torch.tensor([1.0, 2.0, 3.0]))
         with pytest.raises(ValueError, match="periods has 3"):
-            bias.evaluate(_pair_batch([1.0], device))
+            bias(_pair_batch([1.0], device))
 
     def test_multi_component_cv_with_scalar_periods_raises(self, device: str) -> None:
         """A 0 entry marks a component non-periodic, so one value cannot serve.
@@ -348,23 +359,23 @@ class TestCVDimensionality:
         """
         bias = _metad(device, cv=self._cv_2d, periods=torch.tensor([6.28]))
         with pytest.raises(ValueError, match="periods has 1"):
-            bias.evaluate(_pair_batch([1.0], device))
+            bias(_pair_batch([1.0], device))
 
     def test_rank_one_cv_raises(self, device: str) -> None:
         """A CV returning [B] rather than [B, 1] is a common slip."""
         idx = torch.tensor([0, 1])
         bias = _metad(device, cv=lambda b: pair_distance(b, idx).reshape(-1))
         with pytest.raises(ValueError, match=r"must return shape \[B, D\]"):
-            bias.evaluate(_pair_batch([1.0], device))
+            bias(_pair_batch([1.0], device))
 
     def test_validation_fires_on_update_too(self, device: str) -> None:
         """update() also consumes CV output and must not deposit unchecked."""
         bias = _metad(device, sigma=torch.tensor([0.2, 0.4]))
         frame = _pair_batch([1.0], device)
         # update() ignores the result argument; an empty one is enough here.
-        empty = BiasResult(energy=torch.zeros(1, 1, device=device))
+        empty = OrderedDict(energy=torch.zeros(1, 1, device=device))
         with pytest.raises(ValueError, match="cv returns 1 component"):
-            bias.update(frame, empty)
+            bias.update(_ctx(frame, empty), bias.stage)
 
     def test_scalar_sigma_serves_a_multi_component_cv(self, device: str) -> None:
         """One width shared across components is legitimate and must work.
@@ -374,13 +385,13 @@ class TestCVDimensionality:
         """
         bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         assert tuple(bias.hill_centers.shape) == (4, 2)
         assert bias.hill_centers[0].tolist() == pytest.approx([1.0, 2.0])
 
         # Components move 0.3 and 0.6 from the hill center.
-        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        got = float(bias(_pair_batch([1.3], device))["energy"].sum())
         expected = 0.05 * math.exp(-0.5 * (0.3**2 + 0.6**2) / 0.2**2)
         assert got == pytest.approx(expected, rel=1e-5)
 
@@ -391,9 +402,9 @@ class TestCVDimensionality:
             device, cv=self._cv_2d, sigma=torch.tensor([0.2, 0.4]), max_hills=4
         )
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
-        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        got = float(bias(_pair_batch([1.3], device))["energy"].sum())
         expected = 0.05 * math.exp(-0.5 * (0.3**2 / 0.2**2 + 0.6**2 / 0.4**2))
         assert got == pytest.approx(expected, rel=1e-5)
 
@@ -401,10 +412,10 @@ class TestCVDimensionality:
         """The common case must keep its exact previous value."""
         bias = _metad(device, sigma=0.2, max_hills=4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         assert tuple(bias.hill_centers.shape) == (4, 1)
-        got = float(bias.evaluate(_pair_batch([1.3], device)).energy.sum())
+        got = float(bias(_pair_batch([1.3], device))["energy"].sum())
         assert got == pytest.approx(0.05 * math.exp(-0.5 * 0.3**2 / 0.2**2), rel=1e-5)
 
     def test_per_component_periods_apply_to_a_multi_component_cv(
@@ -419,9 +430,9 @@ class TestCVDimensionality:
             periods=torch.tensor([0.0, 6.28]),
         )
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert tuple(bias.hill_centers.shape) == (4, 2)
-        assert float(bias.evaluate(frame).energy.sum()) == pytest.approx(0.05, abs=1e-6)
+        assert float(bias(frame)["energy"].sum()) == pytest.approx(0.05, abs=1e-6)
 
     def test_cv_changing_dimension_mid_run_raises(self, device: str) -> None:
         """Existing hills are not comparable against a different-width CV."""
@@ -435,17 +446,17 @@ class TestCVDimensionality:
 
         bias = _metad(device, cv=switching, sigma=0.2, max_hills=8)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert tuple(bias.hill_centers.shape) == (8, 1)
 
         with pytest.raises(RuntimeError, match="must keep its dimension"):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
     def test_free_energy_rejects_a_wrong_width_grid(self, device: str) -> None:
         """Zeros from a width mismatch would read as a flat free energy."""
         bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         with pytest.raises(ValueError, match="deposited hills"):
             bias.free_energy(torch.tensor([[1.0]], device=device))
@@ -455,15 +466,15 @@ class TestCVDimensionality:
     ) -> None:
         """Priming runs before any deposition resolves the CV width."""
         bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
-        result = bias.evaluate(_pair_batch([1.0], device))
-        assert torch.count_nonzero(result.energy) == 0
+        result = bias(_pair_batch([1.0], device))
+        assert torch.count_nonzero(result.get("energy")) == 0
 
     def test_multi_component_cv_compiles(self, device: str) -> None:
         """The width check is a shape guard, not a data-dependent branch."""
         torch._dynamo.reset()
         bias = _metad(device, cv=self._cv_2d, sigma=0.2, max_hills=4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         batch = _pair_batch([1.3, 2.0], device)
         compiled = torch.compile(bias.energy, fullgraph=True)
@@ -517,29 +528,29 @@ class TestWellTemperedPeriodic:
         periodic, plain = self._biases(device)
         deposit = self._phase_batch([3.10], device)
         for bias in (periodic, plain):
-            bias.update(deposit, bias.evaluate(deposit))
+            bias.update(_ctx(deposit, bias(deposit)), bias.stage)
 
         probe = self._phase_batch([-3.10], device)
-        assert float(periodic.evaluate(probe).energy.sum()) > 0.04
-        assert float(plain.evaluate(probe).energy.sum()) < 1e-12
+        assert float(periodic(probe)["energy"].sum()) > 0.04
+        assert float(plain(probe)["energy"].sum()) < 1e-12
 
     def test_wrapped_force_points_the_short_way(self, device: str) -> None:
         """The repulsion must push away from the hill the short way round."""
         periodic, _ = self._biases(device)
         deposit = self._phase_batch([3.10], device)
-        periodic.update(deposit, periodic.evaluate(deposit))
+        periodic.update(_ctx(deposit, periodic(deposit)), periodic.stage)
 
         # Wrapped, -3.10 sits 0.083 *above* the hill at 3.10 (it is 3.183
         # once carried across the cut), so repulsion drives the CV further
         # positive rather than back down the long way round.
-        forces = periodic.evaluate(self._phase_batch([-3.10], device)).forces
+        forces = periodic(self._phase_batch([-3.10], device))["forces"]
         assert float(forces[1, 0]) > 0.0
 
         # The unwrapped bias sees the same configuration 6.20 away and does
         # essentially nothing, which is the failure the wrap exists to avoid.
         _, plain = self._biases(device)
-        plain.update(deposit, plain.evaluate(deposit))
-        plain_forces = plain.evaluate(self._phase_batch([-3.10], device)).forces
+        plain.update(_ctx(deposit, plain(deposit)), plain.stage)
+        plain_forces = plain(self._phase_batch([-3.10], device))["forces"]
         assert float(plain_forces[1, 0]) == pytest.approx(0.0, abs=1e-9)
 
     def test_non_periodic_component_is_left_unwrapped(self, device: str) -> None:
@@ -553,9 +564,9 @@ class TestWellTemperedPeriodic:
             periods=torch.tensor([0.0]),
         ).to(device)
         deposit = self._phase_batch([3.10], device)
-        bias.update(deposit, bias.evaluate(deposit))
+        bias.update(_ctx(deposit, bias(deposit)), bias.stage)
         probe = self._phase_batch([-3.10], device)
-        assert float(bias.evaluate(probe).energy.sum()) < 1e-12
+        assert float(bias(probe)["energy"].sum()) < 1e-12
 
 
 # ===========================================================================
@@ -570,20 +581,20 @@ class TestStoragePolicies:
         """Silently dropping hills would change a converging run's physics."""
         bias = _metad(device, max_hills=2, storage="preallocated")
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         with pytest.raises(RuntimeError, match="storage='preallocated'"):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
     def test_preallocated_overflow_leaves_state_untouched(self, device: str) -> None:
         """The failed deposition must not half-apply."""
         bias = _metad(device, max_hills=2, storage="preallocated")
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         before = (int(bias.hill_count), int(bias.deposits), bias.state_version)
         with pytest.raises(RuntimeError):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert (int(bias.hill_count), int(bias.deposits), bias.state_version) == before
 
     def test_preallocated_capacity_never_changes(self, device: str) -> None:
@@ -592,7 +603,7 @@ class TestStoragePolicies:
         frame = _pair_batch([1.0], device)
         shapes = {tuple(bias.hill_centers.shape)}
         for _ in range(6):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
             shapes.add(tuple(bias.hill_centers.shape))
         assert shapes == {(6, 1)}
 
@@ -601,7 +612,7 @@ class TestStoragePolicies:
         bias = _metad(device, max_hills=2, storage="grow")
         frame = _pair_batch([1.0], device)
         for _ in range(5):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert bias.capacity >= 5
         assert int(bias.hill_count) == 5
 
@@ -610,13 +621,12 @@ class TestStoragePolicies:
         bias = _metad(device, max_hills=2, storage="grow", sigma=0.5)
         for d in (1.0, 2.0):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
-        before = bias.evaluate(_pair_batch([1.0], device)).energy.clone()
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
+        before = bias(_pair_batch([1.0], device))["energy"].clone()
 
-        bias.update(
-            _pair_batch([5.0], device), bias.evaluate(_pair_batch([5.0], device))
-        )
-        after = bias.evaluate(_pair_batch([1.0], device)).energy
+        far = _pair_batch([5.0], device)
+        bias.update(_ctx(far, bias(far)), bias.stage)
+        after = bias(_pair_batch([1.0], device))["energy"]
         assert bias.capacity > 2
         assert torch.allclose(before, after, atol=1e-6)
 
@@ -625,21 +635,21 @@ class TestStoragePolicies:
         bias = _metad(device, max_hills=3, storage="fifo", sigma=0.2)
         for d in (1.0, 2.0, 3.0, 4.0):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         assert bias.capacity == 3
         assert int(bias.hill_count) == 3
         centers = sorted(round(float(c), 3) for c in bias.hill_centers.reshape(-1))
         assert centers == [2.0, 3.0, 4.0]
         # The evicted hill leaves no trace at its old location.
-        assert float(bias.evaluate(_pair_batch([1.0], device)).energy.sum()) < 1e-6
+        assert float(bias(_pair_batch([1.0], device))["energy"].sum()) < 1e-6
 
     def test_fifo_ring_wraps_more_than_once(self, device: str) -> None:
         """Slot assignment must stay correct after several wraps."""
         bias = _metad(device, max_hills=2, storage="fifo", sigma=0.2)
         for d in (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         centers = sorted(round(float(c), 3) for c in bias.hill_centers.reshape(-1))
         assert centers == [6.0, 7.0]
         assert int(bias.hills_written) == 7
@@ -673,15 +683,15 @@ class TestMultiWalkerHistory:
         """The multiple-walker scheme: B walkers fill a basin B times faster."""
         batch = self._two_close_walkers(device)
         shared = _metad(device, history="shared", sigma=0.5)
-        shared.update(batch, shared.evaluate(batch))
+        shared.update(_ctx(batch, shared(batch)), shared.stage)
         assert int(shared.hill_count) == 2
         assert bool((shared.hill_owner[:2] == -1).all())
 
         private = _metad(device, history="walker", sigma=0.5)
-        private.update(batch, private.evaluate(batch))
+        private.update(_ctx(batch, private(batch)), private.stage)
 
-        shared_e = shared.evaluate(batch).energy.reshape(-1)
-        private_e = private.evaluate(batch).energy.reshape(-1)
+        shared_e = shared(batch)["energy"].reshape(-1)
+        private_e = private(batch)["energy"].reshape(-1)
         # Each walker feels its own hill either way; only shared adds the other.
         assert bool((shared_e > private_e + 1e-4).all())
 
@@ -689,22 +699,22 @@ class TestMultiWalkerHistory:
         """Under "walker", a hill is invisible to every other walker."""
         batch = self._two_close_walkers(device)
         bias = _metad(device, history="walker", sigma=0.5)
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert bias.hill_owner[:2].tolist() == [0, 1]
 
         # Probe walker 0 alone against the history: it must not feel hill 1.
         probe = _pair_batch([1.05], device)
         probe.walker_id = torch.tensor([0], device=probe.positions.device)
-        alone = float(bias.evaluate(probe).energy.sum())
+        alone = float(bias(probe)["energy"].sum())
 
         probe.walker_id = torch.tensor([1], device=probe.positions.device)
-        owner = float(bias.evaluate(probe).energy.sum())
+        owner = float(bias(probe)["energy"].sum())
         assert owner > alone
 
     def test_state_history_tags_by_thermodynamic_state(self, device: str) -> None:
         batch = self._two_close_walkers(device)
         bias = _metad(device, history="state", sigma=0.5)
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert bias.hill_owner[:2].tolist() == [0, 1]
 
     def test_walker_history_without_walker_id_raises(self, device: str) -> None:
@@ -716,18 +726,18 @@ class TestMultiWalkerHistory:
         """
         bias = _metad(device, history="walker", sigma=0.5)
         with pytest.raises(ValueError, match="needs batch.walker_id"):
-            bias.evaluate(_pair_batch([1.0, 1.05], device))
+            bias(_pair_batch([1.0, 1.05], device))
 
     def test_state_history_without_state_id_raises(self, device: str) -> None:
         bias = _metad(device, history="state", sigma=0.5)
         with pytest.raises(ValueError, match="needs batch.thermodynamic_state_id"):
-            bias.evaluate(_pair_batch([1.0, 1.05], device))
+            bias(_pair_batch([1.0, 1.05], device))
 
     def test_shared_history_needs_no_owner_field(self, device: str) -> None:
         """The fields are meaningless under a shared history."""
         bias = _metad(device, history="shared", sigma=0.5)
         frame = _pair_batch([1.0, 1.05], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert bias.hill_owner[:2].tolist() == [-1, -1]
 
     def test_wrong_length_owner_field_raises(self, device: str) -> None:
@@ -736,19 +746,19 @@ class TestMultiWalkerHistory:
         frame = _pair_batch([1.0, 1.05], device)
         frame.walker_id = torch.tensor([7], device=frame.positions.device)
         with pytest.raises(ValueError, match="has 1 entries but the batch has 2"):
-            bias.evaluate(frame)
+            bias(frame)
 
     def test_update_also_rejects_a_missing_owner_field(self, device: str) -> None:
         """Deposition must not file hills under a fabricated owner either."""
         bias = _metad(device, history="walker", sigma=0.5)
         frame = _pair_batch([1.0, 1.05], device)
-        empty = BiasResult(energy=torch.zeros(2, 1, device=device))
+        empty = OrderedDict(energy=torch.zeros(2, 1, device=device))
         with pytest.raises(ValueError, match="needs batch.walker_id"):
-            bias.update(frame, empty)
+            bias.update(_ctx(frame, empty), bias.stage)
 
     def test_runner_supplies_the_owner_fields(self, device: str) -> None:
         """The stamp is what makes walker-private history work in a real run."""
-        bias = _metad(device, name="meta", history="walker", update_frequency=1)
+        bias = _metad(device, name="meta", history="walker", frequency=1)
         runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
         runner.run(_random_batch(device=device), n_steps=2)
 
@@ -773,18 +783,18 @@ class TestRampAndFreeEnergy:
     def test_no_ramp_activates_immediately(self, device: str) -> None:
         bias = _metad(device, ramp_depositions=0)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
-        assert float(bias.evaluate(frame).energy.sum()) == pytest.approx(0.05, abs=1e-6)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        assert float(bias(frame)["energy"].sum()) == pytest.approx(0.05, abs=1e-6)
 
     def test_ramp_grows_the_contribution(self, device: str) -> None:
         """A ramped hill must not switch on at full height where it landed."""
         bias = _metad(device, ramp_depositions=4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         series = []
         for _ in range(4):
-            series.append(float(bias.evaluate(frame).energy.sum()))
+            series.append(float(bias(frame)["energy"].sum()))
             bias.deposits += 1
         assert series == sorted(series)
         assert series[0] < 0.05 * 0.5
@@ -795,7 +805,7 @@ class TestRampAndFreeEnergy:
         gamma = 10.0
         bias = _metad(device, bias_factor=gamma)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         values = torch.tensor([[1.0]], device=device)
         key = torch.full((1,), -1, dtype=torch.long, device=device)
@@ -808,7 +818,7 @@ class TestRampAndFreeEnergy:
         """F = -V when there is no well-tempered damping."""
         bias = _metad(device, bias_factor=None)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         values = torch.tensor([[1.0]], device=device)
         key = torch.full((1,), -1, dtype=torch.long, device=device)
         assert torch.allclose(bias.free_energy(values), -bias.gaussian_sum(values, key))
@@ -818,7 +828,7 @@ class TestRampAndFreeEnergy:
         bias = _metad(device, max_hills=16, sigma=0.3)
         frame = _pair_batch([1.0], device)
         for _ in range(8):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         probed = bias.free_energy(torch.tensor([[1.0], [4.0]], device=device))
         assert float(probed[0]) < float(probed[1])
 
@@ -835,7 +845,7 @@ class TestWellTemperedCompile:
         torch._dynamo.reset()
         bias = _metad(device, sigma=0.4)
         frame = _pair_batch([1.0], device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         batch = _pair_batch([1.2, 2.0], device)
         eager = bias.energy(batch)
@@ -850,7 +860,7 @@ class TestWellTemperedCompile:
         batch = _pair_batch([1.0], device)
         assert float(compiled(batch).sum()) == pytest.approx(0.0, abs=1e-9)
 
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert float(compiled(batch).sum()) == pytest.approx(0.05, abs=1e-6)
 
     def test_grow_exhausts_the_dynamo_recompile_limit(self, device: str) -> None:
@@ -882,7 +892,7 @@ class TestWellTemperedCompile:
             survived = 0
             for i in range(limit + 3):
                 frame = _pair_batch([1.0 + 0.1 * i], device)
-                bias.update(frame, bias.evaluate(frame))
+                bias.update(_ctx(frame, bias(frame)), bias.stage)
                 try:
                     compiled(frame)
                 except (
@@ -916,7 +926,7 @@ class TestWellTemperedCompile:
 
             for i in range(limit + 4):
                 frame = _pair_batch([1.0 + 0.1 * i], device)
-                bias.update(frame, bias.evaluate(frame))
+                bias.update(_ctx(frame, bias(frame)), bias.stage)
                 compiled(frame)  # must not raise
 
             assert bias.capacity == limit + 4
@@ -935,7 +945,7 @@ class TestWellTemperedCompile:
             # the shapes moved; preallocated holds them fixed.
             for i in range(12):
                 frame = _pair_batch([1.0 + 0.1 * i], device)
-                bias.update(frame, bias.evaluate(frame))
+                bias.update(_ctx(frame, bias(frame)), bias.stage)
                 compiled(frame)
 
             assert int(bias.hill_count) == 12
@@ -952,7 +962,7 @@ class TestWellTemperedCompile:
         batch.thermodynamic_state_id = torch.tensor(
             [0, 1], device=batch.positions.device
         )
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         compiled = torch.compile(bias.energy, fullgraph=True)
         assert torch.allclose(compiled(batch), bias.energy(batch), atol=1e-6)
 
@@ -964,15 +974,13 @@ class TestWellTemperedRestart:
         bias = _metad(device, max_hills=8, sigma=0.4)
         for d in (1.0, 2.0, 3.0):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         restored = _metad(device, max_hills=8, sigma=0.4)
         restored.load_state_dict(bias.state_dict())
 
         probe = _pair_batch([1.0, 2.5], device)
-        assert torch.allclose(
-            restored.evaluate(probe).energy, bias.evaluate(probe).energy
-        )
+        assert torch.allclose(restored(probe)["energy"], bias(probe)["energy"])
         assert int(restored.hill_count) == int(bias.hill_count)
         assert int(restored.deposits) == int(bias.deposits)
         assert restored.state_version == bias.state_version
@@ -999,7 +1007,7 @@ class TestWellTemperedRestart:
         """
         source = _metad(device, max_hills=8)
         frame = _pair_batch([1.0], device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = _metad(device, max_hills=8, **{field: value})
         with pytest.raises(ValueError, match=field):
@@ -1011,7 +1019,7 @@ class TestWellTemperedRestart:
         """sigma is a buffer, so an unchecked load would replace it silently."""
         source = _metad(device, sigma=0.2, max_hills=8)
         frame = _pair_batch([1.0], device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = _metad(device, sigma=0.9, max_hills=8)
         with pytest.raises(ValueError, match="sigma"):
@@ -1022,7 +1030,7 @@ class TestWellTemperedRestart:
         """Retention semantics differ, so the same hills mean different runs."""
         source = _metad(device, max_hills=8, storage="preallocated")
         frame = _pair_batch([1.0], device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = _metad(device, max_hills=8, storage="fifo")
         with pytest.raises(ValueError, match="storage"):
@@ -1031,7 +1039,7 @@ class TestWellTemperedRestart:
     def test_restoring_different_periods_raises(self, device: str) -> None:
         source = _metad(device, max_hills=8, periods=torch.tensor([6.28]))
         frame = _pair_batch([1.0], device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = _metad(device, max_hills=8)
         with pytest.raises(ValueError, match="periods"):
@@ -1042,7 +1050,7 @@ class TestWellTemperedRestart:
         source = _metad(device, max_hills=2, storage="grow", sigma=0.4)
         for d in (1.0, 2.0, 3.0, 4.0, 5.0):
             frame = _pair_batch([d], device)
-            source.update(frame, source.evaluate(frame))
+            source.update(_ctx(frame, source(frame)), source.stage)
         assert source.capacity > 2
 
         target = _metad(device, max_hills=2, storage="grow", sigma=0.4)
@@ -1054,7 +1062,7 @@ class TestWellTemperedRestart:
         bias = _metad(device, max_hills=2, storage="grow", sigma=0.4)
         for d in (1.0, 2.0, 3.0, 4.0, 5.0):
             frame = _pair_batch([d], device)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert bias.capacity > 2
 
         restored = _metad(device, max_hills=2, storage="grow", sigma=0.4)
@@ -1062,21 +1070,19 @@ class TestWellTemperedRestart:
         assert restored.capacity == bias.capacity
 
         probe = _pair_batch([1.0, 3.0], device)
-        assert torch.allclose(
-            restored.evaluate(probe).energy, bias.evaluate(probe).energy
-        )
+        assert torch.allclose(restored(probe)["energy"], bias(probe)["energy"])
 
     def test_restart_continues_the_well_tempered_sequence(self, device: str) -> None:
         """Heights after a restart must follow on, not reset to h0."""
         bias = _metad(device, max_hills=8)
         frame = _pair_batch([1.0], device)
         for _ in range(3):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         restored = _metad(device, max_hills=8)
         restored.load_state_dict(bias.state_dict())
-        bias.update(frame, bias.evaluate(frame))
-        restored.update(frame, restored.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        restored.update(_ctx(frame, restored(frame)), restored.stage)
         assert float(restored.hill_heights[3]) == pytest.approx(
             float(bias.hill_heights[3]), rel=1e-9
         )
@@ -1147,8 +1153,8 @@ class TestRMSDInvariance:
             k_push=0.02, alpha=0.5, max_references=4, ramp_depositions=0
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
-        original = bias.evaluate(frame).energy.clone()
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        original = bias(frame)["energy"].clone()
 
         torch.manual_seed(11)
         rotation = _rot().to(device=frame.positions.device, dtype=frame.positions.dtype)
@@ -1156,7 +1162,7 @@ class TestRMSDInvariance:
         moved = self._molecule(device)
         moved.positions = frame.positions @ rotation.T + shift
 
-        assert torch.allclose(bias.evaluate(moved).energy, original, atol=1e-5)
+        assert torch.allclose(bias(moved)["energy"], original, atol=1e-5)
 
     def test_bias_exerts_no_net_force(self, device: str) -> None:
         """A translation-invariant energy cannot push the molecule bodily."""
@@ -1164,10 +1170,10 @@ class TestRMSDInvariance:
             k_push=0.05, alpha=0.5, max_references=4, ramp_depositions=0
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         probe = self._molecule(device, seed=2)
-        forces = bias.evaluate(probe).forces
+        forces = bias(probe)["forces"]
         assert float(forces.sum(dim=0).abs().max()) < 1e-5
 
     def test_forces_match_numerical_gradient(self, device: str) -> None:
@@ -1175,10 +1181,10 @@ class TestRMSDInvariance:
             k_push=0.05, alpha=0.3, max_references=4, ramp_depositions=0
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         probe = self._molecule(device, seed=2)
-        analytic = bias.evaluate(probe).forces
+        analytic = bias(probe)["forces"]
 
         eps = 1e-4
         base = probe.positions.clone()
@@ -1276,7 +1282,7 @@ class TestRMSDSelectionAndPeriodicity:
             ramp_depositions=0,
         ).to(device)
         batch = self._batch(device, [4, 4])
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert tuple(bias.reference_coords.shape) == (4, 3, 3)
 
     def test_out_of_range_selection_raises(self, device: str) -> None:
@@ -1284,13 +1290,13 @@ class TestRMSDSelectionAndPeriodicity:
             k_push=0.02, alpha=0.5, max_references=4, atom_indices=torch.tensor([0, 7])
         ).to(device)
         with pytest.raises(ValueError, match="local index 7"):
-            bias.evaluate(self._batch(device, [4, 4]))
+            bias(self._batch(device, [4, 4]))
 
     def test_ragged_batch_without_selection_raises(self, device: str) -> None:
         """No fixed correspondence exists across differently sized graphs."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
         with pytest.raises(ValueError, match="differing atom counts"):
-            bias.evaluate(self._batch(device, [4, 5]))
+            bias(self._batch(device, [4, 5]))
 
     def test_ragged_batch_with_selection_is_fine(self, device: str) -> None:
         """A common selection restores the correspondence."""
@@ -1300,8 +1306,8 @@ class TestRMSDSelectionAndPeriodicity:
             max_references=4,
             atom_indices=torch.tensor([0, 1, 2]),
         ).to(device)
-        result = bias.evaluate(self._batch(device, [4, 5]))
-        assert result.energy.shape[0] == 2
+        result = bias(self._batch(device, [4, 5]))
+        assert result.get("energy").shape[0] == 2
 
     @staticmethod
     def _boxed(device: str, pbc: list[bool] | None, n_graphs: int = 2) -> Batch:
@@ -1323,13 +1329,13 @@ class TestRMSDSelectionAndPeriodicity:
         """Cartesian RMSD is undefined once atoms can cross a cell face."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
         with pytest.raises(ValueError, match="not defined under periodic"):
-            bias.evaluate(self._boxed(device, [True, True, True]))
+            bias(self._boxed(device, [True, True, True]))
 
     def test_slab_is_rejected(self, device: str) -> None:
         """Wrapping along any one axis is enough to break the metric."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
         with pytest.raises(ValueError, match="not defined under periodic"):
-            bias.evaluate(self._boxed(device, [True, True, False]))
+            bias(self._boxed(device, [True, True, False]))
 
     def test_mixed_batch_is_rejected(self, device: str) -> None:
         """One periodic graph poisons the batch; the bias cannot serve it."""
@@ -1345,7 +1351,7 @@ class TestRMSDSelectionAndPeriodicity:
         ]
         batch = Batch.from_data_list(items).to(device)
         with pytest.raises(ValueError, match="not defined under periodic"):
-            bias.evaluate(batch)
+            bias(batch)
 
     def test_bounding_box_with_pbc_false_is_accepted(self, device: str) -> None:
         """A cell is a box; only pbc says whether atoms wrap through it.
@@ -1360,31 +1366,31 @@ class TestRMSDSelectionAndPeriodicity:
         ).to(device)
         batch = self._boxed(device, [False, False, False])
 
-        result = bias.evaluate(batch)
-        assert torch.count_nonzero(result.energy) == 0
+        result = bias(batch)
+        assert torch.count_nonzero(result.get("energy")) == 0
 
         # It must be usable, not merely accepted.
-        bias.update(batch, result)
+        bias.update(_ctx(batch, result), bias.stage)
         assert int(bias.reference_count) == 2
-        assert float(bias.evaluate(batch).energy.sum()) > 0.0
+        assert float(bias(batch)["energy"].sum()) > 0.0
 
     def test_cell_without_pbc_flags_is_refused_as_undeclared(self, device: str) -> None:
         """A cell with no boundary condition has not said which case it is."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
         with pytest.raises(ValueError, match="no pbc flags"):
-            bias.evaluate(self._boxed(device, None))
+            bias(self._boxed(device, None))
 
     def test_zero_cell_is_not_periodic(self, device: str) -> None:
         """A zero cell is how a molecular batch spells "no cell"."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
         batch = self._batch(device, [4, 4])
         batch.cell = torch.zeros(2, 3, 3, device=batch.positions.device)
-        bias.evaluate(batch)
+        bias(batch)
 
     def test_no_cell_at_all_is_not_periodic(self, device: str) -> None:
         """The plain molecular case carries neither cell nor pbc."""
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
-        bias.evaluate(self._batch(device, [4, 4]))
+        bias(self._batch(device, [4, 4]))
 
 
 # ===========================================================================
@@ -1409,8 +1415,8 @@ class TestRMSDDeposition:
 
     def test_empty_history_is_zero(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(k_push=0.02, alpha=0.5, max_references=4).to(device)
-        result = bias.evaluate(self._molecule(device))
-        assert torch.count_nonzero(result.energy) == 0
+        result = bias(self._molecule(device))
+        assert torch.count_nonzero(result.get("energy")) == 0
 
     def test_deposited_structure_feels_full_amplitude(self, device: str) -> None:
         """At RMSD zero the kernel is exp(0) = 1, so V = k_push."""
@@ -1418,8 +1424,8 @@ class TestRMSDDeposition:
             k_push=0.02, alpha=0.5, max_references=4, ramp_depositions=0
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
-        assert float(bias.evaluate(frame).energy.sum()) == pytest.approx(0.02, abs=1e-7)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        assert float(bias(frame)["energy"].sum()) == pytest.approx(0.02, abs=1e-7)
 
     def test_ramp_is_on_by_default(self, device: str) -> None:
         """A new reference lands exactly where the system is standing."""
@@ -1431,11 +1437,11 @@ class TestRMSDDeposition:
             k_push=0.02, alpha=0.5, max_references=8, ramp_depositions=4
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         series = []
         for _ in range(4):
-            series.append(float(bias.evaluate(frame).energy.sum()))
+            series.append(float(bias(frame)["energy"].sum()))
             bias.deposits += 1
         assert series == sorted(series)
         assert series[0] < 0.02
@@ -1447,14 +1453,14 @@ class TestRMSDDeposition:
         ).to(device)
         frames = [self._molecule(device, seed=s) for s in range(4)]
         for frame in frames:
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         assert bias.capacity == 2
         assert int(bias.reference_count) == 2
         assert int(bias.references_written) == 4
         # The oldest reference has been overwritten, so its site is free again.
-        assert float(bias.evaluate(frames[0]).energy.sum()) < float(
-            bias.evaluate(frames[3]).energy.sum()
+        assert float(bias(frames[0])["energy"].sum()) < float(
+            bias(frames[3])["energy"].sum()
         )
 
     def test_preallocated_overflow_raises(self, device: str) -> None:
@@ -1462,10 +1468,10 @@ class TestRMSDDeposition:
             k_push=0.02, alpha=0.5, max_references=2, storage="preallocated"
         ).to(device)
         frame = self._molecule(device)
-        bias.update(frame, bias.evaluate(frame))
-        bias.update(frame, bias.evaluate(frame))
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
         with pytest.raises(RuntimeError, match="storage='preallocated'"):
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
     def test_warm_start_references_are_active_immediately(self, device: str) -> None:
         """A seeded reference is history, not a fresh deposit needing a ramp."""
@@ -1482,7 +1488,7 @@ class TestRMSDDeposition:
 
         frame = self._molecule(device)
         frame.positions = reference[0].to(frame.positions.device)
-        assert float(bias.evaluate(frame).energy.sum()) == pytest.approx(0.02, abs=1e-7)
+        assert float(bias(frame)["energy"].sum()) == pytest.approx(0.02, abs=1e-7)
 
     def test_warm_start_is_translation_normalised(self, device: str) -> None:
         """Seeded references are centered on storage like deposited ones."""
@@ -1528,30 +1534,28 @@ class TestRMSDDeposition:
             ramp_depositions=0,
         ).to(device)
         batch.walker_id = torch.tensor([0, 1], device=batch.positions.device)
-        bias.update(batch, bias.evaluate(batch))
+        bias.update(_ctx(batch, bias(batch)), bias.stage)
         assert bias.reference_owner[:2].tolist() == [0, 1]
 
         shared = RMSDMetaDynamicsBias(
             k_push=0.02, alpha=0.5, max_references=8, ramp_depositions=0
         ).to(device)
-        shared.update(batch, shared.evaluate(batch))
-        assert bool(
-            (shared.evaluate(batch).energy >= bias.evaluate(batch).energy - 1e-9).all()
-        )
+        shared.update(_ctx(batch, shared(batch)), shared.stage)
+        assert bool((shared(batch)["energy"] >= bias(batch)["energy"] - 1e-9).all())
 
     def test_walker_history_without_walker_id_raises(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(
             k_push=0.02, alpha=0.5, max_references=8, history="walker"
         ).to(device)
         with pytest.raises(ValueError, match="needs batch.walker_id"):
-            bias.evaluate(self._molecule(device, n_graphs=2))
+            bias(self._molecule(device, n_graphs=2))
 
     def test_state_history_without_state_id_raises(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(
             k_push=0.02, alpha=0.5, max_references=8, history="state"
         ).to(device)
         with pytest.raises(ValueError, match="needs batch.thermodynamic_state_id"):
-            bias.evaluate(self._molecule(device, n_graphs=2))
+            bias(self._molecule(device, n_graphs=2))
 
     def test_wrong_length_owner_field_raises(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(
@@ -1560,7 +1564,7 @@ class TestRMSDDeposition:
         batch = self._molecule(device, n_graphs=2)
         batch.walker_id = torch.tensor([4], device=batch.positions.device)
         with pytest.raises(ValueError, match="has 1 entries but the batch has 2"):
-            bias.evaluate(batch)
+            bias(batch)
 
     def test_state_history_declares_exchange_dependence(self) -> None:
         assert (
@@ -1594,7 +1598,7 @@ class TestRMSDRestart:
         ).to(device)
         for seed in range(3):
             frame = self._molecule(device, seed=seed)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
 
         restored = RMSDMetaDynamicsBias(
             k_push=0.02, alpha=0.5, max_references=8, ramp_depositions=0
@@ -1603,7 +1607,7 @@ class TestRMSDRestart:
 
         probe = self._molecule(device, seed=1)
         assert torch.allclose(
-            restored.evaluate(probe).energy, bias.evaluate(probe).energy, atol=1e-7
+            restored(probe)["energy"], bias(probe)["energy"], atol=1e-7
         )
         assert int(restored.reference_count) == int(bias.reference_count)
         assert restored.state_version == bias.state_version
@@ -1629,7 +1633,7 @@ class TestRMSDRestart:
         }
         source = RMSDMetaDynamicsBias(**base).to(device)
         frame = self._molecule(device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = RMSDMetaDynamicsBias(**{**base, field: value}).to(device)
         with pytest.raises(ValueError, match=field):
@@ -1644,7 +1648,7 @@ class TestRMSDRestart:
             atom_indices=torch.tensor([0, 1, 2]),
         ).to(device)
         frame = self._molecule(device)
-        source.update(frame, source.evaluate(frame))
+        source.update(_ctx(frame, source(frame)), source.stage)
 
         target = RMSDMetaDynamicsBias(
             k_push=0.02,
@@ -1666,7 +1670,7 @@ class TestRMSDRestart:
         ).to(device)
         for seed in range(5):
             frame = self._molecule(device, seed=seed)
-            bias.update(frame, bias.evaluate(frame))
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
         assert bias.capacity > 2
 
         restored = RMSDMetaDynamicsBias(
@@ -1681,7 +1685,7 @@ class TestRMSDRestart:
 
         probe = self._molecule(device, seed=2)
         assert torch.allclose(
-            restored.evaluate(probe).energy, bias.evaluate(probe).energy, atol=1e-7
+            restored(probe)["energy"], bias(probe)["energy"], atol=1e-7
         )
 
 
@@ -1693,8 +1697,8 @@ class TestRMSDRestart:
 class TestRunnerIntegration:
     """The runner drives deposition exactly once per due step."""
 
-    def test_deposition_follows_update_frequency(self, device: str) -> None:
-        bias = _metad(device, name="meta", update_frequency=3, max_hills=64)
+    def test_deposition_follows_frequency(self, device: str) -> None:
+        bias = _metad(device, name="meta", frequency=3, max_hills=64)
         runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
         runner.run(_random_batch(device=device), n_steps=9)
 
@@ -1704,18 +1708,18 @@ class TestRunnerIntegration:
 
     def test_no_deposition_during_priming(self, device: str) -> None:
         """Priming evaluates forces; it must not advance the history."""
-        bias = _metad(device, name="meta", update_frequency=1)
+        bias = _metad(device, name="meta", frequency=1)
         runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
         runner.prime_forces(_random_batch(device=device))
         assert int(bias.deposits) == 0
 
     def test_hills_are_deposited_at_post_step_coordinates(self, device: str) -> None:
-        """observation_stage is AFTER_STEP: a hill marks where it arrived."""
-        assert _metad(device).observation_stage.name == "AFTER_STEP"
+        """stage is AFTER_STEP: a hill marks where it arrived."""
+        assert _metad(device).stage.name == "AFTER_STEP"
 
     def test_new_hill_is_felt_on_the_next_step(self, device: str) -> None:
         """Depositing bumps the state version, so the runner re-primes forces."""
-        bias = _metad(device, name="meta", update_frequency=1, sigma=0.6, height=0.5)
+        bias = _metad(device, name="meta", frequency=1, sigma=0.6, height=0.5)
         runner = EnhancedSampling(
             _make_dynamics(device), {"meta": bias}, prime_after_update=True
         )
@@ -1728,7 +1732,7 @@ class TestRunnerIntegration:
         assert float(runner.last_outputs["bias/meta/energy"].abs().sum()) > 0.0
 
     def test_total_is_physical_plus_bias(self, device: str) -> None:
-        bias = _metad(device, name="meta", update_frequency=1, sigma=0.6)
+        bias = _metad(device, name="meta", frequency=1, sigma=0.6)
         runner = EnhancedSampling(_make_dynamics(device), {"meta": bias})
         runner.run(_random_batch(device=device), n_steps=4)
 
@@ -1744,7 +1748,7 @@ class TestRunnerIntegration:
             k_push=0.03,
             alpha=0.4,
             max_references=16,
-            update_frequency=2,
+            frequency=2,
             name="rmsd",
         ).to(device)
         runner = EnhancedSampling(_make_dynamics(device), {"rmsd": bias})
@@ -1756,12 +1760,12 @@ class TestRunnerIntegration:
 
     def test_two_metadynamics_biases_compose(self, device: str) -> None:
         """Independent schedules, summed against unmodified physical output."""
-        meta = _metad(device, name="meta", update_frequency=2, max_hills=64)
+        meta = _metad(device, name="meta", frequency=2, max_hills=64)
         rmsd = RMSDMetaDynamicsBias(
             k_push=0.03,
             alpha=0.4,
             max_references=16,
-            update_frequency=3,
+            frequency=3,
             name="rmsd",
         ).to(device)
         runner = EnhancedSampling(_make_dynamics(device), {"meta": meta, "rmsd": rmsd})
@@ -1774,7 +1778,7 @@ class TestRunnerIntegration:
         self, tmp_path, device: str
     ) -> None:
         """The runner's Zarr checkpoint must carry the hill table."""
-        bias = _metad(device, name="meta", update_frequency=1, max_hills=32)
+        bias = _metad(device, name="meta", frequency=1, max_hills=32)
         runner = EnhancedSampling(
             _make_dynamics(device), {"meta": bias}, steps_per_epoch=4
         )
@@ -1784,7 +1788,7 @@ class TestRunnerIntegration:
         path = tmp_path / "metad.zarr"
         runner.checkpoint(path, batch)
 
-        fresh_bias = _metad(device, name="meta", update_frequency=1, max_hills=32)
+        fresh_bias = _metad(device, name="meta", frequency=1, max_hills=32)
         fresh = EnhancedSampling(
             _make_dynamics(device), {"meta": fresh_bias}, steps_per_epoch=4
         )
@@ -1794,7 +1798,7 @@ class TestRunnerIntegration:
         assert int(fresh_bias.deposits) == int(bias.deposits)
         assert fresh_bias.state_version == bias.state_version
         assert torch.allclose(
-            fresh_bias.evaluate(restored).energy,
-            bias.evaluate(restored).energy,
+            fresh_bias(restored)["energy"],
+            bias(restored)["energy"],
             atol=1e-6,
         )

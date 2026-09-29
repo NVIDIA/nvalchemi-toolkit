@@ -128,16 +128,16 @@ class TestHarmonicUmbrellaBias:
         bias = HarmonicUmbrellaBias(
             cv=_cv, centers=torch.tensor([2.0]), stiffness=4.0, name="u"
         )
-        result = bias.evaluate(batch)
+        result = bias(batch)
         # 0.5 * 4 * (3 - 2)^2 = 2.0
-        assert abs(float(result.energy) - 2.0) < 1e-5
+        assert abs(float(result.get("energy")) - 2.0) < 1e-5
 
     def test_zero_energy_at_center(self, device: str) -> None:
         batch = _pair_batch([2.0], device=device)
         bias = HarmonicUmbrellaBias(
             cv=_cv, centers=torch.tensor([2.0]), stiffness=7.0, name="u"
         )
-        assert abs(float(bias.evaluate(batch).energy)) < 1e-6
+        assert abs(float(bias(batch)["energy"])) < 1e-6
 
     def test_force_pulls_toward_center(self, device: str) -> None:
         """A restraint must shorten a too-long distance, not lengthen it."""
@@ -145,7 +145,7 @@ class TestHarmonicUmbrellaBias:
         bias = HarmonicUmbrellaBias(
             cv=_cv, centers=torch.tensor([2.0]), stiffness=4.0, name="u"
         )
-        forces = bias.evaluate(batch).forces
+        forces = bias(batch)["forces"]
         # Atom 1 sits at +x of atom 0 and is too far: its force must point -x.
         assert float(forces[1, 0]) < 0
         assert float(forces[0, 0]) > 0
@@ -159,7 +159,7 @@ class TestHarmonicUmbrellaBias:
             stiffness=2.0,
             name="u",
         )
-        energy = bias.evaluate(batch).energy.reshape(-1)
+        energy = bias(batch)["energy"].reshape(-1)
         # distances all 2.0; deltas are 0, -1, -2
         expected = torch.tensor([0.0, 1.0, 4.0], device=energy.device)
         assert torch.allclose(energy, expected, atol=1e-5)
@@ -170,7 +170,7 @@ class TestHarmonicUmbrellaBias:
             cv=_cv, centers=torch.tensor([[5.0], [9.0]]), stiffness=1.0, name="u"
         )
         # Uses centers[0] = 5.0 -> 0.5 * 1 * (2-5)^2 = 4.5
-        assert abs(float(bias.evaluate(batch).energy) - 4.5) < 1e-5
+        assert abs(float(bias(batch)["energy"]) - 4.5) < 1e-5
 
     def test_out_of_range_state_id_raises(self, device: str) -> None:
         """A multi-window bias does index the field, so it must be in range."""
@@ -180,7 +180,7 @@ class TestHarmonicUmbrellaBias:
             cv=_cv, centers=torch.tensor([[2.0], [3.0]]), stiffness=1.0, name="u"
         )
         with pytest.raises(IndexError, match="out of range"):
-            bias.evaluate(batch)
+            bias(batch)
 
     def test_single_window_ignores_the_state_id(self, device: str) -> None:
         """One window selects nothing, so the field is not an index into it.
@@ -195,7 +195,7 @@ class TestHarmonicUmbrellaBias:
             cv=_cv, centers=torch.tensor([[2.0]]), stiffness=4.0, name="u"
         )
         # 0.5 * 4 * (3 - 2)^2 = 2.0, using the single window regardless of id.
-        assert abs(float(bias.evaluate(batch).energy) - 2.0) < 1e-5
+        assert abs(float(bias(batch)["energy"]) - 2.0) < 1e-5
 
     @pytest.mark.parametrize(
         "stiffness,shape",
@@ -277,27 +277,27 @@ class TestWalls:
     def test_upper_wall_zero_inside(self, device: str) -> None:
         batch = _pair_batch([2.0], device=device)
         wall = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0)
-        assert abs(float(wall.evaluate(batch).energy)) < 1e-8
+        assert abs(float(wall(batch)["energy"])) < 1e-8
 
     def test_upper_wall_penalises_outside(self, device: str) -> None:
         batch = _pair_batch([7.0], device=device)
         wall = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0)
         # (10/2) * (7-5)^2 = 20
-        assert abs(float(wall.evaluate(batch).energy) - 20.0) < 1e-4
+        assert abs(float(wall(batch)["energy"]) - 20.0) < 1e-4
 
     def test_upper_wall_pushes_inward(self, device: str) -> None:
         batch = _pair_batch([7.0], device=device)
-        forces = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0).evaluate(batch).forces
+        forces = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0)(batch)["forces"]
         assert float(forces[1, 0]) < 0, "upper wall must pull the pair closer"
 
     def test_lower_wall_zero_outside(self, device: str) -> None:
         batch = _pair_batch([7.0], device=device)
         wall = LowerWall(cv=_cv, threshold=5.0, stiffness=10.0)
-        assert abs(float(wall.evaluate(batch).energy)) < 1e-8
+        assert abs(float(wall(batch)["energy"])) < 1e-8
 
     def test_lower_wall_pushes_outward(self, device: str) -> None:
         batch = _pair_batch([2.0], device=device)
-        forces = LowerWall(cv=_cv, threshold=5.0, stiffness=10.0).evaluate(batch).forces
+        forces = LowerWall(cv=_cv, threshold=5.0, stiffness=10.0)(batch)["forces"]
         assert float(forces[1, 0]) > 0, "lower wall must push the pair apart"
 
     def test_wall_inside_gives_zero_forces_not_an_error(self, device: str) -> None:
@@ -307,15 +307,15 @@ class TestWalls:
         energy with no grad_fn, which autograd rejects outright.
         """
         batch = _pair_batch([2.0], device=device)
-        result = UpperWall(cv=_cv, threshold=5.0).evaluate(batch)
-        assert result.forces is not None
-        assert torch.count_nonzero(result.forces) == 0
+        result = UpperWall(cv=_cv, threshold=5.0)(batch)
+        assert result.get("forces") is not None
+        assert torch.count_nonzero(result.get("forces")) == 0
 
     def test_force_continuous_across_boundary(self, device: str) -> None:
         """Quadratic walls have zero force at the wall; no impulse."""
         wall = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0, exponent=2.0)
-        just_inside = wall.evaluate(_pair_batch([4.999], device=device)).forces
-        just_outside = wall.evaluate(_pair_batch([5.001], device=device)).forces
+        just_inside = wall(_pair_batch([4.999], device=device))["forces"]
+        just_outside = wall(_pair_batch([5.001], device=device))["forces"]
         assert torch.allclose(just_inside, just_outside, atol=1e-2)
 
     def test_exponent_below_one_raises(self) -> None:
@@ -329,23 +329,29 @@ class TestWalls:
     def test_flat_bottom_zero_inside(self, device: str) -> None:
         batch = _pair_batch([3.0], device=device)
         restraint = FlatBottomRestraint(cv=_cv, lower=2.0, upper=5.0, stiffness=10.0)
-        assert abs(float(restraint.evaluate(batch).energy)) < 1e-8
+        assert abs(float(restraint(batch)["energy"])) < 1e-8
 
     def test_flat_bottom_penalises_both_sides(self, device: str) -> None:
         restraint = FlatBottomRestraint(cv=_cv, lower=2.0, upper=5.0, stiffness=10.0)
-        below = restraint.evaluate(_pair_batch([1.0])).energy
-        above = restraint.evaluate(_pair_batch([6.0])).energy
+        below = restraint(_pair_batch([1.0]))["energy"]
+        above = restraint(_pair_batch([6.0]))["energy"]
         assert abs(float(below) - 5.0) < 1e-4  # (10/2)*(2-1)^2
         assert abs(float(above) - 5.0) < 1e-4  # (10/2)*(6-5)^2
 
     def test_flat_bottom_matches_two_walls(self, device: str) -> None:
         batch = _pair_batch([6.5], device=device)
-        combined = FlatBottomRestraint(
-            cv=_cv, lower=2.0, upper=5.0, stiffness=3.0
-        ).evaluate(batch)
-        upper = UpperWall(cv=_cv, threshold=5.0, stiffness=3.0).evaluate(batch)
-        lower = LowerWall(cv=_cv, threshold=2.0, stiffness=3.0).evaluate(batch)
-        assert abs(float(combined.energy) - float(upper.energy + lower.energy)) < 1e-5
+        combined = FlatBottomRestraint(cv=_cv, lower=2.0, upper=5.0, stiffness=3.0)(
+            batch
+        )
+        upper = UpperWall(cv=_cv, threshold=5.0, stiffness=3.0)(batch)
+        lower = LowerWall(cv=_cv, threshold=2.0, stiffness=3.0)(batch)
+        assert (
+            abs(
+                float(combined.get("energy"))
+                - float(upper.get("energy") + lower.get("energy"))
+            )
+            < 1e-5
+        )
 
     def test_inverted_bounds_raise(self) -> None:
         with pytest.raises(ValueError, match="strictly below"):
@@ -356,10 +362,10 @@ class TestWalls:
         eps = 1e-4
         wall = UpperWall(cv=_cv, threshold=3.0, stiffness=6.0)
         batch = _pair_batch([4.0], device=device)
-        analytic = wall.evaluate(batch).forces[1, 0]
+        analytic = wall(batch)["forces"][1, 0]
 
-        plus = wall.evaluate(_pair_batch([4.0 + eps], device=device)).energy
-        minus = wall.evaluate(_pair_batch([4.0 - eps], device=device)).energy
+        plus = wall(_pair_batch([4.0 + eps], device=device))["energy"]
+        minus = wall(_pair_batch([4.0 - eps], device=device))["energy"]
         numeric = -(float(plus) - float(minus)) / (2 * eps)
         assert abs(float(analytic) - numeric) < 1e-2
 
@@ -437,13 +443,13 @@ class TestBuiltinBiasCompile:
         bias = self._umbrella(device)
         bias.energy = torch.compile(bias.energy, fullgraph=True)
         with pytest.raises(IndexError, match="out of range"):
-            bias.evaluate(batch)
+            bias(batch)
 
     def test_state_id_error_names_graph_and_valid_range(self, device: str) -> None:
         batch = _pair_batch([3.0, 3.0], device=device)
         batch["thermodynamic_state_id"] = torch.tensor([0, 9], device=device)
         with pytest.raises(IndexError) as excinfo:
-            self._umbrella().evaluate(batch)
+            self._umbrella()(batch)
         message = str(excinfo.value)
         assert "[1]" in message  # the offending graph
         assert "0..1" in message  # the valid range
@@ -546,11 +552,11 @@ class TestDeviceTransparency:
             stiffness=4.0,
             name="u",
         )  # no .to(device)
-        result = bias.evaluate(batch)
-        assert result.energy.device.type == batch.positions.device.type
-        assert abs(float(result.energy) - 2.0) < 1e-5
+        result = bias(batch)
+        assert result.get("energy").device.type == batch.positions.device.type
+        assert abs(float(result.get("energy")) - 2.0) < 1e-5
 
     def test_cpu_built_wall_against_device_batch(self, device: str) -> None:
         batch = _pair_batch([7.0], device=device)
         wall = UpperWall(cv=_cv, threshold=5.0, stiffness=10.0)  # no .to(device)
-        assert abs(float(wall.evaluate(batch).energy) - 20.0) < 1e-4
+        assert abs(float(wall(batch)["energy"]) - 20.0) < 1e-4

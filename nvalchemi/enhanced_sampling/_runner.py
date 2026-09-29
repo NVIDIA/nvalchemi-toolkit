@@ -22,14 +22,13 @@ bias changes.  Integration itself is delegated entirely to the wrapped
 
 from __future__ import annotations
 
-import dataclasses
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import KB_EV
-from nvalchemi.enhanced_sampling._bias import BiasResult, aggregate_bias_results
 from nvalchemi.enhanced_sampling._checkpoint import (
     CheckpointManifest,
     _qualified_name,
@@ -37,15 +36,22 @@ from nvalchemi.enhanced_sampling._checkpoint import (
     write_checkpoint,
 )
 from nvalchemi.enhanced_sampling._exchange import ReplicaExchange
+from nvalchemi.hooks._context import BiasContext
+from nvalchemi.models._utils import (
+    DIAGNOSTIC_PREFIX,
+    aggregate_contributions,
+    validate_contribution,
+)
+from nvalchemi.models.base import BaseModelMixin
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from enum import Enum
     from pathlib import Path
 
+    from nvalchemi._typing import ModelOutputs
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
-    from nvalchemi.enhanced_sampling._bias import BiasPotential
     from nvalchemi.hooks import HookContext
 
 __all__ = ["EnhancedSampling"]
@@ -59,6 +65,16 @@ class _BiasCompositeHook:
     stages, which is what keeps the ordering guarantees in one place instead
     of spread across three separately-registered hooks whose relative order
     would then depend on registration sequence.
+
+    It is also the *orchestrator* for the bias hook family, in the sense
+    :class:`~nvalchemi.training.hooks.update.TrainingUpdateHook` establishes:
+    an adaptive bias carries the
+    :class:`~nvalchemi.hooks.StatefulHook` attributes (``frequency``,
+    ``stage``, ``read_only``, ``commit``) but dispatches through ``update``
+    rather than ``__call__``, because a bias is also an ``nn.Module`` whose
+    ``__call__`` is its model forward.  This object owns protocol compliance
+    on their behalf: it is the thing the registry sees, and it reads those
+    attributes to decide when each bias is due.
     """
 
     def __init__(self, runner: EnhancedSampling) -> None:
@@ -116,15 +132,19 @@ class EnhancedSampling:
         Any ``BaseDynamics``.  Not subclassed, not wrapped — the runner
         registers a hook on it and calls its ``run``.
     biases:
-        Mapping of unique name to :class:`BiasPotential`.  May be empty,
-        which reduces the runner to identity stamping — what pure temperature
-        replica exchange needs, since the ladder alone drives the sampling.
+        Mapping of unique name to bias.  A bias is any
+        :class:`~nvalchemi.models.base.BaseModelMixin` that maps a ``Batch``
+        to :data:`~nvalchemi._typing.ModelOutputs` and carries a ``name`` —
+        there is no separate bias protocol.  May be empty, which reduces the
+        runner to identity stamping — what pure temperature replica exchange
+        needs, since the ladder alone drives the sampling.
     steps_per_epoch:
-        Steps per consistency epoch, the boundary at which
-        :meth:`AdaptivePotentialMixin.commit_epoch` fires.
+        Steps per consistency epoch, the
+        :class:`~nvalchemi.hooks.StatefulHook` synchronisation boundary at
+        which :meth:`AdaptivePotentialMixin.commit` fires.
     compile_biases:
         When ``True``, ``torch.compile`` each conservative bias's
-        ``energy()``.  Not ``evaluate()`` — that path calls
+        ``energy()``.  Not ``forward()`` — that path calls
         ``requires_grad_()``, which ``torch.compile`` cannot trace; see the
         :class:`~nvalchemi.enhanced_sampling.ConservativeBias` docstring.
     prime_after_update:
@@ -136,7 +156,8 @@ class EnhancedSampling:
     Raises
     ------
     TypeError
-        If any value in *biases* does not satisfy :class:`BiasPotential`.
+        If any value in *biases* is not a
+        :class:`~nvalchemi.models.base.BaseModelMixin`.
     ValueError
         If ``steps_per_epoch`` is below 1, or a bias's ``name`` disagrees
         with its key in *biases*.
@@ -165,15 +186,13 @@ class EnhancedSampling:
     def __init__(
         self,
         dynamics: BaseDynamics,
-        biases: Mapping[str, BiasPotential] | None = None,
+        biases: Mapping[str, BaseModelMixin] | None = None,
         *,
         steps_per_epoch: int = 10_000,
         compile_biases: bool = False,
         prime_after_update: bool = True,
         replica_exchange: ReplicaExchange | None = None,
     ) -> None:
-        from nvalchemi.enhanced_sampling._bias import BiasPotential as _Protocol
-
         if int(steps_per_epoch) < 1:
             raise ValueError(
                 f"EnhancedSampling: steps_per_epoch must be at least 1, got "
@@ -183,18 +202,20 @@ class EnhancedSampling:
                 "negative value makes both meaningless."
             )
         self.dynamics = dynamics
-        self.biases: dict[str, BiasPotential] = dict(biases or {})
+        self.biases: dict[str, BaseModelMixin] = dict(biases or {})
         self.steps_per_epoch = int(steps_per_epoch)
         self.prime_after_update = bool(prime_after_update)
         self.replica_exchange = replica_exchange
 
         for key, bias in self.biases.items():
-            if not isinstance(bias, _Protocol):
+            if not isinstance(bias, BaseModelMixin):
                 raise TypeError(
                     f"EnhancedSampling: biases[{key!r}] is a "
-                    f"{type(bias).__name__}, which does not satisfy the "
-                    "BiasPotential protocol (needs a 'name' attribute and an "
-                    "'evaluate(batch) -> BiasResult' method)."
+                    f"{type(bias).__name__}, which is not a BaseModelMixin. A "
+                    "bias is an additive potential like any other: subclass "
+                    "ConservativeBias to get forces and stress from an "
+                    "energy(), or mix in BaseModelMixin directly and return "
+                    "ModelOutputs from forward()."
                 )
             if getattr(bias, "name", None) != key:
                 raise ValueError(
@@ -218,15 +239,15 @@ class EnhancedSampling:
         #   total/<field>           physical + bias, read back from the batch
         self.last_outputs: dict[str, torch.Tensor] = {}
 
-        # Per-bias observation captured at its observation_stage, consumed by
-        # the next update() call.
-        self._pending: dict[str, tuple[Batch, BiasResult]] = {}
+        # Per-bias observation captured at the bias's stage, consumed by the
+        # next update() call.
+        self._pending: dict[str, BiasContext] = {}
 
-        # Per-bias results from the most recent force evaluation. Held because
-        # an AFTER_STEP capture happens after that evaluation has returned,
-        # and update() is documented to receive the result its bias produced
-        # during it.
-        self._last_results: dict[str, BiasResult] = {}
+        # Per-bias contributions from the most recent force evaluation. Held
+        # because an AFTER_STEP capture happens after that evaluation has
+        # returned, and update() is documented to receive the contribution its
+        # bias produced during it.
+        self._last_results: dict[str, ModelOutputs] = {}
         self._last_update_step: dict[str, int] = {}
         self._last_seen_version: dict[str, int] = {}
         self._sync_seen_versions()
@@ -262,8 +283,8 @@ class EnhancedSampling:
         """Compile each conservative bias's ``energy()`` in place.
 
         Assigning the compiled callable as an instance attribute shadows the
-        bound method, so ``evaluate()`` picks it up without an indirection
-        the eager path would also pay.
+        bound method, so ``forward()`` picks it up without an indirection the
+        eager path would also pay.
         """
         for bias in self.biases.values():
             if hasattr(bias, "energy"):
@@ -340,7 +361,7 @@ class EnhancedSampling:
                 device=batch.positions.device,
             )
             for bias in self.biases.values():
-                energy = bias.evaluate(batch).energy
+                energy = bias(batch).get("energy")
                 if energy is not None:
                     total = total + energy.reshape(-1)
         finally:
@@ -398,9 +419,9 @@ class EnhancedSampling:
             offenders: list[str] = []
             for name, bias in self.biases.items():
                 batch["thermodynamic_state_id"] = current
-                before = bias.evaluate(batch).energy
+                before = bias(batch).get("energy")
                 batch["thermodynamic_state_id"] = rotated
-                after = bias.evaluate(batch).energy
+                after = bias(batch).get("energy")
                 if before is None or after is None:
                     continue
                 if not torch.allclose(before, after, rtol=1e-9, atol=1e-12):
@@ -510,15 +531,15 @@ class EnhancedSampling:
             for name, bias in self.biases.items()
         }
 
-    def _adaptive_biases(self) -> dict[str, BiasPotential]:
-        """Return the biases that implement ``update``.
+    def _adaptive_biases(self) -> dict[str, BaseModelMixin]:
+        """Return the biases that implement the stateful-hook ``update``.
 
         Detection is structural (``hasattr``), so a bias satisfies the
         adaptive contract without inheriting ``AdaptivePotentialMixin``.
 
         Returns
         -------
-        dict[str, BiasPotential]
+        dict[str, BaseModelMixin]
             Name to bias, for adaptive biases only.
         """
         return {
@@ -617,7 +638,7 @@ class EnhancedSampling:
             self._last_epoch = epoch
 
     def _commit_epoch(self, epoch: int) -> None:
-        """Run every adaptive bias's ``commit_epoch``, at most once per epoch.
+        """Run every adaptive bias's ``commit``, at most once per epoch.
 
         Idempotent by design.  The commit is reached from two directions —
         lazily, when a step observes that the epoch advanced, and eagerly,
@@ -634,7 +655,7 @@ class EnhancedSampling:
         if epoch < 0 or epoch <= self._committed_epoch:
             return
         for bias in self._adaptive_biases().values():
-            commit = getattr(bias, "commit_epoch", None)
+            commit = getattr(bias, "commit", None)
             if callable(commit):
                 commit()
         self._committed_epoch = epoch
@@ -667,17 +688,15 @@ class EnhancedSampling:
         }
 
         # 2-3. Evaluate each bias against the same unmodified batch.
-        #      BiasResult validates itself on construction.
-        results = {name: bias.evaluate(batch) for name, bias in self.biases.items()}
-        self._last_results = results
+        results = self._contributions(batch)
 
         # 4. Capture AFTER_COMPUTE observations while batch.forces still
         #    holds unbiased physical forces.  ABF depends on this: an
         #    estimator fed its own output diverges.
         self._capture(batch, results, DynamicsStage.AFTER_COMPUTE)
 
-        # 5-6. Namespace observables, then sum once.
-        total = aggregate_bias_results(
+        # 5-6. Namespace diagnostics, then sum once.
+        total = aggregate_contributions(
             [self._namespace(name, r) for name, r in results.items()]
         )
         self._record_diagnostics(results, total)
@@ -686,38 +705,76 @@ class EnhancedSampling:
         self._apply(batch, total, results)
         self._record_totals(batch)
 
-    def _namespace(self, name: str, result: BiasResult) -> BiasResult:
-        """Return *result* with its observables prefixed ``bias/<name>/``.
+    def _contributions(self, batch: Batch) -> dict[str, ModelOutputs]:
+        """Evaluate every bias against *batch* and check what each returned.
 
+        Validation lives here rather than in each bias because this is where
+        an unchecked contribution does damage: the next thing that happens to
+        it is being added into a batch buffer, retained in a capture, or
+        written to a checkpoint.  One enforcement point also covers biases
+        that never call the checker themselves — a hand-written one, or a
+        non-conservative one such as ABF.
+
+        Parameters
+        ----------
+        batch:
+            The live batch, unmodified by any bias.
+
+        Returns
+        -------
+        dict[str, ModelOutputs]
+            Name to contribution.
+
+        Raises
+        ------
+        ValueError
+            If any contribution violates the ``ModelOutputs`` conventions —
+            an attached grad graph, a wrong shape, a NaN.  See
+            :func:`~nvalchemi.models._utils.validate_contribution`.
+        """
+        results: dict[str, ModelOutputs] = {}
+        for name, bias in self.biases.items():
+            outputs = bias(batch)
+            validate_contribution(outputs, source=f"{type(bias).__name__} {name!r}")
+            results[name] = outputs
+        self._last_results = results
+        return results
+
+    def _namespace(self, name: str, result: ModelOutputs) -> ModelOutputs:
+        """Return *result* with its diagnostics keyed by contributing bias.
+
+        ``diagnostics/<key>`` becomes ``diagnostics/bias/<name>/<key>``.
         Namespacing has to happen before aggregation, because
-        ``aggregate_bias_results`` rejects duplicate observable keys rather
-        than silently dropping one — two biases of the same type would
-        otherwise collide on identical names.
+        :func:`~nvalchemi.models._utils.aggregate_contributions` rejects
+        duplicate diagnostic keys rather than silently dropping one — two
+        biases of the same type would otherwise collide on identical names.
 
         Parameters
         ----------
         name:
             The bias name.
         result:
-            The bias's result.
+            The bias's contribution.
 
         Returns
         -------
-        BiasResult
-            A copy with namespaced observables, or *result* unchanged when it
+        ModelOutputs
+            A copy with namespaced diagnostics, or *result* unchanged when it
             has none.
         """
-        if not result.observables:
+        if not any(key.startswith(DIAGNOSTIC_PREFIX) for key in result):
             return result
-        return dataclasses.replace(
-            result,
-            observables={
-                f"bias/{name}/{key}": value for key, value in result.observables.items()
-            },
-        )
+        renamed: ModelOutputs = OrderedDict()
+        for key, value in result.items():
+            if key.startswith(DIAGNOSTIC_PREFIX):
+                suffix = key[len(DIAGNOSTIC_PREFIX) :]
+                renamed[f"{DIAGNOSTIC_PREFIX}bias/{name}/{suffix}"] = value
+            else:
+                renamed[key] = value
+        return renamed
 
     def _record_diagnostics(
-        self, results: dict[str, BiasResult], total: BiasResult
+        self, results: dict[str, ModelOutputs], total: ModelOutputs
     ) -> None:
         """Populate :attr:`last_outputs` with the physical and bias views.
 
@@ -738,14 +795,17 @@ class EnhancedSampling:
         for key, value in self._physical.items():
             outputs[f"physical/{key}"] = value
         for name, result in results.items():
-            for key in ("energy", "forces", "stress", "virial"):
-                value = getattr(result, key)
-                if value is not None:
-                    outputs[f"bias/{name}/{key}"] = value
-            for key, value in result.observables.items():
-                outputs[f"bias/{name}/{key}"] = value
+            for key, value in result.items():
+                if value is None:
+                    continue
+                label = (
+                    key[len(DIAGNOSTIC_PREFIX) :]
+                    if key.startswith(DIAGNOSTIC_PREFIX)
+                    else key
+                )
+                outputs[f"bias/{name}/{label}"] = value
         for key in ("energy", "forces", "stress", "virial"):
-            value = getattr(total, key)
+            value = total.get(key)
             if value is not None:
                 outputs[f"bias_total/{key}"] = value
         self.last_outputs = outputs
@@ -780,8 +840,8 @@ class EnhancedSampling:
     def _apply(
         self,
         batch: Batch,
-        total: BiasResult,
-        results: dict[str, BiasResult] | None = None,
+        total: ModelOutputs,
+        results: dict[str, ModelOutputs] | None = None,
     ) -> None:
         """Add the aggregated bias contribution to the batch, in place.
 
@@ -807,7 +867,7 @@ class EnhancedSampling:
             If the aggregate carries a virial, or if any non-``None`` output
             has no destination buffer on the batch.
         """
-        if total.virial is not None:
+        if total.get("virial") is not None:
             raise ValueError(
                 "EnhancedSampling: a bias returned 'virial', but the runner "
                 "applies 'stress' to the batch. Convert W -> sigma = -W/V in "
@@ -816,16 +876,19 @@ class EnhancedSampling:
             )
         self._check_destinations(batch, total, results or {})
         with torch.no_grad():
-            if total.energy is not None:
-                batch.energy.add_(total.energy.reshape(batch.energy.shape))
-            if total.forces is not None:
-                batch.forces.add_(total.forces)
-            if total.stress is not None:
-                batch.stress.add_(total.stress.reshape(batch.stress.shape))
+            energy = total.get("energy")
+            if energy is not None:
+                batch.energy.add_(energy.reshape(batch.energy.shape))
+            forces = total.get("forces")
+            if forces is not None:
+                batch.forces.add_(forces)
+            stress = total.get("stress")
+            if stress is not None:
+                batch.stress.add_(stress.reshape(batch.stress.shape))
 
     @staticmethod
     def _check_destinations(
-        batch: Batch, total: BiasResult, results: dict[str, BiasResult]
+        batch: Batch, total: ModelOutputs, results: dict[str, ModelOutputs]
     ) -> None:
         """Raise if any produced output has nowhere to go on the batch.
 
@@ -852,7 +915,7 @@ class EnhancedSampling:
         missing = [
             key
             for key in ("energy", "forces", "stress")
-            if getattr(total, key) is not None and getattr(batch, key, None) is None
+            if total.get(key) is not None and getattr(batch, key, None) is None
         ]
         if not missing:
             return
@@ -860,9 +923,7 @@ class EnhancedSampling:
         lines = []
         for key in missing:
             contributors = sorted(
-                name
-                for name, result in results.items()
-                if getattr(result, key, None) is not None
+                name for name, result in results.items() if result.get(key) is not None
             )
             who = f" (from {contributors})" if contributors else ""
             lines.append(f"  '{key}'{who}: add {_ALLOCATION_HINT[key]} to AtomicData")
@@ -888,39 +949,71 @@ class EnhancedSampling:
     def _capture(
         self,
         batch: Batch,
-        results: dict[str, BiasResult],
+        results: dict[str, ModelOutputs],
         stage: DynamicsStage,
     ) -> None:
-        """Snapshot the batch for adaptive biases observing at *stage*.
+        """Snapshot the batch for adaptive biases whose ``stage`` is *stage*.
 
-        The stored pair is exactly what :meth:`AdaptivePotentialMixin.update`
-        is documented to receive: the frame at the bias's
-        ``observation_stage``, and the :class:`BiasResult` that bias returned
-        during the preceding force evaluation.  An ``AFTER_STEP`` capture
-        happens after that evaluation has returned, so the results are read
-        from :attr:`_last_results` rather than recomputed — a metadynamics
-        bias sizing its next hill from the bias energy it just applied needs
-        the real value, not an empty placeholder.
+        The stored :class:`~nvalchemi.hooks.BiasContext` is
+        exactly what :meth:`AdaptivePotentialMixin.update` is documented to
+        receive: the frame at the bias's ``stage``, and the contribution that
+        bias returned during the preceding force evaluation.  An
+        ``AFTER_STEP`` capture happens after that evaluation has returned, so
+        the contributions are read from :attr:`_last_results` rather than
+        recomputed — a metadynamics bias sizing its next hill from the bias
+        energy it just applied needs the real value, not an empty
+        placeholder.
 
         Parameters
         ----------
         batch:
             The live batch.
         results:
-            Per-bias results from the preceding force evaluation.
+            Per-bias contributions from the preceding force evaluation.
         stage:
             The stage being captured.
         """
         step = self.dynamics.step_count
         for name, bias in self._adaptive_biases().items():
-            if (
-                getattr(bias, "observation_stage", DynamicsStage.AFTER_STEP)
-                is not stage
-            ):
+            if getattr(bias, "stage", DynamicsStage.AFTER_STEP) is not stage:
                 continue
-            if step % max(1, getattr(bias, "update_frequency", 1)) != 0:
+            if step % max(1, getattr(bias, "frequency", 1)) != 0:
                 continue
-            self._pending[name] = (batch.clone(), results.get(name, BiasResult()))
+            self._pending[name] = self._bias_context(
+                batch.clone(), results.get(name), step
+            )
+
+    def _bias_context(
+        self, batch: Batch, contribution: ModelOutputs | None, step: int
+    ) -> BiasContext:
+        """Build the context handed to one bias's ``update``.
+
+        Parameters
+        ----------
+        batch:
+            The observed frame.
+        contribution:
+            What the bias returned during the preceding force evaluation, or
+            ``None`` when it has not been evaluated yet.
+        step:
+            The dynamics step the capture belongs to.
+
+        Returns
+        -------
+        BiasContext
+            Populated context; ``workflow`` is this runner, so a bias can
+            reach the dynamics and the full diagnostics dict if it needs to.
+        """
+        from nvalchemi.training.distributed import get_rank
+
+        return BiasContext(
+            batch=batch,
+            model=getattr(self.dynamics, "model", None),
+            global_rank=get_rank(None),
+            workflow=self,
+            step_count=step,
+            contribution=contribution if contribution is not None else OrderedDict(),
+        )
 
     def _observe_and_update(self, batch: Batch) -> None:
         """Capture post-step frames, deliver ``update()``, then re-prime.
@@ -941,15 +1034,15 @@ class EnhancedSampling:
 
         changed = False
         for name, bias in adaptive.items():
-            if step % max(1, getattr(bias, "update_frequency", 1)) != 0:
+            if step % max(1, getattr(bias, "frequency", 1)) != 0:
                 continue
             # Exactly once per step, even if this hook is dispatched twice.
             if self._last_update_step.get(name) == step:
                 continue
-            frames, result = self._pending.pop(
-                name, (batch, self._last_results.get(name, BiasResult()))
-            )
-            bias.update(frames, result)  # type: ignore[attr-defined]
+            ctx = self._pending.pop(name, None)
+            if ctx is None:
+                ctx = self._bias_context(batch, self._last_results.get(name), step)
+            bias.update(ctx, getattr(bias, "stage", DynamicsStage.AFTER_STEP))  # type: ignore[attr-defined]
             self._last_update_step[name] = step
 
             version = getattr(bias, "state_version", 0)
@@ -988,9 +1081,8 @@ class EnhancedSampling:
                 target = getattr(batch, key, None)
                 if target is not None:
                     target.copy_(value.reshape(target.shape))
-        results = {name: bias.evaluate(batch) for name, bias in self.biases.items()}
-        self._last_results = results
-        total = aggregate_bias_results(
+        results = self._contributions(batch)
+        total = aggregate_contributions(
             [self._namespace(name, r) for name, r in results.items()]
         )
         self._record_diagnostics(results, total)
@@ -1099,7 +1191,8 @@ class EnhancedSampling:
                 torch.tensor([index], device=frames.positions.device)
             )
             for bias in adaptive.values():
-                bias.update(frame, BiasResult())  # type: ignore[attr-defined]
+                ctx = self._bias_context(frame, None, index)
+                bias.update(ctx, getattr(bias, "stage", DynamicsStage.AFTER_STEP))  # type: ignore[attr-defined]
 
     def run(
         self, batch: Batch, n_steps: int | None = None, *, prime: bool = True

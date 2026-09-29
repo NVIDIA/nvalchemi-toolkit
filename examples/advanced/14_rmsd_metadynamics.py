@@ -145,7 +145,7 @@ batch = Batch.from_data_list([make_cluster() for _ in range(N_WALKERS)]).to(DEVI
 rmsd_bias = RMSDMetaDynamicsBias(
     k_push=0.08,  # eV
     alpha=10.0,  # A^-2, matched to the ~0.3 A scale this cluster explores
-    update_frequency=40,
+    frequency=40,
     storage="fifo",
     max_references=24,
     ramp_depositions=1,
@@ -243,7 +243,7 @@ for hook in control_model.make_neighbor_hooks():
 recorder = RMSDMetaDynamicsBias(
     k_push=1e-12,
     alpha=10.0,
-    update_frequency=40,
+    frequency=40,
     max_references=24,
     name="rmsd",
 )

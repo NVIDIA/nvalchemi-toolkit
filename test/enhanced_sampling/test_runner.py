@@ -21,21 +21,25 @@ epoch commits, and ``warm_start``.
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import pytest
 import torch
 from torch import Tensor
 
+from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.enhanced_sampling import (
     AdaptivePotentialMixin,
-    BiasResult,
     ConservativeBias,
     EnhancedSampling,
     HarmonicUmbrellaBias,
     pair_distance,
 )
+from nvalchemi.hooks import BiasContext
+from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -99,13 +103,13 @@ class _RecordingAdaptiveBias(AdaptivePotentialMixin, ConservativeBias):
     def __init__(
         self,
         name: str = "recording",
-        update_frequency: int = 1,
-        observation_stage: DynamicsStage = DynamicsStage.AFTER_STEP,
+        frequency: int = 1,
+        stage: DynamicsStage = DynamicsStage.AFTER_STEP,
         bump: bool = True,
     ) -> None:
         super().__init__(name=name)
-        self.update_frequency = update_frequency
-        self.observation_stage = observation_stage
+        self.frequency = frequency
+        self.stage = stage
         self._bump = bump
         self.update_steps: list[int] = []
         self.observed_forces: list[Tensor] = []
@@ -122,7 +126,8 @@ class _RecordingAdaptiveBias(AdaptivePotentialMixin, ConservativeBias):
             + 0.0 * current.positions.sum()
         )
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+        frames = ctx.batch
         step = int(frames.sampling_step.reshape(-1)[0])
         self.update_steps.append(step)
         forces = getattr(frames, "forces", None)
@@ -131,7 +136,7 @@ class _RecordingAdaptiveBias(AdaptivePotentialMixin, ConservativeBias):
         if self._bump:
             self.bump_state_version()
 
-    def commit_epoch(self) -> None:
+    def commit(self) -> None:
         self.commit_calls += 1
 
 
@@ -150,11 +155,11 @@ class TestRunnerConstruction:
     def test_none_biases_allowed(self) -> None:
         assert EnhancedSampling(_make_dynamics()).biases == {}
 
-    def test_non_protocol_bias_raises(self) -> None:
+    def test_non_model_bias_raises(self) -> None:
         class NotABias:
             pass
 
-        with pytest.raises(TypeError, match="does not satisfy the BiasPotential"):
+        with pytest.raises(TypeError, match="not a BaseModelMixin"):
             EnhancedSampling(_make_dynamics(), {"x": NotABias()})
 
     def test_key_name_mismatch_raises(self) -> None:
@@ -383,10 +388,10 @@ class TestForceStepOrdering:
         batch.forces.mul_(0.0)
         assert torch.allclose(runner.last_outputs["total/forces"], recorded)
 
-    def test_observables_namespaced_by_bias_name(self, device: str) -> None:
-        """Two biases emitting the same observable name must not collide."""
+    def test_diagnostics_namespaced_by_bias_name(self, device: str) -> None:
+        """Two biases emitting the same diagnostic name must not collide."""
 
-        class _ObservableBias(ConservativeBias):
+        class _DiagnosticBias(ConservativeBias):
             def __init__(self, name: str) -> None:
                 super().__init__(name=name)
 
@@ -396,18 +401,15 @@ class TestForceStepOrdering:
                     + 0.0 * current.positions.sum()
                 )
 
-            def evaluate(self, current: Batch) -> BiasResult:
-                base = super().evaluate(current)
-                import dataclasses
-
-                return dataclasses.replace(
-                    base, observables={"cv": torch.zeros(current.num_graphs)}
-                )
+            def forward(self, data: Batch, **kwargs) -> ModelOutputs:
+                outputs = super().forward(data, **kwargs)
+                outputs[f"{DIAGNOSTIC_PREFIX}cv"] = torch.zeros(data.num_graphs)
+                return outputs
 
         batch = _make_batch(device=device)
         runner = EnhancedSampling(
             _make_dynamics(device),
-            {"first": _ObservableBias("first"), "second": _ObservableBias("second")},
+            {"first": _DiagnosticBias("first"), "second": _DiagnosticBias("second")},
         )
         runner.prime_forces(batch)
         assert "bias/first/cv" in runner.last_outputs
@@ -416,11 +418,12 @@ class TestForceStepOrdering:
     def test_virial_result_rejected_with_named_error(self, device: str) -> None:
         """The runner applies stress; a virial has no volume here to convert."""
 
-        class _VirialBias:
-            name = "virial_bias"
+        class _VirialBias(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="virial_bias", compute_stress=False)
 
-            def evaluate(self, current: Batch) -> BiasResult:
-                return BiasResult(virial=torch.zeros(current.num_graphs, 3, 3))
+            def forward(self, data: Batch, **kwargs) -> ModelOutputs:
+                return OrderedDict(virial=torch.zeros(data.num_graphs, 3, 3))
 
         batch = _make_batch(device=device)
         runner = EnhancedSampling(
@@ -601,7 +604,7 @@ class TestAdaptiveUpdates:
 
     def test_update_called_once_per_step(self, device: str) -> None:
         batch = _make_batch(device=device)
-        bias = _RecordingAdaptiveBias(update_frequency=1)
+        bias = _RecordingAdaptiveBias(frequency=1)
         runner = EnhancedSampling(_make_dynamics(device), {"recording": bias})
         runner.run(batch, n_steps=5)
         assert bias.update_steps == sorted(bias.update_steps)
@@ -610,9 +613,9 @@ class TestAdaptiveUpdates:
         )
         assert len(bias.update_steps) == 5
 
-    def test_update_frequency_respected(self, device: str) -> None:
+    def test_frequency_respected(self, device: str) -> None:
         batch = _make_batch(device=device)
-        bias = _RecordingAdaptiveBias(update_frequency=3)
+        bias = _RecordingAdaptiveBias(frequency=3)
         runner = EnhancedSampling(_make_dynamics(device), {"recording": bias})
         runner.run(batch, n_steps=9)
         assert all(step % 3 == 0 for step in bias.update_steps), bias.update_steps
@@ -621,7 +624,7 @@ class TestAdaptiveUpdates:
         """ABF's requirement: observe physical forces, never the bias's own."""
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         observer = _RecordingAdaptiveBias(
-            name="observer", observation_stage=DynamicsStage.AFTER_COMPUTE
+            name="observer", stage=DynamicsStage.AFTER_COMPUTE
         )
         runner = EnhancedSampling(
             _make_dynamics(device),
@@ -645,14 +648,14 @@ class TestAdaptiveUpdates:
         its next hill from the bias energy it just applied needs the real
         value, not an empty placeholder.
         """
-        received: list[BiasResult] = []
+        received: list[ModelOutputs] = []
 
         class _ResultRecordingBias(AdaptivePotentialMixin, _ConstantForceBias):
             def __init__(self) -> None:
                 super().__init__(2.0, name="recorder")
 
-            def update(self, frames: Batch, result: BiasResult) -> None:
-                received.append(result)
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+                received.append(ctx.contribution)
 
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner = EnhancedSampling(
@@ -662,26 +665,26 @@ class TestAdaptiveUpdates:
 
         assert received, "update() never called"
         for result in received:
-            assert result.energy is not None, "update() got an empty BiasResult"
-            assert result.forces is not None
+            assert result.get("energy") is not None, "update() got nothing"
+            assert result.get("forces") is not None
             # E = 2 * sum(x)  =>  F = -2 on x only.
             assert torch.allclose(
-                result.forces[:, 0],
-                torch.full_like(result.forces[:, 0], -2.0),
+                result["forces"][:, 0],
+                torch.full_like(result["forces"][:, 0], -2.0),
                 atol=1e-5,
             )
 
     def test_after_compute_update_also_receives_its_result(self, device: str) -> None:
-        received: list[BiasResult] = []
+        received: list[ModelOutputs] = []
 
         class _ResultRecordingBias(AdaptivePotentialMixin, _ConstantForceBias):
-            observation_stage = DynamicsStage.AFTER_COMPUTE
+            stage = DynamicsStage.AFTER_COMPUTE
 
             def __init__(self) -> None:
                 super().__init__(3.0, name="recorder")
 
-            def update(self, frames: Batch, result: BiasResult) -> None:
-                received.append(result)
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+                received.append(ctx.contribution)
 
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner = EnhancedSampling(
@@ -691,10 +694,10 @@ class TestAdaptiveUpdates:
 
         assert received
         for result in received:
-            assert result.energy is not None
+            assert result.get("energy") is not None
             assert torch.allclose(
-                result.forces[:, 0],
-                torch.full_like(result.forces[:, 0], -3.0),
+                result["forces"][:, 0],
+                torch.full_like(result["forces"][:, 0], -3.0),
                 atol=1e-5,
             )
 
@@ -707,8 +710,8 @@ class TestAdaptiveUpdates:
                 def __init__(self) -> None:
                     super().__init__(coefficient, name=tag)
 
-                def update(self, frames: Batch, result: BiasResult) -> None:
-                    seen[tag].append(float(result.forces[0, 0]))
+                def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+                    seen[tag].append(float(ctx.contribution["forces"][0, 0]))
 
             return _Bias()
 
@@ -729,7 +732,7 @@ class TestAdaptiveUpdates:
         runner.run(batch, n_steps=3)  # must not raise NotImplementedError
         assert runner._adaptive_biases() == {}
 
-    def test_commit_epoch_fires_at_boundary(self, device: str) -> None:
+    def test_commit_fires_at_boundary(self, device: str) -> None:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias()
         runner = EnhancedSampling(
@@ -737,7 +740,7 @@ class TestAdaptiveUpdates:
         )
         runner.run(batch, n_steps=6)
         assert bias.commit_calls >= 2, (
-            f"commit_epoch fired {bias.commit_calls} times over 3 epochs"
+            f"commit fired {bias.commit_calls} times over 3 epochs"
         )
 
     def test_state_version_bump_triggers_reprime(self, device: str) -> None:
@@ -831,7 +834,7 @@ class TestAdaptiveMixinComposition:
             def energy(self, current: Batch) -> Tensor:
                 return torch.zeros(current.num_graphs, 1)
 
-            def update(self, frames: Batch, result: BiasResult) -> None:
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
                 self.bump_state_version()
 
         bias = _Both()
@@ -857,7 +860,7 @@ class TestAdaptiveMixinComposition:
             def energy(self, current: Batch) -> Tensor:
                 return torch.zeros(current.num_graphs, 1)
 
-            def update(self, frames: Batch, result: BiasResult) -> None:
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
                 pass
 
         bias = _Both()
@@ -869,10 +872,10 @@ class TestAdaptiveMixinComposition:
         class _ForceOnlyAdaptive(AdaptivePotentialMixin):
             name = "force_only"
 
-            def evaluate(self, current: Batch) -> BiasResult:
-                return BiasResult(forces=torch.zeros_like(current.positions))
+            def forward(self, data: Batch, **kwargs) -> ModelOutputs:
+                return OrderedDict(forces=torch.zeros_like(data.positions))
 
-            def update(self, frames: Batch, result: BiasResult) -> None:
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
                 self.bump_state_version()
 
         bias = _ForceOnlyAdaptive()

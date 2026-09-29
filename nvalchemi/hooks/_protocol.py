@@ -87,3 +87,63 @@ class CheckpointableHook(Protocol):
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         """Restore hook state from a training checkpoint."""
         ...
+
+
+@runtime_checkable
+class StatefulHook(Hook, CheckpointableHook, Protocol):
+    """Protocol for a hook whose state evolves with the workflow it observes.
+
+    Composed rather than redeclared: :class:`Hook` already carries
+    ``frequency`` and ``stage`` — the whole of "run this every N steps, at
+    that point in the step" — and :class:`CheckpointableHook` already carries
+    ``state_dict`` / ``load_state_dict``.  What neither says is whether a given
+    dispatch is allowed to *change* anything, or when accumulated changes
+    become visible to other workers.  This protocol adds exactly those two
+    members, and nothing else.
+
+    The pattern it describes recurs well beyond any one workflow: an adaptive
+    bias depositing hills, an NEB run promoting its climbing image, an
+    adaptive thermostat retuning its coupling, a neighbour list widening its
+    skin.  All of them are read-only while forces are being computed, mutate
+    after the step, and synchronise only occasionally.  Without a shared
+    protocol each one invents its own vocabulary for the same three ideas.
+
+    Attributes
+    ----------
+    read_only : bool
+        ``False`` for a hook that mutates its own state when dispatched.
+        Engines that evaluate the same step more than once — priming forces,
+        re-evaluating under a proposed replica-exchange assignment — use this
+        to tell a dispatch that must happen exactly once from one that is
+        safe to repeat.
+
+    Notes
+    -----
+    Domain hook families may keep a signature suited to their semantics
+    rather than ``__call__(ctx, stage)``, as
+    :class:`~nvalchemi.training.hooks.update.TrainingUpdateHook` does, in
+    which case an orchestrator owns protocol compliance on their behalf.  The
+    attributes below are the part worth sharing regardless.
+
+    .. warning::
+
+        ``isinstance`` against a runtime-checkable Protocol checks that the
+        members *exist*, never that they have the right signature.  An object
+        whose ``__call__`` takes something other than ``(ctx, stage)`` — any
+        ``nn.Module``, for one, whose ``__call__`` is its forward — passes the
+        check and then fails when dispatched.  Use ``isinstance`` to ask
+        whether a hook owns state, not to decide that an arbitrary object is
+        safe to call as a hook; that is the registering engine's business.
+    """
+
+    read_only: bool = False
+
+    def commit(self) -> None:
+        """Publish pending state at a synchronisation boundary.
+
+        Optional; a hook whose state is local to one worker needs no
+        synchronisation and may leave this a no-op.  Never called on the hot
+        path — engines call it at whatever boundary they define as safe (an
+        epoch, a segment, the end of a run), at most once per boundary.
+        """
+        ...

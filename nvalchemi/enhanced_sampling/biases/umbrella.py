@@ -16,17 +16,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
 
-from nvalchemi.enhanced_sampling._bias import BiasResult, ConservativeBias
+from nvalchemi.enhanced_sampling._bias import ConservativeBias
 from nvalchemi.enhanced_sampling.cv._periodic import periodic_difference
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from nvalchemi._typing import ModelOutputs
     from nvalchemi.data import Batch
 
 __all__ = ["HarmonicUmbrellaBias"]
@@ -245,11 +246,11 @@ class HarmonicUmbrellaBias(ConservativeBias):
     def _validate_state_ids(self, current: Batch) -> None:
         """Raise if any ``thermodynamic_state_id`` is out of range.
 
-        Called from :meth:`evaluate`, never from :meth:`energy`.  That
+        Called from :meth:`forward`, never from :meth:`energy`.  That
         placement is deliberate: ``energy()`` is the path
         ``EnhancedSampling(compile_biases=True)`` hands to ``torch.compile``,
         and ``bool(tensor.any())`` there is a data-dependent Python branch
-        that breaks ``fullgraph=True`` outright.  ``evaluate()`` is eager by
+        that breaks ``fullgraph=True`` outright.  ``forward()`` is eager by
         construction, so hoisting the check keeps it running in **every**
         mode, rather than skipping it under compile the way the eager-only
         guards in ``pair_distance`` must.
@@ -282,26 +283,28 @@ class HarmonicUmbrellaBias(ConservativeBias):
                 f"{index[out_of_range].tolist()}; valid ids are 0..{n_states - 1}."
             )
 
-    def evaluate(self, current: Batch) -> BiasResult:
+    def forward(self, data: Batch, **kwargs: Any) -> ModelOutputs:
         """Validate the state ids, then derive energy, forces, and stress.
 
         Parameters
         ----------
-        current:
+        data:
             The live batch.
+        **kwargs:
+            Forwarded to :meth:`ConservativeBias.forward`.
 
         Returns
         -------
-        BiasResult
-            As :meth:`ConservativeBias.evaluate`.
+        ModelOutputs
+            As :meth:`ConservativeBias.forward`.
 
         Raises
         ------
         IndexError
             If a ``thermodynamic_state_id`` is out of range.
         """
-        self._validate_state_ids(current)
-        return super().evaluate(current)
+        self._validate_state_ids(data)
+        return super().forward(data, **kwargs)
 
     def _select_per_graph(
         self, current: Batch, values: Tensor
@@ -310,7 +313,7 @@ class HarmonicUmbrellaBias(ConservativeBias):
 
         Contains no data-dependent Python branch, so it compiles with
         ``fullgraph=True``.  Bounds checking lives in
-        :meth:`_validate_state_ids`, which :meth:`evaluate` runs first.
+        :meth:`_validate_state_ids`, which :meth:`forward` runs first.
 
         Parameters
         ----------
@@ -338,7 +341,7 @@ class HarmonicUmbrellaBias(ConservativeBias):
         ----------
         current:
             Batch with strained positions supplied by
-            :meth:`ConservativeBias.evaluate`.
+            :func:`~nvalchemi.models._utils.isolated_energy_derivatives`.
 
         Returns
         -------

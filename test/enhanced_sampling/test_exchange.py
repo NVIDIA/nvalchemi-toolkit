@@ -1110,10 +1110,10 @@ class TestExchangeCheckpoint:
                     + 0.0 * current.positions.sum()
                 )
 
-            def update(self, frames: Batch, result) -> None:
+            def update(self, ctx, stage) -> None:
                 pass
 
-            def commit_epoch(self) -> None:
+            def commit(self) -> None:
                 order.append("commit")
 
         exchange = ReplicaExchange(

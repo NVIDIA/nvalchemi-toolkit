@@ -26,6 +26,8 @@ it and the ideal-gas limit reports a flat PMF instead of ``-2 kB T ln r``.
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import pytest
 import torch
 
@@ -35,14 +37,34 @@ from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
     AdaptiveBiasingForce,
-    BiasResult,
     EnhancedSampling,
     ReplicaExchange,
     ThermodynamicState,
     pair_displacement,
     pair_distance,
 )
+from nvalchemi.hooks import BiasContext
+from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+
+def _ctx(frames: Batch, contribution=None) -> BiasContext:
+    """Build the capture an adaptive bias's ``update`` is handed.
+
+    The runner builds this itself; tests that drive ``update`` directly need
+    the same shape.
+    """
+    return BiasContext(batch=frames, contribution=contribution or OrderedDict())
+
+
+def _diagnostics(outputs) -> dict:
+    """Return the ``diagnostics/*`` entries of a contribution, unprefixed."""
+    return {
+        key[len(DIAGNOSTIC_PREFIX) :]: value
+        for key, value in outputs.items()
+        if key.startswith(DIAGNOSTIC_PREFIX)
+    }
+
 
 TEMPERATURE = 300.0
 KT = KB_EV * TEMPERATURE
@@ -177,9 +199,9 @@ class TestConstruction:
         with pytest.raises(ValueError, match="max_force must be positive"):
             _abf(max_force=0.0)
 
-    def test_zero_update_frequency_raises(self) -> None:
-        with pytest.raises(ValueError, match="update_frequency must be at least 1"):
-            _abf(update_frequency=0)
+    def test_zero_frequency_raises(self) -> None:
+        with pytest.raises(ValueError, match="frequency must be at least 1"):
+            _abf(frequency=0)
 
     def test_mixin_order_is_correct(self) -> None:
         """AdaptivePotentialMixin must precede nn.Module in the MRO."""
@@ -189,15 +211,32 @@ class TestConstruction:
         assert mro.index(AdaptivePotentialMixin) < mro.index(torch.nn.Module)
 
     def test_is_not_a_conservative_bias(self) -> None:
-        """ABF has no energy to differentiate, so it is not a model."""
+        """ABF has no energy to differentiate, so there is nothing to derive."""
         from nvalchemi.enhanced_sampling import ConservativeBias
 
         assert not issubclass(AdaptiveBiasingForce, ConservativeBias)
 
-    def test_satisfies_the_bias_protocol(self) -> None:
-        from nvalchemi.enhanced_sampling import BiasPotential
+    def test_is_still_an_additive_potential(self) -> None:
+        """Non-conservative does not mean non-model.
 
-        assert isinstance(_abf(), BiasPotential)
+        ABF produces ``forces`` and no ``energy``, but it is still a
+        ``BaseModelMixin`` returning ``ModelOutputs`` — which is what lets the
+        runner treat every bias the same way, and is why there is no separate
+        bias protocol for it to satisfy instead.
+        """
+        from nvalchemi.models.base import BaseModelMixin
+
+        bias = _abf()
+        assert isinstance(bias, BaseModelMixin)
+        assert bias.model_config.outputs == frozenset({"forces"})
+
+    def test_is_a_stateful_hook(self) -> None:
+        """The adaptive half is the shared hook lifecycle, not a private one."""
+        bias = _abf()
+        assert bias.frequency == 1
+        assert bias.stage is DynamicsStage.AFTER_COMPUTE
+        assert bias.read_only is False
+        assert callable(bias.commit)
 
 
 # ===========================================================================
@@ -213,7 +252,7 @@ class TestEstimator:
         """The harmonic pair makes the estimator exact pointwise, not just
         on average — one sample must land on the analytic value."""
         bias = _abf(device)
-        bias.update(_harmonic_frame([distance], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([distance], device)), bias.stage)
 
         index = int(bias.bin_index(torch.tensor([distance]))[0])
         assert float(bias.mean_force()[index]) == pytest.approx(
@@ -229,7 +268,7 @@ class TestEstimator:
         bias = _abf(device)
         frame = _harmonic_frame([2.5], device)
         frame.forces = torch.zeros_like(frame.forces)
-        bias.update(frame, BiasResult())
+        bias.update(_ctx(frame), bias.stage)
 
         index = int(bias.bin_index(torch.tensor([2.5]))[0])
         got = float(bias.mean_force()[index])
@@ -243,14 +282,14 @@ class TestEstimator:
             bias = _abf(device, temperature=temperature)
             frame = _harmonic_frame([2.5], device)
             frame.forces = torch.zeros_like(frame.forces)
-            bias.update(frame, BiasResult())
+            bias.update(_ctx(frame), bias.stage)
             index = int(bias.bin_index(torch.tensor([2.5]))[0])
             gradients.append(float(bias.mean_force()[index]))
         assert gradients[1] == pytest.approx(2.0 * gradients[0], rel=1e-5)
 
     def test_samples_average_within_a_bin(self, device: str) -> None:
         bias = _abf(device, n_bins=1, cv_range=(1.0, 4.0))
-        bias.update(_harmonic_frame([1.5, 2.5, 3.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([1.5, 2.5, 3.5], device)), bias.stage)
 
         expected = sum(_analytic_gradient(r) for r in (1.5, 2.5, 3.5)) / 3.0
         assert int(bias.bin_counts[0]) == 3
@@ -259,21 +298,21 @@ class TestEstimator:
     def test_unvisited_bins_are_nan_not_zero(self, device: str) -> None:
         """Zero is a plausible mean force, so it cannot mean "no data"."""
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.0], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.0], device)), bias.stage)
         estimate = bias.mean_force()
         assert bool(torch.isnan(estimate).any())
         assert int((~torch.isnan(estimate)).sum()) == 1
 
     def test_out_of_range_samples_are_discarded(self, device: str) -> None:
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=10)
-        bias.update(_harmonic_frame([1.0, 2.5, 5.0], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([1.0, 2.5, 5.0], device)), bias.stage)
         assert int(bias.bin_counts.sum()) == 1
 
     def test_update_without_forces_raises(self, device: str) -> None:
         """There is nothing to project if the frame carries no forces."""
         bias = _abf(device)
         with pytest.raises(ValueError, match="has no forces"):
-            bias.update(_harmonic_frame([2.0], device, forces=False), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.0], device, forces=False)), bias.stage)
 
 
 # ===========================================================================
@@ -287,13 +326,13 @@ class TestAppliedForce:
     def test_result_is_force_only(self, device: str) -> None:
         """No energy: the applied force is not the gradient of anything held."""
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
-        result = bias.evaluate(_harmonic_frame([2.5], device))
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
+        result = bias(_harmonic_frame([2.5], device))
 
-        assert result.energy is None
-        assert result.stress is None
-        assert result.virial is None
-        assert result.forces is not None
+        assert result.get("energy") is None
+        assert result.get("stress") is None
+        assert result.get("virial") is None
+        assert result.get("forces") is not None
 
     def test_force_opposes_the_mean_force(self, device: str) -> None:
         """The bias must cancel the drift, not reinforce it.
@@ -305,31 +344,31 @@ class TestAppliedForce:
         bias = _abf(device)
         frame = _harmonic_frame([2.5], device)
         frame.forces = torch.zeros_like(frame.forces)
-        bias.update(frame, BiasResult())
+        bias.update(_ctx(frame), bias.stage)
 
-        forces = bias.evaluate(_harmonic_frame([2.5], device)).forces
+        forces = bias(_harmonic_frame([2.5], device))["forces"]
         assert float(forces[1, 0]) < 0.0
         assert float(forces[0, 0]) > 0.0
 
     def test_applied_force_equals_the_estimate(self, device: str) -> None:
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.9], device), BiasResult())
-        forces = bias.evaluate(_harmonic_frame([2.9], device)).forces
+        bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
+        forces = bias(_harmonic_frame([2.9], device))["forces"]
         assert float(forces[1, 0]) == pytest.approx(_analytic_gradient(2.9), rel=1e-5)
 
     def test_bias_exerts_no_net_force(self, device: str) -> None:
         """Equal and opposite along the pair: no spurious translation."""
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.5, 3.1], device), BiasResult())
-        forces = bias.evaluate(_harmonic_frame([2.5, 3.1], device)).forces
+        bias.update(_ctx(_harmonic_frame([2.5, 3.1], device)), bias.stage)
+        forces = bias(_harmonic_frame([2.5, 3.1], device))["forces"]
         assert float(forces.sum(dim=0).abs().max()) < 1e-9
 
     def test_no_force_before_the_threshold(self, device: str) -> None:
         """An estimate from a handful of samples is noise."""
         bias = _abf(device, min_samples=4, full_samples=8)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
-        result = bias.evaluate(_harmonic_frame([2.5], device))
-        assert torch.count_nonzero(result.forces) == 0
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
+        result = bias(_harmonic_frame([2.5], device))
+        assert torch.count_nonzero(result.get("forces")) == 0
 
     def test_force_ramps_between_the_thresholds(self, device: str) -> None:
         """A jump to the full estimate would be the discontinuity the
@@ -337,9 +376,9 @@ class TestAppliedForce:
         bias = _abf(device, min_samples=2, full_samples=6)
         magnitudes = []
         for _ in range(6):
-            bias.update(_harmonic_frame([2.9], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
             magnitudes.append(
-                abs(float(bias.evaluate(_harmonic_frame([2.9], device)).forces[1, 0]))
+                abs(float(bias(_harmonic_frame([2.9], device))["forces"][1, 0]))
             )
 
         assert magnitudes[0] == pytest.approx(0.0, abs=1e-12)
@@ -350,7 +389,7 @@ class TestAppliedForce:
         bias = _abf(device, min_samples=2, full_samples=4, n_bins=1)
         assert float(bias.ramp_fraction()[0]) == 0.0
         for _ in range(4):
-            bias.update(_harmonic_frame([2.5], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert float(bias.ramp_fraction()[0]) == pytest.approx(1.0)
 
     def test_equal_thresholds_reach_full_force_at_the_threshold(
@@ -366,7 +405,7 @@ class TestAppliedForce:
 
         fractions = []
         for _ in range(5):
-            bias.update(_harmonic_frame([2.5], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
             fractions.append(float(bias.ramp_fraction()[0]))
 
         assert fractions == [0.0, 0.0, 1.0, 1.0, 1.0]
@@ -377,10 +416,10 @@ class TestAppliedForce:
         """The bump must track the ramp, not a separately derived threshold."""
         bias = _abf(device, n_bins=1, min_samples=3, full_samples=3)
         for _ in range(2):
-            bias.update(_harmonic_frame([2.5], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert bias.state_version == 0
 
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert int(bias.bin_counts[0]) == 3
         assert bias.state_version == 1
 
@@ -389,14 +428,11 @@ class TestAppliedForce:
         bias = _abf(
             device, n_bins=1, cv_range=(1.0, 4.0), min_samples=2, full_samples=2
         )
-        bias.update(_harmonic_frame([2.9], device), BiasResult())
-        assert (
-            torch.count_nonzero(bias.evaluate(_harmonic_frame([2.9], device)).forces)
-            == 0
-        )
+        bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
+        assert torch.count_nonzero(bias(_harmonic_frame([2.9], device))["forces"]) == 0
 
-        bias.update(_harmonic_frame([2.9], device), BiasResult())
-        forces = bias.evaluate(_harmonic_frame([2.9], device)).forces
+        bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
+        forces = bias(_harmonic_frame([2.9], device))["forces"]
         assert float(forces[1, 0]) == pytest.approx(_analytic_gradient(2.9), rel=1e-5)
 
     def test_zero_threshold_default_is_a_step(self, device: str) -> None:
@@ -411,7 +447,7 @@ class TestAppliedForce:
         assert bias.full_samples == 0
 
         assert float(bias.ramp_fraction()[0]) == 0.0  # no samples, no estimate
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert float(bias.ramp_fraction()[0]) == 1.0
 
     def test_unvisited_bins_report_zero_ramp(self, device: str) -> None:
@@ -424,33 +460,33 @@ class TestAppliedForce:
         """The two must not drift: the force is the estimate times the ramp."""
         bias = _abf(device, n_bins=1, min_samples=2, full_samples=5)
         for _ in range(6):
-            bias.update(_harmonic_frame([2.9], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
             expected = float(bias.mean_force()[0]) * float(bias.ramp_fraction()[0])
-            forces = bias.evaluate(_harmonic_frame([2.9], device)).forces
+            forces = bias(_harmonic_frame([2.9], device))["forces"]
             assert float(forces[1, 0]) == pytest.approx(expected, rel=1e-5, abs=1e-9)
 
     def test_out_of_range_walkers_feel_nothing(self, device: str) -> None:
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=10)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
-        result = bias.evaluate(_harmonic_frame([2.5, 9.0], device))
-        assert float(result.forces[2:].abs().max()) == 0.0
-        assert float(result.forces[:2].abs().max()) > 0.0
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
+        result = bias(_harmonic_frame([2.5, 9.0], device))
+        assert float(result.get("forces")[2:].abs().max()) == 0.0
+        assert float(result.get("forces")[:2].abs().max()) > 0.0
 
     def test_max_force_caps_the_estimate(self, device: str) -> None:
         """One visit at a bad geometry cannot dominate the trajectory."""
         bias = _abf(device, max_force=0.1)
-        bias.update(_harmonic_frame([3.5], device), BiasResult())
-        forces = bias.evaluate(_harmonic_frame([3.5], device)).forces
+        bias.update(_ctx(_harmonic_frame([3.5], device)), bias.stage)
+        forces = bias(_harmonic_frame([3.5], device))["forces"]
         assert abs(float(forces[1, 0])) == pytest.approx(0.1, rel=1e-6)
 
     def test_evaluate_does_not_mutate_state(self, device: str) -> None:
         """``evaluate`` is read-only; only ``update`` changes the estimate."""
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         before = (bias.bin_counts.clone(), bias.force_sum.clone(), bias.state_version)
 
         for _ in range(3):
-            bias.evaluate(_harmonic_frame([2.5], device))
+            bias(_harmonic_frame([2.5], device))
 
         assert torch.equal(bias.bin_counts, before[0])
         assert torch.equal(bias.force_sum, before[1])
@@ -458,10 +494,10 @@ class TestAppliedForce:
 
     def test_diagnostics_are_reported(self, device: str) -> None:
         bias = _abf(device)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
-        result = bias.evaluate(_harmonic_frame([2.5, 9.0], device))
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
+        result = bias(_harmonic_frame([2.5, 9.0], device))
 
-        assert set(result.observables) >= {
+        assert set(_diagnostics(result)) >= {
             "cv",
             "bin",
             "applied_gradient",
@@ -471,9 +507,9 @@ class TestAppliedForce:
         }
         # Deliberately not called "mean_force": this is the ramped, capped
         # value, which mean_force() is not.
-        assert "mean_force" not in result.observables
-        assert float(result.observables["cv"][0]) == pytest.approx(2.5, abs=1e-6)
-        assert result.observables["in_range"].reshape(-1).tolist() == [1.0, 0.0]
+        assert "mean_force" not in _diagnostics(result)
+        assert float(_diagnostics(result)["cv"][0]) == pytest.approx(2.5, abs=1e-6)
+        assert _diagnostics(result)["in_range"].reshape(-1).tolist() == [1.0, 0.0]
 
     def test_out_of_range_diagnostics_are_zero(self, device: str) -> None:
         """A clamped bin index must not leak the edge bin's statistics.
@@ -488,14 +524,14 @@ class TestAppliedForce:
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
         # Give both edge bins real statistics to leak.
         for _ in range(5):
-            bias.update(_harmonic_frame([2.9], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
         for _ in range(3):
-            bias.update(_harmonic_frame([2.1], device), BiasResult())
+            bias.update(_ctx(_harmonic_frame([2.1], device)), bias.stage)
         assert int(bias.bin_counts.sum()) == 8
 
         # Inside, far above the range, far below it.
-        result = bias.evaluate(_harmonic_frame([2.9, 9.0, 0.5], device))
-        observables = result.observables
+        result = bias(_harmonic_frame([2.9, 9.0, 0.5], device))
+        observables = _diagnostics(result)
 
         assert observables["in_range"].reshape(-1).tolist() == [1.0, 0.0, 0.0]
         assert observables["samples"].reshape(-1).tolist() == [5, 0, 0]
@@ -505,10 +541,10 @@ class TestAppliedForce:
     def test_reported_bin_matches_bin_index(self, device: str) -> None:
         """The observable and the public accessor must not disagree."""
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
-        bias.update(_harmonic_frame([2.9], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.9], device)), bias.stage)
 
         probe = _harmonic_frame([2.9, 9.0, 0.5], device)
-        observables = bias.evaluate(probe).observables
+        observables = _diagnostics(bias(probe))
         assert (
             observables["bin"].reshape(-1).tolist()
             == bias.bin_index(observables["cv"].reshape(-1)).tolist()
@@ -518,7 +554,7 @@ class TestAppliedForce:
     def test_cv_is_reported_even_out_of_range(self, device: str) -> None:
         """The CV is genuinely measured wherever the walker is."""
         bias = _abf(device, cv_range=(2.0, 3.0), n_bins=4)
-        observables = bias.evaluate(_harmonic_frame([9.0], device)).observables
+        observables = _diagnostics(bias(_harmonic_frame([9.0], device)))
         assert float(observables["cv"][0]) == pytest.approx(9.0, abs=1e-5)
 
 
@@ -538,7 +574,7 @@ class TestFreeEnergy:
         """
         bias = _abf(device, cv_range=(1.5, 3.0), n_bins=30)
         centers = bias.bin_centers
-        bias.update(_harmonic_frame(centers.tolist(), device), BiasResult())
+        bias.update(_ctx(_harmonic_frame(centers.tolist(), device)), bias.stage)
 
         profile = bias.free_energy()
         exact = 0.5 * SPRING * (centers - REST_LENGTH) ** 2 - 2 * KT * torch.log(
@@ -552,7 +588,7 @@ class TestFreeEnergy:
     def test_unsampled_bins_are_nan(self, device: str) -> None:
         bias = _abf(device, cv_range=(1.0, 4.0), n_bins=30)
         centers = bias.bin_centers
-        bias.update(_harmonic_frame(centers[5:20].tolist(), device), BiasResult())
+        bias.update(_ctx(_harmonic_frame(centers[5:20].tolist(), device)), bias.stage)
 
         profile = bias.free_energy()
         assert bool(torch.isnan(profile[:5]).all())
@@ -565,7 +601,7 @@ class TestFreeEnergy:
         bias = _abf(device, cv_range=(1.0, 4.0), n_bins=30)
         centers = bias.bin_centers
         sampled = centers[[5, 6, 7, 20, 21]].tolist()
-        bias.update(_harmonic_frame(sampled, device), BiasResult())
+        bias.update(_ctx(_harmonic_frame(sampled, device)), bias.stage)
 
         with pytest.raises(RuntimeError, match="never visited but lie between"):
             bias.free_energy()
@@ -576,7 +612,7 @@ class TestFreeEnergy:
 
     def test_single_bin_is_flat(self, device: str) -> None:
         bias = _abf(device, n_bins=1, cv_range=(1.0, 4.0))
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert float(bias.free_energy()[0]) == 0.0
 
 
@@ -588,8 +624,8 @@ class TestFreeEnergy:
 class TestRunnerIntegration:
     """The runner must hand ABF unbiased forces, exactly once per due step."""
 
-    def test_observation_stage_is_after_compute(self) -> None:
-        assert _abf().observation_stage is DynamicsStage.AFTER_COMPUTE
+    def test_stage_is_after_compute(self) -> None:
+        assert _abf().stage is DynamicsStage.AFTER_COMPUTE
 
     def test_observes_physical_not_total_forces(self, device: str) -> None:
         """An estimator fed its own output converges to what it already said.
@@ -599,9 +635,9 @@ class TestRunnerIntegration:
         observed: list[torch.Tensor] = []
 
         class Spy(AdaptiveBiasingForce):
-            def update(self, frames: Batch, result: BiasResult) -> None:
-                observed.append(frames.forces.clone())
-                super().update(frames, result)
+            def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
+                observed.append(ctx.batch.forces.clone())
+                super().update(ctx, stage)
 
         bias = Spy(
             atom_indices=torch.tensor([0, 3]),
@@ -639,10 +675,8 @@ class TestRunnerIntegration:
         # One sample per walker per step; two walkers.
         assert int(bias.bin_counts.sum()) == 6 * batch.num_graphs
 
-    def test_update_frequency_is_respected(self, device: str) -> None:
-        bias = _abf(
-            device, atom_indices=torch.tensor([0, 3]), name="abf", update_frequency=3
-        )
+    def test_frequency_is_respected(self, device: str) -> None:
+        bias = _abf(device, atom_indices=torch.tensor([0, 3]), name="abf", frequency=3)
         runner = EnhancedSampling(_make_dynamics(device), {"abf": bias})
         batch = _runner_batch(device=device)
         runner.run(batch, n_steps=9)
@@ -660,13 +694,13 @@ class TestRunnerIntegration:
         This is the case ``bump_state_version`` documents.
         """
         bias = _abf(device, min_samples=1000, full_samples=2000)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert bias.state_version == 0
 
     def test_above_threshold_updates_bump_the_version(self, device: str) -> None:
         bias = _abf(device, min_samples=1, full_samples=2)
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
-        bias.update(_harmonic_frame([2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
+        bias.update(_ctx(_harmonic_frame([2.5], device)), bias.stage)
         assert bias.state_version > 0
 
     def test_composes_with_a_conservative_bias(self, device: str) -> None:
@@ -740,7 +774,7 @@ class TestRestart:
 
     def test_state_dict_round_trip(self, device: str) -> None:
         bias = _abf(device)
-        bias.update(_harmonic_frame([1.6, 2.5, 3.1], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([1.6, 2.5, 3.1], device)), bias.stage)
 
         restored = _abf(device)
         restored.load_state_dict(bias.state_dict())
@@ -749,19 +783,19 @@ class TestRestart:
         assert torch.allclose(restored.force_sum, bias.force_sum)
         assert restored.state_version == bias.state_version
         assert torch.allclose(
-            restored.evaluate(_harmonic_frame([2.5], device)).forces,
-            bias.evaluate(_harmonic_frame([2.5], device)).forces,
+            restored(_harmonic_frame([2.5], device))["forces"],
+            bias(_harmonic_frame([2.5], device))["forces"],
         )
 
     def test_restart_continues_averaging(self, device: str) -> None:
         """A restored run must extend the average, not restart it."""
         bias = _abf(device, n_bins=1, cv_range=(1.0, 4.0))
-        bias.update(_harmonic_frame([1.5, 2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([1.5, 2.5], device)), bias.stage)
 
         restored = _abf(device, n_bins=1, cv_range=(1.0, 4.0))
         restored.load_state_dict(bias.state_dict())
-        restored.update(_harmonic_frame([3.5], device), BiasResult())
-        bias.update(_harmonic_frame([3.5], device), BiasResult())
+        restored.update(_ctx(_harmonic_frame([3.5], device)), restored.stage)
+        bias.update(_ctx(_harmonic_frame([3.5], device)), bias.stage)
 
         assert int(restored.bin_counts[0]) == 3
         assert float(restored.mean_force()[0]) == pytest.approx(
@@ -776,7 +810,7 @@ class TestRestart:
         carrying its accumulated mean force with it.
         """
         source = _abf(device, cv_range=(1.0, 4.0))
-        source.update(_harmonic_frame([1.5, 2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([1.5, 2.5], device)), source.stage)
 
         target = _abf(device, cv_range=(2.0, 8.0))
         with pytest.raises(ValueError, match="cv_range"):
@@ -785,7 +819,7 @@ class TestRestart:
     def test_restoring_a_different_temperature_raises(self, device: str) -> None:
         """The metric correction is already folded into ``force_sum``."""
         source = _abf(device)
-        source.update(_harmonic_frame([2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([2.5], device)), source.stage)
 
         target = _abf(device, temperature=900.0)
         with pytest.raises(ValueError, match="temperature"):
@@ -798,7 +832,7 @@ class TestRestart:
         checkpoint's — the opposite of what asking for it meant.
         """
         source = _abf(device, atom_indices=torch.tensor([0, 1]))
-        source.update(_harmonic_frame([2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([2.5], device)), source.stage)
 
         target = _abf(device, atom_indices=torch.tensor([5, 7]))
         with pytest.raises(ValueError, match="atom_indices"):
@@ -820,7 +854,7 @@ class TestRestart:
     ) -> None:
         base = {"min_samples": 1, "full_samples": 100}
         source = _abf(device, **base)
-        source.update(_harmonic_frame([2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([2.5], device)), source.stage)
 
         target = _abf(device, **{**base, field: value})
         with pytest.raises(ValueError, match=field):
@@ -828,7 +862,7 @@ class TestRestart:
 
     def test_the_error_names_every_difference(self, device: str) -> None:
         source = _abf(device, cv_range=(1.0, 4.0))
-        source.update(_harmonic_frame([2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([2.5], device)), source.stage)
         target = _abf(device, cv_range=(2.0, 8.0), temperature=900.0)
 
         with pytest.raises(ValueError) as excinfo:
@@ -839,7 +873,7 @@ class TestRestart:
     def test_identical_configuration_still_restores(self, device: str) -> None:
         """The check must not reject a legitimate continuation."""
         source = _abf(device)
-        source.update(_harmonic_frame([1.5, 2.5], device), BiasResult())
+        source.update(_ctx(_harmonic_frame([1.5, 2.5], device)), source.stage)
 
         target = _abf(device)
         target.load_state_dict(source.state_dict())
@@ -915,13 +949,13 @@ class TestGeometry:
 
     def test_per_graph_pairs_are_supported(self, device: str) -> None:
         bias = _abf(device, atom_indices=torch.tensor([[0, 1], [1, 0]]))
-        bias.update(_harmonic_frame([2.5, 2.5], device), BiasResult())
+        bias.update(_ctx(_harmonic_frame([2.5, 2.5], device)), bias.stage)
         assert int(bias.bin_counts.sum()) == 2
 
     def test_bias_follows_the_batch_device(self, device: str) -> None:
         """A bias built before the batch moved to GPU must still work."""
         bias = _abf("cpu")
         batch = _harmonic_frame([2.5], device)
-        bias.update(batch, BiasResult())
-        result = bias.evaluate(batch)
-        assert result.forces.device.type == batch.positions.device.type
+        bias.update(_ctx(batch), bias.stage)
+        result = bias(batch)
+        assert result.get("forces").device.type == batch.positions.device.type

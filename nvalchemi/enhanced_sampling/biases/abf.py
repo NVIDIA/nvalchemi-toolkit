@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -24,16 +25,19 @@ from torch import Tensor, nn
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling._adaptive import AdaptivePotentialMixin
-from nvalchemi.enhanced_sampling._bias import BiasResult
 from nvalchemi.enhanced_sampling.cv.pair_distance import pair_displacement
+from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
+    from nvalchemi._typing import ModelOutputs
+    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.enhanced_sampling._adaptive import BiasContext
 
 __all__ = ["AdaptiveBiasingForce"]
 
 
-class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
+class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module, BaseModelMixin):
     r"""Estimate and cancel the mean force along a pair distance.
 
     Metadynamics fills a basin with hills; ABF instead measures the mean
@@ -84,7 +88,7 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         Optional cap on ``|dA/dr|`` in eV/A.  A bin that has been visited
         once at a bad geometry can hold a large estimate; the cap bounds
         what that can do to the trajectory.
-    update_frequency:
+    frequency:
         Steps between :meth:`update` calls.  ``1`` (every step) is the usual
         choice — ABF wants every uncorrelated sample it can get.
 
@@ -115,7 +119,7 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         correction to something that is not a distance.
 
     Force-only, and therefore excluded from replica exchange
-        :meth:`evaluate` returns forces with ``energy=None``.  There is no
+        :meth:`forward` returns ``forces`` and no ``energy``.  There is no
         potential to report: the applied force is not the gradient of any
         function the bias holds, which is exactly what makes ABF
         non-conservative.  ``supplies_exchange_energy`` is ``False``, and
@@ -124,7 +128,8 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         cross-state bias energy.
 
     Observation ordering
-        ``observation_stage`` is ``AFTER_COMPUTE``, where ``batch.forces``
+        :attr:`~nvalchemi.enhanced_sampling.AdaptivePotentialMixin.stage` is
+        ``AFTER_COMPUTE``, where ``batch.forces``
         still holds the **unbiased** physical force.  Observing after the
         bias is applied would feed the estimator its own output, and it
         would converge to whatever it had already decided.
@@ -157,7 +162,7 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         min_samples: int = 200,
         full_samples: int | None = None,
         max_force: float | None = None,
-        update_frequency: int = 1,
+        frequency: int = 1,
     ) -> None:
         super().__init__()
 
@@ -222,10 +227,9 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
             raise ValueError(
                 f"AdaptiveBiasingForce: max_force must be positive, got {max_force}."
             )
-        if int(update_frequency) < 1:
+        if int(frequency) < 1:
             raise ValueError(
-                f"AdaptiveBiasingForce: update_frequency must be at least 1, "
-                f"got {update_frequency}."
+                f"AdaptiveBiasingForce: frequency must be at least 1, got {frequency}."
             )
 
         self.name = name
@@ -235,8 +239,15 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         self.min_samples = int(min_samples)
         self.full_samples = ramp_end
         self.max_force = None if max_force is None else float(max_force)
-        self.update_frequency = int(update_frequency)
-        self.observation_stage = DynamicsStage.AFTER_COMPUTE
+        self.frequency = int(frequency)
+        self.stage = DynamicsStage.AFTER_COMPUTE
+        self.model_config = ModelConfig(
+            outputs=frozenset({"forces"}),
+            autograd_outputs=frozenset(),
+            supports_pbc=True,
+            needs_pbc=False,
+            active_outputs={"forces"},
+        )
 
         dtype = torch.get_default_dtype()
         self.register_buffer("atom_indices", indices)
@@ -412,32 +423,71 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
         return torch.where(self.bin_counts > 0, fraction, torch.zeros_like(fraction))
 
     # ------------------------------------------------------------------
-    # BiasPotential
+    # BaseModelMixin required surface
     # ------------------------------------------------------------------
 
-    def evaluate(self, current: Batch) -> BiasResult:
-        """Return the bias force, with no energy.
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """No embeddings: ABF applies a tabulated force, not a network."""
+        return {}
 
-        Read-only: the estimate is applied but never updated here.
+    def compute_embeddings(
+        self, data: AtomicData | Batch, **kwargs: Any
+    ) -> AtomicData | Batch:
+        """Not implemented — ABF produces no embeddings.
 
         Parameters
         ----------
-        current:
-            The live batch.
+        data:
+            The input system.
+        **kwargs:
+            Unused; accepted for interface compatibility.
 
         Returns
         -------
-        BiasResult
-            ``forces`` only, plus per-walker diagnostics: the CV value, its
-            ``bin`` (``-1`` outside ``cv_range``, matching
-            :meth:`bin_index`), the ``applied_gradient`` actually used
-            (ramped and capped, so not the same as :meth:`mean_force`), the
-            bin's sample count, its ramp fraction, and ``in_range``.  Every
-            per-bin quantity reads zero for a walker outside the range, so
-            the diagnostics agree with the force rather than reporting the
-            nearest edge bin's statistics.  ``energy`` is ``None`` because
-            there is none to report.
+        AtomicData | Batch
+            Never returns.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
         """
+        raise NotImplementedError(f"{type(self).__name__} does not produce embeddings.")
+
+    # ------------------------------------------------------------------
+    # Contribution
+    # ------------------------------------------------------------------
+
+    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
+        """Return the bias force, with no energy.
+
+        Read-only with respect to the estimator: the current estimate is
+        applied but never updated here, so it is safe to call repeatedly on
+        the same batch.
+
+        Parameters
+        ----------
+        data:
+            The live batch.
+        **kwargs:
+            Unused; accepted for interface compatibility with model wrappers.
+
+        Returns
+        -------
+        ModelOutputs
+            ``forces``, this bias's ``state_version``, and per-walker
+            ``diagnostics/*``: the CV value, its ``bin`` (``-1`` outside
+            ``cv_range``, matching :meth:`bin_index`), the
+            ``applied_gradient`` actually used (ramped and capped, so not the
+            same as :meth:`mean_force`), the bin's sample count, its ramp
+            fraction, and ``in_range``.  Every per-bin quantity reads zero for
+            a walker outside the range, so the diagnostics agree with the
+            force rather than reporting the nearest edge bin's statistics.
+            There is no ``energy``: the applied force is not the gradient of
+            any function this bias holds.
+        """
+        current = data
         self._align_device(current.positions)
 
         with torch.no_grad():
@@ -466,7 +516,7 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
             # capped value actually used, which is not what mean_force()
             # returns. Reusing that name would invite reading a
             # threshold-suppressed zero as a measured zero mean force.
-            observables = {
+            diagnostics = {
                 "cv": distance.unsqueeze(-1),
                 "bin": torch.where(in_range, bins, torch.full_like(bins, -1)).unsqueeze(
                     -1
@@ -481,25 +531,30 @@ class AdaptiveBiasingForce(AdaptivePotentialMixin, nn.Module):
                 "in_range": in_range.to(forces.dtype).unsqueeze(-1),
             }
 
-        return BiasResult(forces=forces, observables=observables)
+        outputs: ModelOutputs = OrderedDict(forces=forces)
+        for key, value in diagnostics.items():
+            outputs[f"{DIAGNOSTIC_PREFIX}{key}"] = value
+        return self.stamp_state_version(outputs, current)
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         """Accumulate one mean-force sample per walker.
 
         Parameters
         ----------
-        frames:
-            The ``AFTER_COMPUTE`` capture, whose ``forces`` are the unbiased
-            physical forces.
-        result:
-            This bias's own preceding result; unused, since the estimator
-            must not see its own output.
+        ctx:
+            The ``AFTER_COMPUTE`` capture, whose ``ctx.batch.forces`` are the
+            unbiased physical forces.  ``ctx.contribution`` is this bias's own
+            preceding output and is deliberately unused: an estimator fed its
+            own output converges to whatever it had already decided.
+        stage:
+            The stage being dispatched, always :attr:`stage`.
 
         Raises
         ------
         ValueError
             If the captured frame carries no forces to project.
         """
+        frames = ctx.batch
         physical = getattr(frames, "forces", None)
         if physical is None:
             raise ValueError(

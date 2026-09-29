@@ -16,10 +16,10 @@
 
 Covers:
 
-* :class:`~nvalchemi.enhanced_sampling.BiasResult` — shape validation,
-  detachment enforcement, stress/virial mutual exclusion.
-* :class:`~nvalchemi.enhanced_sampling.BiasPotential` — structural
-  Protocol check.
+* A bias is a :class:`~nvalchemi.models.base.BaseModelMixin` returning
+  :data:`~nvalchemi._typing.ModelOutputs` — no bias-specific protocol, no
+  bias-specific result type.  (Contribution validation itself is tested in
+  ``test/models/test_model_utils.py``, where the checker lives.)
 * :class:`~nvalchemi.enhanced_sampling.ConservativeBias` — forces and
   tensile-positive Cauchy stress from autograd; compare both with finite
   differences; stress symmetry; no ``requires_grad`` escape into live
@@ -29,11 +29,9 @@ Covers:
   gradients via ``torch.autograd.gradcheck``; compile-stability under
   ``torch.compile`` (fullgraph=True on CPU); unreduced-cell rejection in
   eager mode (check skipped under compile — caller responsibility).
-* :func:`~nvalchemi.enhanced_sampling.aggregate_bias_results` — summing,
-  None handling, duplicate-key rejection.
-* ``torch.compile`` tests: ``pair_distance`` and ``aggregate_bias_results``
-  compile with ``fullgraph=True``; ``ConservativeBias.energy()`` compiles
-  with ``fullgraph=True``; ``ConservativeBias.evaluate()`` runs under
+* ``torch.compile`` tests: ``pair_distance`` compiles with
+  ``fullgraph=True``; ``ConservativeBias.energy()`` compiles
+  with ``fullgraph=True``; ``ConservativeBias.forward()`` runs under
   ``fullgraph=False`` (graph break at ``requires_grad_()`` is documented).
 
 GPU integration tests are marked ``@pytest.mark.slow`` and are run only
@@ -43,19 +41,16 @@ when a CUDA device is available (the ``device`` fixture handles skip).
 from __future__ import annotations
 
 import gc
+from collections import OrderedDict
 
 import pytest
 import torch
 from torch import Tensor
 
+from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.enhanced_sampling import (
-    BiasPotential,
-    BiasResult,
-    ConservativeBias,
-    aggregate_bias_results,
-    pair_distance,
-)
+from nvalchemi.enhanced_sampling import ConservativeBias, pair_distance
+from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
 
 # ---------------------------------------------------------------------------
 # Shared batch-construction helpers
@@ -137,222 +132,100 @@ def _make_triclinic_batch(
 
 
 # ===========================================================================
-# 1. BiasResult
+# 1. A bias is a model
 # ===========================================================================
 
 
-class TestBiasResult:
-    """Tests for the BiasResult dataclass."""
+class TestBiasIsAModel:
+    """A bias is an additive potential, not a category of its own.
 
-    def test_empty_construction(self) -> None:
-        r = BiasResult()
-        assert r.energy is None
-        assert r.forces is None
-        assert r.observables == {}
+    There is no ``BiasPotential`` protocol and no ``BiasResult``: a bias is a
+    :class:`~nvalchemi.models.base.BaseModelMixin` that maps a ``Batch`` to
+    :data:`~nvalchemi._typing.ModelOutputs`, exactly as ``DFTD3ModelWrapper``
+    and ``LennardJonesModelWrapper`` are.  These tests pin that down, because
+    the temptation to reintroduce a parallel hierarchy is what the design
+    exists to resist.
+    """
 
-    def test_detached_tensors_accepted(self) -> None:
-        e = torch.tensor([[1.0]]).detach()
-        f = torch.zeros(3, 3).detach()
-        r = BiasResult(energy=e, forces=f)
-        assert r.energy is e
-
-    def test_requires_grad_energy_raises(self) -> None:
-        bad = torch.tensor([[1.0]], requires_grad=True)
-        with pytest.raises(ValueError, match="energy.*detached"):
-            BiasResult(energy=bad)
-
-    def test_requires_grad_forces_raises(self) -> None:
-        bad = torch.zeros(3, 3, requires_grad=True)
-        with pytest.raises(ValueError, match="forces.*detached"):
-            BiasResult(forces=bad)
-
-    def test_grad_fn_raises(self) -> None:
-        x = torch.tensor([[1.0]], requires_grad=True)
-        y = x * 2.0  # has grad_fn
-        with pytest.raises(ValueError, match="energy.*detached"):
-            BiasResult(energy=y)
-
-    def test_stress_and_virial_raises(self) -> None:
-        s = torch.zeros(1, 3, 3)
-        v = torch.zeros(1, 3, 3)
-        with pytest.raises(ValueError, match="stress.*virial"):
-            BiasResult(stress=s, virial=v)
-
-    def test_observable_requires_grad_raises(self) -> None:
-        bad = torch.zeros(3, requires_grad=True)
-        with pytest.raises(ValueError, match="observables"):
-            BiasResult(observables={"cv": bad})
-
-    def test_frozen_immutability(self) -> None:
-        r = BiasResult(energy=torch.zeros(1, 1))
-        with pytest.raises((TypeError, AttributeError)):
-            r.energy = torch.ones(1, 1)  # type: ignore[misc]
-
-    # --- shape validation ---
-
-    def test_energy_wrong_ndim_raises(self) -> None:
-        """energy must be [B, 1]; a flat [B] tensor is rejected."""
-        with pytest.raises(ValueError, match="energy.*\\[B, 1\\]"):
-            BiasResult(energy=torch.zeros(2))
-
-    def test_energy_wrong_trailing_dim_raises(self) -> None:
-        """energy last dim must be 1, not 3."""
-        with pytest.raises(ValueError, match="energy.*\\[B, 1\\]"):
-            BiasResult(energy=torch.zeros(2, 3))
-
-    def test_forces_wrong_ndim_raises(self) -> None:
-        """forces must be [N, 3]; a 1-D tensor is rejected."""
-        with pytest.raises(ValueError, match="forces.*\\[N, 3\\]"):
-            BiasResult(forces=torch.zeros(9))
-
-    def test_forces_wrong_width_raises(self) -> None:
-        """forces last dim must be 3, not 1."""
-        with pytest.raises(ValueError, match="forces.*\\[N, 3\\]"):
-            BiasResult(forces=torch.zeros(4, 1))
-
-    def test_stress_wrong_shape_raises(self) -> None:
-        """stress must be [B, 3, 3]; a [B, 3] tensor is rejected."""
-        with pytest.raises(ValueError, match="stress.*\\[B, 3, 3\\]"):
-            BiasResult(stress=torch.zeros(2, 3))
-
-    def test_virial_wrong_shape_raises(self) -> None:
-        """virial must be [B, 3, 3]."""
-        with pytest.raises(ValueError, match="virial.*\\[B, 3, 3\\]"):
-            BiasResult(virial=torch.zeros(2, 9))
-
-    def test_state_version_wrong_ndim_raises(self) -> None:
-        """state_version must be 1-D."""
-        with pytest.raises(ValueError, match="state_version.*\\[B\\]"):
-            BiasResult(state_version=torch.zeros(2, 1, dtype=torch.int32))
-
-    def test_state_version_float_dtype_raises(self) -> None:
-        """state_version must be an integer dtype."""
-        with pytest.raises(ValueError, match="integer dtype"):
-            BiasResult(state_version=torch.zeros(2))  # float32
-
-    def test_state_version_integer_accepted(self) -> None:
-        """state_version with int64 dtype is accepted."""
-        r = BiasResult(state_version=torch.zeros(2, dtype=torch.int64))
-        assert r.state_version is not None
-
-    # --- batch-size consistency ---
-
-    def test_batch_size_mismatch_raises(self) -> None:
-        """energy [2, 1] and virial [3, 3, 3] have inconsistent B."""
-        with pytest.raises(ValueError, match="inconsistent"):
-            BiasResult(energy=torch.zeros(2, 1), virial=torch.zeros(3, 3, 3))
-
-    def test_batch_size_consistent_accepted(self) -> None:
-        """energy [2, 1] and virial [2, 3, 3] with matching B=2 are accepted."""
-        r = BiasResult(energy=torch.zeros(2, 1), virial=torch.zeros(2, 3, 3))
-        assert r.energy is not None
-
-    # --- finiteness ---
-
-    def test_energy_nan_raises(self) -> None:
-        with pytest.raises(ValueError, match="energy.*NaN or Inf"):
-            BiasResult(energy=torch.tensor([[float("nan")]]))
-
-    def test_energy_inf_raises(self) -> None:
-        with pytest.raises(ValueError, match="energy.*NaN or Inf"):
-            BiasResult(energy=torch.tensor([[float("inf")]]))
-
-    def test_forces_nan_raises(self) -> None:
-        bad = torch.zeros(3, 3)
-        bad[1, 2] = float("nan")
-        with pytest.raises(ValueError, match="forces.*NaN or Inf"):
-            BiasResult(forces=bad)
-
-    def test_virial_inf_raises(self) -> None:
-        bad = torch.zeros(1, 3, 3)
-        bad[0, 0, 0] = float("-inf")
-        with pytest.raises(ValueError, match="virial.*NaN or Inf"):
-            BiasResult(virial=bad)
-
-    def test_observable_nan_raises(self) -> None:
-        with pytest.raises(ValueError, match="observables.*NaN or Inf"):
-            BiasResult(observables={"cv": torch.tensor([float("nan")])})
-
-    def test_valid_result_accepted(self) -> None:
-        """A fully-populated valid BiasResult passes all checks."""
-        r = BiasResult(
-            energy=torch.zeros(2, 1),
-            forces=torch.zeros(6, 3),
-            virial=torch.zeros(2, 3, 3),
-            state_version=torch.zeros(2, dtype=torch.int64),
-            observables={"bias/a/cv": torch.zeros(2)},
-        )
-        assert r.energy is not None
-
-
-# ===========================================================================
-# 2. BiasPotential Protocol
-# ===========================================================================
-
-
-class TestBiasPotentialProtocol:
-    """Tests for structural protocol membership."""
-
-    def test_structural_satisfaction(self) -> None:
-        class MyBias:
-            name = "my_bias"
-
-            def evaluate(self, current: Batch) -> BiasResult:
-                return BiasResult()
-
-        assert isinstance(MyBias(), BiasPotential)
-
-    def test_missing_name_not_protocol(self) -> None:
-        class NotABias:
-            def evaluate(self, current: Batch) -> BiasResult:
-                return BiasResult()
-
-        assert not isinstance(NotABias(), BiasPotential)
-
-    def test_missing_evaluate_not_protocol(self) -> None:
-        class NotABias:
-            name = "x"
-
-        assert not isinstance(NotABias(), BiasPotential)
-
-    def test_protocol_inherits_nothing(self) -> None:
-        """The boundary must stay inheritance-free.
-
-        A third party implementing a novel method must not be forced to
-        inherit BaseModelMixin, nn.Module, or anything else.  If this ever
-        fails, the Protocol has stopped being a structural boundary.
-        """
-        from typing import Generic, Protocol
-
+    def test_conservative_bias_is_a_base_model_mixin(self) -> None:
         from nvalchemi.models.base import BaseModelMixin
 
-        bases = set(BiasPotential.__mro__) - {
-            BiasPotential,
-            object,
-            Protocol,
-            Generic,
-        }
-        assert not bases, f"BiasPotential gained base classes: {bases}"
-        assert not issubclass(BiasPotential, BaseModelMixin)
-        assert not issubclass(BiasPotential, torch.nn.Module)
+        assert isinstance(_QuadraticBias(), BaseModelMixin)
 
-    def test_plain_object_satisfies_protocol_without_any_base(self) -> None:
-        """A bias with no base class at all is a valid BiasPotential."""
+    def test_shape_matches_the_other_pure_physics_potentials(self) -> None:
+        """Same base list as the toolkit's other additive potentials."""
+        from nvalchemi.models.base import BaseModelMixin
 
-        class StandaloneBias:
-            name = "standalone"
+        assert ConservativeBias.__bases__ == (torch.nn.Module, BaseModelMixin)
 
-            def evaluate(self, current: Batch) -> BiasResult:
-                return BiasResult(energy=torch.zeros(current.num_graphs, 1))
+        from nvalchemi.models.lj import LennardJonesModelWrapper
 
-        bias = StandaloneBias()
-        assert isinstance(bias, BiasPotential)
-        assert type(bias).__mro__ == (StandaloneBias, object)
+        assert LennardJonesModelWrapper.__bases__ == (torch.nn.Module, BaseModelMixin)
 
-    def test_conservative_bias_satisfies_protocol_via_mixins(self) -> None:
-        """ConservativeBias satisfies the protocol through composition."""
-        bias = _QuadraticBias()
-        assert isinstance(bias, BiasPotential)
+    def test_returns_model_outputs_not_a_bespoke_type(self, device: str) -> None:
+        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        outputs = _QuadraticBias(k=1.5)(batch)
+        assert isinstance(outputs, dict)
+        assert set(outputs) == {"energy", "forces", "stress"}
+
+    def test_runner_rejects_a_non_model_bias(self) -> None:
+        """An object that is not a BaseModelMixin is refused, by name."""
+        from unittest.mock import Mock
+
+        from nvalchemi.enhanced_sampling import EnhancedSampling
+
+        class NotABias:
+            name = "not_a_bias"
+
+            def __call__(self, batch: Batch) -> ModelOutputs:
+                return OrderedDict()
+
+        dynamics = Mock()
+        dynamics.hooks = []
+        with pytest.raises(TypeError, match="not a BaseModelMixin"):
+            EnhancedSampling(dynamics=dynamics, biases={"not_a_bias": NotABias()})
+
+    def test_diagnostics_ride_in_the_same_mapping(self) -> None:
+        """A diagnostic is a namespaced key, not a second payload."""
+        assert DIAGNOSTIC_PREFIX == "diagnostics/"
+
+    @pytest.mark.parametrize("kind", ["static", "adaptive", "force_only"])
+    def test_every_bias_composes_with_a_model(self, kind: str) -> None:
+        """``+`` composition is what being a model buys, so assert it holds.
+
+        Including for the two kinds that could not compose before: an adaptive
+        bias (whose outputs now also carry ``state_version``) and a
+        force-only, non-conservative one (which was outside the model
+        hierarchy entirely).  Extra keys must ride through the pipeline
+        without the composition rejecting them.
+        """
+        from nvalchemi.enhanced_sampling import (
+            AdaptiveBiasingForce,
+            HarmonicUmbrellaBias,
+            WellTemperedMetaDynamicsBias,
+        )
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        cv = lambda batch: pair_distance(batch, torch.tensor([0, 1]))  # noqa: E731
+        bias = {
+            "static": lambda: HarmonicUmbrellaBias(cv=cv, centers=2.0, stiffness=1.0),
+            "adaptive": lambda: WellTemperedMetaDynamicsBias(
+                cv=cv, height=0.1, sigma=0.2, temperature=300.0, max_hills=8
+            ),
+            "force_only": lambda: AdaptiveBiasingForce(
+                atom_indices=torch.tensor([0, 1]),
+                temperature=300.0,
+                cv_range=(1.0, 6.0),
+                n_bins=8,
+            ),
+        }[kind]()
+
+        batch = _make_nonperiodic_batch(n_graphs=1, atoms_per_graph=3)
+        outputs = (DemoModelWrapper(DemoModel()) + bias)(batch)
+
+        assert outputs.get("forces") is not None
+        if kind != "static":
+            assert outputs["state_version"].shape == (batch.num_graphs,)
 
 
 # ===========================================================================
@@ -453,26 +326,26 @@ class TestConservativeBias:
     def test_forces_shape(self, device: str) -> None:
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
         bias = _QuadraticBias(k=1.0)
-        result = bias.evaluate(batch)
-        assert result.forces is not None
-        assert result.forces.shape == (6, 3)
+        result = bias(batch)
+        assert result.get("forces") is not None
+        assert result.get("forces").shape == (6, 3)
 
     def test_energy_shape(self, device: str) -> None:
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
         bias = _QuadraticBias(k=1.0)
-        result = bias.evaluate(batch)
-        assert result.energy is not None
-        assert result.energy.shape == (2, 1)
+        result = bias(batch)
+        assert result.get("energy") is not None
+        assert result.get("energy").shape == (2, 1)
 
     def test_forces_analytical_vs_autograd(self, device: str) -> None:
         """F = -dE/dr; for E = 0.5 * k * ||r||^2, F = -k * r."""
         k = 2.0
         batch = _make_nonperiodic_batch(n_graphs=1, atoms_per_graph=4, device=device)
         bias = _QuadraticBias(k=k)
-        result = bias.evaluate(batch)
+        result = bias(batch)
         expected_forces = -k * batch.positions
-        assert result.forces is not None
-        assert torch.allclose(result.forces, expected_forces, atol=1e-5)
+        assert result.get("forces") is not None
+        assert torch.allclose(result.get("forces"), expected_forces, atol=1e-5)
 
     def test_forces_finite_difference(self, device: str) -> None:
         """Compare autograd forces to central-difference finite differences."""
@@ -489,55 +362,55 @@ class TestConservativeBias:
                 pos_plus = pos.clone()
                 pos_plus[i, j] += eps
                 batch["positions"] = pos_plus
-                e_plus = bias.evaluate(batch).energy.sum().item()
+                e_plus = bias(batch)["energy"].sum().item()
 
                 pos_minus = pos.clone()
                 pos_minus[i, j] -= eps
                 batch["positions"] = pos_minus
-                e_minus = bias.evaluate(batch).energy.sum().item()
+                e_minus = bias(batch)["energy"].sum().item()
 
                 fd_forces[i, j] = -(e_plus - e_minus) / (2 * eps)
 
         batch["positions"] = pos
-        result = bias.evaluate(batch)
-        assert result.forces is not None
+        result = bias(batch)
+        assert result.get("forces") is not None
         # float32 finite differences at eps=1e-4 have ~1e-3 cancellation error;
         # use a tolerance that accounts for float32 precision.
-        assert torch.allclose(result.forces, fd_forces, atol=5e-3)
+        assert torch.allclose(result.get("forces"), fd_forces, atol=5e-3)
 
     def test_result_fully_detached(self, device: str) -> None:
-        """BiasResult tensors must have requires_grad=False and grad_fn=None."""
+        """Returned tensors must have requires_grad=False and grad_fn=None."""
         batch = _make_nonperiodic_batch(device=device)
         bias = _QuadraticBias()
-        result = bias.evaluate(batch)
+        result = bias(batch)
         for name in ("energy", "forces"):
-            t = getattr(result, name)
+            t = result.get(name)
             if t is not None:
                 assert not t.requires_grad, f"{name} has requires_grad=True"
                 assert t.grad_fn is None, f"{name} has non-null grad_fn"
 
     def test_live_batch_positions_not_mutated(self, device: str) -> None:
-        """batch.positions must be restored to original tensor after evaluate()."""
+        """batch.positions must be restored to original tensor after forward()."""
         batch = _make_nonperiodic_batch(device=device)
         original_pos = batch.positions
         original_data = original_pos.clone()
         bias = _QuadraticBias()
-        bias.evaluate(batch)
+        bias(batch)
         # The tensor object should be restored
         assert batch.positions is original_pos
         # Values should be unchanged
         assert torch.allclose(batch.positions, original_data)
 
     def test_live_batch_positions_no_grad(self, device: str) -> None:
-        """After evaluate(), batch.positions must not have requires_grad=True."""
+        """After forward(), batch.positions must not have requires_grad=True."""
         batch = _make_nonperiodic_batch(device=device)
         bias = _QuadraticBias()
-        bias.evaluate(batch)
+        bias(batch)
         assert not batch.positions.requires_grad
         assert batch.positions.grad_fn is None
 
-    def test_no_memory_growth_repeated_evaluate(self, device: str) -> None:
-        """Repeated evaluate() must not grow GPU allocated memory monotonically.
+    def test_no_memory_growth_repeated_forward(self, device: str) -> None:
+        """Repeated forward() must not grow GPU allocated memory monotonically.
 
         Warm up 3 calls, then sample allocated memory over 10 calls.  The
         delta between first and last sample must be ≤ 0 (or a small
@@ -548,7 +421,7 @@ class TestConservativeBias:
 
         # Warm up
         for _ in range(3):
-            bias.evaluate(batch)
+            bias(batch)
 
         gc.collect()
         if device == "cuda":
@@ -559,14 +432,14 @@ class TestConservativeBias:
             mem_start = 0
 
         for _ in range(10):
-            bias.evaluate(batch)
+            bias(batch)
 
         if device == "cuda":
             torch.cuda.synchronize()
             mem_end = torch.cuda.memory_allocated()
             # Allow a small tolerance (1 MB) for CUDA caching allocator overhead
             assert mem_end - mem_start <= 1 * 1024 * 1024, (
-                f"GPU memory grew by {mem_end - mem_start} bytes across 10 evaluate() calls"
+                f"GPU memory grew by {mem_end - mem_start} bytes across 10 forward() calls"
             )
 
     def test_stress_analytical_across_image_boundary(self, device: str) -> None:
@@ -615,16 +488,18 @@ class TestConservativeBias:
         batch = Batch.from_data_list([data]).to(device)
         idx = torch.tensor([0, 1], device=device)
         bias = _PairDistanceBias(atom_indices=idx, k=k)
-        result = bias.evaluate(batch)
+        result = bias(batch)
 
-        assert result.stress is not None, "stress should be non-None for periodic batch"
-        assert result.stress.shape == (1, 3, 3)
-        assert result.virial is None, "ConservativeBias emits stress, not virial"
+        assert result.get("stress") is not None, (
+            "stress should be non-None for periodic batch"
+        )
+        assert result.get("stress").shape == (1, 3, 3)
+        assert result.get("virial") is None, "ConservativeBias emits stress, not virial"
 
         # Analytical: σ = k · outer(dr_mic, dr_mic) / V with dr_mic = [−1, 0, 0]
         expected = torch.zeros(3, 3, device=device)
         expected[0, 0] = k / volume
-        sigma = result.stress[0]  # [3, 3]
+        sigma = result.get("stress")[0]  # [3, 3]
         assert torch.allclose(sigma, expected, atol=1e-8), (
             f"stress = {sigma}, expected {expected}.  Stress may be missing the "
             "atomic-position contribution (strain not applied to both positions "
@@ -641,10 +516,10 @@ class TestConservativeBias:
         """
         batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=5, device=device)
         bias = _AnisotropicBias()
-        result = bias.evaluate(batch)
+        result = bias(batch)
 
-        assert result.stress is not None
-        sigma = result.stress
+        assert result.get("stress") is not None
+        sigma = result.get("stress")
         assert torch.allclose(sigma, sigma.mT, atol=1e-6), (
             f"stress is not symmetric:\n{sigma}\nvs transpose\n{sigma.mT}"
         )
@@ -652,10 +527,10 @@ class TestConservativeBias:
     def test_no_stress_for_nonperiodic_batch(self, device: str) -> None:
         """A batch with no cell yields forces but no stress."""
         batch = _make_nonperiodic_batch(device=device)
-        result = _QuadraticBias().evaluate(batch)
-        assert result.forces is not None
-        assert result.stress is None
-        assert result.virial is None
+        result = _QuadraticBias()(batch)
+        assert result.get("forces") is not None
+        assert result.get("stress") is None
+        assert result.get("virial") is None
 
     def test_compute_stress_false_skips_stress(self, device: str) -> None:
         """``compute_stress=False`` drops 'stress' from active_outputs."""
@@ -671,27 +546,27 @@ class TestConservativeBias:
         assert "stress" in bias.model_config.outputs
 
         batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
-        result = bias.evaluate(batch)
-        assert result.forces is not None
-        assert result.stress is None
+        result = bias(batch)
+        assert result.get("forces") is not None
+        assert result.get("stress") is None
 
     def test_active_outputs_toggled_at_runtime(self, device: str) -> None:
         """active_outputs is a runtime field: flipping it changes the result."""
         batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=4, device=device)
         bias = _QuadraticBias()
 
-        assert bias.evaluate(batch).stress is not None
+        assert bias(batch).get("stress") is not None
         bias.model_config.active_outputs = {"energy", "forces"}
-        assert bias.evaluate(batch).stress is None
+        assert bias(batch).get("stress") is None
         bias.model_config.active_outputs = {"energy", "forces", "stress"}
-        assert bias.evaluate(batch).stress is not None
+        assert bias(batch).get("stress") is not None
 
     def test_live_batch_cell_restored(self, device: str) -> None:
-        """batch.cell must be restored to the original tensor after evaluate()."""
+        """batch.cell must be restored to the original tensor after forward()."""
         batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=4, device=device)
         original_cell = batch.cell
         original_data = original_cell.clone()
-        _QuadraticBias().evaluate(batch)
+        _QuadraticBias()(batch)
         assert batch.cell is original_cell
         assert torch.allclose(batch.cell, original_data)
         assert not batch.cell.requires_grad
@@ -723,8 +598,8 @@ class TestConservativeBias:
             atom_indices=torch.tensor([0, 3], device=device), k=1.5
         )
 
-        result = bias.evaluate(batch)
-        assert result.stress is not None
+        result = bias(batch)
+        assert result.get("stress") is not None
 
         base_pos = batch.positions.clone()
         base_cell = batch.cell.clone()
@@ -744,16 +619,16 @@ class TestConservativeBias:
                     deform = eye + sign * eps
                     batch["positions"] = base_pos @ deform
                     batch["cell"] = base_cell @ deform
-                    energies.append(bias.evaluate(batch).energy.sum().item())
+                    energies.append(bias(batch)["energy"].sum().item())
 
                 fd_stress[a, b] = (energies[0] - energies[1]) / (2 * h * volume)
 
         batch["positions"] = base_pos
         batch["cell"] = base_cell
 
-        assert torch.allclose(result.stress[0], fd_stress, atol=1e-7), (
-            f"autograd stress\n{result.stress[0]}\ndiffers from finite differences\n"
-            f"{fd_stress}"
+        sigma = result["stress"][0]
+        assert torch.allclose(sigma, fd_stress, atol=1e-7), (
+            f"autograd stress\n{sigma}\ndiffers from finite differences\n{fd_stress}"
         )
 
     def test_position_independent_bias_gives_zero_forces(self, device: str) -> None:
@@ -775,19 +650,19 @@ class TestConservativeBias:
             pbc=torch.tensor([[True, True, True]]),
         )
         batch = Batch.from_data_list([data]).to(device)
-        result = _CellVolumeBias(target_volume=target).evaluate(batch)
+        result = _CellVolumeBias(target_volume=target)(batch)
 
-        assert result.forces is not None
-        assert result.forces.shape == (2, 3)
-        assert torch.count_nonzero(result.forces) == 0, (
-            f"a position-independent bias must give zero forces, got {result.forces}"
+        forces = result["forces"]
+        assert forces.shape == (2, 3)
+        assert torch.count_nonzero(forces) == 0, (
+            f"a position-independent bias must give zero forces, got {forces}"
         )
 
         # dE/dV = 2 (V - V0);  dV/deps = V * I  =>  sigma = dE/deps / V = 2 (V - V0) I
-        assert result.stress is not None
-        expected = torch.eye(3, device=result.stress.device) * 2.0 * (volume - target)
-        assert torch.allclose(result.stress[0], expected, rtol=1e-5), (
-            f"stress = {result.stress[0]}, expected {expected}"
+        sigma = result["stress"][0]
+        expected = torch.eye(3, device=sigma.device) * 2.0 * (volume - target)
+        assert torch.allclose(sigma, expected, rtol=1e-5), (
+            f"stress = {sigma}, expected {expected}"
         )
 
     def test_constant_bias_gives_zero_forces_and_stress(self, device: str) -> None:
@@ -797,31 +672,33 @@ class TestConservativeBias:
         restraint while every atom is inside the wall.
         """
         batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, device=device)
-        result = _ConstantBias(value=3.0).evaluate(batch)
+        result = _ConstantBias(value=3.0)(batch)
 
-        assert result.energy is not None
-        assert torch.allclose(result.energy, torch.full_like(result.energy, 3.0))
-        assert result.forces is not None
-        assert torch.count_nonzero(result.forces) == 0
-        assert result.stress is not None
-        assert torch.count_nonzero(result.stress) == 0
+        assert result.get("energy") is not None
+        assert torch.allclose(
+            result.get("energy"), torch.full_like(result.get("energy"), 3.0)
+        )
+        assert result.get("forces") is not None
+        assert torch.count_nonzero(result.get("forces")) == 0
+        assert result.get("stress") is not None
+        assert torch.count_nonzero(result.get("stress")) == 0
 
     def test_constant_bias_nonperiodic_gives_zero_forces(self, device: str) -> None:
         """The no-cell path also tolerates an energy with no position dependence."""
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
-        result = _ConstantBias(value=1.5).evaluate(batch)
+        result = _ConstantBias(value=1.5)(batch)
 
-        assert result.forces is not None
-        assert result.forces.shape == (6, 3)
-        assert torch.count_nonzero(result.forces) == 0
-        assert result.stress is None
+        assert result.get("forces") is not None
+        assert result.get("forces").shape == (6, 3)
+        assert torch.count_nonzero(result.get("forces")) == 0
+        assert result.get("stress") is None
 
-    def test_evaluate_is_read_only_no_state_change(self, device: str) -> None:
-        """Multiple evaluate() calls must leave bias state unchanged."""
+    def test_forward_is_read_only_no_state_change(self, device: str) -> None:
+        """Multiple forward() calls must leave bias state unchanged."""
         batch = _make_nonperiodic_batch(device=device)
         bias = _QuadraticBias(k=2.5)
-        r1 = bias.evaluate(batch)
-        r2 = bias.evaluate(batch)
+        r1 = bias(batch)
+        r2 = bias(batch)
         assert result_close(r1, r2)
 
 
@@ -907,16 +784,16 @@ class TestConservativeBiasModelMixin:
         assert torch.allclose(restored.counter, torch.tensor([3.0]))
 
     def test_forward_returns_model_outputs(self, device: str) -> None:
-        """forward() is the ModelOutputs view of evaluate()."""
+        """forward() is the single entry point; there is no second result type."""
         batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, device=device)
         bias = _QuadraticBias(k=1.5)
         outputs = bias(batch)
 
         assert isinstance(outputs, dict)
         assert set(outputs) == {"energy", "forces", "stress"}
-        reference = bias.evaluate(batch)
-        assert torch.allclose(outputs["energy"], reference.energy)
-        assert torch.allclose(outputs["stress"], reference.stress)
+        reference = bias(batch)
+        assert torch.allclose(outputs["energy"], reference.get("energy"))
+        assert torch.allclose(outputs["stress"], reference.get("stress"))
 
     def test_forward_respects_active_outputs(self, device: str) -> None:
         batch = _make_cubic_batch(n_graphs=1, atoms_per_graph=3, device=device)
@@ -939,10 +816,10 @@ class TestConservativeBiasModelMixin:
         assert torch.allclose(total["forces"], model_out["forces"] + bias_out["forces"])
 
 
-def result_close(a: BiasResult, b: BiasResult, atol: float = 1e-6) -> bool:
-    """Return True iff all non-None tensor fields of a and b are close."""
-    for attr in ("energy", "forces", "virial", "stress"):
-        ta, tb = getattr(a, attr), getattr(b, attr)
+def result_close(a: ModelOutputs, b: ModelOutputs, atol: float = 1e-6) -> bool:
+    """Return True iff both contributions agree on every physical field."""
+    for key in ("energy", "forces", "virial", "stress"):
+        ta, tb = a.get(key), b.get(key)
         if ta is None and tb is None:
             continue
         if ta is None or tb is None:
@@ -1394,146 +1271,7 @@ class TestPairDistance:
 
 
 # ===========================================================================
-# 5. aggregate_bias_results
-# ===========================================================================
-
-
-class TestAggregateBiasResults:
-    """Tests for bias aggregation."""
-
-    def test_empty_list_returns_empty_result(self) -> None:
-        r = aggregate_bias_results([])
-        assert r.energy is None
-        assert r.forces is None
-
-    def test_single_result_passthrough(self) -> None:
-        e = torch.tensor([[1.0]])
-        f = torch.zeros(3, 3)
-        r = aggregate_bias_results([BiasResult(energy=e, forces=f)])
-        assert torch.allclose(r.energy, e)
-        assert torch.allclose(r.forces, f)
-
-    def test_energy_summed(self) -> None:
-        r1 = BiasResult(energy=torch.tensor([[1.0]]))
-        r2 = BiasResult(energy=torch.tensor([[2.0]]))
-        agg = aggregate_bias_results([r1, r2])
-        assert torch.allclose(agg.energy, torch.tensor([[3.0]]))
-
-    def test_forces_summed(self) -> None:
-        f1 = torch.ones(4, 3)
-        f2 = torch.ones(4, 3) * 2.0
-        r1 = BiasResult(forces=f1)
-        r2 = BiasResult(forces=f2)
-        agg = aggregate_bias_results([r1, r2])
-        assert torch.allclose(agg.forces, torch.ones(4, 3) * 3.0)
-
-    def test_none_fields_handled(self) -> None:
-        r1 = BiasResult(energy=torch.tensor([[1.0]]))
-        r2 = BiasResult(forces=torch.zeros(2, 3))
-        agg = aggregate_bias_results([r1, r2])
-        assert agg.energy is not None
-        assert agg.forces is not None
-
-    def test_virial_summed(self) -> None:
-        v1 = torch.ones(1, 3, 3)
-        v2 = torch.ones(1, 3, 3) * 2.0
-        r1 = BiasResult(virial=v1)
-        r2 = BiasResult(virial=v2)
-        agg = aggregate_bias_results([r1, r2])
-        assert torch.allclose(agg.virial, torch.ones(1, 3, 3) * 3.0)
-
-    def test_mixed_stress_and_virial_raises(self) -> None:
-        """Mixing stress from one result and virial from another raises ValueError.
-
-        The error must come from aggregate_bias_results itself (not from
-        BiasResult.__post_init__) with a message that identifies which
-        result indices contributed each field.
-        """
-        r_stress = BiasResult(stress=torch.zeros(1, 3, 3))
-        r_virial = BiasResult(virial=torch.zeros(1, 3, 3))
-        with pytest.raises(ValueError, match="stress.*virial|virial.*stress"):
-            aggregate_bias_results([r_stress, r_virial])
-
-    def test_mixed_stress_and_virial_error_identifies_indices(self) -> None:
-        """Error message must identify which result indices are responsible."""
-        results = [
-            BiasResult(energy=torch.zeros(1, 1)),  # index 0 — no cell response
-            BiasResult(stress=torch.zeros(1, 3, 3)),  # index 1 — stress
-            BiasResult(energy=torch.zeros(1, 1)),  # index 2 — no cell response
-            BiasResult(virial=torch.zeros(1, 3, 3)),  # index 3 — virial
-        ]
-        with pytest.raises(ValueError, match=r"\[1\].*\[3\]|\[3\].*\[1\]"):
-            aggregate_bias_results(results)
-
-    def test_all_stress_aggregates_correctly(self) -> None:
-        """Multiple stress contributions are summed without raising."""
-        r1 = BiasResult(stress=torch.ones(1, 3, 3))
-        r2 = BiasResult(stress=torch.ones(1, 3, 3) * 2.0)
-        agg = aggregate_bias_results([r1, r2])
-        assert agg.stress is not None
-        assert agg.virial is None
-        assert torch.allclose(agg.stress, torch.ones(1, 3, 3) * 3.0)
-
-    def test_duplicate_observable_key_raises(self) -> None:
-        r1 = BiasResult(observables={"bias/a/cv": torch.zeros(1)})
-        r2 = BiasResult(observables={"bias/a/cv": torch.ones(1)})
-        with pytest.raises(ValueError, match="duplicate observable key"):
-            aggregate_bias_results([r1, r2])
-
-    def test_duplicate_observable_error_identifies_indices(self) -> None:
-        """The message must name both colliding results, not just the key.
-
-        Observables are merged rather than summed, so a collision silently
-        dropping one bias's diagnostic is exactly what this guards against;
-        the message has to say which two biases collided.
-        """
-        results = [
-            BiasResult(observables={"bias/a/cv": torch.zeros(1)}),  # index 0
-            BiasResult(energy=torch.zeros(1, 1)),
-            BiasResult(observables={"bias/b/cv": torch.zeros(1)}),
-            BiasResult(observables={"bias/a/cv": torch.ones(1)}),  # index 3
-        ]
-        with pytest.raises(ValueError) as excinfo:
-            aggregate_bias_results(results)
-        message = str(excinfo.value)
-        assert "results[0]" in message
-        assert "results[3]" in message
-        assert "bias/a/cv" in message
-
-    def test_observables_not_summed_with_matching_field_name(self) -> None:
-        """An observable named 'energy' must not be added to the bias energy.
-
-        observables are merged in a separate namespace from the tensor
-        fields, so a name collision between the two is not possible.
-        """
-        r1 = BiasResult(
-            energy=torch.ones(1, 1),
-            observables={"energy": torch.tensor([100.0])},
-        )
-        r2 = BiasResult(energy=torch.ones(1, 1))
-        agg = aggregate_bias_results([r1, r2])
-        assert agg.energy is not None
-        assert torch.allclose(agg.energy, torch.full((1, 1), 2.0))
-        assert torch.allclose(agg.observables["energy"], torch.tensor([100.0]))
-
-    def test_distinct_observable_keys_merged(self) -> None:
-        r1 = BiasResult(observables={"bias/a/cv": torch.tensor([1.0])})
-        r2 = BiasResult(observables={"bias/b/cv": torch.tensor([2.0])})
-        agg = aggregate_bias_results([r1, r2])
-        assert "bias/a/cv" in agg.observables
-        assert "bias/b/cv" in agg.observables
-
-    def test_different_registration_orders_same_result(self) -> None:
-        """Aggregation must be order-independent (commutativity for sum)."""
-        e1 = torch.tensor([[1.5]])
-        e2 = torch.tensor([[0.5]])
-        agg_ab = aggregate_bias_results([BiasResult(energy=e1), BiasResult(energy=e2)])
-        agg_ba = aggregate_bias_results([BiasResult(energy=e2), BiasResult(energy=e1)])
-        assert torch.allclose(agg_ab.energy, agg_ba.energy)
-
-
-# ===========================================================================
-# 6. torch.compile — fullgraph and graph-break tests
+# 5. torch.compile — fullgraph and graph-break tests
 # ===========================================================================
 
 
@@ -1541,22 +1279,22 @@ class TestCompile:
     """Verifies what can and cannot be compiled with ``torch.compile``.
 
     * :func:`pair_distance` — compiles with ``fullgraph=True``.
-    * :func:`aggregate_bias_results` — compiles with ``fullgraph=True`` for
-      fixed-size input lists.
-    * ``ConservativeBias.evaluate()`` — does **not** compile with
+    * ``ConservativeBias.forward()`` — does **not** compile with
       ``fullgraph=True``.  The root cause is
-      ``pos_leaf = positions.detach().requires_grad_(True)``:
+      ``pos_leaf = positions.detach().requires_grad_(True)`` inside
+      :func:`~nvalchemi.models._utils.isolated_energy_derivatives`:
       ``torch.compile`` does not support ``.requires_grad_()`` mutation.
       **Chosen approach:** compile :meth:`energy` independently; keep
-      ``evaluate()`` as an eager orchestration wrapper.
-      ``EnhancedSampling(compile_biases=True)`` will compile each bias's
-      ``energy()`` override, not ``evaluate()``.
+      ``forward()`` as an eager orchestration wrapper.
+      ``EnhancedSampling(compile_biases=True)`` compiles each bias's
+      ``energy()`` override, not ``forward()``.
 
     Tests in this class:
 
-    * ``fullgraph=True`` tests for compile-capable paths (``pair_distance``,
-      ``aggregate_bias_results``).
-    * ``fullgraph=False`` tests for ``ConservativeBias.evaluate()`` (allow
+    * ``fullgraph=True`` tests for compile-capable paths (``pair_distance``).
+      ``aggregate_contributions`` now lives in ``models/_utils.py``; its
+      compile test moved to ``test/models/test_model_utils.py`` with it.
+    * ``fullgraph=False`` tests for ``ConservativeBias.forward()`` (allow
       graph break; verify correctness and no memory growth).
     * ``fullgraph=True`` test for compiling ``energy()`` only.
     """
@@ -1571,7 +1309,7 @@ class TestCompile:
 
     @staticmethod
     def _compile_kw_allow_breaks(device: str) -> dict:
-        """Compile kwargs allowing graph breaks (for evaluate())."""
+        """Compile kwargs allowing graph breaks (for forward())."""
         kw: dict = {"fullgraph": False}
         if device == "cuda":
             kw["backend"] = "inductor"
@@ -1617,26 +1355,6 @@ class TestCompile:
         assert d.isfinite().all()
 
     # ------------------------------------------------------------------
-    # aggregate_bias_results — fully compilable (fullgraph=True)
-    # ------------------------------------------------------------------
-
-    def test_aggregate_compiles_fullgraph(self, device: str) -> None:
-        """aggregate_bias_results compiles with fullgraph=True."""
-        e1 = torch.ones(2, 1, device=device)
-        e2 = torch.ones(2, 1, device=device) * 2.0
-        f1 = torch.ones(8, 3, device=device)
-        f2 = torch.ones(8, 3, device=device) * 0.5
-
-        def _agg() -> BiasResult:
-            return aggregate_bias_results(
-                [BiasResult(energy=e1, forces=f1), BiasResult(energy=e2, forces=f2)]
-            )
-
-        compiled = torch.compile(_agg, **self._compile_kw_full(device))
-        result = compiled()
-        assert result.energy is not None
-        assert torch.allclose(result.energy, torch.full((2, 1), 3.0, device=device))
-
     # ------------------------------------------------------------------
     # ConservativeBias.energy() — compilable when subclassed correctly
     # ------------------------------------------------------------------
@@ -1645,15 +1363,15 @@ class TestCompile:
         """ConservativeBias.energy() compiles with fullgraph=True.
 
         This is the actual compile target when compile_biases=True.
-        evaluate() stays eager; energy() is compiled per the fallback.
+        forward() stays eager; energy() is compiled per the fallback.
         """
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
         bias = _QuadraticBias(k=1.0)
 
-        # Simulate the runner compiling energy() not evaluate()
+        # Simulate the runner compiling energy() not forward()
         compiled_energy = torch.compile(bias.energy, **self._compile_kw_full(device))
 
-        # Temporarily inject fresh positions leaf (as evaluate() does eagerly)
+        # Temporarily inject fresh positions leaf (as forward() does eagerly)
         pos_leaf = batch.positions.detach().requires_grad_(True)
         batch["positions"] = pos_leaf
         for _ in range(3):
@@ -1663,24 +1381,24 @@ class TestCompile:
         assert e.isfinite().all()
 
     # ------------------------------------------------------------------
-    # ConservativeBias.evaluate() — runs with graph breaks (fullgraph=False)
+    # ConservativeBias.forward() — runs with graph breaks (fullgraph=False)
     # ------------------------------------------------------------------
 
-    def test_conservative_bias_evaluate_runs_correctly(self, device: str) -> None:
-        """ConservativeBias.evaluate() produces correct forces (eager mode).
+    def test_conservative_bias_forward_runs_correctly(self, device: str) -> None:
+        """ConservativeBias.forward() produces correct forces (eager mode).
 
-        evaluate() is NOT compiled with fullgraph=True (see spike finding).
+        forward() is NOT compiled with fullgraph=True (see spike finding).
         It is the eager orchestration wrapper; energy() is what gets compiled.
         """
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
         bias = _QuadraticBias(k=1.0)
-        result = bias.evaluate(batch)
-        assert result.forces is not None
-        assert result.forces.shape == (8, 3)
-        assert result.forces.isfinite().all()
+        result = bias(batch)
+        assert result.get("forces") is not None
+        assert result.get("forces").shape == (8, 3)
+        assert result.get("forces").isfinite().all()
 
     def test_conservative_bias_compile_allows_graph_break(self, device: str) -> None:
-        """ConservativeBias.evaluate() can run under torch.compile(fullgraph=False).
+        """ConservativeBias.forward() can run under torch.compile(fullgraph=False).
 
         With fullgraph=False the graph break at requires_grad_() is allowed.
         Output agrees with eager.
@@ -1688,23 +1406,31 @@ class TestCompile:
         batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
         bias = _QuadraticBias(k=2.0)
 
-        r_eager = bias.evaluate(batch)
-        compiled = torch.compile(bias.evaluate, **self._compile_kw_allow_breaks(device))
+        r_eager = bias(batch)
+        compiled = torch.compile(bias.forward, **self._compile_kw_allow_breaks(device))
         r_compiled = compiled(batch)
 
-        assert r_eager.energy is not None and r_compiled.energy is not None
-        assert torch.allclose(r_eager.energy, r_compiled.energy, atol=1e-4)
-        assert r_eager.forces is not None and r_compiled.forces is not None
-        assert torch.allclose(r_eager.forces, r_compiled.forces, atol=1e-4)
+        assert (
+            r_eager.get("energy") is not None and r_compiled.get("energy") is not None
+        )
+        assert torch.allclose(
+            r_eager.get("energy"), r_compiled.get("energy"), atol=1e-4
+        )
+        assert (
+            r_eager.get("forces") is not None and r_compiled.get("forces") is not None
+        )
+        assert torch.allclose(
+            r_eager.get("forces"), r_compiled.get("forces"), atol=1e-4
+        )
 
-    def test_no_memory_growth_eager_evaluate_10_calls(self, device: str) -> None:
-        """Eager evaluate() must not grow GPU memory across 10 calls."""
+    def test_no_memory_growth_eager_forward_10_calls(self, device: str) -> None:
+        """Eager forward() must not grow GPU memory across 10 calls."""
         batch = _make_nonperiodic_batch(n_graphs=4, atoms_per_graph=8, device=device)
         bias = _QuadraticBias(k=1.0)
 
         # Warm up
         for _ in range(3):
-            bias.evaluate(batch)
+            bias(batch)
 
         gc.collect()
         if device == "cuda":
@@ -1713,13 +1439,13 @@ class TestCompile:
             mem_start = torch.cuda.memory_allocated()
 
         for _ in range(10):
-            bias.evaluate(batch)
+            bias(batch)
 
         if device == "cuda":
             torch.cuda.synchronize()
             mem_end = torch.cuda.memory_allocated()
             assert mem_end - mem_start <= 1 * 1024 * 1024, (
-                f"GPU memory grew by {mem_end - mem_start} bytes across 10 evaluate() calls"
+                f"GPU memory grew by {mem_end - mem_start} bytes across 10 forward() calls"
             )
 
     def test_pair_distance_inside_energy_compiles(self, device: str) -> None:

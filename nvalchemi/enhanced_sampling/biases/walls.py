@@ -133,7 +133,7 @@ class _WallBase(ConservativeBias):
         ----------
         current:
             Batch with strained positions supplied by
-            :meth:`ConservativeBias.evaluate`.
+            :meth:`ConservativeBias.forward`.
 
         Returns
         -------
@@ -340,7 +340,7 @@ class FlatBottomRestraint(_WallBase):
         ----------
         current:
             Batch with strained positions supplied by
-            :meth:`ConservativeBias.evaluate`.
+            :meth:`ConservativeBias.forward`.
 
         Returns
         -------

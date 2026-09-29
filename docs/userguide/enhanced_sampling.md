@@ -127,7 +127,7 @@ accumulated bias pushes it towards wherever it has not yet been.
 ### Well-tempered metadynamics
 
 `WellTemperedMetaDynamicsBias` deposits one hill per walker at its current CV
-value, every `update_frequency` steps. In the well-tempered scheme each hill
+value, every `frequency` steps. In the well-tempered scheme each hill
 is damped by the bias already standing at that point,
 
 ```text
@@ -146,7 +146,7 @@ metad = WellTemperedMetaDynamicsBias(
     sigma=0.25,            # hill width, CV units
     temperature=300.0,
     bias_factor=8.0,       # gamma; None gives standard metadynamics
-    update_frequency=500,
+    frequency=500,
     storage="preallocated",
     max_hills=2000,
     name="metad",
@@ -248,7 +248,7 @@ from nvalchemi.enhanced_sampling import RMSDMetaDynamicsBias
 explorer = RMSDMetaDynamicsBias(
     k_push=0.08,                        # eV
     alpha=10.0,                         # A^-2
-    update_frequency=500,
+    frequency=500,
     max_references=64,                  # FIFO by default
     atom_indices=torch.tensor([0, 4, 7]),   # heavy atoms only
     name="explorer",
@@ -369,7 +369,7 @@ awkward geometry can do while its average settles.
 
 ### Observation ordering
 
-`observation_stage` is `AFTER_COMPUTE`, where `batch.forces` still holds the
+`stage` is `AFTER_COMPUTE`, where `batch.forces` still holds the
 **unbiased** physical force. This is load-bearing: an estimator shown its own
 output converges to whatever it had already decided, and the resulting profile
 looks perfectly smooth. The runner captures the frame before applying any bias
@@ -381,7 +381,7 @@ changed, so re-priming would be pure cost.
 
 ### No energy, and therefore no replica exchange
 
-`evaluate()` returns `forces` with `energy=None`. There is genuinely no
+`forward()` returns `forces` and no `energy`. There is genuinely no
 potential to report, which is what makes ABF non-conservative. The Metropolis
 acceptance rule needs each bias's energy evaluated under both states being
 swapped, so `supplies_exchange_energy` is `False` and `ReplicaExchange`
@@ -395,7 +395,7 @@ The per-step diagnostic is named `bias/<name>/applied_gradient` rather than
 `mean_force`, because it is the ramped and capped value actually used — a
 threshold-suppressed zero there is not a measured zero mean force.
 
-The per-step observables are `cv`, `bin`, `applied_gradient`, `samples`,
+The per-step diagnostics are `cv`, `bin`, `applied_gradient`, `samples`,
 `ramp`, and `in_range`. A walker outside `cv_range` reports `bin = -1` and
 zero for every per-bin quantity, matching the zero force it receives. Only
 `cv` is still reported, since the coordinate is genuinely measured wherever
@@ -407,52 +407,73 @@ across a hole, so every value beyond it would be wrong by an unknown constant.
 
 ## Writing your own bias
 
-### The boundary: `BiasPotential`
+### A bias is an additive potential
 
-`BiasPotential` is a `@runtime_checkable` Protocol that **inherits nothing**.
-A bias needs a `name` and an `evaluate`:
+There is no bias protocol and no bias result type. A bias is a
+`BaseModelMixin` that maps a `Batch` to `ModelOutputs` — the same shape as
+`DFTD3ModelWrapper` and `LennardJonesModelWrapper`, which are also pure
+additive potentials with no learned parameters:
 
 ```python
-class MyBias:
-    name = "my_bias"
+class MyBias(nn.Module, BaseModelMixin):
+    def __init__(self):
+        super().__init__()
+        self.name = "my_bias"
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            active_outputs={"energy", "forces"},
+        )
 
-    def evaluate(self, current):
-        return BiasResult(energy=..., forces=...)
+    def forward(self, data, **kwargs):
+        return OrderedDict(energy=..., forces=...)
 ```
 
-That class satisfies the protocol with no base class at all.
+In practice you subclass `ConservativeBias`, which is that plus the autograd
+derivation — but nothing forces you to.
 
-#### Why `BiasResult` is narrower than `ModelOutputs`
+#### Diagnostics and state versions
 
-`ModelOutputs` is an open mapping; `BiasResult` carries a fixed set of physics
-fields. The split is between what the runner **applies** and what it merely
-**reports**.
+`ModelOutputs` is an open mapping, and two general conventions ride in it:
 
-An applied output needs a destination (`batch.energy`, `batch.forces`,
-`batch.stress`), a per-graph or per-atom reshape rule, a rule for combining it
-across biases, and a conversion — stress and virial are the same physics in two
-conventions, and moving between them needs the cell volume. An unrecognised key
-has none of that, and `_check_destinations` already raises for any produced
-output with no buffer to receive it. So an open payload would be open only up
-to the first key the runner could not apply.
+- **`diagnostics/<key>`** — arbitrary reported tensors, no shape contract,
+  never summed and never applied. The runner surfaces them as
+  `bias/<name>/<key>`. A per-atom energy decomposition belongs here: it is a
+  diagnostic, not a contribution to `batch.energy`.
+- **`state_version`** — integer revision IDs, shape `[B]`, saying which
+  revision of the producer's state generated the rest of the mapping.
+  `AdaptivePotentialMixin` stamps it for you.
 
-`observables` is the open half: an arbitrary `Mapping[str, Tensor]`, no shape
-checks, surfaced as `bias/<name>/<key>`. A per-atom energy decomposition
-belongs there — it is a diagnostic, not a contribution to `batch.energy`.
+Neither is enhanced-sampling-specific; both are documented on `ModelOutputs`
+and checked by `validate_contribution`.
 
-The cost is real: a method producing a genuinely new *applied* output cannot
+#### What the runner will actually apply
+
+Only `energy`, `forces`, and `stress` are added into the batch. For each one
+the runner has to know the destination buffer, whether it is per-graph or
+per-atom, and how it combines across biases. An unrecognised *applied* key has
+none of that, so `_check_destinations` raises rather than dropping a
+contribution in silence.
+
+The cost is real: a method producing a genuinely new applied output cannot
 express it without editing the framework. That is accepted, because the
-alternative is a contribution the runner silently drops.
+alternative is a contribution the runner silently drops. Anything you only
+want to *see* goes under `diagnostics/`, which is unconstrained.
 
 ### The batteries: mixins
 
 Capability is opt-in per bias, supplied as composable mixins:
 
 ```python
-class MyRestraint(ConservativeBias): ...                        # energy -> forces + stress
-class MyMetaD(AdaptivePotentialMixin, ConservativeBias): ...    # ...and evolving state
-class MyABF(AdaptivePotentialMixin): ...                        # adaptive, no energy
+class MyRestraint(ConservativeBias): ...                     # energy -> forces + stress
+class MyMetaD(AdaptivePotentialMixin, ConservativeBias): ... # ...and evolving state
+class MyABF(AdaptivePotentialMixin, nn.Module, BaseModelMixin): ...  # adaptive, no energy
 ```
+
+A non-conservative bias has no energy to differentiate, so it does not inherit
+`ConservativeBias` — but it is still a `BaseModelMixin`. `AdaptiveBiasingForce`
+declares `outputs={"forces"}` and returns no `"energy"` key. *Non-conservative
+does not mean non-model*, and that is what lets the runner type-check, apply,
+and distribute every bias the same way.
 
 :::{important}
 `AdaptivePotentialMixin` must come **first** in the base list. `ConservativeBias`
@@ -479,14 +500,21 @@ Notes:
 
 - **Stress, not virial.** `ConservativeBias` emits tensile-positive Cauchy
   stress, matching every model wrapper in the toolkit, so bias output sums
-  directly with model output. `BiasResult.virial` exists for hand-written
-  biases that produce a virial directly, but the runner will reject it —
-  convert with `sigma = -W/V` first.
+  directly with model output. A `"virial"` key exists for hand-written biases
+  that produce a virial directly, but the runner will reject it — convert with
+  `sigma = -W/V` first.
 - **Partial dependence is fine.** An energy that depends only on the cell (a
   volume restraint) yields zero forces and real stress; one that returns a
   constant on some branch yields zeros for both. Neither is an error.
-- **`torch.compile` boundary is `energy()`, not `evaluate()`.**
-  `evaluate()` calls `requires_grad_()`, which `torch.compile` cannot trace.
+- **The isolation is shared, not private.** `forward()` delegates to
+  `nvalchemi.models._utils.isolated_energy_derivatives`, which evaluates an
+  energy function against a detached view of a live `Batch`, restores every
+  field it touched in a `finally` block, and returns derivatives with no grad
+  graph attached. Anything that differentiates against a batch it does not own
+  — an NEB spring term, a hand-written wall — can call it directly without
+  depending on this package.
+- **`torch.compile` boundary is `energy()`, not `forward()`.**
+  `forward()` reaches `requires_grad_()`, which `torch.compile` cannot trace.
   `EnhancedSampling(compile_biases=True)` compiles each bias's `energy()`.
 
 :::{important}
@@ -495,8 +523,8 @@ data-dependent Python branches out of it**. A `bool(tensor.any())` there —
 a bounds check, a "did anything violate this" guard — breaks `fullgraph=True`
 outright with a "Could not guard on data-dependent expression" error.
 
-Put such validation in an override of `evaluate()` instead, which is eager by
-construction, then call `super().evaluate(current)`. `HarmonicUmbrellaBias`
+Put such validation in an override of `forward()` instead, which is eager by
+construction, then call `super().forward(data)`. `HarmonicUmbrellaBias`
 validates `thermodynamic_state_id` this way. That placement is strictly better
 than an eager-only `torch.compiler.is_compiling()` guard: the check still runs
 when `energy()` is compiled, rather than being skipped exactly when a mistake
@@ -505,25 +533,57 @@ is hardest to diagnose.
 
 ### Adaptive biases
 
-`AdaptivePotentialMixin` separates read-only evaluation from state mutation:
+`AdaptivePotentialMixin` separates read-only evaluation from state mutation.
+It is the shared `StatefulHook` lifecycle from `nvalchemi.hooks`, filled in —
+`frequency`, `stage`, `read_only`, and `commit` mean here exactly what they
+mean for any other hook:
 
 ```python
 class MyMetaD(AdaptivePotentialMixin, ConservativeBias):
-    update_frequency = 100
-    observation_stage = DynamicsStage.AFTER_STEP
+    frequency = 100                          # Hook: every N steps
+    stage = DynamicsStage.AFTER_STEP         # Hook: where in the step
+    read_only = False                        # StatefulHook: update() mutates
 
-    def energy(self, current): ...          # read-only, compile-friendly
+    def energy(self, current): ...           # read-only, compile-friendly
 
-    def update(self, frames, result):       # called once per due step
-        self.deposit_hill(frames)
-        self.bump_state_version()           # tells the runner forces are stale
+    def update(self, ctx, stage):            # called once per due step
+        self.deposit_hill(ctx.batch)
+        self.bump_state_version()            # tells the runner forces are stale
+
+    def commit(self):                        # StatefulHook sync boundary
+        ...                                  # publish shared history, if any
 ```
 
-`observation_stage` decides which frame `update` receives:
+"Read-only while forces are computed, mutate after the step, synchronise
+occasionally" is not specific to sampling — NEB's climbing-image promotion, an
+adaptive thermostat, and an adaptive neighbour skin have the same shape — so
+the vocabulary lives in `nvalchemi.hooks.StatefulHook` and this mixin only
+fills it in. `StatefulHook` itself composes `Hook` (`frequency`, `stage`) and
+`CheckpointableHook` (`state_dict`, `load_state_dict`), adding only `read_only`
+and `commit`.
+
+`stage` decides which frame `update` receives:
 
 - `AFTER_STEP` — post-step coordinates. What metadynamics wants.
 - `AFTER_COMPUTE` — captured while `batch.forces` still holds the **unbiased**
   physical forces. What ABF requires; an estimator fed its own output diverges.
+
+`ctx` is a `BiasContext` — a `DynamicsContext` with one extra field,
+`ctx.contribution`, holding what this bias returned during the force
+evaluation that preceded the capture. It lives in `nvalchemi.hooks` beside
+`DynamicsContext` and `TrainContext`, not in this subpackage, for the same
+reason the lifecycle does.
+
+:::{note}
+`update` is not spelled `__call__` even though a `Hook` is dispatched that way.
+A bias is also an `nn.Module`, whose `__call__` is the model forward that
+`BaseDynamics` and `PipelineModelWrapper` both invoke; one name cannot be both.
+This is the resolution `TrainingUpdateHook` already uses — a domain hook family
+keeps the signature its semantics need, and an orchestrator owns protocol
+compliance on its behalf. Here that orchestrator is the single composite hook
+`EnhancedSampling` installs, which reads `frequency` and `stage` and dispatches
+`update` and `commit`.
+:::
 
 ## The runner
 
@@ -537,7 +597,7 @@ behave exactly as they would unbiased.
    summed once and applied together, so no bias can observe another's forces
    and the total does not depend on registration order.
 2. **`update()` is delivered exactly once per due step**, after integration.
-3. **Observables are namespaced** `bias/<name>/<key>`, so two biases of the
+3. **Diagnostics are namespaced** `bias/<name>/<key>`, so two biases of the
    same type cannot collide.
 4. **Forces are primed** before the first step. A velocity-Verlet-style
    integrator reads `batch.forces` in its first half-step, before any model
@@ -905,8 +965,8 @@ correct under NVE and NVT, where nothing reads the stress, so it can be
 migrated when convenient rather than urgently. The hook remains functional and
 no removal date is set.
 
-No adapter is provided: bridging a `BiasPotential` onto `bias_fn` would have
-to discard `BiasResult.stress`, reintroducing the exact failure the new API
+No adapter is provided: bridging a bias onto `bias_fn` would have
+to discard its `stress`, reintroducing the exact failure the new API
 removes.
 
 ## Not yet implemented

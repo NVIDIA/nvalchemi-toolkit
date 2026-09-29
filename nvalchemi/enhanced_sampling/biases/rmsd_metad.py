@@ -27,8 +27,10 @@ from nvalchemi.enhanced_sampling._bias import ConservativeBias
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from nvalchemi._typing import ModelOutputs
     from nvalchemi.data import Batch
-    from nvalchemi.enhanced_sampling._bias import BiasResult
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.enhanced_sampling._adaptive import BiasContext
 
 __all__ = ["RMSDMetaDynamicsBias"]
 
@@ -137,8 +139,10 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         ``None`` uses every atom.  The usual choice is heavy atoms only:
         hydrogens rotating on a methyl group produce RMSD the exploration
         does not care about.
-    update_frequency:
-        Dynamics steps between depositions.
+    frequency:
+        Dynamics steps between depositions.  The
+        :class:`~nvalchemi.hooks.Hook` attribute, with the meaning it has
+        everywhere else.
     storage:
         ``"fifo"`` (default), ``"preallocated"``, or ``"grow"``.  FIFO is the
         xTB-compatible default and is not a compromise here the way it is for
@@ -219,7 +223,7 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         *,
         name: str = "rmsd_metadynamics",
         atom_indices: Tensor | None = None,
-        update_frequency: int = 500,
+        frequency: int = 500,
         storage: Literal["preallocated", "grow", "fifo"] = "fifo",
         max_references: int | None = None,
         history: Literal["shared", "state", "walker"] = "shared",
@@ -249,10 +253,9 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             raise ValueError(
                 f"RMSDMetaDynamicsBias: alpha must be positive, got {alpha}."
             )
-        if int(update_frequency) < 1:
+        if int(frequency) < 1:
             raise ValueError(
-                f"RMSDMetaDynamicsBias: update_frequency must be at least 1, "
-                f"got {update_frequency}."
+                f"RMSDMetaDynamicsBias: frequency must be at least 1, got {frequency}."
             )
         if int(ramp_depositions) < 0:
             raise ValueError(
@@ -297,7 +300,7 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         self.alpha = float(alpha)
         self.storage = storage
         self.history = history
-        self.update_frequency = int(update_frequency)
+        self.frequency = int(frequency)
         self.ramp_depositions = int(ramp_depositions)
         self._capacity = capacity
 
@@ -453,7 +456,7 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
                     f"RMSDMetaDynamicsBias {self.name!r}: reference storage is "
                     f"full ({self.capacity} references) and "
                     "storage='preallocated'. Raise max_references, lengthen "
-                    "update_frequency, or switch to storage='fifo', which is "
+                    "frequency, or switch to storage='fifo', which is "
                     "the xTB-compatible policy and discards the oldest "
                     "reference instead."
                 )
@@ -593,18 +596,20 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             mask = mask & (self.reference_owner.unsqueeze(0) == owner_key.unsqueeze(1))
         return (kernel * weights.unsqueeze(0) * mask).sum(dim=-1)
 
-    def evaluate(self, current: Batch) -> BiasResult:
+    def forward(self, data: Batch, **kwargs: Any) -> ModelOutputs:
         """Reject periodic batches, then derive energy and forces.
 
         Parameters
         ----------
-        current:
+        data:
             The live batch.
+        **kwargs:
+            Forwarded to :meth:`ConservativeBias.forward`.
 
         Returns
         -------
-        BiasResult
-            As :meth:`ConservativeBias.evaluate`.
+        ModelOutputs
+            As :meth:`ConservativeBias.forward`.
 
         Raises
         ------
@@ -614,9 +619,9 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             the batch have differing atom counts while ``atom_indices`` is
             ``None``.
         """
-        self._reject_periodic(current)
-        self._validate_sites(current)
-        return super().evaluate(current)
+        self._reject_periodic(data)
+        self._validate_sites(data)
+        return super().forward(data, **kwargs)
 
     def _reject_periodic(self, current: Batch) -> None:
         """Raise if the batch is under periodic boundary conditions.
@@ -633,7 +638,7 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         but no boundary condition has not said which case it is, and the
         failure this guard exists to prevent is silent.
 
-        Runs in ``evaluate`` rather than ``energy`` so the flag reduction
+        Runs in ``forward`` rather than ``energy`` so the flag reduction
         stays off the compiled path.
 
         Parameters
@@ -735,16 +740,18 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     # Deposition
     # ------------------------------------------------------------------
 
-    def update(self, frames: Batch, result: BiasResult) -> None:
+    def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         """Append the current geometry to the reference set, one per walker.
 
         Parameters
         ----------
-        frames:
-            Post-step frame captured by the runner.
-        result:
-            The bias's own result from the preceding force evaluation.
+        ctx:
+            The capture.  ``ctx.batch`` is the post-step frame; the bias's own
+            preceding contribution is on ``ctx.contribution``.
+        stage:
+            The stage being dispatched, always :attr:`stage`.
         """
+        frames = ctx.batch
         with torch.no_grad():
             coords = self._gather_sites(frames).detach()  # [B, M, 3]
             centered = coords - coords.mean(dim=1, keepdim=True)
