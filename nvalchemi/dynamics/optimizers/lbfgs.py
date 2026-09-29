@@ -40,6 +40,7 @@ the history.  Positions must not be edited between steps (e.g. by
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -56,6 +57,7 @@ from nvalchemi.dynamics._ops.lbfgs import (
 )
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks.cell_align import AlignCellHook, _aligned_periodic
+from nvalchemi.hooks.periodic import WrapPeriodicHook
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -123,6 +125,31 @@ def _refuse(name: str) -> None:
         f"{name} is fixed when optimizer state is allocated; "
         "construct a new optimizer to change it"
     )
+
+
+def _warn_if_wraps_positions(dynamics: BaseDynamics) -> None:
+    """Warn when ``WrapPeriodicHook`` is registered on *dynamics* or its ``FusedStage``.
+
+    L-BFGS differences consecutive positions (``s = x - x_base``) to build its
+    curvature history.  A hook that edits positions between steps — most
+    commonly ``WrapPeriodicHook``, the natural thing to copy over from an NVE
+    example — inserts a spurious lattice-translation jump into that history.
+    This doesn't error; it silently corrupts the search direction, which has
+    been measured to inflate the number of steps to converge by 50-500x, or
+    to stall convergence outright.  See the module docstring.
+    """
+    own_and_enclosing = (*dynamics.hooks, *dynamics._enclosing_hooks)
+    if any(isinstance(h, WrapPeriodicHook) for h in own_and_enclosing):
+        warnings.warn(
+            f"{type(dynamics).__name__} has WrapPeriodicHook registered. "
+            "Editing positions between steps corrupts L-BFGS's curvature "
+            "history and can silently inflate the number of steps to "
+            "converge by 50-500x, or stall convergence entirely. Remove "
+            "WrapPeriodicHook from this optimizer (or its FusedStage), or "
+            "use FIRE2/FIRE2VariableCell if periodic wrapping is required.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 def _ops_state(state: Batch) -> LBFGSState:
@@ -203,6 +230,7 @@ class LBFGS(BaseDynamics):
         _refuse("history_size")
 
     def _init_state(self, batch: Batch) -> None:
+        _warn_if_wraps_positions(self)
         self._state = _build_state(
             batch.num_nodes_per_graph,
             self.history_size,
@@ -369,6 +397,7 @@ class LBFGSVariableCell(BaseDynamics):
         return cell
 
     def _init_state(self, batch: Batch) -> None:
+        _warn_if_wraps_positions(self)
         self._state = _build_state(
             batch.num_nodes_per_graph,
             self.history_size,

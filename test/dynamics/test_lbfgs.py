@@ -22,6 +22,7 @@ two-level state, inflight batching, FusedStage masking, cell alignment and
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +50,7 @@ from nvalchemi.dynamics.optimizers.lbfgs import (
     _PER_SYSTEM,
     _ops_state,
 )
+from nvalchemi.hooks.periodic import WrapPeriodicHook
 
 from .test_state_management import (
     _make_atomic_data,
@@ -657,6 +659,49 @@ class TestFusedStage:
         fused, _, batch = self._skew_fused(AlignCellHook(frequency=2))
         with pytest.raises(ValueError, match="frequency=1"):
             fused.step(batch)
+
+
+# ---------------------------------------------------------------------------
+# WrapPeriodicHook corrupts the curvature history: must warn
+# ---------------------------------------------------------------------------
+
+
+class TestLBFGSWrapPeriodicWarning:
+    def test_own_hook_warns_on_fixed_cell(self):
+        batch = _make_batch(2, n_atoms_each=4, seed=6)
+        dynamics = LBFGS(
+            model=_make_model(),
+            hooks=[WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)],
+        )
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            dynamics._ensure_state_initialized(batch)
+
+    def test_own_hook_warns_on_variable_cell(self):
+        batch = _cell_batch([None, None])
+        dynamics = LBFGSVariableCell(
+            model=_make_model(needs_stress=True),
+            hooks=[WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)],
+        )
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            dynamics._ensure_state_initialized(batch)
+
+    def test_no_hook_does_not_warn(self):
+        batch = _make_batch(2, n_atoms_each=4, seed=7)
+        dynamics = LBFGS(model=_make_model())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            dynamics._ensure_state_initialized(batch)
+
+    def test_enclosing_fused_stage_hook_warns(self):
+        # Registered on the FusedStage, not lbfgs itself; only checking
+        # detection here, so a non-periodic batch is enough — the hook
+        # never actually has to run.
+        lbfgs = LBFGS(model=_make_model())
+        fused = lbfgs + FIRE2(model=_make_model(), dt=0.05)
+        fused.register_hook(WrapPeriodicHook(), stage=DynamicsStage.AFTER_POST_UPDATE)
+        batch = _make_batch(2)
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            lbfgs._ensure_state_initialized(batch)
 
 
 # ---------------------------------------------------------------------------
