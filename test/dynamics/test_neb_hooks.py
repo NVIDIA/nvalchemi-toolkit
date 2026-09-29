@@ -18,11 +18,13 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 import torch
 import torch._dynamo as dynamo
+import warp as wp
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
@@ -45,6 +47,13 @@ from nvalchemi.dynamics.mep.neb_ops.modes import (
 from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
 from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.hooks import DynamicsContext
+
+
+@wp.func
+def _custom_tangent_weights(energy_prev: Any, energy_curr: Any, energy_next: Any):
+    """Use equal weights to exercise importable custom NEB equations."""
+    one = type(energy_curr)(1.0)
+    return one, one
 
 
 def _bands(energies: list[float], groups: list[int]) -> Batch:
@@ -343,6 +352,22 @@ class TestNEBForceHook:
         gram.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
         gram(ctx, DynamicsStage.AFTER_COMPUTE)
         assert torch.isfinite(batch.forces).all()
+
+    def test_custom_method_key_restores_equation_functions(self) -> None:
+        method = NEBMethod(
+            tangent_weights_fn=_custom_tangent_weights,
+            effective_force_fn=neb_effective_force_from_gram_stats,
+        )
+
+        key = method.to_key()
+        restored = NEBMethod.from_key(key)
+
+        assert key.startswith("gram_stats|")
+        assert "test_neb_hooks._custom_tangent_weights" in key
+        assert restored.tangent_weights_fn is method.tangent_weights_fn
+        assert restored.effective_force_fn is method.effective_force_fn
+        assert restored.climbing_force_fn is method.climbing_force_fn
+        assert _force_hook(method=restored).method_key == key
 
     def test_rejects_unknown_method_name(self) -> None:
         with pytest.raises(ValueError, match="Unknown NEB method"):

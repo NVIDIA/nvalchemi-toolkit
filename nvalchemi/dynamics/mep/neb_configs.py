@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, Self, runtime_checkable
 
 import torch
 import warp as wp
@@ -30,6 +30,10 @@ from nvalchemi.dynamics.mep.neb_equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
     neb_effective_force,
+)
+from nvalchemi.dynamics.mep.neb_ops.methods import (
+    prepare_neb_method_key,
+    resolve_neb_method,
 )
 
 __all__ = [
@@ -202,3 +206,38 @@ class NEBMethod:
                     f"{field_name} must be a function decorated with warp.func; "
                     f"got {type(value).__name__}"
                 )
+
+    def to_key(self) -> str:
+        """Return the prepared kernel key containing importable equation paths.
+
+        Returns
+        -------
+        str
+            Kernel kind and dotted paths for the three equation functions.
+        """
+        return prepare_neb_method_key(
+            self.tangent_weights_fn,
+            self.effective_force_fn,
+            self.climbing_force_fn,
+        )
+
+    @classmethod
+    def from_key(cls, key: str) -> Self:
+        """Restore the equation functions from a prepared kernel key.
+
+        Parameters
+        ----------
+        key : str
+            Key produced by :meth:`to_key`.
+
+        Returns
+        -------
+        NEBMethod
+            Method using the imported equation functions.
+        """
+        equations = resolve_neb_method(key)
+        return cls(
+            tangent_weights_fn=equations.tangent_fn,
+            effective_force_fn=equations.force_fn,
+            climbing_force_fn=equations.climbing_force_fn,
+        )

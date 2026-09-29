@@ -32,7 +32,6 @@ from nvalchemi.dynamics.mep.neb_configs import (
     SpringConfig,
     SpringContext,
 )
-from nvalchemi.dynamics.mep.neb_ops.methods import prepare_neb_method_key
 from nvalchemi.dynamics.mep.neb_ops.modes import ENDPOINT, REGULAR_NEB
 from nvalchemi.dynamics.mep.neb_ops.torch_ops import neb_forces
 from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
@@ -214,11 +213,7 @@ class NEBForceHook:
             raise TypeError(
                 f"method must be 'improved_tangent' or an NEBMethod; got {type(method).__name__}"
             )
-        method_key = prepare_neb_method_key(
-            method.tangent_weights_fn,
-            method.effective_force_fn,
-            method.climbing_force_fn,
-        )
+        method_key = method.to_key()
 
         # Validate endpoint behavior and image-local atom constraints together.
         if endpoint_mode not in {"fixed", "relaxed"}:
