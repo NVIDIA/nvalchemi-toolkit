@@ -130,24 +130,37 @@ class _QuadraticDerivativeWrapperBase(torch.nn.Module, BaseModelMixin):
                 if energies
                 else data.positions.sum().expand(0, 1)
             )
-        elif self.output_kind == "second_derivative_raise":
+        elif self.output_kind in {
+            "second_derivative_raise",
+            "runtime_second_derivative_raise",
+        }:
             energies = []
             start = 0
             for atom_count in data.num_nodes_list:
                 stop = start + atom_count
+                derivative = (
+                    _RaiseOnRuntimeSecondDerivative
+                    if self.output_kind == "runtime_second_derivative_raise"
+                    else _RaiseOnSecondDerivative
+                )
                 energies.append(
-                    self.scale
-                    * _RaiseOnSecondDerivative.apply(data.positions[start:stop])
+                    self.scale * derivative.apply(data.positions[start:stop])
                 )
                 start = stop
             energy = torch.stack(energies).reshape(-1, 1)
         elif self.output_kind == "detached_quadratic":
             node_energy = _DetachedQuadratic.apply(data.positions)
+        elif self.output_kind == "connected_zero":
+            node_energy = data.positions.pow(3).sum(dim=-1, keepdim=True)
         elif self.output_kind == "linear":
             node_energy = self.scale * data.positions.sum(dim=-1, keepdim=True)
         else:
             node_energy = self.scale * data.positions.square().sum(dim=-1, keepdim=True)
-        if self.output_kind not in {"coupled", "second_derivative_raise"}:
+        if self.output_kind not in {
+            "coupled",
+            "second_derivative_raise",
+            "runtime_second_derivative_raise",
+        }:
             energy = torch.zeros(
                 data.num_graphs,
                 1,
@@ -227,6 +240,20 @@ class _RaiseOnSecondDerivative(torch.autograd.Function):
         return 2 * _RaiseDuringBackward.apply(positions) * grad_output
 
 
+class _RaiseOnRuntimeSecondDerivative(torch.autograd.Function):
+    """Quadratic energy whose second derivative raises an unrelated error."""
+
+    @staticmethod
+    def forward(ctx, positions):
+        ctx.save_for_backward(positions)
+        return positions.square().sum()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        (positions,) = ctx.saved_tensors
+        return 2 * _RaiseRuntimeDuringBackward.apply(positions) * grad_output
+
+
 class _DetachedQuadratic(torch.autograd.Function):
     """Quadratic forward with a detached constant first derivative."""
 
@@ -249,6 +276,18 @@ class _RaiseDuringBackward(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         raise LookupError("injected dense row failure")
+
+
+class _RaiseRuntimeDuringBackward(torch.autograd.Function):
+    """Identity used to inject an unrelated runtime failure on double backward."""
+
+    @staticmethod
+    def forward(ctx, value):
+        return value
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        raise RuntimeError("injected unrelated second-backward failure")
 
 
 def _coupled_hessian_matrix(
@@ -643,6 +682,33 @@ class TestHessianVectorProduct:
         with pytest.raises(RuntimeError, match="not connected to the position leaf"):
             model.hessian_vector_product(batch, torch.ones_like(batch.positions))
 
+    @pytest.mark.parametrize("operation", ["hvp", "dense"])
+    def test_connected_zero_second_derivative_is_supported(self, operation):
+        batch = _make_derivative_batch(2)
+        batch.positions.zero_()
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "connected_zero"
+
+        if operation == "hvp":
+            result = model.hessian_vector_product(
+                batch, torch.ones_like(batch.positions)
+            )
+        else:
+            model.compute_hessian(batch)
+            result = batch.hessian
+
+        torch.testing.assert_close(result, torch.zeros_like(result))
+
+    def test_unrelated_second_backward_runtime_error_propagates(self):
+        batch = _make_derivative_batch(1, 2)
+        model = _QualifiedQuadraticDerivativeWrapper()
+        model.output_kind = "runtime_second_derivative_raise"
+
+        with pytest.raises(
+            RuntimeError, match="injected unrelated second-backward failure"
+        ):
+            model.hessian_vector_product(batch, torch.ones_like(batch.positions))
+
     def test_torch_compile_aot_eager_second_derivative(self):
         if not hasattr(torch, "compile"):
             pytest.skip("torch.compile is unavailable")
@@ -946,12 +1012,16 @@ for name in ('aimnet', 'mace', 'fairchem'):
             text=True,
         )
 
-    def test_public_derivative_error_pickle_round_trip(self):
+    @pytest.mark.parametrize(
+        ("operation", "strategy"),
+        [("hvp", None), ("dense_hessian", "loop"), ("dense_hessian", "vmap")],
+    )
+    def test_public_derivative_error_pickle_round_trip(self, operation, strategy):
         error = DerivativeNotSupported(
             model_name="DemoModelWrapper",
-            operation="dense_hessian",
+            operation=operation,
             execution="local",
-            strategy="vmap",
+            strategy=strategy,
             reason="unsupported test configuration",
         )
 
@@ -964,6 +1034,7 @@ for name in ('aimnet', 'mace', 'fairchem'):
         assert restored.execution == error.execution
         assert restored.strategy == error.strategy
         assert restored.reason == error.reason
+        assert restored.args == error.args
         assert str(restored) == str(error)
 
 
@@ -1274,6 +1345,18 @@ class TestDenseHessian:
                 "vmap",
                 LookupError,
                 "injected dense row failure",
+            ),
+            (
+                "runtime_second_derivative_raise",
+                "loop",
+                RuntimeError,
+                "injected unrelated second-backward failure",
+            ),
+            (
+                "runtime_second_derivative_raise",
+                "vmap",
+                RuntimeError,
+                "injected unrelated second-backward failure",
             ),
         ],
     )

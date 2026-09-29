@@ -61,7 +61,6 @@ from nvalchemi.hooks import Hook, NeighborListHook
 from nvalchemi.models._derivatives import (
     _DerivativeRequest,
     _reject_derivative_request,
-    _require_local_derivative_request,
     _temporary_model_config,
 )
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
@@ -798,7 +797,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate one local derivative request across pipeline steps."""
-        _require_local_derivative_request(self, request)
+        if request.execution != "local":
+            _reject_derivative_request(
+                self,
+                request,
+                "distributed second-order derivatives are not supported",
+            )
         for group_index, group in enumerate(self.groups):
             for step_index, step in enumerate(group.steps):
                 if isinstance(step.model, PipelineModelWrapper):
@@ -829,7 +833,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 ),
                 strategy=request.strategy,
             )
-            _require_local_derivative_request(step.model, child_request)
+            if child_request.execution != "local":
+                _reject_derivative_request(
+                    step.model,
+                    child_request,
+                    "distributed second-order derivatives are not supported",
+                )
             step.model._validate_derivative_request(child_request)
 
     def _call_step(

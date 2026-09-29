@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, Self
 
@@ -89,35 +90,19 @@ class DerivativeNotSupported(NotImplementedError):
             f"for execution='{execution}', strategy='{strategy_text}': {reason}"
         )
 
-    def __reduce__(self) -> tuple[Any, tuple[str, str, str, str | None, str]]:
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
         """Reconstruct the exception from its contextual fields when unpickled."""
         return (
-            _reconstruct_derivative_not_supported,
-            (
-                self.model_name,
-                self.operation,
-                self.execution,
-                self.strategy,
-                self.reason,
+            partial(
+                type(self),
+                model_name=self.model_name,
+                operation=self.operation,
+                execution=self.execution,
+                strategy=self.strategy,
+                reason=self.reason,
             ),
+            (),
         )
-
-
-def _reconstruct_derivative_not_supported(
-    model_name: str,
-    operation: _DerivativeOperation,
-    execution: _DerivativeExecutionKind,
-    strategy: _DerivativeStrategy | None,
-    reason: str,
-) -> DerivativeNotSupported:
-    """Rebuild the public exception using its keyword-only constructor."""
-    return DerivativeNotSupported(
-        model_name=model_name,
-        operation=operation,
-        execution=execution,
-        strategy=strategy,
-        reason=reason,
-    )
 
 
 def _reject_derivative_request(
@@ -144,19 +129,6 @@ def _reject_derivative_request(
         strategy=request.strategy,
         reason=reason,
     )
-
-
-def _require_local_derivative_request(
-    model: object,
-    request: _DerivativeRequest,
-) -> None:
-    """Reject distributed Hessian requests before wrapper-specific checks."""
-    if request.execution != "local":
-        _reject_derivative_request(
-            model,
-            request,
-            "distributed second-order derivatives are not supported",
-        )
 
 
 _CONFIG_OVERRIDE_UNSET = object()
@@ -274,21 +246,19 @@ def _position_gradient(graph: _DerivativeGraph) -> Tensor:
                 "First position derivative does not retain a differentiable graph"
             )
 
-        try:
-            torch.autograd.grad(
-                gradient,
-                graph.positions,
-                grad_outputs=torch.ones_like(gradient),
-                retain_graph=True,
-                allow_unused=False,
-            )
-        except RuntimeError as exc:
-            message = str(exc).lower()
-            if "not have been used in the graph" not in message:
-                raise
+        # A first derivative can depend on model parameters but not on positions.
+        # A connected zero Hessian returns zeros; a disconnected derivative returns None.
+        probe = torch.autograd.grad(
+            gradient,
+            graph.positions,
+            grad_outputs=torch.ones_like(gradient),
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
+        if probe is None:
             raise RuntimeError(
                 "First position derivative is not connected to the position leaf"
-            ) from exc
+            )
     return gradient
 
 
@@ -369,11 +339,6 @@ class _ValidatedDenseHessianRequest:
         positions = getattr(batch, "positions", None)
         if not isinstance(positions, Tensor):
             raise RuntimeError("Dense Hessians require tensor positions")
-        if not positions.is_floating_point():
-            raise TypeError(
-                "Dense Hessian positions must have a floating-point dtype, "
-                f"got {positions.dtype}"
-            )
         if positions.ndim != 2 or positions.shape[1] != 3:
             raise ValueError(
                 "Dense Hessian positions must have shape [total_atoms, 3], "
@@ -650,7 +615,12 @@ def _prepare_derivative_graph(
     if not isinstance(batch, Batch):
         raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
 
-    _require_local_derivative_request(model, request)
+    if request.execution != "local":
+        _reject_derivative_request(
+            model,
+            request,
+            "distributed second-order derivatives are not supported",
+        )
     model._validate_derivative_request(request)
 
     graph: _DerivativeGraph | None = None

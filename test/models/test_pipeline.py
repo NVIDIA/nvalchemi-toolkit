@@ -2993,8 +2993,12 @@ class TestPipelineDerivativeTopology:
             pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
 
     @pytest.mark.parametrize("context", ["pipeline_distributed", "child_distributed"])
+    @pytest.mark.parametrize(
+        ("operation", "strategy"),
+        [("hvp", None), ("dense_hessian", "loop"), ("dense_hessian", "vmap")],
+    )
     def test_contextual_capability_rejection_precedes_all_forwards(
-        self, context, monkeypatch
+        self, context, operation, strategy
     ):
         batch = _make_one_system_derivative_batch()
         earlier = _QualifiedPipelineQuadratic()
@@ -3006,13 +3010,28 @@ class TestPipelineDerivativeTopology:
             pipeline._dist_ctx = object()
         elif context == "child_distributed":
             rejected._dist_ctx = object()
-        monkeypatch.setattr(
-            earlier,
-            "forward",
-            lambda *_args, **_kwargs: pytest.fail("Earlier step must not run"),
+        with pytest.raises(
+            DerivativeNotSupported,
+            match="distributed second-order derivatives are not supported",
+        ) as exc_info:
+            if operation == "hvp":
+                pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+            else:
+                pipeline.compute_hessian(batch, strategy=strategy)
+
+        error = exc_info.value
+        expected_model_name = (
+            type(pipeline).__name__
+            if context == "pipeline_distributed"
+            else type(rejected).__name__
         )
-        with pytest.raises(DerivativeNotSupported, match=context.split("_")[-1]):
-            pipeline.hessian_vector_product(batch, torch.ones_like(batch.positions))
+        assert error.model_name == expected_model_name
+        assert error.operation == operation
+        assert error.execution == "distributed"
+        assert error.strategy == strategy
+        assert error.reason == "distributed second-order derivatives are not supported"
+        assert earlier.forward_calls == 0
+        assert rejected.forward_calls == 0
 
     def test_strategy_specific_rejection_does_not_fall_back(self):
         batch = _make_one_system_derivative_batch()

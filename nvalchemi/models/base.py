@@ -740,11 +740,6 @@ class BaseModelMixin(abc.ABC):
         positions = getattr(batch, "positions", None)
         if not isinstance(positions, torch.Tensor):
             raise RuntimeError("Hessian-vector products require tensor positions")
-        if not positions.is_floating_point():
-            raise TypeError(
-                "Hessian-vector product positions must have a floating-point dtype, "
-                f"got {positions.dtype}"
-            )
         _validate_hessian_vector(vectors, positions)
 
         with self.prepare_hessian(batch) as operator:
