@@ -74,7 +74,6 @@ class DemoGANGenerate:
         rng: torch.Generator | None = None,
         **kwargs,
     ) -> Batch:
-        del kwargs
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
         z = torch.randn(n, self.model.latent_dim, generator=rng, device=self.device)
         positions = self.model.decode(z).reshape(n, self.model.num_atoms, 3)

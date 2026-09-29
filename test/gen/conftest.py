@@ -85,7 +85,7 @@ def trivial_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     TensorDict
         Zeros under the ``"x1"`` key, aligned with ``inputs``.
     """
-    del rng, kwargs
+    del rng
     n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
     return TensorDict({"x1": torch.zeros(n, 1, 3)}, batch_size=[n])
 
@@ -112,7 +112,7 @@ def batch_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     Batch
         ``num_samples`` (or ``inputs.num_graphs``) dummy graphs.
     """
-    del rng, kwargs
+    del rng
     n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
     return make_batch(n)
 
@@ -168,7 +168,7 @@ class DeviceAwareGenerate:
         Batch
             Dummy graphs on ``self.device``.
         """
-        del rng, kwargs
+        del rng
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
         return make_batch(n).to(self.device)
 
@@ -259,7 +259,6 @@ class DemoGANGenerate:
         Batch
             One point-cloud graph per draw.
         """
-        del kwargs
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
         z = torch.randn(n, self.model.latent_dim, generator=rng, device=self.device)
         sample = TensorDict({"x1": self.model.decode(z)}, batch_size=[n])
