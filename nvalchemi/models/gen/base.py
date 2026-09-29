@@ -26,8 +26,8 @@ kept separate: a generative model builds on this mixin, not
 Two pieces live here:
 
 * :class:`GenerativeModelConfig` — a pydantic config schema describing a
-  generative model's capability surface: variable-atom support, batch-field
-  declarations, and prediction-output keys. It is set as ``self.model_config``
+  generative model's capability surface: batch-field declarations and
+  prediction-output keys. It is set as ``self.model_config``
   in a wrapper's ``__init__``, mirroring the ``BaseModelMixin`` pattern (the
   config lives with the model, not on the
   :class:`~nvalchemi.gen.generator.AtomisticGenerator`).

@@ -33,6 +33,7 @@ from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel
 from test.gen.conftest import (
     DemoGANGenerate,
+    batch_generate,
     make_batch,
     trivial_generate,
 )
@@ -593,6 +594,49 @@ class TestStageKwargs:
 class TestDuckTypedSessions:
     """Context-manager stages are entered inside a pipeline session."""
 
+    def test_inference_mode_clone_escapes_before_run_stage(self) -> None:
+        """An inference-mode generator hands run-stages normal tensors."""
+
+        class _InferenceProbe:
+            def __init__(self) -> None:
+                self.seen: bool | None = None
+                self.mode: bool | None = None
+
+            def run(self, batch: Batch, **kwargs) -> Batch:
+                """Record tensor provenance and the mode active during the call."""
+                self.seen = batch.positions.is_inference()
+                self.mode = torch.is_inference_mode_enabled()
+                return batch
+
+        gen = AtomisticGenerator(
+            generator_func=batch_generate,
+            enable_inference_mode=True,
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions", "atomic_numbers"}),
+        )
+        probe = _InferenceProbe()
+        pipe = GenerationPipeline(stages=[gen, probe])
+        with pipe:
+            out = pipe(make_batch(num_graphs=1))
+        assert isinstance(out, Batch)
+        assert probe.seen is False
+        assert probe.mode is False  # inference mode is off for the run call itself
+        # the failure mode the fix targets, exercised end to end
+        assert not out.positions.is_inference()
+        out.positions.requires_grad_(True).sum().backward()
+
+    def test_duplicate_stage_instance_rejected_at_session_entry(self) -> None:
+        """The same generator twice in one pipeline unbalances hook lifecycles."""
+        gen = _generator()
+        pipe = GenerationPipeline(stages=[gen, gen])
+        with pytest.raises(RuntimeError, match="do not nest"):
+            with pipe:
+                pass
+        # the failure unwound the first entry: the generator recovers cleanly
+        with gen:
+            out = gen(make_batch(num_graphs=1))
+        assert out.num_graphs == 1
+
     def test_context_manager_stage_entered(self) -> None:
         """A stage with ``__enter__``/``__exit__`` is entered and exited."""
         entered: list[bool] = []
@@ -706,6 +750,67 @@ class TestDuckTypedSessions:
             out = pipe(None)
             assert isinstance(out, Batch)
             assert out.positions.device.type == "cuda"
+
+    def test_clone_gives_the_run_stage_fresh_storage(self) -> None:
+        """The boundary clone does not share storage with the producer's batch."""
+        produced: list[Batch] = []
+
+        def _recording_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
+            """Return a batch and remember it."""
+            batch = batch_generate(inputs, num_samples=num_samples, rng=rng, **kwargs)
+            produced.append(batch)
+            return batch
+
+        gen = AtomisticGenerator(
+            generator_func=_recording_generate,
+            required_inputs=frozenset(),
+            outputs=frozenset({"positions", "atomic_numbers"}),
+        )
+        pipe = GenerationPipeline(stages=[gen, _RunRecorder()])
+        out = pipe(make_batch(num_graphs=1))
+        assert out.positions.data_ptr() != produced[0].positions.data_ptr()
+
+    def test_raw_path_passes_inference_tensors_through_untouched(self) -> None:
+        """The non-Batch path gets no escape or clone: raw samples pass as-is.
+
+        An opted-in generator returning a TensorDict hands the run-stage the
+        same object with the session's mode still active — the raw contract
+        is "untouched", and an escape without a clone could not rescue the
+        tensors anyway (inference-ness survives the mode ending).
+        """
+
+        class _RawProbe:
+            def __init__(self) -> None:
+                self.mode: bool | None = None
+                self.identity: int | None = None
+
+            def run(self, sample, **kwargs):
+                """Record the session mode and object identity of the raw sample."""
+                self.mode = torch.is_inference_mode_enabled()
+                self.identity = id(sample)
+                return sample
+
+        returned: list = []
+
+        def _raw_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
+            """Return a raw TensorDict and remember it."""
+            sample = trivial_generate(inputs, num_samples=num_samples, rng=rng)
+            returned.append(sample)
+            return sample
+
+        gen = AtomisticGenerator(
+            generator_func=_raw_generate,
+            enable_inference_mode=True,
+            required_inputs=frozenset(),
+            outputs=frozenset(),
+        )
+        probe = _RawProbe()
+        pipe = GenerationPipeline(stages=[gen, probe])
+        with pipe:
+            out = pipe(make_batch(num_graphs=1))
+        assert probe.mode is True
+        assert probe.identity == id(returned[0])
+        assert out is returned[0]
 
 
 class TestBoundaryGuardCompileSkip:

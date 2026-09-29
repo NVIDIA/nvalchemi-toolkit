@@ -150,9 +150,13 @@ class DemoDiffusionGenerate:
 #
 # Entering a ``with gan:`` session sets up the RNG state, creates a CUDA
 # stream on GPU, and manages compiled model lifetimes. Repeated draws inside
-# the session advance the RNG deterministically.
+# the session advance the RNG deterministically. Nothing here needs gradients,
+# so both drivers set ``enable_inference_mode=True``: sessions then run
+# under ``torch.inference_mode`` and avoid autograd tracking.
 
-gan = AtomisticGenerator(generator_func=DemoGANGenerate(DemoGANModel()), seed=42)
+gan = AtomisticGenerator(
+    generator_func=DemoGANGenerate(DemoGANModel()), seed=42, enable_inference_mode=True
+)
 
 with gan:
     first = gan.sample(num_samples=4)
@@ -177,6 +181,7 @@ print(
 diffusion = AtomisticGenerator(
     generator_func=DemoDiffusionGenerate(DemoDiffusionModel(), num_steps=4),
     seed=42,
+    enable_inference_mode=True,
 )
 
 with diffusion:

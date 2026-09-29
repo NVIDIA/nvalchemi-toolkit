@@ -652,6 +652,12 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         AtomisticGenerator
             This instance.
         """
+        if self._session_stack is not None:
+            raise RuntimeError(
+                "AtomisticGenerator sessions do not nest: this instance is "
+                "already in a session (duplicate pipeline stage or a manual "
+                "double-enter). Exit the active session first."
+            )
         stack = ExitStack()
         try:
             if self.enable_inference_mode and not torch.is_inference_mode_enabled():

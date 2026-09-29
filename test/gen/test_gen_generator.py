@@ -1042,6 +1042,13 @@ class TestSession:
             assert not torch.is_inference_mode_enabled()
             gen()
 
+    def test_session_reentry_raises(self) -> None:
+        """A generator already in a session refuses a second entry."""
+        gen = self._generator()
+        with gen:
+            with pytest.raises(RuntimeError, match="do not nest"):
+                gen.__enter__()
+
     def test_session_enters_inference_mode_when_enabled(self) -> None:
         """``enable_inference_mode=True`` runs the session under inference mode."""
         gen = self._generator(enable_inference_mode=True)

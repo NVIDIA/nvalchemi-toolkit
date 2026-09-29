@@ -245,6 +245,8 @@ class GenerationPipeline(BaseModel):
         stream (dynamics engines and fused stages honor it) — then enters each
         stage's own session. The pipeline never enters
         :func:`torch.inference_mode` itself; generator stages manage their own.
+        Run-stages require a grad-enabled caller: a caller-managed
+        ``torch.no_grad`` region is not escaped.
         Exiting does not synchronize the session stream: enqueue a
         ``wait_stream`` or ``synchronize`` before consuming results from a
         different stream.
@@ -254,6 +256,11 @@ class GenerationPipeline(BaseModel):
         GenerationPipeline
             This instance.
         """
+        if self._session_stack is not None:
+            raise RuntimeError(
+                "GenerationPipeline sessions do not nest: this instance is "
+                "already in a session. Exit the active session first."
+            )
         stack = ExitStack()
         try:
             device = self._infer_device()
@@ -412,14 +419,17 @@ class GenerationPipeline(BaseModel):
                     )
                 result = run(result, **pass_kwargs)
                 continue
-            # Fresh, autograd-capable leaves for the engine: clone escapes any
-            # inference-mode or grad-history the producing stage left behind.
-            result = result.clone()
+            # Fresh leaves for the engine, free of inference mode: cloning
+            # while inference mode is active still produces inference
+            # tensors, so disable inference mode before calling clone.
+            # Grad-attached producers are not rescued here (clone stays
+            # differentiable): functions feeding dynamics must run grad-free.
             with (
                 torch.inference_mode(False)
                 if torch.is_inference_mode_enabled()
                 else nullcontext()
             ):
+                result = result.clone()
                 result = run(result, **pass_kwargs)
         return result
 
