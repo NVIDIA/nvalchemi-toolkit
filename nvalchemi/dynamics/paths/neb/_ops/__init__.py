@@ -22,8 +22,8 @@ Planned toolkit-ops locations
     ``nvalchemiops/dynamics/neb/equations.py``
 ``kernels.py``
     ``nvalchemiops/dynamics/neb/kernels.py``
-``registry.py`` method specifications and controlled registration
-    ``nvalchemiops/dynamics/neb/registry.py``
+``methods.py`` method signatures and stable key resolution
+    ``nvalchemiops/dynamics/neb/methods.py``
 ``launchers.py`` overload selection and launch
     ``nvalchemiops/dynamics/neb/launchers.py``
 ``torch_ops.py`` Torch validation and custom-op boundary
@@ -36,7 +36,6 @@ Planned toolkit-ops locations
 
 from __future__ import annotations
 
-from nvalchemi.dynamics.paths.neb._ops.registry import register_neb_method
 from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
 
-__all__ = ["neb_forces", "register_neb_method"]
+__all__ = ["neb_forces"]

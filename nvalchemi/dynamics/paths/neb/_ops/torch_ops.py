@@ -42,7 +42,7 @@ from nvalchemiops.torch._warp_op_helpers import (
 )
 
 from .launchers import _neb_kernel_arg_types, launch_neb_forces_kernel
-from .registry import _GramStatsMethod, _StoredTangentMethod, get_neb_method
+from .methods import _STORED_PREFIX, DEFAULT_NEB_METHOD_KEY
 
 __all__ = [
     "neb_forces",
@@ -179,15 +179,7 @@ def _launch_neb_from_torch(
     """Convert Torch tensors and dispatch to the launcher."""
     pos = x[0]
     scalar = _TORCH_TO_WP_SCALAR[pos.dtype]
-    spec = get_neb_method(method)
-    if isinstance(spec, _StoredTangentMethod):
-        stored = True
-    elif isinstance(spec, _GramStatsMethod):
-        stored = False
-    else:
-        raise RuntimeError(
-            f"NEB method {method!r} has unsupported specification {type(spec).__name__}"
-        )
+    stored = method.startswith(_STORED_PREFIX)
     if stored and tangent is None:
         raise RuntimeError("stored-tangent kernels require tangent scratch")
     if not stored and tangent is not None:
@@ -341,7 +333,7 @@ def stored_tangent_neb_forces(
     mic_candidate_count: torch.Tensor,
     candidate_shifts: torch.Tensor,
     *,
-    method: str = "improved_tangent",
+    method: str,
     tangent_buffer: torch.Tensor | None = None,
     effective_forces: torch.Tensor | None = None,
     link_lengths: torch.Tensor | None = None,
@@ -458,7 +450,7 @@ def gram_stats_neb_forces(
     mic_candidate_count: torch.Tensor,
     candidate_shifts: torch.Tensor,
     *,
-    method: str = "improved_tangent",
+    method: str,
     effective_forces: torch.Tensor | None = None,
     link_lengths: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -563,15 +555,14 @@ def neb_forces(
     mic_candidate_count: torch.Tensor,
     candidate_shifts: torch.Tensor,
     *,
-    method: str = "improved_tangent",
+    method: str = DEFAULT_NEB_METHOD_KEY,
     vector_scratch: torch.Tensor | None = None,
     effective_forces: torch.Tensor | None = None,
     link_lengths: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute effective NEB forces for the public NEB dynamics API.
 
-    This adapter supports the built-in ``"improved_tangent"`` method and
-    dispatches custom methods through the NEB method registry.
+    This adapter dispatches equations by their prepared, stable method key.
 
     Parameters
     ----------
@@ -604,9 +595,9 @@ def neb_forces(
     candidate_shifts : torch.Tensor, shape (num_paths, 26, 3)
         Fixed-capacity nonzero Cartesian candidate translations for each path.
     method : str, optional
-        Registered NEB formulation name. ``"improved_tangent"`` is built in.
-        Any user-defined method should use the exact name passed to
-        :func:`register_neb_method`.
+        Key returned by :func:`.methods.prepare_neb_method_key`.
+        Defaults to the built-in improved-tangent equations. Prepare custom
+        keys before tracing.
     vector_scratch : torch.Tensor, shape (num_atoms, 3), optional
         Reusable per-atom vector scratch for stored-tangent methods;
         Gram-statistics methods reject it. Caller-provided writable buffers
@@ -642,7 +633,7 @@ def neb_forces(
     link_lengths : torch.Tensor, shape (num_images - num_paths,)
         Minimum-image link lengths in path-major order.
     """
-    spec = get_neb_method(method)
+    stored = method.startswith(_STORED_PREFIX)
     common_args = (
         positions,
         physical_forces,
@@ -660,7 +651,7 @@ def neb_forces(
         mic_candidate_count,
         candidate_shifts,
     )
-    if isinstance(spec, _StoredTangentMethod):
+    if stored:
         return stored_tangent_neb_forces(
             *common_args,
             method=method,
@@ -668,15 +659,11 @@ def neb_forces(
             effective_forces=effective_forces,
             link_lengths=link_lengths,
         )
-    if isinstance(spec, _GramStatsMethod):
-        if vector_scratch is not None:
-            raise ValueError("Gram-statistics NEB methods do not accept vector_scratch")
-        return gram_stats_neb_forces(
-            *common_args,
-            method=method,
-            effective_forces=effective_forces,
-            link_lengths=link_lengths,
-        )
-    raise RuntimeError(
-        f"NEB method {method!r} has unsupported specification {type(spec).__name__}"
+    if vector_scratch is not None:
+        raise ValueError("Gram-statistics NEB methods do not accept vector_scratch")
+    return gram_stats_neb_forces(
+        *common_args,
+        method=method,
+        effective_forces=effective_forces,
+        link_lengths=link_lengths,
     )

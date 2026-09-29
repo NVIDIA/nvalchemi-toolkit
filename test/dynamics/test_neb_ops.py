@@ -23,27 +23,60 @@ import pytest
 import torch
 import warp as wp
 
-from nvalchemi.dynamics.paths.neb._ops import (
-    neb_forces,
-    register_neb_method,
-)
+from nvalchemi.dynamics.paths.neb._ops import neb_forces
 from nvalchemi.dynamics.paths.neb._ops.equations import (
+    climbing_image_effective_force,
+    improved_tangent_weights,
+    neb_effective_force,
     neb_effective_force_from_gram_stats,
 )
 from nvalchemi.dynamics.paths.neb._ops.launchers import (
     _get_neb_forces_kernel_overloads,
+)
+from nvalchemi.dynamics.paths.neb._ops.methods import (
+    DEFAULT_NEB_METHOD_KEY,
+    _GramStatsMethod,
+    _StoredTangentMethod,
+    prepare_neb_method_key,
+    resolve_neb_method,
 )
 from nvalchemi.dynamics.paths.neb._ops.modes import (
     CLIMBING_NEB,
     ENDPOINT,
     REGULAR_NEB,
 )
-from nvalchemi.dynamics.paths.neb._ops.registry import (
-    _GramStatsMethod,
-    _StoredTangentMethod,
-    available_neb_methods,
-    get_neb_method,
-)
+
+
+@wp.func
+def _twice_stored_effective_force(
+    physical_force: Any,
+    tangent: Any,
+    force_dot_tangent: Any,
+    k_plus: Any,
+    k_minus: Any,
+    norm_d_plus: Any,
+    norm_d_minus: Any,
+    energy_prev: Any,
+    energy_curr: Any,
+    energy_next: Any,
+    path_energy_ref: Any,
+    path_energy_max: Any,
+):
+    """Return twice the regular NEB force using the shorter signature."""
+    return type(force_dot_tangent)(2.0) * neb_effective_force(
+        physical_force,
+        tangent,
+        force_dot_tangent,
+        k_plus,
+        k_minus,
+        norm_d_plus,
+        norm_d_minus,
+        energy_prev,
+        energy_curr,
+        energy_next,
+        path_energy_ref,
+        path_energy_max,
+    )
 
 
 @wp.func
@@ -69,7 +102,7 @@ def _twice_neb_effective_force(
     path_energy_ref: Any,
     path_energy_max: Any,
 ):
-    """Return twice the built-in regular NEB force for registry testing."""
+    """Return twice the built-in regular NEB force for custom-method testing."""
     return type(force_dot_tangent)(2.0) * neb_effective_force_from_gram_stats(
         physical_force,
         tangent,
@@ -368,53 +401,36 @@ def _naive_improved_tangent_neb_forces(
 
 
 # =============================================================================
-# Method registry
+# Method keys
 # =============================================================================
 
 
-class TestNEBMethodRegistry:
-    """Test NEB method registration and overload selection."""
+class TestNEBMethodKeys:
+    """Test stable method keys and kernel selection by signature."""
 
-    def test_static_method_table_contains_improved_tangent(self) -> None:
-        assert "improved_tangent" in available_neb_methods()
-        assert isinstance(get_neb_method("improved_tangent"), _StoredTangentMethod)
-
-    def test_registers_user_method_as_gram_stats(self) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-
-        name = "test_user_gram_stats"
-        result = register_neb_method(
-            name=name,
-            tangent_fn=stored_method.tangent_fn,
-            force_fn=neb_effective_force_from_gram_stats,
-            climbing_force_fn=stored_method.climbing_force_fn,
+    def test_builtin_uses_stored_tangent(self) -> None:
+        assert isinstance(
+            resolve_neb_method(DEFAULT_NEB_METHOD_KEY), _StoredTangentMethod
         )
 
-        assert result is None
-        assert name in available_neb_methods()
-        assert isinstance(get_neb_method(name), _GramStatsMethod)
-        assert (
-            register_neb_method(
-                name=name,
-                tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
-                climbing_force_fn=stored_method.climbing_force_fn,
-            )
-            is None
+    def test_prepared_keys_are_stable_and_select_both_contracts(self) -> None:
+        light = prepare_neb_method_key(
+            improved_tangent_weights,
+            neb_effective_force,
+            climbing_image_effective_force,
         )
-
-    def test_rejects_conflicting_method_name(self) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-
-        with pytest.raises(ValueError, match="already registered"):
-            register_neb_method(
-                name="improved_tangent",
-                tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
-                climbing_force_fn=stored_method.climbing_force_fn,
-            )
+        gram = prepare_neb_method_key(
+            improved_tangent_weights,
+            neb_effective_force_from_gram_stats,
+            climbing_image_effective_force,
+        )
+        assert light == prepare_neb_method_key(
+            improved_tangent_weights,
+            neb_effective_force,
+            climbing_image_effective_force,
+        )
+        assert isinstance(resolve_neb_method(light), _StoredTangentMethod)
+        assert isinstance(resolve_neb_method(gram), _GramStatsMethod)
 
     @pytest.mark.parametrize(
         "device",
@@ -428,79 +444,92 @@ class TestNEBMethodRegistry:
             ),
         ],
     )
-    def test_runs_user_defined_equation_through_neb_forces(self, device: str) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        method = "test_twice_effective_force"
-        register_neb_method(
-            name=method,
-            tangent_fn=stored_method.tangent_fn,
-            force_fn=_twice_neb_effective_force,
-            climbing_force_fn=stored_method.climbing_force_fn,
+    def test_runs_custom_gram_equation(self, device: str) -> None:
+        method = prepare_neb_method_key(
+            improved_tangent_weights,
+            _twice_neb_effective_force,
+            climbing_image_effective_force,
         )
         inputs = list(_inputs(device=device))
         inputs[7][1] = REGULAR_NEB
-
         reference_forces, reference_links = neb_forces(*inputs)
         actual_forces, actual_links = neb_forces(*inputs, method=method)
-
         torch.testing.assert_close(actual_links, reference_links, atol=0, rtol=0)
         torch.testing.assert_close(actual_forces[:2], reference_forces[:2])
         torch.testing.assert_close(actual_forces[2:4], 2 * reference_forces[2:4])
         torch.testing.assert_close(actual_forces[4:], reference_forces[4:])
 
-    def test_rejects_same_type_reregistration_with_different_equations(self) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        name = "test_conflicting_gram_stats"
-        register_neb_method(
-            name=name,
-            tangent_fn=stored_method.tangent_fn,
-            force_fn=neb_effective_force_from_gram_stats,
-            climbing_force_fn=stored_method.climbing_force_fn,
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is required"
+                ),
+            ),
+        ],
+    )
+    def test_custom_light_equation_uses_stored_tangent(self, device: str) -> None:
+        method = prepare_neb_method_key(
+            improved_tangent_weights,
+            _twice_stored_effective_force,
+            climbing_image_effective_force,
         )
+        assert isinstance(resolve_neb_method(method), _StoredTangentMethod)
+        inputs = list(_inputs(device=device))
+        inputs[7][1] = REGULAR_NEB
+        reference_forces, reference_links = neb_forces(*inputs)
+        actual_forces, actual_links = neb_forces(*inputs, method=method)
+        torch.testing.assert_close(actual_links, reference_links, atol=0, rtol=0)
+        torch.testing.assert_close(actual_forces[:2], reference_forces[:2])
+        torch.testing.assert_close(actual_forces[2:4], 2 * reference_forces[2:4])
+        torch.testing.assert_close(actual_forces[4:], reference_forces[4:])
 
-        with pytest.raises(ValueError, match="already registered"):
-            register_neb_method(
-                name=name,
-                tangent_fn=stored_method.tangent_fn,
-                force_fn=_twice_neb_effective_force,
-                climbing_force_fn=stored_method.climbing_force_fn,
+    def test_rejects_mismatched_kernel_kind(self) -> None:
+        light = prepare_neb_method_key(
+            improved_tangent_weights,
+            neb_effective_force,
+            climbing_image_effective_force,
+        )
+        with pytest.raises(ValueError, match="kernel kind"):
+            resolve_neb_method(light.replace("stored_tangent|", "gram_stats|", 1))
+
+    def test_rejects_nonimportable_equation(self) -> None:
+        @wp.func
+        def local_force(physical_force: Any):
+            return physical_force
+
+        with pytest.raises(ValueError, match="importable"):
+            prepare_neb_method_key(
+                improved_tangent_weights, local_force, climbing_image_effective_force
             )
 
     @pytest.mark.parametrize(
-        "field_name",
-        ["tangent_fn", "force_fn", "climbing_force_fn"],
+        "field_name", ["tangent_fn", "force_fn", "climbing_force_fn"]
     )
-    def test_rejects_non_warp_equations(self, field_name: str) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
+    def test_rejects_non_warp_equation(self, field_name: str) -> None:
         equations = {
-            "tangent_fn": stored_method.tangent_fn,
-            "force_fn": neb_effective_force_from_gram_stats,
-            "climbing_force_fn": stored_method.climbing_force_fn,
+            "tangent_fn": improved_tangent_weights,
+            "force_fn": neb_effective_force,
+            "climbing_force_fn": climbing_image_effective_force,
         }
         equations[field_name] = object()
-
         with pytest.raises(TypeError, match=field_name):
-            register_neb_method(name=f"test_invalid_{field_name}", **equations)
+            prepare_neb_method_key(**equations)
 
-    @pytest.mark.parametrize("name", ["", "   "])
-    def test_rejects_empty_method_names(self, name: str) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-
-        with pytest.raises(ValueError, match="must not be empty"):
-            register_neb_method(
-                name=name,
-                tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
-                climbing_force_fn=stored_method.climbing_force_fn,
+    def test_rejects_wrong_force_signature(self) -> None:
+        with pytest.raises(ValueError, match="neither supported NEB signature"):
+            prepare_neb_method_key(
+                improved_tangent_weights,
+                improved_tangent_weights,
+                climbing_image_effective_force,
             )
 
     def test_method_overloads_are_cached(self) -> None:
-        first = _get_neb_forces_kernel_overloads("improved_tangent")
-        second = _get_neb_forces_kernel_overloads("improved_tangent")
+        first = _get_neb_forces_kernel_overloads(DEFAULT_NEB_METHOD_KEY)
+        second = _get_neb_forces_kernel_overloads(DEFAULT_NEB_METHOD_KEY)
         assert first is second
 
 
@@ -646,11 +675,8 @@ class TestNEBTorchAdapter:
             )
 
     def test_rejects_vector_scratch_for_gram_stats_method(self) -> None:
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        method = "test_rejects_gram_stats_vector_scratch"
-        register_neb_method(
-            name=method,
+        stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+        method = prepare_neb_method_key(
             tangent_fn=stored_method.tangent_fn,
             force_fn=neb_effective_force_from_gram_stats,
             climbing_force_fn=stored_method.climbing_force_fn,
@@ -668,7 +694,7 @@ class TestNEBTorchAdapter:
             )
 
     def test_rejects_unknown_method(self) -> None:
-        with pytest.raises(ValueError, match="unknown NEB method.*available methods"):
+        with pytest.raises(ValueError, match="prepared NEB method key"):
             neb_forces(*_inputs(device="cpu"), method="not_registered")
 
 
@@ -752,18 +778,15 @@ class TestImprovedTangentNumerics:
     ) -> None:
         """Ragged paths keep link, spring, cell, and force bookkeeping isolated."""
         inputs = _ragged_multi_path_inputs(device=device, dtype=dtype)
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        gram_method = "ragged_multi_path_gram_stats"
-        register_neb_method(
-            name=gram_method,
+        stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+        gram_method = prepare_neb_method_key(
             tangent_fn=stored_method.tangent_fn,
             force_fn=neb_effective_force_from_gram_stats,
             climbing_force_fn=stored_method.climbing_force_fn,
         )
 
         expected = _naive_improved_tangent_neb_forces(*inputs)
-        for method in ("improved_tangent", gram_method):
+        for method in (DEFAULT_NEB_METHOD_KEY, gram_method):
             actual = neb_forces(*inputs, method=method)
             tolerance = 2.0e-5 if dtype == torch.float32 else 1.0e-11
             torch.testing.assert_close(
@@ -811,18 +834,15 @@ class TestImprovedTangentNumerics:
         inputs[0] = (base_image.unsqueeze(0) + offsets).reshape(-1, 3).contiguous()
         inputs[2] = inputs[2].new_tensor(energies)
 
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        gram_method = "improved_tangent_fallback_gram_stats"
-        register_neb_method(
-            name=gram_method,
+        stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+        gram_method = prepare_neb_method_key(
             tangent_fn=stored_method.tangent_fn,
             force_fn=neb_effective_force_from_gram_stats,
             climbing_force_fn=stored_method.climbing_force_fn,
         )
 
         expected = _naive_improved_tangent_neb_forces(*inputs)
-        for method in ("improved_tangent", gram_method):
+        for method in (DEFAULT_NEB_METHOD_KEY, gram_method):
             actual = neb_forces(*inputs, method=method)
             torch.testing.assert_close(actual, expected, atol=1.0e-11, rtol=1.0e-11)
 
@@ -865,11 +885,8 @@ class TestNEBKernelParity:
         device: str,
     ) -> None:
         """Stored-tangent and Gram-statistics kernels produce the same outputs."""
-        stored_method = get_neb_method("improved_tangent")
-        assert isinstance(stored_method, _StoredTangentMethod)
-        method = "improved_tangent_gram_stats"
-        register_neb_method(
-            name=method,
+        stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+        method = prepare_neb_method_key(
             tangent_fn=stored_method.tangent_fn,
             force_fn=neb_effective_force_from_gram_stats,
             climbing_force_fn=stored_method.climbing_force_fn,
@@ -887,7 +904,7 @@ class TestNEBKernelParity:
             inputs[6] = inputs[6].new_tensor([0.1, 0.1])
             inputs[7][1] = REGULAR_NEB
 
-        stored_tangent = neb_forces(*inputs, method="improved_tangent")
+        stored_tangent = neb_forces(*inputs)
         gram_stats = neb_forces(*inputs, method=method)
 
         tolerance = 2.0e-5 if dtype == torch.float32 else 1.0e-11
@@ -929,11 +946,8 @@ def test_skewed_cell_link_lengths_use_exact_mic_for_both_kernel_strategies(
 ) -> None:
     """Stored-tangent and Gram-statistics kernels search skew-cell images."""
     # Compare both kernel strategies using the same improved-tangent setup.
-    stored_method = get_neb_method("improved_tangent")
-    assert isinstance(stored_method, _StoredTangentMethod)
-    gram_method = "test_skewed_mic_gram_stats"
-    register_neb_method(
-        name=gram_method,
+    stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+    gram_method = prepare_neb_method_key(
         tangent_fn=stored_method.tangent_fn,
         force_fn=neb_effective_force_from_gram_stats,
         climbing_force_fn=stored_method.climbing_force_fn,
@@ -977,7 +991,7 @@ def test_skewed_cell_link_lengths_use_exact_mic_for_both_kernel_strategies(
 
     # Only link lengths are relevant here; the two force strategies are tested
     # independently through the second return value.
-    stored_links = neb_forces(*inputs, method="improved_tangent")[1]
+    stored_links = neb_forces(*inputs)[1]
     gram_links = neb_forces(*inputs, method=gram_method)[1]
 
     tolerance = 2.0e-6 if dtype == torch.float32 else 1.0e-12
@@ -1011,11 +1025,8 @@ def test_orthogonal_and_partial_periodic_mic_match_torch_reference(
     mic_case: str,
 ) -> None:
     """Both kernel strategies cover orthogonal and zero-padded partial MIC."""
-    stored_method = get_neb_method("improved_tangent")
-    assert isinstance(stored_method, _StoredTangentMethod)
-    gram_method = "test_orthogonal_partial_mic_gram_stats"
-    register_neb_method(
-        name=gram_method,
+    stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+    gram_method = prepare_neb_method_key(
         tangent_fn=stored_method.tangent_fn,
         force_fn=neb_effective_force_from_gram_stats,
         climbing_force_fn=stored_method.climbing_force_fn,
@@ -1069,7 +1080,7 @@ def test_orthogonal_and_partial_periodic_mic_match_torch_reference(
     expected = _naive_improved_tangent_neb_forces(*inputs)
     tolerance = 2.0e-5 if dtype == torch.float32 else 1.0e-11
 
-    for method in ("improved_tangent", gram_method):
+    for method in (DEFAULT_NEB_METHOD_KEY, gram_method):
         actual = neb_forces(*inputs, method=method)
         torch.testing.assert_close(actual, expected, atol=tolerance, rtol=tolerance)
 
@@ -1099,7 +1110,14 @@ def test_orthogonal_and_partial_periodic_mic_match_torch_reference(
 class TestNEBCompilation:
     """Test compilation and CUDA graph capture of the Torch adapter."""
 
-    @pytest.mark.parametrize("method", ["improved_tangent", "test_compile_gram_stats"])
+    @pytest.mark.parametrize(
+        "method",
+        [
+            DEFAULT_NEB_METHOD_KEY,
+            "test_compile_stored_tangent",
+            "test_compile_gram_stats",
+        ],
+    )
     @pytest.mark.parametrize(
         "device",
         [
@@ -1116,18 +1134,23 @@ class TestNEBCompilation:
         self, device: str, method: str
     ) -> None:
         """Inductor compiles the complete adapter graph on CPU and CUDA."""
-        if method != "improved_tangent":
-            stored_method = get_neb_method("improved_tangent")
-            assert isinstance(stored_method, _StoredTangentMethod)
-            register_neb_method(
-                name=method,
+        if method != DEFAULT_NEB_METHOD_KEY:
+            stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+            force_fn = (
+                _twice_stored_effective_force
+                if "stored_tangent" in method
+                else neb_effective_force_from_gram_stats
+            )
+            method = prepare_neb_method_key(
                 tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
+                force_fn=force_fn,
                 climbing_force_fn=stored_method.climbing_force_fn,
             )
         inputs = _inputs(device=device)
 
         def compiled_neb_forces(*args):
+            if method == DEFAULT_NEB_METHOD_KEY:
+                return neb_forces(*args)
             return neb_forces(*args, method=method)
 
         expected = neb_forces(*inputs, method=method)
@@ -1135,23 +1158,33 @@ class TestNEBCompilation:
         torch.testing.assert_close(compiled(*inputs), expected, atol=0, rtol=0)
 
     @pytest.mark.parametrize(
-        "method", ["improved_tangent", "test_cuda_graph_gram_stats"]
+        "method",
+        [
+            DEFAULT_NEB_METHOD_KEY,
+            "test_cuda_graph_stored_tangent",
+            "test_cuda_graph_gram_stats",
+        ],
     )
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
     def test_neb_forces_cuda_graph_capture_and_replay(self, method: str) -> None:
         """A warmed adapter captures and replays on a prebound Warp stream."""
-        if method != "improved_tangent":
-            stored_method = get_neb_method("improved_tangent")
-            assert isinstance(stored_method, _StoredTangentMethod)
-            register_neb_method(
-                name=method,
+        if method != DEFAULT_NEB_METHOD_KEY:
+            stored_method = resolve_neb_method(DEFAULT_NEB_METHOD_KEY)
+            force_fn = (
+                _twice_stored_effective_force
+                if "stored_tangent" in method
+                else neb_effective_force_from_gram_stats
+            )
+            method = prepare_neb_method_key(
                 tangent_fn=stored_method.tangent_fn,
-                force_fn=neb_effective_force_from_gram_stats,
+                force_fn=force_fn,
                 climbing_force_fn=stored_method.climbing_force_fn,
             )
         inputs = _inputs(device="cuda")
         vector_scratch = (
-            torch.empty_like(inputs[0]) if method == "improved_tangent" else None
+            torch.empty_like(inputs[0])
+            if isinstance(resolve_neb_method(method), _StoredTangentMethod)
+            else None
         )
         effective_forces = torch.empty_like(inputs[0])
         link_lengths = torch.empty_like(inputs[6])

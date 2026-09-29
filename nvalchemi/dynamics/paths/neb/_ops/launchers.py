@@ -26,7 +26,10 @@ from .kernels import (
     build_gram_stats_neb_kernel,
     build_stored_tangent_neb_kernel,
 )
-from .registry import _GramStatsMethod, _StoredTangentMethod, get_neb_method
+from .methods import (
+    _StoredTangentMethod,
+    resolve_neb_method,
+)
 
 __all__ = ["launch_neb_forces_kernel"]
 
@@ -71,23 +74,14 @@ def _get_neb_forces_kernel_overloads(
     method: str,
 ) -> dict[object, wp.Kernel]:
     """Return cached dtype overloads for an NEB method."""
-    spec = get_neb_method(method)
-    if isinstance(spec, _StoredTangentMethod):
-        stored_tangent = True
-        builder = build_stored_tangent_neb_kernel
-    elif isinstance(spec, _GramStatsMethod):
-        stored_tangent = False
-        builder = build_gram_stats_neb_kernel
-    else:
-        raise RuntimeError(
-            f"NEB method {method!r} has unsupported specification {type(spec).__name__}"
-        )
-
-    kernel = builder(
-        spec.tangent_fn,
-        spec.force_fn,
-        spec.climbing_force_fn,
+    spec = resolve_neb_method(method)
+    stored_tangent = isinstance(spec, _StoredTangentMethod)
+    builder = (
+        build_stored_tangent_neb_kernel
+        if stored_tangent
+        else build_gram_stats_neb_kernel
     )
+    kernel = builder(spec.tangent_fn, spec.force_fn, spec.climbing_force_fn)
 
     def build_arg_types(dtype: object) -> list[object]:
         return _neb_kernel_arg_types(dtype, stored_tangent)
@@ -108,13 +102,13 @@ def launch_neb_forces_kernel(
 ) -> None:
     """Launch the fused NEB force kernel on a CPU or CUDA device.
 
-    The kernel implementation and dtype overload are selected from the registered
-    NEB method. The launch device is taken from ``args``.
+    The kernel implementation and dtype overload are selected from the
+    prepared NEB method key. The launch device is taken from ``args``.
 
     Parameters
     ----------
     method : str
-        Registered NEB method name used to select the kernel implementation.
+        Prepared key used to select the kernel implementation.
     args : list[object]
         Ordered, already-converted Warp kernel arguments.
     scalar_dtype : object
@@ -128,7 +122,6 @@ def launch_neb_forces_kernel(
     ValueError
         If the method or Warp device is unsupported.
     """
-    get_neb_method(method)
     if num_images == 0:
         return
 
