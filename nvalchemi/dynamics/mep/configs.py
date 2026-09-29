@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, runtime_checkable
 
 import torch
@@ -120,7 +120,10 @@ class ConstantSpringConfig:
     """
 
     value: float
-    refresh: Literal[DynamicsStage.ON_ADMISSION] = DynamicsStage.ON_ADMISSION
+    refresh: Literal[DynamicsStage.ON_ADMISSION] = field(
+        default=DynamicsStage.ON_ADMISSION,
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         """Normalize and validate the constant spring value."""
