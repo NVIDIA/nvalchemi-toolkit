@@ -571,7 +571,8 @@ def neb_forces(
     image_energies : torch.Tensor, shape (num_images,)
         Physical energy of every image.
     image_ptr : torch.Tensor, shape (num_images + 1,), dtype int32
-        CSR offsets mapping images to packed atoms.
+        CSR offsets mapping images to packed atoms. Images in the same path
+        must have equal atom counts and matching atom order.
     path_ptr : torch.Tensor, shape (num_paths + 1,), dtype int32
         CSR offsets mapping paths to packed images.
     image_path_idx : torch.Tensor, shape (num_images,), dtype int32
@@ -610,6 +611,9 @@ def neb_forces(
 
     Notes
     -----
+    Pointer contents are not validated on each call. Callers must provide a
+    valid layout.
+
     Direct CUDA graph capture requires a warmup launch for Warp JIT and a
     matching Warp stream installed before capture::
 
