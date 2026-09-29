@@ -192,7 +192,7 @@ def _launch_neb_from_torch(
     tensors.extend((forces, links))
     arg_types = _neb_kernel_arg_types(scalar, stored)
     args = [
-        wp.from_torch(tensor, dtype=arg_type.dtype)
+        wp.from_torch(tensor, dtype=arg_type.dtype, requires_grad=False)
         for tensor, arg_type in zip(tensors, arg_types, strict=True)
     ]
 

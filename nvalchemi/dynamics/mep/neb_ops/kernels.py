@@ -491,24 +491,20 @@ def build_gram_stats_neb_kernel(
     storing a per-atom tangent buffer. For regular NEB, the additional reductions
     and repeated displacement work may be slower than the stored-tangent strategy.
 
-    Instead of forming :math:`\hat{\boldsymbol{\tau}}` and storing it per atom,
-    the kernel reduces the image-wide Gram products
+    Instead of storing :math:`\hat{\boldsymbol{\tau}}` per atom, the kernel reduces
+    the image-wide Gram products
     :math:`\mathbf{d}_+\cdot\mathbf{d}_-`, :math:`\mathbf{F}\cdot\mathbf{d}_+`,
     :math:`\mathbf{F}\cdot\mathbf{d}_-`, and :math:`\lVert\mathbf{F}\rVert^2`
-    (alongside :math:`\lVert\mathbf{d}_+\rVert`, :math:`\lVert\mathbf{d}_-\rVert`)
-    and combines them with the tangent weights :math:`w_\pm` to obtain the tangent
-    norm and the scalar projections analytically:
+    alongside the link norms. It also forms the local tangent
+    :math:`\boldsymbol{\tau}_i = w_+\mathbf{d}_{+,i} + w_-\mathbf{d}_{-,i}`
+    and directly accumulates its squared norm and projections onto the force and
+    both links. For example,
 
     .. math::
 
-        \lVert\boldsymbol{\tau}\rVert^2
-        = w_+^2\lVert\mathbf{d}_+\rVert^2
-        + 2 w_+ w_-\,(\mathbf{d}_+\cdot\mathbf{d}_-)
-        + w_-^2\lVert\mathbf{d}_-\rVert^2,
-        \qquad
         \mathbf{F}\cdot\hat{\boldsymbol{\tau}}
-        = \frac{w_+(\mathbf{F}\cdot\mathbf{d}_+) + w_-(\mathbf{F}\cdot\mathbf{d}_-)}
-               {\lVert\boldsymbol{\tau}\rVert}.
+        = \frac{\sum_i \mathbf{F}_i\cdot\boldsymbol{\tau}_i}
+               {\sqrt{\sum_i \boldsymbol{\tau}_i\cdot\boldsymbol{\tau}_i}}.
 
     These projections, together with the per-atom displacements
     :math:`\mathbf{d}_\pm` and their link projections onto
@@ -614,6 +610,9 @@ def build_gram_stats_neb_kernel(
         local_dplus_dot_dminus = zero
         local_dminus_sq = zero
         local_tangent_sq = zero
+        local_force_dot_tangent = zero
+        local_dplus_dot_tangent = zero
+        local_dminus_dot_tangent = zero
         local_force_dot_dplus = zero
         local_force_dot_dminus = zero
         local_force_sq = zero
@@ -652,6 +651,15 @@ def build_gram_stats_neb_kernel(
                     local_dminus_sq = local_dminus_sq + wp.dot(d_minus, d_minus)
                     tangent = weight_plus * d_plus + weight_minus * d_minus
                     local_tangent_sq = local_tangent_sq + wp.dot(tangent, tangent)
+                    local_force_dot_tangent = local_force_dot_tangent + wp.dot(
+                        physical_force, tangent
+                    )
+                    local_dplus_dot_tangent = local_dplus_dot_tangent + wp.dot(
+                        d_plus, tangent
+                    )
+                    local_dminus_dot_tangent = local_dminus_dot_tangent + wp.dot(
+                        d_minus, tangent
+                    )
                     local_force_dot_dplus = local_force_dot_dplus + wp.dot(
                         physical_force,
                         d_plus,
@@ -686,6 +694,9 @@ def build_gram_stats_neb_kernel(
         dplus_dot_dminus = wp.tile_sum(wp.tile(local_dplus_dot_dminus))[0]
         dminus_sq = wp.tile_sum(wp.tile(local_dminus_sq))[0]
         tangent_sq = wp.tile_sum(wp.tile(local_tangent_sq))[0]
+        force_dot_tangent_numerator = wp.tile_sum(wp.tile(local_force_dot_tangent))[0]
+        dplus_dot_tangent_numerator = wp.tile_sum(wp.tile(local_dplus_dot_tangent))[0]
+        dminus_dot_tangent_numerator = wp.tile_sum(wp.tile(local_dminus_dot_tangent))[0]
         force_dot_dplus = wp.tile_sum(wp.tile(local_force_dot_dplus))[0]
         force_dot_dminus = wp.tile_sum(wp.tile(local_force_dot_dminus))[0]
         force_sq = wp.tile_sum(wp.tile(local_force_sq))[0]
@@ -709,15 +720,9 @@ def build_gram_stats_neb_kernel(
         dplus_dot_tangent = zero
         dminus_dot_tangent = zero
         if fallback == 0:
-            force_dot_tangent = (
-                weight_plus * force_dot_dplus + weight_minus * force_dot_dminus
-            ) / tangent_norm
-            dplus_dot_tangent = (
-                weight_plus * dplus_sq + weight_minus * dplus_dot_dminus
-            ) / tangent_norm
-            dminus_dot_tangent = (
-                weight_plus * dplus_dot_dminus + weight_minus * dminus_sq
-            ) / tangent_norm
+            force_dot_tangent = force_dot_tangent_numerator / tangent_norm
+            dplus_dot_tangent = dplus_dot_tangent_numerator / tangent_norm
+            dminus_dot_tangent = dminus_dot_tangent_numerator / tangent_norm
         elif fallback == 1:
             force_dot_tangent = force_dot_dplus / dplus_norm
             dplus_dot_tangent = dplus_norm

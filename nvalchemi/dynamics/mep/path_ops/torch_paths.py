@@ -50,11 +50,11 @@ def _path_energy_stats_out_op(
     """Launch path-energy reductions into caller-provided output buffers."""
     scalar = _TORCH_TO_WP_SCALAR[image_energies.dtype]
     args = [
-        wp.from_torch(image_energies, dtype=scalar),
-        wp.from_torch(path_ptr, dtype=wp.int32),
-        wp.from_torch(endpoint_reference_energy, dtype=scalar),
-        wp.from_torch(highest_interior_energy, dtype=scalar),
-        wp.from_torch(highest_interior_image_idx, dtype=wp.int32),
+        wp.from_torch(image_energies, dtype=scalar, requires_grad=False),
+        wp.from_torch(path_ptr, dtype=wp.int32, requires_grad=False),
+        wp.from_torch(endpoint_reference_energy, dtype=scalar, requires_grad=False),
+        wp.from_torch(highest_interior_energy, dtype=scalar, requires_grad=False),
+        wp.from_torch(highest_interior_image_idx, dtype=wp.int32, requires_grad=False),
     ]
     num_paths = path_ptr.shape[0] - 1
     if num_paths == 0:

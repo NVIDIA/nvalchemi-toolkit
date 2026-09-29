@@ -126,6 +126,37 @@ def _twice_neb_effective_force(
     )
 
 
+@wp.func
+def _projection_combination_effective_force(
+    physical_force: Any,
+    tangent: Any,
+    d_plus: Any,
+    d_minus: Any,
+    force_dot_tangent: Any,
+    dplus_dot_tangent: Any,
+    dminus_dot_tangent: Any,
+    norm_d_plus: Any,
+    norm_d_minus: Any,
+    dplus_dot_dminus: Any,
+    force_dot_dplus: Any,
+    force_dot_dminus: Any,
+    force_squared_norm: Any,
+    k_plus: Any,
+    k_minus: Any,
+    energy_prev: Any,
+    energy_curr: Any,
+    energy_next: Any,
+    path_energy_ref: Any,
+    path_energy_max: Any,
+):
+    """Expose all three tangent projections in a test force."""
+    return (
+        physical_force * force_dot_tangent
+        + d_plus * dplus_dot_tangent
+        + d_minus * dminus_dot_tangent
+    )
+
+
 # =============================================================================
 # Fixtures and launch helpers
 # =============================================================================
@@ -856,6 +887,52 @@ class TestImprovedTangentNumerics:
 
 class TestNEBKernelParity:
     """Compare equivalent NEB kernel strategies."""
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is required"
+                ),
+            ),
+        ],
+    )
+    def test_gram_projections_preserve_nearly_cancelling_links(
+        self, device: str
+    ) -> None:
+        """Direct projections retain components lost by expanded Gram products."""
+        method = prepare_neb_method_key(
+            improved_tangent_weights,
+            _projection_combination_effective_force,
+            climbing_image_effective_force,
+        )
+        inputs = list(_inputs(device=device, dtype=torch.float32))
+        base = inputs[0][:2]
+        offset = 1.0e-4
+        backward = base + base.new_tensor([1.0, offset / 2, 0.0])
+        forward = base + base.new_tensor([1.0, offset, 0.0])
+        inputs[0] = torch.cat((backward, base, forward)).contiguous()
+        inputs[1] = torch.zeros_like(inputs[0])
+        inputs[1][2:4] = base.new_tensor([1.0, offset, 0.0])
+        inputs[2] = inputs[2].new_tensor([0.0, 1.0, 0.0])
+        inputs[7][1] = REGULAR_NEB
+
+        actual, _ = neb_forces(*inputs, method=method)
+        d_plus = inputs[0][4:6] - inputs[0][2:4]
+        d_minus = inputs[0][2:4] - inputs[0][0:2]
+        tangent = d_plus + d_minus
+        tangent = tangent / torch.linalg.vector_norm(tangent)
+        force = inputs[1][2:4]
+        expected = (
+            force * torch.sum(force * tangent)
+            + d_plus * torch.sum(d_plus * tangent)
+            + d_minus * torch.sum(d_minus * tangent)
+        )
+        torch.testing.assert_close(actual[2:4], expected, atol=1.0e-6, rtol=1.0e-5)
+        assert float(expected[:, 0].abs().min()) > 1.0e-4
 
     @pytest.mark.parametrize("case", ["ordinary", "nearly-cancelling"])
     @pytest.mark.parametrize(
