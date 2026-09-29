@@ -355,13 +355,13 @@ including multi-pipeline topologies and monitoring with persistent storage.
 :maxdepth: 1
 
 dynamics_simulations
-dynamics_paths
+dynamics_mep
 dynamics_sinks
 ```
 
 - [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
   their configuration.
-- [Reaction Paths and NEB](dynamics_paths_guide) --- batched nudged elastic band,
+- [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
   using either the high-level `NEB` strategy or hooks attached directly to an
   optimizer.
 - [Hooks](hooks_guide) --- the hook protocol, built-in hooks, and writing custom

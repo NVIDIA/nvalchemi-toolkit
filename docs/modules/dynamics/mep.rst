@@ -1,17 +1,19 @@
 .. SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 .. SPDX-License-Identifier: Apache-2.0
 
-.. _dynamics-paths:
+.. _dynamics-mep:
 
 ======================
 Reaction Paths and NEB
 ======================
 
-- **User guide**: :ref:`dynamics_paths_guide` --- task-oriented walkthrough
+- **User guide**: :ref:`dynamics_mep_guide` --- task-oriented walkthrough
   covering the high-level ``NEB`` strategy and the low-level
   ``FusedStage`` + hooks recipe.
 
-This page covers :mod:`nvalchemi.dynamics.mep`.
+The :mod:`nvalchemi.dynamics.mep` package provides tools for calculating
+minimum energy paths, including path construction, nudged elastic band (NEB)
+optimization, and hooks for monitoring and controlling the calculation.
 
 Strategy
 --------

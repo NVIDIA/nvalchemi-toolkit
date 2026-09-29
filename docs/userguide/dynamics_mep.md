@@ -1,11 +1,11 @@
 
-(dynamics_paths_guide)=
+(dynamics_mep_guide)=
 
 # Reaction Paths and NEB
 
-The `nvalchemi.dynamics.mep` subpackage runs batched Nudged Elastic Band
-(NEB) calculations to find minimum-energy reaction paths between two
-endpoint structures. Like every other simulation type, it follows the
+The `nvalchemi.dynamics.mep` subpackage includes batched Nudged Elastic Band
+(NEB) methods for simulating minimum energy paths (MEPs) between two endpoint
+structures. Like every other simulation type, it follows the
 [execution loop](dynamics_guide): a path is just a batch where each graph is
 one image, and images belonging to the same path share a `group_layout`
 group.
@@ -279,10 +279,16 @@ relaxed_paths = optimizer.run(paths)
 
 The NEB path hooks, in the order they must be registered:
 
+`ClimbingImageSelectionHook`, `NEBForceHook`, and `PathDiagnosticsHook` must
+receive the same `PathEnergyStatsHook` instance registered in the hooks list.
+That hook refreshes its statistics first at `AFTER_COMPUTE`, before any of the
+three consumers reads them. `NEB.build_engine()` wires this shared instance and
+order automatically.
+
 1. **{py:class}`~nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook`** ---
    always first. Computes per-path endpoint reference energy and the
-   highest-energy interior image; every other path hook reads its results
-   via `get_stats()`.
+   highest-energy interior image; the selection, force, and diagnostics hooks
+   read its results via `get_stats()`.
 2. **{py:class}`~nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook`**
    (optional) --- flips the selected image's `force_mode` to climbing before
    `NEBForceHook` runs. Needed only for climbing-image NEB.
