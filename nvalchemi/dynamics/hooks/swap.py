@@ -145,7 +145,9 @@ class PairSwapHook:
         labels only and rebinds nothing.
     slot_field:
         Per-graph batch field holding the assignment.  Must be a permutation
-        of ``0..n_slots-1``.
+        of ``0..n_slots-1``.  Required rather than defaulted: the name is the
+        caller's, and a default borrowed from one method would quietly make
+        this hook that method's.
     n_slots:
         Number of slots on the ladder.
     pairing:
@@ -172,13 +174,19 @@ class PairSwapHook:
         accept_fn: Callable[[Batch, torch.Tensor, torch.Tensor], torch.Tensor],
         params_fn: Callable[[torch.Tensor], Mapping[str, torch.Tensor]] | None = None,
         *,
-        slot_field: str = "thermodynamic_state_id",
+        slot_field: str,
         n_slots: int,
         pairing: Literal["even_odd"]
         | Callable[[int, int], list[tuple[int, int]]] = "even_odd",
         frequency: int = 100,
         on_swap: Callable[[Batch], None] | None = None,
     ) -> None:
+        if isinstance(pairing, str) and pairing not in _PAIRINGS:
+            raise ValueError(
+                f"PairSwapHook: unknown pairing {pairing!r}. Built-in "
+                f"schedules are {sorted(_PAIRINGS)}; pass a callable "
+                "(segment, n_slots) -> list[tuple[int, int]] for another."
+            )
         if int(frequency) < 1:
             raise ValueError(
                 f"PairSwapHook: frequency must be at least 1, got {frequency}. "
@@ -256,6 +264,54 @@ class PairSwapHook:
         self.attempted_segment = segment
         self._attempt(batch, segment)
 
+    def _validated_slots(self, batch: Batch) -> torch.Tensor:
+        """Return the assignment, or say why it cannot be swapped on.
+
+        Pairing looks up "which row holds slot *k*", so the assignment has to
+        be a bijection.  Checked here rather than left to fail later because
+        the later failure is a bare ``KeyError`` from a dict lookup, naming
+        neither the field nor the ladder.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+
+        Returns
+        -------
+        torch.Tensor
+            The assignment as a ``[B]`` long tensor.
+
+        Raises
+        ------
+        ValueError
+            If the field is absent, the wrong length, or not a permutation of
+            ``0..n_slots-1``.
+        """
+        values = getattr(batch, self.slot_field, None)
+        if values is None:
+            raise ValueError(
+                f"PairSwapHook: the batch has no {self.slot_field!r} field, "
+                "so there is no assignment to swap. Stamp it before the first "
+                "step, or name the field the batch actually carries."
+            )
+        slots = values.reshape(-1).to(torch.long)
+        if slots.numel() != self.n_slots:
+            raise ValueError(
+                f"PairSwapHook: the ladder has {self.n_slots} slot(s) but "
+                f"{self.slot_field!r} holds {slots.numel()} entr(ies). A swap "
+                "pairs slots with the rows holding them, which needs one row "
+                "per slot."
+            )
+        if sorted(slots.tolist()) != list(range(self.n_slots)):
+            raise ValueError(
+                f"PairSwapHook: {self.slot_field!r} must be a permutation of "
+                f"0..{self.n_slots - 1}, got {slots.tolist()}. A duplicate "
+                "would let two rows claim the same slot, and the pair lookup "
+                "would silently decide one of them twice."
+            )
+        return slots
+
     def _attempt(self, batch: Batch, segment: int) -> None:
         """Decide one round of swaps and apply the accepted ones.
 
@@ -270,7 +326,7 @@ class PairSwapHook:
         if not pairs:
             return
 
-        slots = batch[self.slot_field].reshape(-1).to(torch.long)
+        slots = self._validated_slots(batch)
         row_of_slot = {int(slot): row for row, slot in enumerate(slots.tolist())}
         rows_i = torch.tensor(
             [row_of_slot[i] for i, _ in pairs], device=slots.device, dtype=torch.long
@@ -286,6 +342,12 @@ class PairSwapHook:
         new_slots = apply_pair_swaps(slots, pairs, accepted, row_of_slot)
         batch[self.slot_field] = new_slots
         if self.params_fn is not None:
+            if self.dynamics is None:
+                raise RuntimeError(
+                    "PairSwapHook: no engine to rebind on. The hook takes it "
+                    "from on_register, so register it on the dynamics rather "
+                    "than driving attempt_segment() by hand."
+                )
             self.dynamics.apply_per_system_params(self.params_fn(new_slots), batch)
         if self.on_swap is not None:
             self.on_swap(batch)

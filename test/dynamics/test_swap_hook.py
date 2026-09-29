@@ -47,7 +47,7 @@ def _make_batch(n_graphs: int = 4) -> Batch:
         for _ in range(n_graphs)
     ]
     batch = Batch.from_data_list(data_list)
-    batch["thermodynamic_state_id"] = torch.arange(n_graphs, dtype=torch.long)
+    batch["slot"] = torch.arange(n_graphs, dtype=torch.long)
     return batch
 
 
@@ -158,6 +158,7 @@ class TestPairSwapHook:
     def _hook(self, **kwargs: object) -> PairSwapHook:
         """Return a hook over a four-slot ladder."""
         defaults = {
+            "slot_field": "slot",
             "n_slots": 4,
             "frequency": 2,
         }
@@ -172,7 +173,7 @@ class TestPairSwapHook:
 
     def test_a_non_positive_frequency_is_refused(self) -> None:
         with pytest.raises(ValueError, match="at least 1"):
-            PairSwapHook(_accept_all, n_slots=4, frequency=0)
+            PairSwapHook(_accept_all, slot_field="slot", n_slots=4, frequency=0)
 
     def test_dispatch_acts_on_the_completed_segment(self) -> None:
         """At step kN the segment that just finished is k-1, not k."""
@@ -199,14 +200,14 @@ class TestPairSwapHook:
         hook = self._hook()
         hook.on_register(_RecordingEngine())
         hook.attempt_segment(batch, 0)
-        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [1, 0, 3, 2]
+        assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
 
     def test_rejected_swap_changes_nothing(self) -> None:
         batch = _make_batch()
         hook = self._hook(accept_fn=_accept_none)
         hook.on_register(_RecordingEngine())
         hook.attempt_segment(batch, 0)
-        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [0, 1, 2, 3]
+        assert batch.slot.reshape(-1).tolist() == [0, 1, 2, 3]
 
     def test_params_are_rebound_from_the_post_swap_assignment(self) -> None:
         """The whole point: labels and integrator parameters move together."""
@@ -234,7 +235,7 @@ class TestPairSwapHook:
             asked.append(i.numel())
             return torch.ones(i.numel(), dtype=torch.bool)
 
-        hook = PairSwapHook(_spy, n_slots=2, frequency=2)
+        hook = PairSwapHook(_spy, slot_field="slot", n_slots=2, frequency=2)
         hook.on_register(_RecordingEngine())
         hook.attempt_segment(_make_batch(n_graphs=2), 1)
         assert asked == []
@@ -259,14 +260,14 @@ class TestPairSwapHook:
     def test_the_rule_is_given_the_rows_holding_each_pair(self) -> None:
         """Rows, not slots: a walker keeps its row while its label moves."""
         batch = _make_batch()
-        batch["thermodynamic_state_id"] = torch.tensor([2, 0, 3, 1])
+        batch["slot"] = torch.tensor([2, 0, 3, 1])
         seen: list[tuple[list[int], list[int]]] = []
 
         def _spy(b, i, j):
             seen.append((i.tolist(), j.tolist()))
             return torch.zeros(i.numel(), dtype=torch.bool)
 
-        hook = PairSwapHook(_spy, n_slots=4, frequency=2)
+        hook = PairSwapHook(_spy, slot_field="slot", n_slots=4, frequency=2)
         hook.on_register(_RecordingEngine())
         hook.attempt_segment(batch, 0)
         # slot 0 is on row 1, slot 1 on row 3, slot 2 on row 0, slot 3 on row 2.
@@ -275,6 +276,7 @@ class TestPairSwapHook:
     def test_a_custom_pairing_is_honoured(self) -> None:
         hook = PairSwapHook(
             _accept_all,
+            slot_field="slot",
             n_slots=4,
             frequency=2,
             pairing=lambda segment, n: [(0, 3)],
@@ -282,7 +284,47 @@ class TestPairSwapHook:
         hook.on_register(_RecordingEngine())
         batch = _make_batch()
         hook.attempt_segment(batch, 0)
-        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [3, 1, 2, 0]
+        assert batch.slot.reshape(-1).tolist() == [3, 1, 2, 0]
+
+    def test_a_non_permutation_assignment_is_named(self) -> None:
+        """Pairing is a bijection lookup; a duplicate must not reach it.
+
+        Left unchecked the failure is a bare ``KeyError`` from a dict lookup
+        inside the hook, naming neither the field nor the ladder.
+        """
+        batch = _make_batch()
+        batch["slot"] = torch.tensor([0, 0, 2, 3])
+        hook = self._hook()
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(ValueError, match="must be a permutation"):
+            hook.attempt_segment(batch, 0)
+
+    def test_a_wrong_length_assignment_is_named(self) -> None:
+        batch = _make_batch(n_graphs=2)
+        hook = self._hook()
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(ValueError, match="slot\\(s\\) but"):
+            hook.attempt_segment(batch, 0)
+
+    def test_a_missing_assignment_field_is_named(self) -> None:
+        hook = PairSwapHook(
+            _accept_all, slot_field="not_stamped", n_slots=4, frequency=2
+        )
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(ValueError, match="no 'not_stamped' field"):
+            hook.attempt_segment(_make_batch(), 0)
+
+    def test_rebinding_without_an_engine_is_named(self) -> None:
+        """params_fn needs the engine on_register supplies."""
+        hook = self._hook(params_fn=lambda slots: {"temperature": slots.float()})
+        with pytest.raises(RuntimeError, match="no engine to rebind on"):
+            hook.attempt_segment(_make_batch(), 0)
+
+    def test_an_unknown_pairing_name_is_named(self) -> None:
+        with pytest.raises(ValueError, match="unknown pairing"):
+            PairSwapHook(
+                _accept_all, slot_field="slot", n_slots=4, pairing="round_robin"
+            )
 
     def test_the_segment_cursor_round_trips(self) -> None:
         hook = self._hook()
