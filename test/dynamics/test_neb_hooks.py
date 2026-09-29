@@ -34,6 +34,11 @@ from nvalchemi.dynamics.mep import (
     NEBMethod,
     SpringContext,
 )
+from nvalchemi.dynamics.mep._geometry import (
+    PreparedMIC,
+    minimum_image_displacement,
+    prepare_batch_mic,
+)
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
     NEBForceHook,
@@ -44,11 +49,6 @@ from nvalchemi.dynamics.mep.neb_ops.methods import DEFAULT_NEB_METHOD_KEY
 from nvalchemi.dynamics.mep.neb_ops.modes import (
     CLIMBING_NEB,
     ENDPOINT,
-)
-from nvalchemi.dynamics.paths._geometry import (
-    PreparedMIC,
-    minimum_image_displacement,
-    prepare_batch_mic,
 )
 from nvalchemi.hooks import DynamicsContext
 
@@ -752,7 +752,7 @@ class TestNEBForceHook:
         prepared = prepare_batch_mic(batch, batch.cell[:1], batch.pbc[:1])
         hook = _force_hook()
 
-        with patch("nvalchemi.dynamics.paths._geometry.prepare_mic") as prepare:
+        with patch("nvalchemi.dynamics.mep._geometry.prepare_mic") as prepare:
             hook(DynamicsContext(batch=batch), DynamicsStage.ON_ADMISSION)
 
         prepare.assert_not_called()

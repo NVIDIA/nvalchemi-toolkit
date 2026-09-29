@@ -23,7 +23,7 @@ import torch
 import warp as wp
 
 from nvalchemi.dynamics.mep.neb_ops.kernels import _mic
-from nvalchemi.dynamics.paths._geometry import (
+from nvalchemi.dynamics.mep._geometry import (
     minimum_image_displacement,
     prepare_mic,
 )

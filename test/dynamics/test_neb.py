@@ -32,23 +32,22 @@ from nvalchemi.dynamics import (
     FusedStage,
 )
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
-from nvalchemi.dynamics.paths import (
+from nvalchemi.dynamics.mep import (
     NEB,
     ClimbingImageConfig,
     ConstantSpringConfig,
     IDPPModel,
+    NEBMethod,
     interpolate_paths,
     prepare_idpp_targets,
 )
-from nvalchemi.dynamics.paths.hooks import (
+from nvalchemi.dynamics.mep.hooks import (
+    ClimbingImageSelectionHook,
+    NEBForceHook,
     PathDiagnosticsHook,
     PathEnergyStatsHook,
 )
-from nvalchemi.dynamics.paths.neb.hooks import (
-    ClimbingImageSelectionHook,
-    NEBForceHook,
-)
-from nvalchemi.dynamics.paths.neb.neb import _NEB_FIRE2_DEFAULTS
+from nvalchemi.dynamics.mep.neb import _NEB_FIRE2_DEFAULTS
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -142,6 +141,18 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
+
+    def test_custom_method_runs_but_is_not_serializable(self) -> None:
+        strategy = NEB(model=_model(), method=NEBMethod())
+        force_hook = next(
+            hook
+            for hook in strategy.build_engine().hooks
+            if isinstance(hook, NEBForceHook)
+        )
+
+        assert force_hook.method_key.startswith("stored_tangent|")
+        with pytest.raises(ValueError, match="NEBMethod objects are runtime-only"):
+            strategy.to_spec_dict()
 
     def test_spec_round_trip_preserves_configuration(self) -> None:
         """JSON recipes preserve NEB-specific configuration."""

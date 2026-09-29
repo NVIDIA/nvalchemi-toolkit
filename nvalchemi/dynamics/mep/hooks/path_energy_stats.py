@@ -25,7 +25,7 @@ from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.mep.path_ops.torch_paths import path_energy_stats
-from nvalchemi.dynamics.paths.validate import validate_paths
+from nvalchemi.dynamics.mep.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
 
 

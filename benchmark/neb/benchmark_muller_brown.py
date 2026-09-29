@@ -34,8 +34,8 @@ from benchmark.neb._mueller_brown_model import (
     MullerBrownModel,
 )
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.paths.interpolate import interpolate_paths
-from nvalchemi.dynamics.paths.neb.neb import NEB, ClimbingImageConfig
+from nvalchemi.dynamics.mep.neb import NEB, ClimbingImageConfig
+from nvalchemi.dynamics.mep.interpolate import interpolate_paths
 
 AFTER_REGULAR_EXIT_STATUS = 2
 

@@ -26,6 +26,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.mep._geometry import PreparedMIC, prepare_batch_mic
 from nvalchemi.dynamics.mep.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.mep.neb_configs import (
     ConstantSpringConfig,
@@ -36,11 +37,7 @@ from nvalchemi.dynamics.mep.neb_configs import (
 )
 from nvalchemi.dynamics.mep.neb_ops.modes import ENDPOINT, REGULAR_NEB
 from nvalchemi.dynamics.mep.neb_ops.torch_ops import neb_forces
-from nvalchemi.dynamics.paths._geometry import (
-    PreparedMIC,
-    prepare_batch_mic,
-)
-from nvalchemi.dynamics.paths.validate import validate_paths
+from nvalchemi.dynamics.mep.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
 
 

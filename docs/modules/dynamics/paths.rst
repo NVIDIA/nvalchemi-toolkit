@@ -11,12 +11,12 @@ Reaction Paths and NEB
   covering the high-level ``NEB`` strategy and the low-level
   ``FusedStage`` + hooks recipe.
 
-This page is the API reference for :mod:`nvalchemi.dynamics.paths`.
+This page covers :mod:`nvalchemi.dynamics.mep`.
 
 Strategy
 --------
 
-.. currentmodule:: nvalchemi.dynamics.paths
+.. currentmodule:: nvalchemi.dynamics.mep
 
 .. autosummary::
    :toctree: _generated
@@ -52,7 +52,7 @@ Spring and method configuration
 Hooks
 -----
 
-.. currentmodule:: nvalchemi.dynamics.paths.hooks
+.. currentmodule:: nvalchemi.dynamics.mep.hooks
 
 .. autosummary::
    :toctree: _generated
@@ -60,8 +60,6 @@ Hooks
 
    PathEnergyStatsHook
    PathDiagnosticsHook
-
-.. currentmodule:: nvalchemi.dynamics.paths.neb.hooks
 
 .. autosummary::
    :toctree: _generated

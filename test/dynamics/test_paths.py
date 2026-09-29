@@ -23,8 +23,8 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.paths import interpolate_paths, validate_paths
-from nvalchemi.dynamics.paths._geometry import prepare_mic
+from nvalchemi.dynamics.mep import interpolate_paths, validate_paths
+from nvalchemi.dynamics.mep._geometry import prepare_mic
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -479,7 +479,7 @@ class TestInterpolatePaths:
         final = _batch(positions, numbers, cell=cell, pbc=pbc)
 
         with patch(
-            "nvalchemi.dynamics.paths.interpolate.prepare_mic",
+            "nvalchemi.dynamics.mep.interpolate.prepare_mic",
             wraps=prepare_mic,
         ) as prepare:
             interpolate_paths(

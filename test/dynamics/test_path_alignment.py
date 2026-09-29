@@ -22,8 +22,8 @@ import numpy as np
 import pytest
 import torch
 
-from nvalchemi.dynamics.paths._alignment import align_batch_positions
-from nvalchemi.dynamics.paths._geometry import prepare_mic
+from nvalchemi.dynamics.mep._alignment import align_batch_positions
+from nvalchemi.dynamics.mep._geometry import prepare_mic
 
 
 def _nonperiodic_batched_pair(
@@ -273,7 +273,7 @@ def test_align_batch_positions_reuses_prepared_mic() -> None:
     prepared = prepare_mic(cell, pbc)
 
     with patch(
-        "nvalchemi.dynamics.paths._geometry.prepare_mic",
+        "nvalchemi.dynamics.mep._geometry.prepare_mic",
         side_effect=AssertionError("MIC geometry was prepared again"),
     ):
         alignment = align_batch_positions(

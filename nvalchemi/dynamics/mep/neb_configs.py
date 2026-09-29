@@ -35,7 +35,7 @@ from nvalchemi.dynamics.mep.neb_ops.methods import (
     prepare_neb_method_key,
     resolve_neb_method,
 )
-from nvalchemi.dynamics.paths._geometry import PreparedMIC
+from nvalchemi.dynamics.mep._geometry import PreparedMIC
 
 __all__ = [
     "ConstantSpringConfig",
@@ -92,15 +92,7 @@ class SpringContext:
 
 @runtime_checkable
 class SpringConfig(Protocol):
-    """Resolve spring constants for the links in one or more NEB paths.
-
-    Custom implementations are runtime-only:
-    :class:`~nvalchemi.dynamics.paths.neb.NEB` accepts them during engine
-    construction, but
-    :meth:`~nvalchemi.dynamics.paths.neb.NEB.to_spec_dict` cannot serialize them.
-    The ``refresh`` stage must remain unchanged for the lifetime of a configured
-    engine.
-    """
+    """Resolve spring constants for the links in one or more NEB paths."""
 
     refresh: Literal[
         DynamicsStage.ON_ADMISSION,

@@ -34,20 +34,18 @@ from pydantic import (
 from nvalchemi._serialization import SerializableClass
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
-from nvalchemi.dynamics.optimizers.fire2 import FIRE2
-from nvalchemi.dynamics.paths.hooks import (
+from nvalchemi.dynamics.mep.hooks import (
+    ClimbingImageSelectionHook,
+    NEBForceHook,
     PathDiagnosticsHook,
     PathEnergyStatsHook,
 )
-from nvalchemi.dynamics.paths.neb.configs import (
+from nvalchemi.dynamics.mep.neb_configs import (
     ConstantSpringConfig,
     NEBMethod,
     SpringConfig,
 )
-from nvalchemi.dynamics.paths.neb.hooks import (
-    ClimbingImageSelectionHook,
-    NEBForceHook,
-)
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.strategy import (
     DynamicsStrategy,
     PositiveInt,
@@ -404,15 +402,13 @@ class NEB(DynamicsStrategy):
 
     @field_serializer("method", when_used="json")
     def _serialize_method(self, method: str | NEBMethod) -> str:
-        """Serialize NEB methods through their stable registry names."""
+        """Serialize built-in method names and reject custom equations."""
         if isinstance(method, str):
             return method
-        if method.name is None:
-            raise ValueError(
-                "Unnamed NEBMethod objects are runtime-only and cannot be "
-                "serialized by NEB.to_spec_dict()"
-            )
-        return method.name
+        raise ValueError(
+            "NEBMethod objects are runtime-only and cannot be serialized by "
+            "NEB.to_spec_dict()"
+        )
 
     @model_validator(mode="after")
     def _validate_configuration(self) -> NEB:

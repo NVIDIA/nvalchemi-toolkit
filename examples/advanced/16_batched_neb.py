@@ -19,7 +19,7 @@ Batched NEB with AIMNet2-rxn
 Nudged elastic band (NEB) finds the minimum-energy path — and therefore the
 transition-state estimate — between a reactant and a product. It represents
 the path as an ordered band of molecular structures called images. This example
-uses the :class:`~nvalchemi.dynamics.paths.NEB` API to optimize eight reaction
+uses the :class:`~nvalchemi.dynamics.mep.NEB` API to optimize eight reaction
 paths together on a GPU. Grouping every image in one
 :class:`~nvalchemi.data.Batch` lets the model evaluate the paths in parallel.
 
@@ -29,8 +29,8 @@ and coordinates are unchanged from the source data; positions are in angstrom.
 The data are distributed under the Transition1x MIT license.
 
 Each path starts with only a reactant and product structure.
-:func:`~nvalchemi.dynamics.paths.interpolate_paths` creates a ten-image linear
-band between them, then :class:`~nvalchemi.dynamics.paths.IDPPModel` relaxes
+:func:`~nvalchemi.dynamics.mep.interpolate_paths` creates a ten-image linear
+band between them, then :class:`~nvalchemi.dynamics.mep.IDPPModel` relaxes
 the interior images to provide a better initial path for NEB.
 
 After IDPP initialization, ``aimnet2-rxn`` supplies the physical energies and
@@ -80,7 +80,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.paths import (
+from nvalchemi.dynamics.mep import (
     NEB,
     ClimbingImageConfig,
     IDPPModel,
@@ -135,7 +135,7 @@ print(f"Initial batch: {initial.num_graphs} graphs, {initial.num_nodes} atoms")
 # Interpolate and initialize the paths
 # ------------------------------------
 # NEB optimization needs an initial band connecting each pair of endpoints.
-# :func:`~nvalchemi.dynamics.paths.interpolate_paths` constructs these bands.
+# :func:`~nvalchemi.dynamics.mep.interpolate_paths` constructs these bands.
 # It pairs graph ``i`` in the reactant batch with graph ``i`` in the product
 # batch and linearly interpolates ``NUM_IMAGES`` structures, including both
 # endpoints.
@@ -281,7 +281,7 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 # stability and helps reduce kinks and corner cutting.
 #
 # The force formulation can also be customized. A
-# :class:`~nvalchemi.dynamics.paths.NEBMethod` may replace the tangent,
+# :class:`~nvalchemi.dynamics.mep.NEBMethod` may replace the tangent,
 # regular-NEB force, or climbing-image force with custom ``@wp.func``
 # functions:
 #
@@ -295,7 +295,7 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 #    custom_neb = NEB(model=model, method=custom_method)
 #
 # While ``NEBMethod`` defines the force equations,
-# :class:`~nvalchemi.dynamics.paths.ClimbingImageConfig` controls the transition
+# :class:`~nvalchemi.dynamics.mep.ClimbingImageConfig` controls the transition
 # from regular NEB to climbing-image NEB. Each path first runs regular NEB until
 # it reaches ``regular_fmax=0.5``. The highest-energy interior image is then
 # selected as the climbing image. Its spring force is removed and the component
@@ -305,13 +305,13 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 #
 # ``spring=0.1`` uses the same spring constant for every link in the band. For
 # more advanced spring schemes, provide a custom
-# :class:`~nvalchemi.dynamics.paths.SpringConfig` to compute per-link values.
+# :class:`~nvalchemi.dynamics.mep.SpringConfig` to compute per-link values.
 # The internal :class:`~nvalchemi.dynamics.FIRE2` stages use the NEB-tuned
 # optimizer defaults, while ``n_steps=500`` limits the total number of
 # optimization steps.
 #
 # Passing ``diagnostics_log_path`` enables a
-# :class:`~nvalchemi.dynamics.paths.hooks.PathDiagnosticsHook` together with a
+# :class:`~nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook` together with a
 # CSV :class:`~nvalchemi.dynamics.hooks.LoggingHook`. These hooks reuse the
 # already-computed path state, so diagnostics require no additional model
 # evaluation. ``diagnostics_frequency`` controls how often both hooks run. The
@@ -319,12 +319,12 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 #
 # Advanced users can build the same workflow explicitly with
 # :class:`~nvalchemi.dynamics.FusedStage`, composing optimizer stages with
-# :class:`~nvalchemi.dynamics.paths.hooks.PathEnergyStatsHook`,
-# :class:`~nvalchemi.dynamics.paths.neb.hooks.ClimbingImageSelectionHook`,
-# :class:`~nvalchemi.dynamics.paths.neb.hooks.NEBForceHook`, convergence hooks,
-# and observer hooks. :class:`~nvalchemi.dynamics.paths.NEB` provides a
+# :class:`~nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook`,
+# :class:`~nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook`,
+# :class:`~nvalchemi.dynamics.mep.hooks.NEBForceHook`, convergence hooks,
+# and observer hooks. :class:`~nvalchemi.dynamics.mep.NEB` provides a
 # higher-level interface that manages their ordering and lifecycle through
-# :meth:`~nvalchemi.dynamics.paths.NEB.run`.
+# :meth:`~nvalchemi.dynamics.mep.NEB.run`.
 
 # Copy the IDPP-relaxed positions into a fresh band so that ``idpp_band`` remains
 # available for comparison, without carrying over the IDPP dynamics state.

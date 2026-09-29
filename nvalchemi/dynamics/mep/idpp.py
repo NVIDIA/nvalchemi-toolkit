@@ -24,12 +24,12 @@ from torch import Tensor, nn
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import SegmentedLevelStorage
-from nvalchemi.dynamics.paths._geometry import (
+from nvalchemi.dynamics.mep._geometry import (
     PreparedMIC,
     minimum_image_displacement,
     prepare_batch_mic,
 )
-from nvalchemi.dynamics.paths.validate import validate_paths
+from nvalchemi.dynamics.mep.validate import validate_paths
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
 _TARGET_DISTANCE_KEY = "idpp_target_distances"

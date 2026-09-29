@@ -21,12 +21,12 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.paths import (
+from nvalchemi.dynamics.mep import (
     IDPPModel,
     interpolate_paths,
     prepare_idpp_targets,
 )
-from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
+from nvalchemi.dynamics.mep._geometry import prepare_batch_mic
 
 # =============================================================================
 # Helpers

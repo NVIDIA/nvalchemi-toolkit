@@ -21,10 +21,10 @@ from typing import TYPE_CHECKING, NamedTuple
 import torch
 from torch import Tensor
 
-from nvalchemi.dynamics.paths._geometry import minimum_image_displacement
+from nvalchemi.dynamics.mep._geometry import minimum_image_displacement
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.paths._geometry import PreparedMIC
+    from nvalchemi.dynamics.mep._geometry import PreparedMIC
 
 
 class PositionAlignment(NamedTuple):

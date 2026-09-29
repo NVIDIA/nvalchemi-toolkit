@@ -22,8 +22,8 @@ import torch
 from torch import Tensor
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.paths._alignment import align_batch_positions
-from nvalchemi.dynamics.paths._geometry import (
+from nvalchemi.dynamics.mep._alignment import align_batch_positions
+from nvalchemi.dynamics.mep._geometry import (
     PreparedMIC,
     minimum_image_displacement,
     prepare_mic,
