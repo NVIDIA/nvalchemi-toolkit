@@ -95,6 +95,13 @@ def _aligned_periodic(
 
     Reads *batch* without writing it; other systems keep their values.
     Returns ``None`` when there is nothing to align.
+
+    Shared by :class:`AlignCellHook` (which copies the result back into the
+    live batch) and
+    :meth:`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell._reference_cells`
+    (which only needs the aligned cell to validate/seed its reference chart,
+    without touching *batch*) — kept standalone rather than inlined into the
+    hook so both call sites share one alignment implementation.
     """
     if getattr(batch, "cell", None) is None or getattr(batch, "pbc", None) is None:
         return None
