@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 import torch
 
-from nvalchemi.dynamics.mep._alignment import align_batch_positions
+from nvalchemi.dynamics.mep import PositionAlignment, align_batch_positions
 from nvalchemi.dynamics.mep._geometry import prepare_mic
 
 
@@ -90,6 +90,7 @@ def test_align_batch_positions_handles_variable_size_nonperiodic_graphs(
 
     alignment = align_batch_positions(reference, mobile, batch_idx, counts)
 
+    assert isinstance(alignment, PositionAlignment)
     atol = 1.0e-5 if dtype == torch.float32 else 1.0e-12
     torch.testing.assert_close(alignment.positions, reference, rtol=0, atol=atol)
     torch.testing.assert_close(

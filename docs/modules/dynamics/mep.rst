@@ -39,6 +39,17 @@ Path construction
    prepare_idpp_targets
    validate_paths
 
+Position alignment
+------------------
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   align_batch_positions
+
+.. autoclass:: PositionAlignment
+
 Spring and method configuration
 --------------------------------
 
@@ -62,7 +73,9 @@ Hooks
    :nosignatures:
 
    PathEnergyStatsHook
+   PathEnergyStats
    PathDiagnosticsHook
+   PathDiagnostics
 
 .. autosummary::
    :toctree: _generated

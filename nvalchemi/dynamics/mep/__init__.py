@@ -14,6 +14,7 @@
 # limitations under the License.
 """Minimum-energy path construction and nudged elastic band dynamics."""
 
+from nvalchemi.dynamics.mep._alignment import PositionAlignment, align_batch_positions
 from nvalchemi.dynamics.mep.idpp import IDPPModel, prepare_idpp_targets
 from nvalchemi.dynamics.mep.interpolate import interpolate_paths
 from nvalchemi.dynamics.mep.neb import NEB, ClimbingImageConfig
@@ -32,9 +33,11 @@ __all__ = [
     "IDPPModel",
     "NEB",
     "NEBMethod",
+    "PositionAlignment",
     "SpringConfig",
     "SpringContext",
     "TorchNEBMethod",
+    "align_batch_positions",
     "interpolate_paths",
     "prepare_idpp_targets",
     "validate_paths",

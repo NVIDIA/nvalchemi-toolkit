@@ -5,10 +5,9 @@
 
 The `nvalchemi.dynamics.mep` subpackage includes batched Nudged Elastic Band
 (NEB) methods for simulating minimum energy paths (MEPs) between two endpoint
-structures. Like every other simulation type, it follows the
-[execution loop](dynamics_guide): a path is just a batch where each graph is
-one image, and images belonging to the same path share a `group_layout`
-group.
+structures. Many paths can be simulated together as one batch, each path being a
+sequence of images between its two endpoints. Every graph in the batch is one
+image, and the images of a path share a `group_layout` group.
 
 There are two ways to use it:
 
@@ -63,6 +62,28 @@ restricts the corresponding atom pairs used to fit each transform without
 restricting which atoms are transformed. Every path must select at least one
 atom; for example, `initial.atomic_numbers > 1` fits molecular paths using only
 heavy atoms.
+
+For alignment without interpolation, call
+{py:func}`~nvalchemi.dynamics.mep.align_batch_positions` directly on two
+`Batch`es with matching atom order (optionally passing `fit_mask`):
+
+```python
+from nvalchemi.dynamics.mep import align_batch_positions
+
+alignment = align_batch_positions(
+    initial.positions,
+    final.positions,
+    initial.batch_idx,
+    initial.num_nodes_per_graph,
+)
+aligned_final = alignment.positions
+```
+
+The returned {py:class}`~nvalchemi.dynamics.mep.PositionAlignment` also holds
+the rotation and translation for each graph. Pass `cell` and `pbc` for periodic
+graphs; the function then uses minimum-image positions and translation without
+rotating the cell.
+
 {py:func}`~nvalchemi.dynamics.mep.prepare_idpp_targets` +
 {py:class}`~nvalchemi.dynamics.mep.IDPPModel` relax the path against target
 pairwise distances (IDPP,
@@ -98,7 +119,8 @@ Key fields:
 | `spring` | `0.1` | Constant spring force, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig` |
 | `method` | `"improved_tangent"` | Named method, custom Warp `NEBMethod`, or callable `TorchNEBMethod` |
 | `climbing` | `None` | `None` runs regular NEB only; set a `ClimbingImageConfig` to enable climbing-image NEB |
-| `optimizer` / `optimizer_kwargs` | `FIRE2` | Optimizer driving each image; kwargs forwarded to it |
+| `optimizer` | `FIRE2` | Optimizer driving each image |
+| `optimizer_kwargs` | NEB-tuned defaults for the optimizer | Overrides forwarded to each optimizer stage, taking precedence over the tuned defaults |
 | `fmax` | `0.05` | Force threshold for the final (or only) stage |
 | `endpoint_mode` | `"fixed"` | `"fixed"` keeps endpoints static; `"relaxed"` lets them move |
 | `fixed_atom_indices` | `None` | Per-path, image-local atom indices held fixed in every image |
@@ -106,13 +128,18 @@ Key fields:
 | `diagnostics_frequency` | `1` | Step frequency for computing and logging diagnostics |
 | `neighbor_hooks` | `None` | Override `model.make_neighbor_hooks()` with a custom neighbor-list hook list |
 | `compile` | `False` | Compile the fused NEB step with `torch.compile` |
+| `compile_kwargs` | `{}` | Keyword arguments forwarded to `torch.compile` when compilation is enabled |
 
-`endpoint_mode="fixed"` and `fixed_atom_indices` are both enforced by a
-{py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook` that `NEB` appends
-automatically --- `NEBForceHook` only computes *which* atoms are fixed (as a
-`neb_fixed_node_mask` batch field); `FreezeAtomsHook` is what actually zeroes
-their forces/velocities and restores their positions across integrator
-stages.
+`optimizer_kwargs` cannot set `model`, `hooks`, `by_group`,
+`convergence_hook`, or `n_steps`: `NEB` supplies these separately for each
+stage, so specifying them raises `ValueError`.
+
+`NEBForceHook` always publishes `neb_fixed_node_mask`, a Boolean node mask
+marking fixed endpoints and any `fixed_atom_indices`. It zeroes the physical
+and effective forces at those nodes. When `endpoint_mode="fixed"` or a nonempty
+`fixed_atom_indices` mapping is provided, `NEB` also appends a
+{py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook` to clear velocities and
+restore positions across optimizer stages.
 
 `ClimbingImageConfig.mode="after_regular"` runs regular NEB to
 `regular_fmax` (or `fmax` if unset) before promoting the highest-energy
@@ -120,6 +147,10 @@ interior image to a climbing image and continuing to `fmax`;
 `mode="immediate"` climbs from the first step.
 `selection="fixed"` locks in the initial climbing image;
 `selection="dynamic"` reselects it every evaluation.
+`max_regular_steps` and `max_climbing_steps` optionally limit each path's steps
+in the respective stage. A path advances when its stage limit is reached even
+if it has not met the force threshold. `max_regular_steps` is only valid with
+`mode="after_regular"`.
 
 `neb.run(paths)` builds a fresh engine via `neb.build_engine()` and calls
 `engine.run(paths)`. `NEB` is a Pydantic model, so it also serializes with
@@ -127,7 +158,7 @@ interior image to a climbing image and continuing to `fmax`;
 {py:class}`~nvalchemi.dynamics.strategy.DynamicsStrategy` subclasses used for
 training and fine-tuning specs.
 
-### The `method` equations
+### NEB methods
 
 `method="improved_tangent"` (the default and only named method)
 implements the Henkelman--Jónsson improved tangent
@@ -135,7 +166,7 @@ implements the Henkelman--Jónsson improved tangent
 For an interior image with neighbor energies $E^-, E, E^+$ and
 displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
 
-- **Tangent**: $\boldsymbol{\tau} = w^+\mathbf{d}^+ + w^-\mathbf{d}^-$
+- **Tangent**: $\vec{\tau} = w^+\mathbf{d}^+ + w^-\mathbf{d}^-$
   (then normalized), where the weights $w^\pm$ favor the higher-energy
   neighbor on monotonic sections of the path and blend both links at an
   extremum.
@@ -143,8 +174,8 @@ displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
 
   $$
   \mathbf{F}^{\mathrm{NEB}} = \mathbf{F}
-  - (\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}}
-  {}+ F^{\mathrm{s},\parallel}\hat{\boldsymbol{\tau}}
+  - (\mathbf{F}\cdot\hat{\tau})\hat{\tau}
+  {}+ F^{\mathrm{s},\parallel}\hat{\tau}
   $$
 
   That is the physical force projected perpendicular to the tangent, plus the
@@ -159,7 +190,7 @@ displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
 
   $$
   \mathbf{F}^{\mathrm{climb}} = \mathbf{F}
-  - 2(\mathbf{F}\cdot\hat{\boldsymbol{\tau}})\hat{\boldsymbol{\tau}}
+  - 2(\mathbf{F}\cdot\hat{\tau})\hat{\tau}
   $$
 
   The spring force is dropped and the parallel physical-force component is
@@ -173,8 +204,31 @@ independently (unset ones fall back to the improved-tangent equations above):
 | Field | Inputs available | Returns |
 |-------|-------------------|---------|
 | `tangent_weights_fn` | `energy_prev`, `energy_curr`, `energy_next` (scalars) | `(weight_plus, weight_minus)` link weights for the tangent |
-| `effective_force_fn` | The stored-tangent inputs (`physical_force`, `tangent`, `force_dot_tangent`, spring constants, link norms, and path energies), or the full Gram-statistics inputs including link vectors and dot products | effective force vector for a regular (non-climbing) interior image |
+| `effective_force_fn` | One of the two ordered signatures below | effective force vector for a regular (non-climbing) interior image |
 | `climbing_force_fn` | `physical_force`, `tangent`, `force_dot_tangent` | effective force vector for the climbing image |
+
+The `effective_force_fn` parameter names and order must match one of these
+signatures exactly; they select the corresponding Warp kernel:
+
+```text
+Stored tangent:
+(physical_force, tangent, force_dot_tangent, k_plus, k_minus,
+ norm_d_plus, norm_d_minus, energy_prev, energy_curr, energy_next,
+ path_energy_ref, path_energy_max)
+
+Gram statistics:
+(physical_force, tangent, d_plus, d_minus, force_dot_tangent,
+ dplus_dot_tangent, dminus_dot_tangent, norm_d_plus, norm_d_minus,
+ dplus_dot_dminus, force_dot_dplus, force_dot_dminus, force_squared_norm,
+ k_plus, k_minus, energy_prev, energy_curr, energy_next,
+ path_energy_ref, path_energy_max)
+```
+
+`physical_force`, `tangent`, `d_plus`, and `d_minus` are vectors for the
+current atom. The dot products and link norms are scalars reduced over the
+current image; `k_plus` and `k_minus` are the adjacent link spring constants.
+`energy_prev`, `energy_curr`, and `energy_next` are image energies, while
+`path_energy_ref` and `path_energy_max` are path-wide energy statistics.
 
 ```python
 import warp as wp
@@ -206,6 +260,25 @@ prepared minimum-image geometry. It returns effective forces for every atom
 and one minimum-image length per forward image link. Importable classes whose
 constructor arguments are stored as attributes also round-trip through
 `to_spec_dict()` and `from_spec_dict()`; other callables can be used at runtime.
+
+```python
+from nvalchemi.dynamics.mep import NEB
+from nvalchemi.dynamics.mep._geometry import minimum_image_displacement
+
+class MyTorchNEBMethod:
+    def __init__(self, scale: float = 1.0) -> None:
+        self.scale = scale  # stored as an attribute, so the spec round-trips
+
+    def __call__(self, batch, *, spring_constants, path_energy_ref, path_energy_max, mic):
+        forces = batch.physical_forces.clone()  # don't modify the batch in place
+        # ... apply your equations to regular, climbing, and endpoint images,
+        # using batch.positions, batch.energy, and batch.force_mode
+        # use minimum_image_displacement(..., prepared=mic) for link vectors
+        link_lengths = ...  # one minimum-image length per forward link
+        return forces, link_lengths
+
+neb = NEB(model=model, method=MyTorchNEBMethod(scale=0.5), fmax=0.05)
+```
 
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig`
@@ -296,9 +369,9 @@ order automatically.
    core hook: computes the local tangent and replaces `batch.forces` with the
    spring + perpendicular-physical-force NEB update, saving the raw model
    force to `batch.physical_forces`. When `endpoint_mode="fixed"` or
-   `fixed_atom_indices` is set, it also writes a `neb_fixed_node_mask` batch
-   field marking which atoms should stay put --- it does not enforce that
-   itself.
+   `fixed_atom_indices` is set, it populates `neb_fixed_node_mask` (present
+   on every batch) with the constrained atoms and zeroes their forces. The mask
+   alone does not keep their positions fixed during optimizer updates.
 4. **{py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook`** (optional, needed
    whenever step 3 produces a fixed-atom mask) --- a general-purpose,
    non-NEB-specific hook (`nvalchemi.dynamics.hooks`) that zeroes forces and
@@ -338,6 +411,11 @@ duplicating that construction here, read `NEB.build_engine()` in
 `nvalchemi/dynamics/mep/neb.py` --- it is the reference
 implementation for a two-substage, `status`-gated `FusedStage` with
 `ClimbingImageSelectionHook(status_code=...)` scoped to the climbing stage.
+With `mode="after_regular"` it sets `reprime_on_entry={1}`, so a path entering
+the climbing stage skips one optimizer update while the shared model evaluation
+and the climbing sub-stage's `AFTER_COMPUTE` hooks refresh its forces. In a
+hand-assembled engine, attach the stage-specific force hook to the target
+sub-stage. The flag only guarantees it runs before the first update.
 
 ## Periodic paths
 
