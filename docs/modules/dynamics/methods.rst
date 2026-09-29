@@ -229,10 +229,53 @@ evaluation.
    .. autofunction:: fire2_step_coord
    .. autofunction:: fire2_step_coord_cell
 
-L-BFGS steps along a quasi-Newton direction built from the last
-``history_size`` position/force differences, bounded by ``maxstep``.  Like
-FIRE2 it takes one force evaluation per step and places the whole step before
-the force evaluation.
+L-BFGS relaxation
+==================
+
+L-BFGS (Liu & Nocedal, 1989) is a quasi-Newton geometry optimizer: it builds a
+curvature-corrected descent direction from the last ``history_size``
+position/force pairs via the two-loop recursion, then steps along it within a
+``maxstep`` trust region. Like FIRE2, it reads no energy, owns no convergence
+tolerance, and places the whole step before the force evaluation — one force
+evaluation per step, with no restarts or damped-MD trajectory to tune.
+
+Each accepted step keeps a curvature pair
+
+.. math::
+
+   \mathbf{s} = \mathbf{x}_k - \mathbf{x}_{k-1},
+   \qquad
+   \mathbf{y} = \mathbf{F}_{k-1} - \mathbf{F}_{k},
+
+and the two-loop recursion combines the last ``history_size`` pairs into a
+direction :math:`\mathbf{d}`, seeded by the curvature ratio :math:`\gamma =
+(\mathbf{s}\cdot\mathbf{y})/(\mathbf{y}\cdot\mathbf{y})` of the most recent
+pair — the standard L-BFGS inverse-Hessian approximation, expressed here in
+forces rather than the gradient :math:`\mathbf{g} = -\mathbf{F}` the
+recursion is classically written in. A pair only enters the history if
+
+.. math::
+
+   \mathbf{s}\cdot\mathbf{y} > \epsilon\,
+       \sqrt{(\mathbf{s}\cdot\mathbf{s})\,(\mathbf{y}\cdot\mathbf{y})},
+
+i.e. the cosine between :math:`\mathbf{s}` and :math:`\mathbf{y}` clears
+``curvature_eps`` :math:`\epsilon` (default :math:`10^{-6}` for float32,
+:math:`10^{-10}` for float64); a rejected pair is simply dropped, not stored.
+If the resulting direction is not itself downhill
+(:math:`\mathbf{F}\cdot\mathbf{d} \le 0`), it is replaced by steepest descent
+along :math:`\mathbf{F}`. The step length is then set by scaling
+:math:`\mathbf{d}` so the largest per-atom displacement is at most
+``maxstep`` (:math:`\mathrm{\AA}`) — a trust region on ``alpha``, not a
+per-displacement clamp, since the stored pair uses :math:`\mathbf{s} =
+\alpha\,\mathbf{d}`. Nothing here reads an energy, so there is no line
+search: the objective can rise on a step, but the force still converges.
+
+``LBFGSVariableCell`` extends the same recursion to the cell degrees of
+freedom (two extra packed rows per system), mirroring
+``FIRE2VariableCell``'s NPH-style cell coupling; the cell must be aligned to
+upper-triangular form (:class:`~nvalchemi.dynamics.hooks.AlignCellHook`)
+before the reference chart is captured.
 
 .. dropdown:: Underlying ``nvalchemiops`` kernels
 
