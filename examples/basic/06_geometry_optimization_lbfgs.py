@@ -22,8 +22,7 @@ hooks, same convergence criterion, one force evaluation per step.  It builds a
 quasi-Newton direction from the last ``history_size`` position/force
 differences, so it usually needs far fewer steps.
 
-This example relaxes the same batch of argon clusters with both optimizers and
-compares the number of force evaluations.
+This example relaxes a batch of argon clusters with L-BFGS.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE2, LBFGS, ConvergenceHook, DynamicsStage
+from nvalchemi.dynamics import LBFGS, ConvergenceHook, DynamicsStage
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -60,7 +59,6 @@ def make_cluster(n_per_side: int, seed: int) -> AtomicData:
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
         energy=torch.zeros(1, 1),
-        velocities=torch.zeros(n, 3),  # read by FIRE2 only
     )
 
 
@@ -72,10 +70,10 @@ def make_batch() -> Batch:
 
 
 # %%
-# Relax with FIRE2, then with L-BFGS
-# ----------------------------------
-# Only the class and its hyperparameters change.  ``convergence_hook`` stops
-# the run once every system's fmax is below the threshold.
+# Relax with L-BFGS
+# -----------------
+# ``convergence_hook`` stops the run once every system's fmax is below the
+# threshold.
 
 
 def relax(optimizer) -> Batch:
@@ -92,10 +90,6 @@ def fmax(batch: Batch) -> float:
 
 converged = ConvergenceHook.from_fmax(1e-3)
 
-# FIRE2 timestep tuned for LJ argon (the default tmax=0.08 is much slower here).
-fire2 = FIRE2(model=model, dt=0.5, tmax=1.0, n_steps=2000, convergence_hook=converged)
-fire2_batch = relax(fire2)
-
 lbfgs = LBFGS(
     model=model,
     history_size=6,  # stored curvature pairs
@@ -105,18 +99,12 @@ lbfgs = LBFGS(
 )
 lbfgs_batch = relax(lbfgs)
 
-print(f"FIRE2 : {fire2.step_count:4d} steps, fmax {fmax(fire2_batch):.1e} eV/Å")
 print(f"L-BFGS: {lbfgs.step_count:4d} steps, fmax {fmax(lbfgs_batch):.1e} eV/Å")
 
 # %%
 # Final energies
 # --------------
-# Each system is relaxed to a local minimum.  Small clusters are floppy, so
-# the two optimizers can settle into different (nearby) minima.
+# Each system is relaxed to a local minimum.
 
-for i, (e_fire2, e_lbfgs) in enumerate(
-    zip(
-        fire2_batch.energy.squeeze(-1).tolist(), lbfgs_batch.energy.squeeze(-1).tolist()
-    )
-):
-    print(f"sys{i}: E(FIRE2) = {e_fire2:+.5f} eV   E(L-BFGS) = {e_lbfgs:+.5f} eV")
+for i, e_lbfgs in enumerate(lbfgs_batch.energy.squeeze(-1).tolist()):
+    print(f"sys{i}: E(L-BFGS) = {e_lbfgs:+.5f} eV")
