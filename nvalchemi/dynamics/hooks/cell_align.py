@@ -105,6 +105,9 @@ def _aligned_periodic(
     """
     if getattr(batch, "cell", None) is None or getattr(batch, "pbc", None) is None:
         return None
+    cell = batch.cell.detach()
+    if cell.shape[0] == 0:
+        return None
 
     # Determine which systems are periodic
     pbc = batch.pbc
@@ -117,19 +120,32 @@ def _aligned_periodic(
         periodic_mask = pbc.any(dim=-1)
     if active_graph_mask is not None:
         periodic_mask = periodic_mask & active_graph_mask
+
+    # Cheap skew check on the *unmodified* cell, before cloning anything or
+    # launching the Warp kernel.  ``AlignCellHook`` must run every step for
+    # ``LBFGSVariableCell`` (frequency=1), and by the second step every
+    # active periodic cell is typically already aligned — the common case
+    # is "nothing to do", not "some systems are periodic".  Skipping the
+    # clone + kernel launch here also avoids nudging already-aligned
+    # positions by ulp-level amounts every step, which would otherwise
+    # violate L-BFGS's "don't edit positions between steps" contract.
+    skew = torch.triu(cell, 1).abs()
+    atol = torch.finfo(cell.dtype).eps * cell.abs().amax().clamp(min=1.0) * 10
+    needs_align = periodic_mask[:, None, None] & (skew > atol)
     # Eager early exit; compiled graphs run branchless (all-False is a no-op).
-    if not torch.compiler.is_compiling() and not periodic_mask.any():
+    if not torch.compiler.is_compiling() and not needs_align.any():
         return None
 
-    positions = batch.positions.detach().contiguous().clone()
-    cell = batch.cell.detach().contiguous().clone()
-    if positions.dtype not in (torch.float32, torch.float64):
+    positions_dtype = batch.positions.dtype
+    if positions_dtype not in (torch.float32, torch.float64):
         raise TypeError(
             "Cell alignment only supports float32/float64 positions, got "
-            f"{positions.dtype}."
+            f"{positions_dtype}."
         )
-    if cell.dtype != positions.dtype:
-        cell = cell.to(dtype=positions.dtype)
+    positions = batch.positions.detach().contiguous().clone()
+    cell = cell.contiguous().clone()
+    if cell.dtype != positions_dtype:
+        cell = cell.to(dtype=positions_dtype)
 
     batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
     align_cell(positions, cell, batch_idx)
