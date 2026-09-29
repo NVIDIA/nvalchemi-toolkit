@@ -253,6 +253,86 @@ class TestAlignCellOp:
         assert cell.data_ptr() == cell_data_ptr
 
 
+class TestAlignCellOpTransform:
+    """Tests for the rotation matrix ``align_cell`` returns.
+
+    A caller with data already computed in the pre-alignment frame (e.g.
+    forces/stress primed before ``AlignCellHook`` runs) needs this rotation
+    to bring that data into the post-alignment frame too, rather than
+    silently mixing frames.
+    """
+
+    def test_returned_transform_reproduces_position_update(self, device: str) -> None:
+        """``positions_new[i] = transform[sys(i)] @ positions_old[i]``."""
+        dtype = torch.float64
+        cell1 = _make_rotated_cell(a=5.0, b=5.0, c=5.0, dtype=dtype, device=device)
+        cell2 = _make_rotated_cell(a=8.0, b=7.0, c=6.0, dtype=dtype, device=device)
+        cell = torch.cat([cell1, cell2], dim=0)
+        positions = torch.randn(6, 3, dtype=dtype, device=device)
+        batch_idx = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.int32, device=device)
+        positions_before = positions.clone()
+
+        transform = align_cell(positions, cell, batch_idx)
+
+        predicted = torch.einsum(
+            "nij,nj->ni", transform[batch_idx.long()], positions_before
+        )
+        assert torch.allclose(predicted, positions, atol=1e-8)
+
+    def test_returned_transform_reproduces_cell_update(self, device: str) -> None:
+        """``cell_new = cell_old @ transform^T``."""
+        dtype = torch.float64
+        cell = _make_rotated_cell(a=6.0, b=7.0, c=8.0, dtype=dtype, device=device)
+        cell_before = cell.clone()
+        positions = torch.randn(4, 3, dtype=dtype, device=device)
+
+        transform = align_cell(positions, cell)
+
+        predicted = torch.einsum("mij,mkj->mik", cell_before, transform)
+        assert torch.allclose(predicted, cell, atol=1e-8)
+
+    def test_transform_is_a_rotation(self, device: str) -> None:
+        """The transform is orthogonal with determinant 1 (a proper rotation)."""
+        dtype = torch.float64
+        cell = _make_rotated_cell(dtype=dtype, device=device)
+        positions = torch.randn(4, 3, dtype=dtype, device=device)
+
+        transform = align_cell(positions, cell)
+
+        eye = torch.eye(3, dtype=dtype, device=device)
+        assert torch.allclose(transform[0] @ transform[0].T, eye, atol=1e-8)
+        assert torch.allclose(
+            torch.linalg.det(transform[0]), torch.tensor(1.0, dtype=dtype), atol=1e-8
+        )
+
+    def test_identity_when_already_aligned(self, device: str) -> None:
+        """An already upper-triangular cell gets the identity transform."""
+        dtype = torch.float64
+        cell = torch.tensor(
+            [[[5.0, 0.0, 0.0], [2.0, 6.0, 0.0], [1.0, 0.5, 7.0]]],
+            dtype=dtype,
+            device=device,
+        )
+        positions = torch.randn(4, 3, dtype=dtype, device=device)
+
+        transform = align_cell(positions, cell)
+
+        assert torch.allclose(
+            transform[0], torch.eye(3, dtype=dtype, device=device), atol=1e-8
+        )
+
+    def test_caller_supplied_buffer_is_mutated_in_place(self, device: str) -> None:
+        dtype = torch.float64
+        cell = _make_rotated_cell(dtype=dtype, device=device)
+        positions = torch.randn(4, 3, dtype=dtype, device=device)
+        buf = torch.zeros(1, 3, 3, dtype=dtype, device=device)
+
+        returned = align_cell(positions, cell, transform=buf)
+
+        assert returned is buf
+        assert not torch.allclose(buf, torch.zeros_like(buf))
+
+
 # ===========================================================================
 # AlignCellHook
 # ===========================================================================
@@ -367,3 +447,60 @@ class TestAlignCellHook:
 
         # Cell should not be modified
         assert torch.allclose(batch.cell, cell_before)
+
+    def test_rotates_forces_and_stress_with_the_cell(self, device: str) -> None:
+        """Forces/stress "primed" before the hook runs must not go stale.
+
+        ``BaseDynamics`` computes forces/stress (``_prime_forces``) before
+        ``BEFORE_STEP`` hooks fire, so on the first step after admission this
+        hook rotates positions/cell *after* forces/stress were already
+        computed in the old frame.  If the hook didn't also rotate
+        forces/stress, ``pre_update`` would consume positions/cell from the
+        new frame together with forces/stress from the old one.
+        """
+        dtype = torch.float64
+        batch = _make_periodic_batch(dtype=dtype, device=device)
+        rotated = _make_rotated_cell(a=10.0, b=10.0, c=10.0, dtype=dtype, device=device)
+        batch["cell"] = rotated
+        batch["forces"] = torch.randn_like(batch.positions)
+        batch["stress"] = torch.randn(1, 3, 3, dtype=dtype, device=device)
+        forces_before = batch.forces.clone()
+        stress_before = batch.stress.clone()
+        cell_before = batch.cell.clone()
+
+        hook = AlignCellHook()
+        ctx = _make_ctx(batch, _make_dynamics())
+        hook(ctx, DynamicsStage.BEFORE_STEP)
+
+        assert _upper_triangular(batch.cell, atol=1e-8)
+        assert not torch.allclose(batch.forces, forces_before)
+        assert not torch.allclose(batch.stress, stress_before)
+
+        # Reconstruct the rotation the hook applied from how it moved the
+        # cell, and check forces/stress were rotated by the same transform.
+        transform = torch.linalg.solve(cell_before[0], batch.cell[0]).T
+        expected_forces = forces_before @ transform.T
+        assert torch.allclose(batch.forces, expected_forces, atol=1e-6)
+        expected_stress = transform @ stress_before[0] @ transform.T
+        assert torch.allclose(batch.stress[0], expected_stress, atol=1e-6)
+
+    def test_noop_without_forces_or_stress(self, device: str) -> None:
+        """Hook still aligns the cell when the batch has no forces/stress yet.
+
+        This is the state during ``LBFGSVariableCell._init_state``, called
+        before forces are primed for the first time.
+        """
+        dtype = torch.float64
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6, 6, 6], dtype=torch.long),
+            positions=torch.randn(4, 3, dtype=dtype) * 2.0 + 5.0,
+            cell=_make_rotated_cell(a=10.0, b=10.0, c=10.0, dtype=dtype),
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+
+        hook = AlignCellHook()
+        ctx = _make_ctx(batch, _make_dynamics())
+        hook(ctx, DynamicsStage.BEFORE_STEP)  # should not raise
+
+        assert _upper_triangular(batch.cell, atol=1e-8)

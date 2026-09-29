@@ -52,6 +52,13 @@ class AlignCellHook:
     representation reduces rotational ambiguity (improving optimizer
     stability) and has 6 independent parameters instead of 9.
 
+    ``forces`` and ``stress``, if present on the batch, are rotated by the
+    same transform.  This matters because :class:`~nvalchemi.dynamics.base.BaseDynamics`
+    primes forces/stress (one model call) before ``BEFORE_STEP`` hooks run,
+    so on the first step of a new admission this hook would otherwise rotate
+    positions/cell into a new frame while leaving already-computed
+    forces/stress in the old one.
+
     The hook fires at :attr:`~DynamicsStage.BEFORE_STEP` and skips
     non-periodic systems.
 
@@ -83,18 +90,33 @@ class AlignCellHook:
         del stage
         aligned = _aligned_periodic(ctx.batch, ctx.active_graph_mask)
         if aligned is not None:
+            positions, cell, forces, stress = aligned
             with torch.no_grad():
-                ctx.batch.positions.copy_(aligned[0])
-                ctx.batch.cell.copy_(aligned[1])
+                ctx.batch.positions.copy_(positions)
+                ctx.batch.cell.copy_(cell)
+                # BaseDynamics primes forces/stress via a model call before
+                # BEFORE_STEP hooks run (base.py), i.e. before this hook
+                # rotates positions/cell on the first step of an admission.
+                # Rotate them the same way so pre_update doesn't mix a
+                # pre-rotation force/stress with post-rotation positions.
+                if forces is not None:
+                    ctx.batch.forces.copy_(forces)
+                if stress is not None:
+                    ctx.batch.stress.copy_(stress)
 
 
 def _aligned_periodic(
     batch, active_graph_mask: torch.Tensor | None = None
-) -> tuple[torch.Tensor, torch.Tensor] | None:
-    """Return ``(positions, cell)`` with active periodic systems aligned.
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None] | None:
+    """Return ``(positions, cell, forces, stress)`` with periodic systems aligned.
 
-    Reads *batch* without writing it; other systems keep their values.
-    Returns ``None`` when there is nothing to align.
+    ``forces``/``stress`` are rotated by the same transform as ``positions``/
+    ``cell`` (``None`` when *batch* doesn't carry that field) so a caller that
+    already has forces/stress computed in the old frame — e.g. because forces
+    were primed before this hook ran — can keep them consistent with the
+    newly-aligned frame instead of silently mixing the two.  Reads *batch*
+    without writing it; other systems keep their values.  Returns ``None``
+    when there is nothing to align.
 
     Shared by :class:`AlignCellHook` (which copies the result back into the
     live batch) and
@@ -148,12 +170,32 @@ def _aligned_periodic(
         cell = cell.to(dtype=positions_dtype)
 
     batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
-    align_cell(positions, cell, batch_idx)
+    transform = align_cell(positions, cell, batch_idx)
 
     # Keep only active periodic graphs, leaving all other graphs unchanged
     aligned_atoms = periodic_mask[batch.batch_idx].unsqueeze(-1)
     aligned_cells = periodic_mask[:, None, None]
+
+    forces = None
+    batch_forces = getattr(batch, "forces", None)
+    if batch_forces is not None:
+        rotated = torch.einsum(
+            "nij,nj->ni", transform[batch.batch_idx.long()], batch_forces.detach()
+        )
+        forces = torch.where(aligned_atoms, rotated, batch_forces.detach())
+
+    stress = None
+    batch_stress = getattr(batch, "stress", None)
+    if batch_stress is not None:
+        # Cauchy stress is a rank-2 Cartesian tensor: sigma' = R sigma R^T.
+        rotated = torch.einsum(
+            "mij,mjk,mlk->mil", transform, batch_stress.detach(), transform
+        )
+        stress = torch.where(aligned_cells, rotated, batch_stress.detach())
+
     return (
         torch.where(aligned_atoms, positions, batch.positions.detach()),
         torch.where(aligned_cells, cell, batch.cell.detach()),
+        forces,
+        stress,
     )
