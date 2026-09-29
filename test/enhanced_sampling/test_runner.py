@@ -177,11 +177,23 @@ class TestRunnerConstruction:
         runner = EnhancedSampling(_make_dynamics(), {}, steps_per_epoch=1)
         assert runner.steps_per_epoch == 1
 
-    def test_hook_inserted_at_front(self) -> None:
+    def test_hooks_installed_ahead_of_user_hooks(self) -> None:
         """The bias hook must run before any other AFTER_COMPUTE hook."""
+
+        class _NoopHook:
+            stage = DynamicsStage.AFTER_COMPUTE
+            frequency = 1
+
+            def __call__(self, ctx: object, stage: DynamicsStage) -> None:
+                pass
+
+        user_hook = _NoopHook()
         dynamics = _make_dynamics()
+        dynamics.register_hook(user_hook)
         runner = EnhancedSampling(dynamics, {})
-        assert dynamics.hooks[0] is runner._hook
+        installed = dynamics.hooks
+        assert installed[: len(runner._hooks)] == runner._hooks
+        assert installed.index(runner._bias_hook) < installed.index(user_hook)
 
     def test_repr_lists_biases(self) -> None:
         runner = EnhancedSampling(

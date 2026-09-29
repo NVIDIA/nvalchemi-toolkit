@@ -913,7 +913,7 @@ class TestRunnerCheckpointRestore:
         )
         runner2.restore(path)
         assert bias2.state_version == saved_version
-        assert runner2._last_seen_version["quiet"] == saved_version, (
+        assert runner2._bias_hook._last_seen_version["quiet"] == saved_version, (
             "seen-version cache still reflects the fresh bias, not the restored one"
         )
 
@@ -940,13 +940,13 @@ class TestRunnerCheckpointRestore:
         resumed = runner2.restore(path)
 
         calls = {"n": 0}
-        original = runner2._reprime
+        original = runner2._bias_hook._reprime
 
         def _counting_reprime(b: Batch) -> None:
             calls["n"] += 1
             original(b)
 
-        runner2._reprime = _counting_reprime  # type: ignore[method-assign]
+        runner2._bias_hook._reprime = _counting_reprime  # type: ignore[method-assign]
         runner2.run(resumed, n_steps=1, prime=False)
         assert calls["n"] == 0, (
             f"re-primed {calls['n']} time(s) although no bias changed"
@@ -972,13 +972,13 @@ class TestRunnerCheckpointRestore:
         resumed = runner2.restore(path)
 
         calls = {"n": 0}
-        original = runner2._reprime
+        original = runner2._bias_hook._reprime
 
         def _counting_reprime(b: Batch) -> None:
             calls["n"] += 1
             original(b)
 
-        runner2._reprime = _counting_reprime  # type: ignore[method-assign]
+        runner2._bias_hook._reprime = _counting_reprime  # type: ignore[method-assign]
         runner2.run(resumed, n_steps=1, prime=False)
         assert calls["n"] == 1, "a genuine bias change no longer re-primes"
 

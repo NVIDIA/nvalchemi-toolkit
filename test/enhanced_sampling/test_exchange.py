@@ -797,7 +797,7 @@ class TestRunnerIntegration:
         runner = EnhancedSampling(_make_dynamics(device), {}, replica_exchange=exchange)
         runner.prime_forces(batch)
         before = batch.velocities.clone()
-        runner._attempt_exchange(batch, segment=0)
+        runner._exchange_hook._attempt(batch, segment=0)
         if exchange.accepted:
             assert not torch.allclose(batch.velocities, before), (
                 "an accepted swap left velocities at the old temperature"
@@ -909,7 +909,10 @@ class TestExchangeCheckpoint:
         assert exchange2.attempts == exchange.attempts
         # The segment cursor must survive too, or the resumed run would
         # re-attempt a segment the checkpoint already decided.
-        assert runner2._attempted_segment == runner._attempted_segment
+        assert (
+            runner2._exchange_hook.attempted_segment
+            == runner._exchange_hook.attempted_segment
+        )
 
     def test_restored_run_reproduces_decisions(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
@@ -1074,11 +1077,15 @@ class TestExchangeCheckpoint:
         )
         batch = runner.run(_make_batch(device=device), n_steps=4)
         assert runner.dynamics.step_count == 4
-        assert runner._attempted_segment == 0, "precondition: segment 1 is due"
+        assert runner._exchange_hook.attempted_segment == 0, (
+            "precondition: segment 1 is due"
+        )
 
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
-        assert runner._attempted_segment == 1, "the due segment was not drained"
+        assert runner._exchange_hook.attempted_segment == 1, (
+            "the due segment was not drained"
+        )
 
         saved, _, _ = read_checkpoint(path, device)
         on_disk = saved.thermodynamic_state_id.reshape(-1).tolist()
