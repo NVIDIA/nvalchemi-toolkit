@@ -82,12 +82,23 @@ with LBFGS(
     relaxed = opt.run(batch)
 ```
 
-- `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: install
-  `AlignCellHook()` (`frequency=1`), as for `FIRE2VariableCell`, on the optimizer
-  or its `FusedStage`. Without the hook, every cell in the batch must already be
-  aligned.
-- Do not edit positions between steps (e.g. `WrapPeriodicHook`); the history
-  differences consecutive positions. `FreezeAtomsHook` is supported.
+- `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: a cell
+  is "aligned" when it is upper-triangular (`a` along x, `b` in the xy-plane; see
+  {py:class}`~nvalchemi.dynamics.hooks.AlignCellHook`). On admission, the
+  optimizer snapshots each system's aligned cell as its reference chart; every
+  later step's cell is checked against that reference and must still be
+  upper-triangular, or a `ValueError` is raised. Install `AlignCellHook()`
+  (`frequency=1`), as for `FIRE2VariableCell`, on the optimizer or its
+  `FusedStage` so it re-aligns the cell before every step. If you don't install
+  the hook, you are responsible for ensuring every cell handed to the optimizer
+  is already upper-triangular on every step, not just at admission.
+- Do not edit positions between steps (e.g. `WrapPeriodicHook`); L-BFGS builds
+  its quasi-Newton direction from `s = x_k - x_{k-1}`, so any out-of-band edit
+  (such as wrapping coordinates back into the cell) introduces a spurious jump
+  that is not the optimizer's own displacement and corrupts the stored
+  curvature pairs. `FreezeAtomsHook` is supported because it restores frozen
+  atoms to the same position every step, so their contribution to `s` is
+  always zero rather than a fictitious jump.
 - The first step after admission moves the largest-force atom by `maxstep`.
 - The cell reference is captured when a system is admitted. Under `FusedStage`, a
   system entering the stage later keeps it; this stays correct but can take more
