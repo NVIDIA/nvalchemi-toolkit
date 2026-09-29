@@ -80,9 +80,9 @@ context manager protocol. The `with` block manages a dedicated
 properly opened and closed:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
-with FIRE(
+with FIRE2(
     model=model,
     dt=0.1,
     n_steps=500,
