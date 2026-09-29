@@ -19,6 +19,7 @@ from nvalchemi.dynamics.mep.neb_configs import (
     NEBMethod,
     SpringConfig,
     SpringContext,
+    TorchNEBMethod,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "NEBMethod",
     "SpringConfig",
     "SpringContext",
+    "TorchNEBMethod",
 ]

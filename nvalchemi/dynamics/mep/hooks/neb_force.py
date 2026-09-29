@@ -31,10 +31,14 @@ from nvalchemi.dynamics.mep.neb_configs import (
     NEBMethod,
     SpringConfig,
     SpringContext,
+    TorchNEBMethod,
 )
 from nvalchemi.dynamics.mep.neb_ops.modes import ENDPOINT, REGULAR_NEB
 from nvalchemi.dynamics.mep.neb_ops.torch_ops import neb_forces
-from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
+from nvalchemi.dynamics.paths._geometry import (
+    PreparedMIC,
+    prepare_batch_mic,
+)
 from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.validate import validate_paths
 from nvalchemi.hooks import DynamicsContext
@@ -112,8 +116,9 @@ class NEBForceHook:
     spring : float or SpringConfig, optional
         Positive constant spring value or a policy that resolves one
         spring constant for every adjacent image pair. Default is ``0.1``.
-    method : str or NEBMethod, optional
-        Built-in method name or a custom set of Warp equation functions.
+    method : str, NEBMethod, or TorchNEBMethod, optional
+        Built-in method name, custom Warp equations, or a Torch method that
+        computes NEB effective forces for the batch of paths.
         Default is ``"improved_tangent"``.
     endpoint_mode : {"fixed", "relaxed"}, optional
         Whether path endpoint images remain fixed or use their physical
@@ -158,6 +163,10 @@ class NEBForceHook:
             climbing_force_fn=my_climbing_force,
         )
         hook = NEBForceHook(energy_stats_hook=energy_stats, method=method)
+
+    Pass a Torch callable accepting ``(batch, *, ...)`` in the same way::
+
+        hook = NEBForceHook(energy_stats_hook=energy_stats, method=my_torch_method)
     """
 
     stage = DynamicsStage.AFTER_COMPUTE
@@ -168,7 +177,7 @@ class NEBForceHook:
         *,
         energy_stats_hook: PathEnergyStatsHook,
         spring: float | SpringConfig = 0.1,
-        method: str | NEBMethod = "improved_tangent",
+        method: str | NEBMethod | TorchNEBMethod = "improved_tangent",
         endpoint_mode: Literal["fixed", "relaxed"] = "fixed",
         fixed_atom_indices: Mapping[int, Sequence[int]] | None = None,
     ) -> None:
@@ -209,11 +218,12 @@ class NEBForceHook:
             if method != "improved_tangent":
                 raise ValueError(f"Unknown NEB method: {method!r}")
             method = NEBMethod()
-        elif not isinstance(method, NEBMethod):
+        elif not isinstance(method, (NEBMethod, TorchNEBMethod)):
             raise TypeError(
-                f"method must be 'improved_tangent' or an NEBMethod; got {type(method).__name__}"
+                "method must be 'improved_tangent', an NEBMethod, or a "
+                f"TorchNEBMethod; got {type(method).__name__}"
             )
-        method_key = method.to_key()
+        method_key = method.to_key() if isinstance(method, NEBMethod) else None
 
         # Validate endpoint behavior and image-local atom constraints together.
         if endpoint_mode not in {"fixed", "relaxed"}:
@@ -429,7 +439,8 @@ class NEBForceHook:
             link_lengths=torch.empty(n_links, dtype=dtype, device=device),
             vector_scratch=(
                 torch.empty_like(batch.positions)
-                if self.method_key.startswith("stored_tangent|")
+                if self.method_key is not None
+                and self.method_key.startswith("stored_tangent|")
                 else None
             ),
             image_ptr=image_ptr,
@@ -481,27 +492,48 @@ class NEBForceHook:
         )
         batch.physical_forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
         self._refresh_spring_constants(ctx, DynamicsStage.AFTER_COMPUTE)
-        neb_forces(
-            positions=batch.positions.contiguous(),
-            physical_forces=batch.physical_forces.contiguous(),
-            image_energies=batch.energy.reshape(-1).contiguous(),
-            image_ptr=workspace.image_ptr,
-            path_ptr=workspace.path_ptr,
-            image_path_idx=workspace.image_path_idx,
-            spring_constants=workspace.spring_constants,
-            image_force_mode=batch.force_mode,
-            path_energy_ref=stats.endpoint_reference_energy.contiguous(),
-            path_energy_max=stats.highest_interior_energy.contiguous(),
-            mic_mode=workspace.mic.mode,
-            periodic_basis=workspace.mic.periodic_basis,
-            cartesian_to_fractional=workspace.mic.cartesian_to_fractional,
-            mic_candidate_count=workspace.mic.candidate_count,
-            candidate_shifts=workspace.mic.candidate_shifts,
-            method=self.method_key,
-            vector_scratch=workspace.vector_scratch,
-            effective_forces=workspace.effective_forces,
-            link_lengths=workspace.link_lengths,
-        )
+        if self.method_key is None:
+            # Compute neb forces with pure Torch
+            effective_forces, link_lengths = self.method(
+                batch,
+                spring_constants=workspace.spring_constants,
+                path_energy_ref=stats.endpoint_reference_energy,
+                path_energy_max=stats.highest_interior_energy,
+                mic=workspace.mic,
+            )
+            if (
+                effective_forces.shape != workspace.effective_forces.shape
+                or link_lengths.shape != workspace.link_lengths.shape
+            ):
+                raise ValueError(
+                    "TorchNEBMethod must return forces shaped like positions "
+                    "and one length per forward link"
+                )
+            workspace.effective_forces.copy_(effective_forces)
+            workspace.link_lengths.copy_(link_lengths)
+        else:
+            # Compute neb forces with Warp
+            neb_forces(
+                positions=batch.positions.contiguous(),
+                physical_forces=batch.physical_forces.contiguous(),
+                image_energies=batch.energy.reshape(-1).contiguous(),
+                image_ptr=workspace.image_ptr,
+                path_ptr=workspace.path_ptr,
+                image_path_idx=workspace.image_path_idx,
+                spring_constants=workspace.spring_constants,
+                image_force_mode=batch.force_mode,
+                path_energy_ref=stats.endpoint_reference_energy.contiguous(),
+                path_energy_max=stats.highest_interior_energy.contiguous(),
+                mic_mode=workspace.mic.mode,
+                periodic_basis=workspace.mic.periodic_basis,
+                cartesian_to_fractional=workspace.mic.cartesian_to_fractional,
+                mic_candidate_count=workspace.mic.candidate_count,
+                candidate_shifts=workspace.mic.candidate_shifts,
+                method=self.method_key,
+                vector_scratch=workspace.vector_scratch,
+                effective_forces=workspace.effective_forces,
+                link_lengths=workspace.link_lengths,
+            )
         workspace.effective_forces.masked_fill_(active_fixed_nodes.unsqueeze(-1), 0)
         # Expand packed link lengths into the per-image field. Terminal entries
         # are initialized to zero on admission and are not modified here.

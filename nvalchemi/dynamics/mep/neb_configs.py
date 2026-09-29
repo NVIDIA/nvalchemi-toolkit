@@ -24,7 +24,7 @@ import torch
 import warp as wp
 from torch import Tensor
 
-from nvalchemi.data import GroupLayout
+from nvalchemi.data import Batch, GroupLayout
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.mep.neb_equations import (
     climbing_image_effective_force,
@@ -35,12 +35,14 @@ from nvalchemi.dynamics.mep.neb_ops.methods import (
     prepare_neb_method_key,
     resolve_neb_method,
 )
+from nvalchemi.dynamics.paths._geometry import PreparedMIC
 
 __all__ = [
     "ConstantSpringConfig",
     "NEBMethod",
     "SpringConfig",
     "SpringContext",
+    "TorchNEBMethod",
 ]
 
 
@@ -149,6 +151,47 @@ class ConstantSpringConfig:
             dtype=context.positions.dtype,
             device=context.positions.device,
         )
+
+
+@runtime_checkable
+class TorchNEBMethod(Protocol):
+    """Compute effective forces for a batch of paths using Torch operations."""
+
+    def __call__(
+        self,
+        batch: Batch,
+        *,
+        spring_constants: Tensor,
+        path_energy_ref: Tensor,
+        path_energy_max: Tensor,
+        mic: PreparedMIC,
+    ) -> tuple[Tensor, Tensor]:
+        """Return effective forces and forward-link lengths.
+
+        The batch provides packed positions, physical forces, energies, path
+        layout, and image force modes. Handle regular, climbing, and endpoint
+        images. Compute minimum-image link lengths with
+        ``minimum_image_displacement(..., prepared=mic)``. The hook applies
+        fixed-atom and active-path masks before publishing the returned forces.
+
+        Parameters
+        ----------
+        batch : Batch
+            Current batch of paths. ``positions`` and ``physical_forces``
+            have shape ``(num_atoms, 3)``; ``energy`` and ``force_mode`` have
+            one entry per image. Read inputs without modifying the batch.
+        spring_constants : Tensor, shape (num_images - num_paths,)
+            Per-link spring constants.
+        path_energy_ref, path_energy_max : Tensor, shape (num_paths,)
+            Endpoint reference and highest interior energy per path.
+        mic : PreparedMIC
+            Geometry for ``minimum_image_displacement(..., prepared=mic)``.
+        Returns
+        -------
+        tuple[Tensor, Tensor]
+            Effective forces with shape ``(num_atoms, 3)`` and MIC-aware
+            forward-link lengths with shape ``(num_images - num_paths,)``.
+        """
 
 
 @dataclass(frozen=True, slots=True)

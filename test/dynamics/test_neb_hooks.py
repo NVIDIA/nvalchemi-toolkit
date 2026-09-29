@@ -44,7 +44,11 @@ from nvalchemi.dynamics.mep.neb_ops.modes import (
     CLIMBING_NEB,
     ENDPOINT,
 )
-from nvalchemi.dynamics.paths._geometry import prepare_batch_mic
+from nvalchemi.dynamics.paths._geometry import (
+    PreparedMIC,
+    minimum_image_displacement,
+    prepare_batch_mic,
+)
 from nvalchemi.dynamics.paths.hooks import PathEnergyStatsHook
 from nvalchemi.hooks import DynamicsContext
 
@@ -333,6 +337,68 @@ class TestNEBForceHook:
         )
         torch.testing.assert_close(batch.forces[batch.batch_idx == 2], expected_regular)
         assert torch.all(batch.forces[endpoint_rows] == 0)
+
+    def test_torch_method_receives_path_inputs_and_publishes_forces(self) -> None:
+        """Torch methods own MIC links; the hook publishes both returned tensors."""
+
+        class DoubleForces:
+            seen: dict[str, object] | None = None
+
+            def __call__(
+                self,
+                batch: Batch,
+                *,
+                spring_constants: torch.Tensor,
+                path_energy_ref: torch.Tensor,
+                path_energy_max: torch.Tensor,
+                mic: PreparedMIC,
+            ) -> tuple[torch.Tensor, torch.Tensor]:
+                self.seen = {
+                    "batch": batch,
+                    "spring_constants": spring_constants,
+                    "path_energy_ref": path_energy_ref,
+                    "path_energy_max": path_energy_max,
+                    "mic": mic,
+                }
+                links = minimum_image_displacement(
+                    batch.positions[1:] - batch.positions[:-1],
+                    torch.zeros(2, dtype=torch.long),
+                    prepared=mic,
+                )
+                return 2 * batch.physical_forces, torch.linalg.vector_norm(
+                    links, dim=-1
+                )
+
+        batch = _bands([0.0, 1.0, 0.0], [0, 0, 0])
+        batch.positions[:, 0] = torch.tensor([0.0, 4.0, 8.0])
+        batch.cell = (torch.eye(3) * 5).repeat(3, 1, 1)
+        batch.pbc = torch.tensor([[True, False, False]]).repeat(3, 1)
+        method = DoubleForces()
+        hook = _force_hook(method=method)
+        ctx = DynamicsContext(batch=batch)
+        hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook.energy_stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+
+        with patch("nvalchemi.dynamics.mep.hooks.neb_force.neb_forces") as warp_op:
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        warp_op.assert_not_called()
+
+        assert hook.method_key is None
+        assert method.seen is not None
+        assert method.seen["batch"] is batch
+        torch.testing.assert_close(
+            batch.forward_link_length, torch.tensor([1.0, 1.0, 0.0])
+        )
+        torch.testing.assert_close(
+            minimum_image_displacement(
+                batch.positions[1:2] - batch.positions[0:1],
+                torch.zeros(1, dtype=torch.long),
+                prepared=method.seen["mic"],
+            ),
+            torch.tensor([[-1.0, 0.0, 0.0]]),
+        )
+        torch.testing.assert_close(batch.forces[:, 0], torch.tensor([0.0, 4.0, 0.0]))
 
     def test_prepares_builtin_and_gram_statistic_method_keys(self) -> None:
         builtin = _force_hook()

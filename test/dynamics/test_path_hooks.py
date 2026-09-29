@@ -306,12 +306,16 @@ class TestPathDiagnosticsHook:
             by_group=True,
             custom_scalars={
                 "fmax": lambda ctx: diagnostics_hook.get_diagnostics().fmax,
-                "energy_barrier": lambda ctx: diagnostics_hook.get_diagnostics().energy_barrier,
+                "energy_barrier": lambda ctx: (
+                    diagnostics_hook.get_diagnostics().energy_barrier
+                ),
                 "path_length": (
                     lambda ctx: diagnostics_hook.get_diagnostics().path_length
                 ),
                 "highest_interior_image_idx": (
-                    lambda ctx: diagnostics_hook.get_diagnostics().highest_interior_image_idx
+                    lambda ctx: (
+                        diagnostics_hook.get_diagnostics().highest_interior_image_idx
+                    )
                 ),
             },
         )
