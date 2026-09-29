@@ -98,7 +98,14 @@ def _cell_batch(cells, pbc=True, n_atoms=4):
 
 
 def _aligned(cell):
-    return torch.triu(cell, 1).abs().max().item() <= 1e-10
+    """Whether *cell*'s strict upper triangle is (numerically) zero.
+
+    Scaled by dtype epsilon and cell magnitude rather than a fixed atol:
+    float32 rounding in the alignment kernel is ~1e-7 relative, so a bare
+    ``1e-10`` is unreachable for float32 cells and silently over-tight.
+    """
+    atol = torch.finfo(cell.dtype).eps * cell.abs().amax().clamp(min=1.0) * 10
+    return torch.triu(cell, 1).abs().max().item() <= atol
 
 
 class _Record:
