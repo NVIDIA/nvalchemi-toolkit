@@ -22,6 +22,12 @@ hooks, same convergence criterion, one force evaluation per step.  It builds a
 quasi-Newton direction from the last ``history_size`` position/force
 differences, so it usually needs far fewer steps.
 
+L-BFGS also launches more Warp kernels per step than FIRE2, so it has higher
+per-step overhead.  That's invisible behind a real MLIP forward pass, but with
+a model this cheap (Lennard-Jones), the per-step overhead can outweigh the
+step-count win, so L-BFGS can be slower in wall-clock time here even though it
+converges in far fewer steps.
+
 This example relaxes a batch of argon clusters with L-BFGS.
 """
 

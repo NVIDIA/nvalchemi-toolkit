@@ -68,6 +68,15 @@ to `forces`.
 {py:class}`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell` are drop-in
 alternatives to FIRE2: one force evaluation per step, usually far fewer steps.
 
+Each L-BFGS step also launches noticeably more Warp kernels than a FIRE2 step
+(the two-loop recursion iterates over `history_size` in Python), so its
+per-step overhead is higher. With an expensive model forward pass this is
+negligible next to fewer total steps, but with a cheap model — like the LJ
+model in the examples — the per-step overhead can outweigh the reduction in
+step count, making L-BFGS slower in wall-clock time despite converging in
+fewer steps. Prefer FIRE2 when the model is cheap and steps are many;
+L-BFGS wins when the model forward pass dominates step cost.
+
 ```python
 from nvalchemi.dynamics import ConvergenceHook
 from nvalchemi.dynamics.optimizers import LBFGS

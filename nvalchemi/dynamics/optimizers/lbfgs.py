@@ -26,6 +26,12 @@ Both classes delegate to ``lbfgs_step_coord`` and ``lbfgs_step_coord_cell``
 from :mod:`nvalchemiops.torch.lbfgs`.  The step is placed entirely in
 ``pre_update``; ``post_update`` is a no-op.
 
+The two-loop recursion iterates over ``history_size`` in Python, so each
+step launches noticeably more Warp kernels than a FIRE2 step.  Fewer total
+steps usually still wins on wall-clock time once the model forward pass
+dominates, but with a cheap model this per-step launch overhead can make
+L-BFGS slower than FIRE2 despite converging in fewer steps.
+
 Hyperparameters:
 
 * ``history_size``  — stored curvature pairs (default 6); fixed at allocation
