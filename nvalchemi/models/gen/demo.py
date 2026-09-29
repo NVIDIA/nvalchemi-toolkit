@@ -68,7 +68,6 @@ class DemoGANModel(nn.Module, GenerativeModelMixin):
 
     def forward(self, data: Any, *, x: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         """Decode a latent draw ``x`` of shape ``(B, latent_dim)``."""
-        del data, kwargs
         return self.decoder(x)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
@@ -77,7 +76,6 @@ class DemoGANModel(nn.Module, GenerativeModelMixin):
 
     def to_batch(self, sample: TensorDict, cond_batch: Batch | None = None) -> Batch:
         """Materialize the sample: one point-cloud graph per draw."""
-        del cond_batch
         positions = sample["x1"].reshape(-1, self.num_atoms, 3)
         numbers = positions.new_full((self.num_atoms,), 6, dtype=torch.long)
         return Batch.from_data_list(
@@ -122,14 +120,12 @@ class DemoDiffusionModel(nn.Module, GenerativeModelMixin):
         MLP. ``class_labels`` is accepted for the PhysicsNeMo calling
         convention and unused here.
         """
-        del class_labels
         b = x.shape[0]
         s = sigma.reshape(b, 1)
         return self.net(torch.cat([x.reshape(b, -1), s], dim=-1)).reshape_as(x)
 
     def to_batch(self, sample: TensorDict, cond_batch: Batch | None = None) -> Batch:
         """Materialize the sample: one point-cloud graph per draw."""
-        del cond_batch
         positions = sample["x1"].reshape(-1, self.num_atoms, 3)
         numbers = positions.new_full((self.num_atoms,), 6, dtype=torch.long)
         return Batch.from_data_list(
