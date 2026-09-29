@@ -12,18 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Transactional Zarr checkpoints for enhanced sampling.
+"""Transactional, pickle-free Zarr checkpoints for any set of stateful objects.
+
+Writing state transactionally and refusing to restore a torn store is not
+specific to any one workflow: enhanced-sampling restart needs it, plain MD
+restart needs it, and an NEB restart will need it.  So this lives beside the
+package rather than inside one subpackage, and it is written against
+:class:`Stateful` — the ``state_dict`` / ``load_state_dict`` pair that hooks,
+integrators, biases, ladders and ``nn.Module`` already satisfy.
 
 Layout, extending the existing ``AtomicData`` Zarr record in place::
 
     checkpoint.zarr/
-      meta/, core/, custom/     walker batch, via AtomicDataZarrWriter
-      sampling/
-        manifest               committed metadata — WRITTEN LAST
-        dynamics/              integrator, thermostat, and RNG counters
-        biases/<name>/         each bias's state_dict()
-        runner/                walker-id allocation and epoch counters
-        exchange/              ladder config, counters, acceptance-RNG position
+      meta/, core/, custom/     the batch, via AtomicDataZarrWriter (optional)
+      checkpoint/
+        manifest                committed metadata — WRITTEN LAST
+        <component>/            one group per named Stateful; '/' nests
+
+Component names are caller-chosen and may nest (``"biases/umbrella"``), so a
+checkpoint can be inspected group by group rather than as one opaque blob.
+``manifest`` is reserved.
 
 State is stored as Zarr arrays (tensors) and group attributes (scalars,
 strings, nested mappings).  There are **no pickle payloads**: a checkpoint is
@@ -33,17 +41,27 @@ Transactionality
 ----------------
 Components are written first, each checksummed, and the manifest is written
 last.  A checkpoint interrupted at any point therefore has no manifest, and
-:func:`read_checkpoint` rejects a store without one rather than restoring a
+:func:`load_checkpoint` rejects a store without one rather than restoring a
 torn half-state.  Checksums are verified on read, so a store that was
 truncated *after* the manifest landed is also caught.
 
-The cover is total.  Every ``sampling/`` component carries its own digest,
-and ``batch_checksum`` covers ``meta/``, ``core/``, and ``custom/`` — the
-positions, velocities, forces, pointer arrays, and walker identity that
-``AtomicDataZarrWriter`` writes outside the component path.  Checksumming
-only the sampling state would attest to the bias and integrator while
-leaving the coordinates unguarded, which is the half of the checkpoint a
-reader is most likely to trust blindly.
+The cover is total.  Every component carries its own digest, and
+``batch_checksum`` covers ``meta/``, ``core/``, and ``custom/`` — the
+positions, velocities, pointer arrays, and any extra per-graph fields that
+``AtomicDataZarrWriter`` writes outside the component path.  Checksumming only
+the component state would attest to the model and integrator while leaving the
+coordinates unguarded, which is the half of the checkpoint a reader is most
+likely to trust blindly.
+
+Relationship to ``training/_checkpoint.py``
+-------------------------------------------
+Training has its own checkpoint layer with a different storage format — a
+directory of ``.pt`` files with per-component specs, indices, and
+model/optimizer/scheduler associations.  It is not refactored onto this
+module; that is a format migration with its own compatibility story.  What
+this module fixes is the smaller thing: a *third* copy of "write
+transactionally, checksum, refuse a torn store" is not created the next time a
+workflow needs restart.
 """
 
 from __future__ import annotations
@@ -51,7 +69,8 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
@@ -66,34 +85,57 @@ from nvalchemi.data.datapipes.backends.zarr import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
 __all__ = [
     "CHECKPOINT_FORMAT_VERSION",
+    "CheckpointContents",
     "CheckpointManifest",
-    "read_checkpoint",
-    "write_checkpoint",
+    "Stateful",
+    "load_checkpoint",
+    "save_checkpoint",
 ]
 
 CHECKPOINT_FORMAT_VERSION = 1
 
-_SAMPLING = "sampling"
-_MANIFEST = "sampling/manifest"
-
-# Graph-level fields the runner owns.  ``AtomicDataZarrWriter.write`` only
-# persists fields it recognises, so these are added explicitly through
-# ``add_custom`` — without that, walker identity would be silently dropped and
-# a "restored" run would come back with fresh ids and default state
-# assignments.
-_IDENTITY_FIELDS = ("walker_id", "thermodynamic_state_id")
+_ROOT = "checkpoint"
+_MANIFEST_NAME = "manifest"
+_MANIFEST = f"{_ROOT}/{_MANIFEST_NAME}"
 
 _SCALAR_TYPES = (bool, int, float, str)
 
-# Zarr groups that together hold the walker batch.  These are written by
+# Zarr groups that together hold the batch.  These are written by
 # AtomicDataZarrWriter rather than through _encode_state, so they need their
 # own integrity cover — without it the manifest would attest only to the
-# sampling/* state and a corrupted core/positions would restore silently.
+# component state and a corrupted core/positions would restore silently.
 _BATCH_GROUPS = ("meta", "core", "custom")
+
+
+@runtime_checkable
+class Stateful(Protocol):
+    """Anything that can hand out its state and take it back.
+
+    The whole contract this module needs.  ``nn.Module``, ``BaseDynamics``,
+    ``ReplicaExchange``, every ``CheckpointableHook`` and every adaptive bias
+    already satisfy it, which is the point: a checkpoint is a mapping of name
+    to *something that knows its own state*, not a per-workflow schema.
+
+    .. warning::
+
+        ``isinstance`` against a runtime-checkable Protocol checks that the
+        members *exist*, never that they behave.  Use it to ask whether an
+        object owns state, not to decide that an arbitrary object is safe to
+        check-point.
+    """
+
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return this object's state as a Zarr-representable mapping."""
+        ...
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore this object's state from a mapping."""
+        ...
 
 
 class CheckpointManifest(BaseModel):
@@ -106,51 +148,49 @@ class CheckpointManifest(BaseModel):
     ----------
     format_version:
         Layout version, for forward migration.
-    sampling_step:
-        Dynamics step count the checkpoint was taken at.
-    sampling_epoch:
-        Consistency epoch the checkpoint was taken at.
-    steps_per_epoch:
-        Epoch length in force evaluations.
-    num_graphs:
-        Walker count, validated against the restored batch.
     components:
-        Names of the ``sampling/`` groups written.
+        Names of the component groups written.
     checksums:
-        SHA-256 per ``sampling/`` component, verified on read.  Must have an
-        entry for every name in :attr:`components`, and no others.
+        SHA-256 per component, verified on read.  Must have an entry for
+        every name in :attr:`components`, and no others.
     batch_checksum:
         SHA-256 over every array in ``meta/``, ``core/``, and ``custom/`` —
-        the walker batch itself.  Kept separate from :attr:`checksums`
-        because those name ``sampling/`` groups the reader walks, while this
-        covers arrays written by ``AtomicDataZarrWriter``.
-    model_class:
-        Fully-qualified model wrapper class, validated on restore.
-    dynamics_class:
-        Fully-qualified dynamics class, validated on restore.
-    bias_classes:
-        Bias name to fully-qualified class, validated on restore.
-    exchange_config:
-        Replica-exchange configuration fingerprint, or ``None`` when the run
-        had no exchange.  Validated on restore: the ladder decides what a
-        swap *means*, so restoring into a different one — or into no exchange
-        at all — has to be refused rather than silently accepted.
+        the batch itself.  Kept separate from :attr:`checksums` because those
+        name component groups the reader walks, while this covers arrays
+        written by ``AtomicDataZarrWriter``.  Empty exactly when no batch was
+        saved.
+    num_graphs:
+        Graph count, validated against the restored batch.  ``None`` when no
+        batch was saved.
+    batch_fields:
+        Per-graph fields persisted alongside the batch through the custom
+        array API, because ``AtomicDataZarrWriter`` only writes the fields it
+        recognises.  Recorded so the reader restores exactly what was saved.
+    batch_field_dtypes:
+        ``str(dtype)`` per entry in :attr:`batch_fields`.
+    compatibility:
+        Caller-defined fingerprint of the configuration that wrote the
+        checkpoint — class names, hyperparameters, whatever restoring into a
+        different value would silently corrupt.  This module stores and
+        returns it; deciding what a mismatch *means* belongs to the caller,
+        which is why there is a ``validate`` hook on :func:`load_checkpoint`
+        rather than a comparison here.
+    metadata:
+        Caller-defined bookkeeping — step counts, epoch indices, timestamps.
+        Never interpreted here.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     format_version: int = CHECKPOINT_FORMAT_VERSION
-    sampling_step: int
-    sampling_epoch: int
-    steps_per_epoch: int
-    num_graphs: int
     components: list[str] = Field(default_factory=list)
     checksums: dict[str, str] = Field(default_factory=dict)
     batch_checksum: str = ""
-    model_class: str = ""
-    dynamics_class: str = ""
-    bias_classes: dict[str, str] = Field(default_factory=dict)
-    exchange_config: dict[str, Any] | None = None
+    num_graphs: int | None = None
+    batch_fields: list[str] = Field(default_factory=list)
+    batch_field_dtypes: dict[str, str] = Field(default_factory=dict)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _every_component_is_covered(self) -> CheckpointManifest:
@@ -161,7 +201,7 @@ class CheckpointManifest(BaseModel):
         "unverified" — it is invalid.  Treating a missing entry as permission
         to skip verification would make the cover opt-out: deleting one key
         from the manifest attributes is enough to leave that component free to
-        modify.  The same goes for the walker batch.
+        modify.  The same goes for the batch.
 
         Returns
         -------
@@ -171,8 +211,9 @@ class CheckpointManifest(BaseModel):
         Raises
         ------
         ValueError
-            If a component has no checksum, a checksum names no component, or
-            the batch checksum is absent.
+            If a component has no checksum, a checksum names no component, a
+            saved batch has no checksum, or a checksum claims a batch that was
+            never saved.
         """
         declared = set(self.components)
         covered = set(self.checksums)
@@ -192,17 +233,48 @@ class CheckpointManifest(BaseModel):
                 "does not declare as components. The manifest is inconsistent "
                 "with itself."
             )
-        if not self.batch_checksum:
+        if self.num_graphs is not None and not self.batch_checksum:
             raise ValueError(
-                "Checkpoint manifest has no batch_checksum. The walker batch "
-                "— positions, velocities, and walker identity — would then be "
-                "restored unverified."
+                "Checkpoint manifest records a batch but has no "
+                "batch_checksum. The positions, velocities and per-graph "
+                "identity would then be restored unverified."
+            )
+        if self.num_graphs is None and self.batch_checksum:
+            raise ValueError(
+                "Checkpoint manifest has a batch_checksum but records no "
+                "batch. The manifest is inconsistent with itself."
             )
         return self
 
 
+@dataclass(frozen=True)
+class CheckpointContents:
+    """What a verified checkpoint held.
+
+    Attributes
+    ----------
+    manifest:
+        The committed manifest.
+    states:
+        Component name to decoded state.  Present whether or not
+        :func:`load_checkpoint` applied it, so a caller that must control
+        ordering — an integrator whose per-system state has to be allocated
+        against the restored batch before it can be written into — can apply
+        that component itself.
+    batch:
+        The restored batch, or ``None`` when none was saved.
+    """
+
+    manifest: CheckpointManifest
+    states: dict[str, dict[str, Any]] = field(default_factory=dict)
+    batch: Batch | None = None
+
+
 def _qualified_name(obj: Any) -> str:
     """Return ``module.ClassName`` for *obj*'s type.
+
+    Useful for building a :attr:`CheckpointManifest.compatibility` entry: a
+    restore into a different class is the failure this names.
 
     Parameters
     ----------
@@ -379,12 +451,12 @@ def _component_checksum(state: Mapping[str, Any]) -> str:
 
 
 def _batch_checksum(root: zarr.Group) -> str:
-    """Return a SHA-256 over every array holding the walker batch.
+    """Return a SHA-256 over every array holding the batch.
 
     Covers ``meta/``, ``core/``, and ``custom/`` — positions, velocities,
-    forces, the CSR pointer arrays, and the runner's identity fields.  These
-    are written by ``AtomicDataZarrWriter``, not by :func:`_encode_state`, so
-    they are outside the per-component checksum path and need this.
+    forces, the CSR pointer arrays, and any extra per-graph fields.  These are
+    written by ``AtomicDataZarrWriter``, not by :func:`_encode_state`, so they
+    are outside the per-component checksum path and need this.
 
     Reads the arrays back from the store rather than hashing the in-memory
     batch, so the write-side and read-side digests are computed over exactly
@@ -415,124 +487,185 @@ def _batch_checksum(root: zarr.Group) -> str:
     return digest.hexdigest()
 
 
-def write_checkpoint(
+def _check_names(components: Mapping[str, Any]) -> None:
+    """Reject component names that cannot be stored.
+
+    Parameters
+    ----------
+    components:
+        The caller's component mapping.
+
+    Raises
+    ------
+    ValueError
+        If a name is empty, has an empty path segment, or collides with the
+        reserved manifest group.
+    """
+    for name in components:
+        parts = name.split("/")
+        if not name or any(not part for part in parts):
+            raise ValueError(
+                f"Checkpoint: component name {name!r} is empty or has an empty "
+                "path segment. Names become Zarr groups, and '/' nests them."
+            )
+        if parts[0] == _MANIFEST_NAME:
+            raise ValueError(
+                f"Checkpoint: component name {name!r} collides with the "
+                f"reserved {_MANIFEST!r} group, which is the commit marker."
+            )
+
+
+def save_checkpoint(
     path: str | Path,
-    batch: Batch,
-    components: Mapping[str, Mapping[str, Any]],
+    components: Mapping[str, Stateful],
     *,
-    sampling_step: int,
-    sampling_epoch: int,
-    steps_per_epoch: int,
-    model_class: str = "",
-    dynamics_class: str = "",
-    bias_classes: Mapping[str, str] | None = None,
-    exchange_config: Mapping[str, Any] | None = None,
+    batch: Batch | None = None,
+    batch_fields: Sequence[str] = (),
+    compatibility: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> CheckpointManifest:
     """Write a transactional checkpoint.
 
-    Order matters and is the whole guarantee: walker batch, then each
-    component, then the manifest.  An interruption anywhere before the last
-    step leaves a store with no manifest, which :func:`read_checkpoint`
-    refuses.
+    Order matters and is the whole guarantee: batch, then each component,
+    then the manifest.  An interruption anywhere before the last step leaves
+    a store with no manifest, which :func:`load_checkpoint` refuses.
 
     Parameters
     ----------
     path:
         Destination store.
-    batch:
-        The live walker batch.
     components:
-        Mapping of component name (``"dynamics"``, ``"biases/umbrella"``,
-        ``"runner"``) to its state mapping.
-    sampling_step:
-        Step count at the checkpoint.
-    sampling_epoch:
-        Epoch at the checkpoint.
-    steps_per_epoch:
-        Epoch length.
-    model_class:
-        Fully-qualified model class, recorded for restore-time validation.
-    dynamics_class:
-        Fully-qualified dynamics class, likewise.
-    bias_classes:
-        Bias name to fully-qualified class, likewise.
-    exchange_config:
-        Replica-exchange configuration fingerprint, or ``None``.
+        Mapping of component name to :class:`Stateful`.  Names may nest with
+        ``/`` (``"biases/umbrella"``); ``"manifest"`` is reserved.
+    batch:
+        Batch to save alongside the components, or ``None`` for a
+        state-only checkpoint.
+    batch_fields:
+        Per-graph fields on *batch* to persist explicitly.
+        ``AtomicDataZarrWriter.write`` only stores the fields it recognises,
+        so anything else — walker identity, a state assignment — is dropped
+        without complaint unless it is named here.
+    compatibility:
+        Fingerprint of the configuration doing the writing, stored verbatim
+        and handed back on load.  Nothing here interprets it.
+    metadata:
+        Caller bookkeeping — step counts, epoch indices — stored verbatim.
 
     Returns
     -------
     CheckpointManifest
         The manifest that was committed.
-    """
-    writer = AtomicDataZarrWriter(str(path))
-    writer.write(batch)
 
-    # AtomicDataZarrWriter.write persists only the fields it recognises, so
-    # the runner's identity fields have to be added through the custom-array
-    # API or they are dropped without complaint.
-    for field in _IDENTITY_FIELDS:
-        value = getattr(batch, field, None)
-        if value is not None:
-            writer.add_custom(field, value.reshape(-1), level="system")
+    Raises
+    ------
+    ValueError
+        If a component name is empty or reserved, or *batch_fields* names a
+        field the batch does not carry.
+    TypeError
+        If any component's state holds a value that cannot be stored without
+        pickling.
+    """
+    _check_names(components)
+
+    batch_field_dtypes: dict[str, str] = {}
+    if batch is not None:
+        writer = AtomicDataZarrWriter(str(path))
+        writer.write(batch)
+        for name in batch_fields:
+            value = getattr(batch, name, None)
+            if value is None:
+                raise ValueError(
+                    f"Checkpoint: batch_fields names {name!r}, which the batch "
+                    "does not carry. Drop it, or stamp the field before "
+                    "saving — a field that is silently skipped comes back "
+                    "missing on restore."
+                )
+            writer.add_custom(name, value.reshape(-1), level="system")
+            batch_field_dtypes[name] = str(value.dtype)
+    elif batch_fields:
+        raise ValueError(
+            "Checkpoint: batch_fields was given without a batch to take them from."
+        )
 
     root = zarr.open_group(str(path), mode="a")
     # Computed now, while the store holds only the batch: the digest must not
-    # depend on the sampling/* groups written next.
-    batch_checksum = _batch_checksum(root)
-    sampling = root.require_group(_SAMPLING)
+    # depend on the component groups written next.
+    batch_checksum = _batch_checksum(root) if batch is not None else ""
+    container = root.require_group(_ROOT)
 
     checksums: dict[str, str] = {}
-    for name, state in components.items():
-        group = sampling
+    for name, component in components.items():
+        state = dict(component.state_dict())
+        group = container
         for part in name.split("/"):
             group = group.require_group(part)
         _encode_state(group, state)
         checksums[name] = _component_checksum(state)
 
     manifest = CheckpointManifest(
-        sampling_step=sampling_step,
-        sampling_epoch=sampling_epoch,
-        steps_per_epoch=steps_per_epoch,
-        num_graphs=batch.num_graphs,
         components=sorted(components),
         checksums=checksums,
         batch_checksum=batch_checksum,
-        model_class=model_class,
-        dynamics_class=dynamics_class,
-        bias_classes=dict(bias_classes or {}),
-        exchange_config=dict(exchange_config) if exchange_config else None,
+        num_graphs=batch.num_graphs if batch is not None else None,
+        batch_fields=list(batch_fields),
+        batch_field_dtypes=batch_field_dtypes,
+        compatibility=dict(compatibility or {}),
+        metadata=dict(metadata or {}),
     )
 
     # Written last: this is the commit.
-    manifest_group = root.require_group(_MANIFEST)
+    manifest_group = container.require_group(_MANIFEST_NAME)
     manifest_group.attrs["manifest"] = manifest.model_dump()
     return manifest
 
 
-def read_checkpoint(
-    path: str | Path, device: torch.device | str = "cpu"
-) -> tuple[Batch, dict[str, dict[str, Any]], CheckpointManifest]:
+def load_checkpoint(
+    path: str | Path,
+    components: Mapping[str, Stateful] | None = None,
+    *,
+    device: torch.device | str = "cpu",
+    validate: Callable[[CheckpointManifest], None] | None = None,
+) -> CheckpointContents:
     """Read a checkpoint, refusing anything not fully committed.
+
+    Every component is decoded and checksum-verified before *any* of them is
+    applied, so a store that fails verification leaves the caller's objects
+    untouched.
 
     Parameters
     ----------
     path:
         Source store.
+    components:
+        Mapping of component name to :class:`Stateful` to restore into.
+        Every name must be present in the checkpoint.  Omit a component —
+        or pass ``None`` for all of them — to have its state decoded and
+        returned without being applied, which is what a caller with an
+        ordering constraint needs.
     device:
         Device to place restored tensors on.
+    validate:
+        Called with the manifest after integrity checks pass and before any
+        state is applied — and before the check that *components* names only
+        things the checkpoint holds, since a configuration mismatch is usually
+        what made a component absent.  This is where a caller compares
+        :attr:`CheckpointManifest.compatibility` against its own
+        configuration and raises, because what a mismatch *means* is
+        domain knowledge this module does not have.
 
     Returns
     -------
-    tuple[Batch, dict[str, dict[str, Any]], CheckpointManifest]
-        The walker batch, the component states, and the manifest.
+    CheckpointContents
+        The manifest, every component's decoded state, and the batch when one
+        was saved.
 
     Raises
     ------
     ValueError
         If the store has no committed manifest; if the manifest is internally
-        inconsistent (a declared component with no checksum, a checksum for no
-        component, or no batch checksum); if a declared component is missing;
-        or if any checksum, component or batch, does not match.
+        inconsistent; if a declared component is missing; if any checksum,
+        component or batch, does not match; or if *components* names something
+        the checkpoint does not hold.
     """
     root = zarr.open_group(str(path), mode="r")
     if _MANIFEST not in root:
@@ -558,10 +691,10 @@ def read_checkpoint(
             f"{CHECKPOINT_FORMAT_VERSION}."
         )
 
-    sampling = root[_SAMPLING]
+    container = root[_ROOT]
     states: dict[str, dict[str, Any]] = {}
     for name in manifest.components:
-        group: Any = sampling
+        group: Any = container
         for part in name.split("/"):
             if part not in group:
                 raise ValueError(
@@ -582,30 +715,53 @@ def read_checkpoint(
             )
         states[name] = state
 
-    actual = _batch_checksum(root)
-    if actual != manifest.batch_checksum:
+    batch = None
+    if manifest.num_graphs is not None:
+        actual = _batch_checksum(root)
+        if actual != manifest.batch_checksum:
+            raise ValueError(
+                f"Checkpoint at {path}: the batch failed its checksum "
+                f"(expected {manifest.batch_checksum[:12]}…, got "
+                f"{actual[:12]}…). One of meta/, core/, or custom/ was "
+                "modified or truncated after the manifest was written — "
+                "positions, velocities, or per-graph identity can no longer "
+                "be trusted."
+            )
+        batch = _read_batch(path, manifest, device)
+
+    # After integrity, before the structural check below: a configuration
+    # mismatch usually *causes* the missing component ("this checkpoint was
+    # written without replica exchange"), and the domain can say so in terms
+    # the caller acts on. A bare "does not hold component(s) ['exchange']"
+    # would pre-empt that with the symptom.
+    if validate is not None:
+        validate(manifest)
+
+    missing = sorted(set(components or {}) - set(manifest.components))
+    if missing:
         raise ValueError(
-            f"Checkpoint at {path}: the walker batch failed its checksum "
-            f"(expected {manifest.batch_checksum[:12]}…, got {actual[:12]}…). "
-            "One of meta/, core/, or custom/ was modified or truncated after "
-            "the manifest was written — positions, velocities, or walker "
-            "identity can no longer be trusted."
+            f"Checkpoint at {path} does not hold component(s) {missing}, which "
+            f"the caller asked to restore. It holds {manifest.components}."
         )
 
-    return _read_batch(path, manifest, device), states, manifest
+    for name, component in (components or {}).items():
+        component.load_state_dict(states[name])
+
+    return CheckpointContents(manifest=manifest, states=states, batch=batch)
 
 
 def _read_batch(
     path: str | Path, manifest: CheckpointManifest, device: torch.device | str
 ) -> Batch:
-    """Reconstruct the walker batch, identity fields included.
+    """Reconstruct the batch, extra per-graph fields included.
 
     Parameters
     ----------
     path:
         Source store.
     manifest:
-        The committed manifest, read for the expected walker count.
+        The committed manifest, read for the expected graph count and the
+        extra fields to restore.
     device:
         Device for the restored batch.
 
@@ -617,13 +773,13 @@ def _read_batch(
     Raises
     ------
     ValueError
-        If the store holds a different number of walkers than the manifest
+        If the store holds a different number of graphs than the manifest
         recorded.
     """
     reader = AtomicDataZarrReader(str(path))
     if len(reader) != manifest.num_graphs:
         raise ValueError(
-            f"Checkpoint at {path} holds {len(reader)} walker(s) but its "
+            f"Checkpoint at {path} holds {len(reader)} graph(s) but its "
             f"manifest records {manifest.num_graphs}; the store is corrupt."
         )
 
@@ -632,10 +788,11 @@ def _read_batch(
 
     root = zarr.open_group(str(path), mode="r")
     custom = root["custom"] if "custom" in root else None
-    for field in _IDENTITY_FIELDS:
-        if custom is not None and field in custom:
-            values = np.asarray(custom[field][...])
-            batch[field] = torch.from_numpy(np.ascontiguousarray(values)).to(
-                device=device, dtype=torch.long
+    for name in manifest.batch_fields:
+        if custom is not None and name in custom:
+            values = np.asarray(custom[name][...])
+            batch[name] = torch.from_numpy(np.ascontiguousarray(values)).to(
+                device=device,
+                dtype=_torch_dtype(manifest.batch_field_dtypes[name]),
             )
     return batch

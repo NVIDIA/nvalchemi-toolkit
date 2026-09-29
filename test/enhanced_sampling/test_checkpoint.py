@@ -29,6 +29,7 @@ import torch
 import zarr
 from torch import Tensor
 
+from nvalchemi._checkpoint import CHECKPOINT_FORMAT_VERSION, load_checkpoint
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin, NVTNoseHoover
 from nvalchemi.dynamics.base import DynamicsStage
@@ -38,13 +39,6 @@ from nvalchemi.enhanced_sampling import (
     EnhancedSampling,
     HarmonicUmbrellaBias,
     pair_distance,
-)
-from nvalchemi.enhanced_sampling._checkpoint import (
-    CHECKPOINT_FORMAT_VERSION,
-    _component_checksum,
-    _decode_state,
-    _encode_state,
-    read_checkpoint,
 )
 from nvalchemi.hooks import BiasContext
 from nvalchemi.models.base import BaseModelMixin
@@ -194,93 +188,6 @@ class _SharedHistoryBias(AdaptivePotentialMixin, ConservativeBias):
         self.commit_calls += 1
         self.published += self.pending
         self.pending.zero_()
-
-
-# ===========================================================================
-# 1. State encoding
-# ===========================================================================
-
-
-class TestStateEncoding:
-    """Nested state survives the Zarr round-trip without pickle."""
-
-    def test_tensors_scalars_and_nesting(self, tmp_path) -> None:
-        state = {
-            "counter": 7,
-            "label": "umbrella",
-            "ratio": 0.25,
-            "flag": True,
-            "nothing": None,
-            "listy": [1, 2, 3],
-            "weights": torch.arange(6, dtype=torch.float64).reshape(2, 3),
-            "ids": torch.tensor([4, 5], dtype=torch.int64),
-            "nested": {"inner": torch.ones(2), "depth": 2},
-        }
-        group = zarr.open_group(str(tmp_path / "s.zarr"), mode="w")
-        _encode_state(group, state)
-        restored = _decode_state(group, "cpu")
-
-        assert restored["counter"] == 7
-        assert restored["label"] == "umbrella"
-        assert restored["flag"] is True
-        assert restored["nothing"] is None
-        assert restored["listy"] == [1, 2, 3]
-        assert torch.equal(restored["weights"], state["weights"])
-        assert restored["weights"].dtype == torch.float64
-        assert restored["ids"].dtype == torch.int64
-        assert torch.equal(restored["nested"]["inner"], state["nested"]["inner"])
-        assert restored["nested"]["depth"] == 2
-
-    def test_empty_tensor_round_trips(self, tmp_path) -> None:
-        group = zarr.open_group(str(tmp_path / "s.zarr"), mode="w")
-        _encode_state(group, {"empty": torch.zeros(0, 3)})
-        restored = _decode_state(group, "cpu")
-        assert restored["empty"].shape == (0, 3)
-
-    def test_zero_dimensional_tensor_round_trips(self, tmp_path) -> None:
-        """Zarr stores a 0-d array as shape (1,); the rank must be restored.
-
-        Scalar buffers are how a compile-safe bias holds its counters — a
-        Python int would be a data-dependent value in the traced graph.  If
-        the rank comes back wrong the component no longer matches the digest
-        taken when it was written, and restore fails its own checksum.
-        """
-        state = {"count": torch.tensor(5, dtype=torch.int64)}
-        group = zarr.open_group(str(tmp_path / "s.zarr"), mode="w")
-        _encode_state(group, state)
-        restored = _decode_state(group, "cpu")
-
-        assert restored["count"].shape == ()
-        assert torch.equal(restored["count"], state["count"])
-        assert _component_checksum(restored) == _component_checksum(state)
-
-    def test_checksum_distinguishes_rank(self) -> None:
-        """A scalar and a one-element vector are not the same state."""
-        assert _component_checksum({"x": torch.tensor(5)}) != _component_checksum(
-            {"x": torch.tensor([5])}
-        )
-
-    def test_unsupported_type_raises_rather_than_pickling(self, tmp_path) -> None:
-        """Refusing is the point: a pickle payload would make a checkpoint
-        executable and unreadable outside Python."""
-        group = zarr.open_group(str(tmp_path / "s.zarr"), mode="w")
-        with pytest.raises(TypeError, match="no pickle payloads"):
-            _encode_state(group, {"bad": object()})
-
-    def test_checksum_is_order_independent(self) -> None:
-        a = {"x": torch.ones(3), "y": 2}
-        b = {"y": 2, "x": torch.ones(3)}
-        assert _component_checksum(a) == _component_checksum(b)
-
-    def test_checksum_detects_value_change(self) -> None:
-        base = _component_checksum({"x": torch.ones(3)})
-        assert base != _component_checksum({"x": torch.zeros(3)})
-        assert base != _component_checksum({"x": torch.ones(3) * 2})
-
-    def test_checksum_detects_dtype_change(self) -> None:
-        assert _component_checksum({"x": torch.ones(3)}) != _component_checksum(
-            {"x": torch.ones(3, dtype=torch.float64)}
-        )
 
 
 # ===========================================================================
@@ -466,14 +373,15 @@ class TestCheckpointTransactionality:
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        restored_batch, states, manifest = read_checkpoint(path, device)
+        contents = load_checkpoint(path, device=device)
+        manifest, states = contents.manifest, contents.states
         assert manifest.format_version == CHECKPOINT_FORMAT_VERSION
-        assert manifest.sampling_step == 4
-        assert manifest.sampling_epoch == 1
+        assert manifest.metadata["sampling_step"] == 4
+        assert manifest.metadata["sampling_epoch"] == 1
         assert manifest.num_graphs == 2
         assert "dynamics" in states
         assert "biases/u" in states
-        assert restored_batch.num_graphs == 2
+        assert contents.batch.num_graphs == 2
 
     def test_store_without_manifest_is_refused(self, tmp_path, device: str) -> None:
         """An interrupted write leaves no manifest; restoring it must fail."""
@@ -482,7 +390,7 @@ class TestCheckpointTransactionality:
         path = tmp_path / "torn.zarr"
         AtomicDataZarrWriter(str(path)).write(_make_batch(device=device))
         with pytest.raises(ValueError, match="no committed manifest"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     def test_manifest_is_written_last(self, tmp_path, device: str) -> None:
         """Every declared component must already exist when the manifest lands."""
@@ -493,9 +401,9 @@ class TestCheckpointTransactionality:
         runner.checkpoint(path)
 
         root = zarr.open_group(str(path), mode="r")
-        manifest = dict(root["sampling/manifest"].attrs["manifest"])
+        manifest = dict(root["checkpoint/manifest"].attrs["manifest"])
         for name in manifest["components"]:
-            node = root["sampling"]
+            node = root["checkpoint"]
             for part in name.split("/"):
                 assert part in node, f"{name} declared but missing"
                 node = node[part]
@@ -509,11 +417,11 @@ class TestCheckpointTransactionality:
         runner.checkpoint(path)
 
         root = zarr.open_group(str(path), mode="a")
-        temperature = root["sampling/dynamics/state/temperature"]
+        temperature = root["checkpoint/dynamics/state/temperature"]
         temperature[...] = temperature[...] * 3.0
 
         with pytest.raises(ValueError, match="failed its checksum"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     def test_missing_declared_component_is_caught(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
@@ -523,9 +431,9 @@ class TestCheckpointTransactionality:
         runner.checkpoint(path)
 
         root = zarr.open_group(str(path), mode="a")
-        del root["sampling/biases"]
+        del root["checkpoint/biases"]
         with pytest.raises(ValueError, match="manifest but the group is missing"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     @pytest.mark.parametrize(
         "array_path",
@@ -557,8 +465,8 @@ class TestCheckpointTransactionality:
         root = zarr.open_group(str(path), mode="a")
         root[array_path][...] = root[array_path][...] + 1
 
-        with pytest.raises(ValueError, match="walker batch failed its checksum"):
-            read_checkpoint(path, device)
+        with pytest.raises(ValueError, match="batch failed its checksum"):
+            load_checkpoint(path, device=device)
 
     def test_corrupted_pointer_array_is_rejected(self, tmp_path, device: str) -> None:
         """meta/ carries the CSR pointers that define graph boundaries."""
@@ -571,8 +479,8 @@ class TestCheckpointTransactionality:
         root = zarr.open_group(str(path), mode="a")
         root["meta/atoms_ptr"][...] = root["meta/atoms_ptr"][...] + 1
 
-        with pytest.raises(ValueError, match="walker batch failed its checksum"):
-            read_checkpoint(path, device)
+        with pytest.raises(ValueError, match="batch failed its checksum"):
+            load_checkpoint(path, device=device)
 
     def test_manifest_records_a_batch_checksum(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
@@ -581,15 +489,15 @@ class TestCheckpointTransactionality:
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        _, _, manifest = read_checkpoint(path, device)
+        manifest = load_checkpoint(path, device=device).manifest
         assert manifest.batch_checksum, "batch is not covered by any checksum"
         assert len(manifest.batch_checksum) == 64
 
-    def test_batch_checksum_is_independent_of_sampling_groups(
+    def test_batch_checksum_is_independent_of_component_groups(
         self, tmp_path, device: str
     ) -> None:
-        """It must be computed before sampling/ lands, or it would drift."""
-        from nvalchemi.enhanced_sampling._checkpoint import _batch_checksum
+        """It must be computed before checkpoint/ lands, or it would drift."""
+        from nvalchemi._checkpoint import _batch_checksum
 
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
@@ -598,7 +506,7 @@ class TestCheckpointTransactionality:
         runner.checkpoint(path)
 
         root = zarr.open_group(str(path), mode="r")
-        _, _, manifest = read_checkpoint(path, device)
+        manifest = load_checkpoint(path, device=device).manifest
         assert _batch_checksum(root) == manifest.batch_checksum
 
     def test_intact_checkpoint_still_restores(self, tmp_path, device: str) -> None:
@@ -608,16 +516,16 @@ class TestCheckpointTransactionality:
         runner.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
-        restored, _, _ = read_checkpoint(path, device)
+        restored = load_checkpoint(path, device=device).batch
         assert restored.num_graphs == 2
 
     @staticmethod
     def _tamper_manifest(path, mutate) -> None:
         """Apply *mutate* to the manifest dict and write it back."""
         root = zarr.open_group(str(path), mode="a")
-        manifest = dict(root["sampling/manifest"].attrs["manifest"])
+        manifest = dict(root["checkpoint/manifest"].attrs["manifest"])
         mutate(manifest)
-        root["sampling/manifest"].attrs["manifest"] = manifest
+        root["checkpoint/manifest"].attrs["manifest"] = manifest
 
     def _committed(self, tmp_path, device: str):
         batch = _make_batch(device=device)
@@ -636,10 +544,10 @@ class TestCheckpointTransactionality:
         path = self._committed(tmp_path, device)
         self._tamper_manifest(path, lambda m: m["checksums"].pop("dynamics"))
         root = zarr.open_group(str(path), mode="a")
-        root["sampling/dynamics/state/temperature"][...] = 999.0
+        root["checkpoint/dynamics/state/temperature"][...] = 999.0
 
         with pytest.raises(ValueError, match="with no checksum"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     def test_stripped_batch_checksum_is_invalid(self, tmp_path, device: str) -> None:
         path = self._committed(tmp_path, device)
@@ -648,7 +556,7 @@ class TestCheckpointTransactionality:
         root["core/positions"][...] = root["core/positions"][...] * 99.0
 
         with pytest.raises(ValueError, match="no batch_checksum"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     def test_orphaned_checksum_is_invalid(self, tmp_path, device: str) -> None:
         """A checksum for an undeclared component means the manifest is torn."""
@@ -657,14 +565,14 @@ class TestCheckpointTransactionality:
             path, lambda m: m["checksums"].__setitem__("ghost", "0" * 64)
         )
         with pytest.raises(ValueError, match="does not declare as components"):
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
 
     def test_manifest_error_names_the_store(self, tmp_path, device: str) -> None:
         """One ValueError naming the path, not a nested pydantic report."""
         path = self._committed(tmp_path, device)
-        self._tamper_manifest(path, lambda m: m["checksums"].pop("runner"))
+        self._tamper_manifest(path, lambda m: m["checksums"].pop("hooks/bias"))
         with pytest.raises(ValueError) as excinfo:
-            read_checkpoint(path, device)
+            load_checkpoint(path, device=device)
         assert str(path) in str(excinfo.value)
 
     def test_written_manifest_covers_every_component(
@@ -672,7 +580,7 @@ class TestCheckpointTransactionality:
     ) -> None:
         """The writer must never produce a manifest the reader would reject."""
         path = self._committed(tmp_path, device)
-        _, _, manifest = read_checkpoint(path, device)
+        manifest = load_checkpoint(path, device=device).manifest
         assert set(manifest.checksums) == set(manifest.components)
         assert manifest.batch_checksum
 
@@ -831,7 +739,7 @@ class TestRunnerCheckpointRestore:
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        _, states, _ = read_checkpoint(path, device)
+        states = load_checkpoint(path, device=device).states
         recorded = states["biases/shared"]
         assert float(recorded["published"]) == 4, "checkpoint captured pre-commit state"
         assert float(recorded["pending"]) == 0

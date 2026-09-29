@@ -878,7 +878,7 @@ class TestExchangeCheckpoint:
         assert other.pair_attempts == exchange.pair_attempts
 
     def test_exchange_component_written(self, tmp_path, device: str) -> None:
-        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+        from nvalchemi._checkpoint import load_checkpoint
 
         batch = _make_batch(device=device)
         runner, model, _ = self._runner(device)
@@ -886,7 +886,8 @@ class TestExchangeCheckpoint:
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        _, states, manifest = read_checkpoint(path, device)
+        contents = load_checkpoint(path, device=device)
+        manifest, states = contents.manifest, contents.states
         assert "exchange" in manifest.components
         assert "exchange" in states
         assert "exchange_id" in states["exchange"]
@@ -996,7 +997,7 @@ class TestExchangeCheckpoint:
             other.restore(path, model)
 
     def test_manifest_records_the_ladder(self, tmp_path, device: str) -> None:
-        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+        from nvalchemi._checkpoint import load_checkpoint
 
         batch = _make_batch(device=device)
         runner, model, exchange = self._runner(device)
@@ -1004,25 +1005,25 @@ class TestExchangeCheckpoint:
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        _, _, manifest = read_checkpoint(path, device)
-        assert manifest.exchange_config is not None
-        assert manifest.exchange_config["temperatures"] == pytest.approx(
-            exchange.temperatures.tolist()
-        )
-        assert manifest.exchange_config["acceptance"] == "temperature"
+        manifest = load_checkpoint(path, device=device).manifest
+        assert manifest.compatibility["exchange_config"] is not None
+        assert manifest.compatibility["exchange_config"][
+            "temperatures"
+        ] == pytest.approx(exchange.temperatures.tolist())
+        assert manifest.compatibility["exchange_config"]["acceptance"] == "temperature"
 
     def test_manifest_records_none_without_exchange(
         self, tmp_path, device: str
     ) -> None:
-        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+        from nvalchemi._checkpoint import load_checkpoint
 
         batch = _make_batch(device=device)
         plain, model = _sampling(device, {}, steps_per_epoch=4)
         plain.run(batch, model, n_steps=4)
         path = tmp_path / "ck.zarr"
         plain.checkpoint(path)
-        _, _, manifest = read_checkpoint(path, device)
-        assert manifest.exchange_config is None
+        manifest = load_checkpoint(path, device=device).manifest
+        assert manifest.compatibility["exchange_config"] is None
 
     def test_load_state_dict_rejects_a_different_ladder(self) -> None:
         """Defence in depth: the component validates itself, too."""
@@ -1062,7 +1063,7 @@ class TestExchangeCheckpoint:
         the checkpoint records pre-exchange labels, contrary to the "after
         exchange, after bias commit" checkpoint point.
         """
-        from nvalchemi.enhanced_sampling._checkpoint import read_checkpoint
+        from nvalchemi._checkpoint import load_checkpoint
 
         exchange = ReplicaExchange(
             _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
@@ -1082,7 +1083,7 @@ class TestExchangeCheckpoint:
             "the due segment was not drained"
         )
 
-        saved, _, _ = read_checkpoint(path, device)
+        saved = load_checkpoint(path, device=device).batch
         on_disk = saved.thermodynamic_state_id.reshape(-1).tolist()
 
         # Advancing one step would have drained the same segment; the labels

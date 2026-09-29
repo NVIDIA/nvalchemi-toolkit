@@ -147,6 +147,27 @@ class WalkerIdentityHook:
         """
         self.stamp(ctx.batch, getattr(ctx, "step_count", 0))
 
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return the identifier allocation that must survive a restart.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            The next identifier to issue.  A resumed run that restarted the
+            counter would reissue ids already attached to saved history.
+        """
+        return {"next_walker_id": int(self.next_walker_id)}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore the identifier allocation.
+
+        Parameters
+        ----------
+        state:
+            A mapping produced by :meth:`state_dict`.
+        """
+        self.next_walker_id = int(state.get("next_walker_id", 0))
+
     def stamp(self, batch: Batch, step: int) -> None:
         """Write identity and counter fields for *step* onto *batch*.
 
@@ -1003,6 +1024,28 @@ class EpochCommitHook:
         """
         self.commit_epoch(getattr(ctx, "step_count", 0) // self.frequency - 1)
 
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return the boundary cursor that must survive a restart.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            The last epoch committed.  Restarting at ``-1`` would re-commit
+            epochs whose shared history was already published, which a bias
+            that merges pending deposits would double-count.
+        """
+        return {"committed_epoch": int(self.committed_epoch)}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore the boundary cursor.
+
+        Parameters
+        ----------
+        state:
+            A mapping produced by :meth:`state_dict`.
+        """
+        self.committed_epoch = int(state.get("committed_epoch", -1))
+
     def commit_epoch(self, epoch: int) -> None:
         """Commit *epoch*, at most once.
 
@@ -1073,6 +1116,28 @@ class ReplicaExchangeHook:
         """
         step = getattr(ctx, "step_count", 0)
         self.attempt_segment(ctx.batch, step // self.frequency - 1)
+
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return the segment cursor that must survive a restart.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            The last segment attempted.  A resumed run that lost it would
+            re-decide a segment the checkpoint had already decided, against a
+            ladder whose acceptance RNG has moved on.
+        """
+        return {"attempted_segment": int(self.attempted_segment)}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore the segment cursor.
+
+        Parameters
+        ----------
+        state:
+            A mapping produced by :meth:`state_dict`.
+        """
+        self.attempted_segment = int(state.get("attempted_segment", -1))
 
     def attempt_segment(self, batch: Batch, segment: int) -> None:
         """Attempt *segment*'s pairs, at most once.

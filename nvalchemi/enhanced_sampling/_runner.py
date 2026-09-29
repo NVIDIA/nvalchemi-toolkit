@@ -30,14 +30,15 @@ from typing import TYPE_CHECKING, Any
 import torch
 from pydantic import Field, PrivateAttr, model_validator
 
+from nvalchemi._checkpoint import (
+    CheckpointManifest,
+    Stateful,
+    _qualified_name,
+    load_checkpoint,
+    save_checkpoint,
+)
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.strategy import DynamicsStrategy
-from nvalchemi.enhanced_sampling._checkpoint import (
-    CheckpointManifest,
-    _qualified_name,
-    read_checkpoint,
-    write_checkpoint,
-)
 from nvalchemi.enhanced_sampling._exchange import ReplicaExchange
 from nvalchemi.enhanced_sampling.hooks import (
     BiasHook,
@@ -55,6 +56,13 @@ if TYPE_CHECKING:
     from nvalchemi.hooks import Hook
 
 __all__ = ["EnhancedSampling"]
+
+# Graph-level fields WalkerIdentityHook stamps that AtomicDataZarrWriter does
+# not recognise.  Without naming them to save_checkpoint they are dropped
+# without complaint, and a "restored" run comes back with fresh ids and default
+# state assignments.  The counters are not here: they are a function of the
+# step count, which the manifest carries.
+_IDENTITY_FIELDS = ("walker_id", "thermodynamic_state_id")
 
 
 def _register_identity_bookkeeping() -> None:
@@ -568,8 +576,43 @@ class EnhancedSampling(DynamicsStrategy):
             self.prime_forces(batch, model)
         return super().run(batch, model, n_steps=n_steps)
 
-    def _components(self, engine: BaseDynamics) -> dict[str, dict[str, Any]]:
-        """Collect every component's state for a checkpoint.
+    def _components(self, engine: BaseDynamics | None = None) -> dict[str, Stateful]:
+        """Name every object whose state a checkpoint must carry.
+
+        Each is a :class:`~nvalchemi._checkpoint.Stateful`, so the checkpoint
+        layer reads it directly rather than being handed a pre-collected
+        schema: the hooks own their own cursors, the biases own their history,
+        and the ladder owns its acceptance RNG position.
+
+        Parameters
+        ----------
+        engine:
+            The live engine, included as ``"dynamics"`` when given.  Omitted
+            on restore, where the integrator's state has to be applied after
+            its per-system arrays are allocated against the restored batch.
+
+        Returns
+        -------
+        dict[str, Stateful]
+            Component name to the object that owns that state.
+        """
+        components: dict[str, Stateful] = {}
+        if engine is not None:
+            components["dynamics"] = engine
+        components["hooks/identity"] = self._identity_hook
+        components["hooks/bias"] = self._bias_hook
+        components["hooks/epoch"] = self._epoch_hook
+        if self._exchange_hook is not None:
+            components["hooks/exchange"] = self._exchange_hook
+        for name, bias in self.biases.items():
+            if isinstance(bias, Stateful):
+                components[f"biases/{name}"] = bias
+        if self.replica_exchange is not None:
+            components["exchange"] = self.replica_exchange
+        return components
+
+    def _compatibility(self, engine: BaseDynamics) -> dict[str, Any]:
+        """Describe the configuration a restore has to match.
 
         Parameters
         ----------
@@ -578,30 +621,22 @@ class EnhancedSampling(DynamicsStrategy):
 
         Returns
         -------
-        dict[str, dict[str, Any]]
-            Component name to state mapping.
+        dict[str, Any]
+            Fingerprint stored in the manifest and checked by
+            :meth:`_validate_compatibility`.
         """
-        components: dict[str, dict[str, Any]] = {
-            "dynamics": dict(engine.state_dict()),
-            "runner": {
-                "steps_per_epoch": self.steps_per_epoch,
-                "next_walker_id": self._identity_hook.next_walker_id,
-                "committed_epoch": self._epoch_hook.committed_epoch,
-                "attempted_segment": (
-                    self._exchange_hook.attempted_segment
-                    if self._exchange_hook is not None
-                    else -1
-                ),
-                **self._bias_hook.state_dict(),
+        return {
+            "model_class": _qualified_name(engine.model),
+            "dynamics_class": _qualified_name(engine),
+            "bias_classes": {
+                name: _qualified_name(bias) for name, bias in self.biases.items()
             },
+            "exchange_config": (
+                self.replica_exchange.config_fingerprint()
+                if self.replica_exchange is not None
+                else None
+            ),
         }
-        for name, bias in self.biases.items():
-            getter = getattr(bias, "state_dict", None)
-            if callable(getter):
-                components[f"biases/{name}"] = dict(getter())
-        if self.replica_exchange is not None:
-            components["exchange"] = dict(self.replica_exchange.state_dict())
-        return components
 
     def checkpoint(self, path: str | Path, batch: Batch | None = None) -> None:
         """Write a transactional checkpoint at a consistency-epoch boundary.
@@ -660,23 +695,17 @@ class EnhancedSampling(DynamicsStrategy):
             self._exchange_hook.attempt_segment(target, step // interval - 1)
         self._epoch_hook.commit_epoch(step // self.steps_per_epoch - 1)
 
-        write_checkpoint(
+        save_checkpoint(
             path,
-            target,
             self._components(engine),
-            sampling_step=step,
-            sampling_epoch=step // self.steps_per_epoch,
-            steps_per_epoch=self.steps_per_epoch,
-            model_class=_qualified_name(engine.model),
-            dynamics_class=_qualified_name(engine),
-            bias_classes={
-                name: _qualified_name(bias) for name, bias in self.biases.items()
+            batch=target,
+            batch_fields=_IDENTITY_FIELDS,
+            compatibility=self._compatibility(engine),
+            metadata={
+                "sampling_step": step,
+                "sampling_epoch": step // self.steps_per_epoch,
+                "steps_per_epoch": self.steps_per_epoch,
             },
-            exchange_config=(
-                self.replica_exchange.config_fingerprint()
-                if self.replica_exchange is not None
-                else None
-            ),
         )
 
     def restore(
@@ -715,44 +744,34 @@ class EnhancedSampling(DynamicsStrategy):
         """
         engine = self.dynamics(model)
         target_device = device if device is not None else self._model_device(engine)
-        batch, states, manifest = read_checkpoint(path, target_device)
-        self._validate_compatibility(manifest, engine)
 
-        self.steps_per_epoch = int(manifest.steps_per_epoch)
+        # "dynamics" is deliberately not in the mapping: its per-system arrays
+        # have to be allocated against the restored batch before they can be
+        # written into, and the batch only exists once the store is read. It is
+        # applied by hand below, from the decoded state every component gets
+        # back whether or not it was restored automatically.
+        contents = load_checkpoint(
+            path,
+            self._components(),
+            device=target_device,
+            validate=lambda manifest: self._validate_compatibility(manifest, engine),
+        )
+        batch = contents.batch
+
+        self.steps_per_epoch = int(contents.manifest.metadata["steps_per_epoch"])
         # The divisor lives on the hooks that use it, so a checkpoint written
         # with a different epoch length re-cadences them rather than leaving
         # the strategy's copy and the hooks' copies disagreeing.
         self._identity_hook.steps_per_epoch = self.steps_per_epoch
         self._epoch_hook.frequency = self.steps_per_epoch
 
-        runner_state = states.get("runner", {})
-        self._identity_hook.next_walker_id = int(runner_state.get("next_walker_id", 0))
-        self._epoch_hook.committed_epoch = int(runner_state.get("committed_epoch", -1))
-        if self._exchange_hook is not None:
-            self._exchange_hook.attempted_segment = int(
-                runner_state.get("attempted_segment", -1)
-            )
-        self._bias_hook.load_state_dict(runner_state)
-
-        exchange_state = states.get("exchange")
-        if exchange_state is not None and self.replica_exchange is not None:
-            self.replica_exchange.load_state_dict(exchange_state)
-
-        for name, bias in self.biases.items():
-            state = states.get(f"biases/{name}")
-            loader = getattr(bias, "load_state_dict", None)
-            if state is not None and callable(loader):
-                loader(state)
         # Loading wrote each bias's saved state_version straight onto it, which
         # the bias hook never observed as a change; re-baseline so the first
         # post-restore update() does not read it as one.
         self._bias_hook.sync_seen_versions()
 
-        # The integrator's per-system state must exist before it can be
-        # restored into, and its shapes come from the batch — so initialise
-        # against the restored batch first, then overwrite.
         engine._ensure_state_initialized(batch)
-        engine.load_state_dict(states.get("dynamics", {}))
+        engine.load_state_dict(contents.states["dynamics"])
 
         self._restored = True
         self.prime_forces(batch, model)
@@ -801,26 +820,26 @@ class EnhancedSampling(DynamicsStrategy):
         ValueError
             If the model class, dynamics class, or bias set disagrees.
         """
+        saved = manifest.compatibility
+        actual = self._compatibility(engine)
+
         problems: list[str] = []
-        actual_model = _qualified_name(engine.model)
-        if manifest.model_class and manifest.model_class != actual_model:
+        for key, label in (("model_class", "model"), ("dynamics_class", "dynamics")):
+            recorded = saved.get(key)
+            # An unrecorded class is tolerated; a recorded one that disagrees
+            # is not.
+            if recorded and recorded != actual[key]:
+                problems.append(
+                    f"  {label}: checkpoint has {recorded}, "
+                    f"this strategy has {actual[key]}"
+                )
+        # Unconditional, unlike the two above: an empty bias set is a real
+        # configuration, so "checkpoint had none, this strategy has three" is a
+        # mismatch rather than a missing record.
+        if saved.get("bias_classes", {}) != actual["bias_classes"]:
             problems.append(
-                f"  model: checkpoint has {manifest.model_class}, "
-                f"this strategy has {actual_model}"
-            )
-        actual_dynamics = _qualified_name(engine)
-        if manifest.dynamics_class and manifest.dynamics_class != actual_dynamics:
-            problems.append(
-                f"  dynamics: checkpoint has {manifest.dynamics_class}, "
-                f"this strategy has {actual_dynamics}"
-            )
-        actual_biases = {
-            name: _qualified_name(bias) for name, bias in self.biases.items()
-        }
-        if manifest.bias_classes != actual_biases:
-            problems.append(
-                f"  biases: checkpoint has {manifest.bias_classes}, "
-                f"this strategy has {actual_biases}"
+                f"  biases: checkpoint has {saved.get('bias_classes', {})}, "
+                f"this strategy has {actual['bias_classes']}"
             )
         # The ladder decides what a swap means, so a mismatch — including
         # exchange-versus-none in either direction — changes the semantics of
@@ -828,10 +847,7 @@ class EnhancedSampling(DynamicsStrategy):
         # valid.
         problems.extend(
             ReplicaExchange.describe_config_mismatch(
-                manifest.exchange_config,
-                self.replica_exchange.config_fingerprint()
-                if self.replica_exchange is not None
-                else None,
+                saved.get("exchange_config"), actual["exchange_config"]
             )
         )
         if problems:

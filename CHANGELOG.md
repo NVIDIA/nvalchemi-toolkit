@@ -4,6 +4,31 @@
 
 ### Added
 
+- `nvalchemi/_checkpoint.py` — transactional, pickle-free Zarr checkpoints for
+  any set of stateful objects. `save_checkpoint(path, components, batch=...)`
+  and `load_checkpoint(path, components, ...)` take a mapping of name to
+  `Stateful` — the `state_dict` / `load_state_dict` pair that `nn.Module`,
+  `BaseDynamics`, `ReplicaExchange`, every `CheckpointableHook` and every
+  adaptive bias already satisfy — so a checkpoint is a mapping of name to
+  *something that knows its own state* rather than a per-workflow schema.
+  Names may nest (`"biases/umbrella"`, `"hooks/epoch"`), so a store is
+  inspectable group by group; `manifest` is reserved, and an empty path
+  segment is refused rather than silently flattened. The manifest is written
+  last and is the commit marker; every component and the batch are SHA-256
+  checksummed and verified on read, and cover is mandatory rather than
+  best-effort. A `compatibility` fingerprint and a `metadata` blob are stored
+  verbatim, and `load_checkpoint` takes a `validate` callback invoked after
+  integrity checks and before any state is applied — deciding what a
+  fingerprint mismatch *means* is domain knowledge the layer does not have.
+
+  This replaces the copy that shipped inside `enhanced_sampling/_checkpoint.py`.
+  Writing transactionally and refusing a torn store is wanted by MD restart and
+  NEB restart too, and a second implementation under one subpackage is what
+  guarantees a third. `training/_checkpoint.py` is **not** refactored onto it:
+  that layer has a different storage format — a directory of `.pt` files with
+  per-component specs, indices, and model/optimizer/scheduler associations —
+  and migrating it is a format change with its own compatibility story.
+
 - `DynamicsStrategy` — a declarative recipe that configures a `BaseDynamics`
   it does not own. Construction validates the whole configuration, `build()`
   turns it into a live engine, `to_spec_dict()` serialises the knobs, and
@@ -259,23 +284,17 @@
   `pair_distance` is now its norm, so the two cannot drift apart in their
   validation, device handling, or minimum-image convention.
 
-- Exact checkpoint and restore for enhanced sampling.
-  `EnhancedSampling.checkpoint()` writes a transactional Zarr store that
-  extends the existing `AtomicData` layout with a `sampling/` group holding
-  integrator, bias, and hook-family state; `restore()` reads it back and returns a
-  force-primed batch that reproduces the identical trajectory. The manifest is
-  written last and is the commit marker, so an interrupted write has none and
-  is refused rather than half-restored. Integrity cover is total: each
-  `sampling/` component is SHA-256 checksummed, and a separate
-  `batch_checksum` covers `meta/`, `core/`, and `custom/` — the positions,
-  velocities, pointer arrays, and walker identity that `AtomicDataZarrWriter`
-  writes outside the component path. All are verified on read, and cover is
-  mandatory: a manifest with a gap — a declared component lacking a checksum,
-  a checksum naming no component, or no batch checksum — is rejected as
-  invalid rather than read unverified. State is Zarr
-  arrays and JSON attributes with **no pickle payloads** — an unsupported
-  value type raises rather than falling back, so loading a checkpoint cannot
-  execute code. Checkpoints are permitted
+- Exact checkpoint and restore for enhanced sampling, through the shared
+  checkpoint layer above. `EnhancedSampling.checkpoint()` names every object
+  whose state matters — the engine, each hook, each bias, the ladder — and
+  `restore()` reads it back and returns a force-primed batch that reproduces
+  the identical trajectory. `WalkerIdentityHook`, `EpochCommitHook` and
+  `ReplicaExchangeHook` gained `state_dict`/`load_state_dict` so each owns its
+  own cursor rather than being collected into one opaque `runner` blob:
+  walker-id allocation, last committed epoch, last attempted segment.
+  `"dynamics"` is the one component applied by hand, because the integrator's
+  per-system arrays have to be allocated against the restored batch before
+  they can be written into. Checkpoints are permitted
   only at a consistency-epoch boundary, the one point with no pending
   `update()` or in-flight epoch commit; the error names the next valid step.
   `checkpoint()` also drains the completed epoch's `commit()` before

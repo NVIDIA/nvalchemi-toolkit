@@ -761,21 +761,29 @@ that was saved.
 
 ### Transactional by construction
 
-The store is written walker batch → components → **manifest last**. The
-manifest is the commit marker:
+Writing state transactionally and refusing a torn store is not specific to
+enhanced sampling, so it lives in the shared checkpoint layer
+(`nvalchemi._checkpoint`) rather than here: `save_checkpoint` and
+`load_checkpoint` take a mapping of name to anything with
+`state_dict`/`load_state_dict`, which is what hooks, integrators, biases and
+the ladder already are. This section describes what an enhanced-sampling run
+puts in it.
 
-- No manifest ⇒ the write was interrupted ⇒ `read_checkpoint` refuses it.
+The store is written batch → components → **manifest last**. The manifest is
+the commit marker:
+
+- No manifest ⇒ the write was interrupted ⇒ `load_checkpoint` refuses it.
 - **Everything** is checksummed (SHA-256) and verified on read, so damage
-  *after* the manifest landed is caught too: each `sampling/` component
-  individually, plus a `batch_checksum` covering `meta/`, `core/`, and
-  `custom/`. Cover is mandatory, not best-effort — a manifest that declares a
-  component without a checksum, carries a checksum for no component, or omits
-  the batch checksum is rejected as invalid — otherwise deleting one key from
-  the manifest would be enough to leave that component free to modify.
-- The batch checksum is the one most easily forgotten: the walker batch is
-  written by `AtomicDataZarrWriter`, outside the component path, so covering
-  only the sampling state would attest to the bias and integrator while
-  restoring corrupted positions or a scrambled walker identity in silence.
+  *after* the manifest landed is caught too: each component individually,
+  plus a `batch_checksum` covering `meta/`, `core/`, and `custom/`. Cover is
+  mandatory, not best-effort — a manifest that declares a component without a
+  checksum, carries a checksum for no component, or omits the batch checksum
+  is rejected as invalid — otherwise deleting one key from the manifest would
+  be enough to leave that component free to modify.
+- The batch checksum is the one most easily forgotten: the batch is written by
+  `AtomicDataZarrWriter`, outside the component path, so covering only the
+  component state would attest to the bias and integrator while restoring
+  corrupted positions or a scrambled walker identity in silence.
 - **No pickle payloads.** State is Zarr arrays and JSON attributes, so a
   checkpoint is readable by anything that reads Zarr and loading one cannot
   execute code. An unsupported value type raises rather than falling back.
@@ -783,12 +791,21 @@ manifest is the commit marker:
 ```text
 run.zarr/
   meta/, core/, custom/    walker batch (custom/ carries walker identity)
-  sampling/
+  checkpoint/
     manifest               written last — the commit; holds every checksum
     dynamics/              step counter, RNG seed, per-system integrator state
     biases/<name>/         each bias's state_dict()
-    runner/                walker-id allocation, epoch and segment counters
+    hooks/identity/        walker-id allocation
+    hooks/bias/            per-bias update() delivery record
+    hooks/epoch/           last committed epoch
+    hooks/exchange/        last attempted segment
+    exchange/              ladder counters and acceptance-RNG position
 ```
+
+Each of those groups is one object's `state_dict()`, so a checkpoint can be
+inspected piece by piece rather than as one blob. The manifest also carries a
+free-form `compatibility` fingerprint — model, dynamics and bias classes, and
+the ladder — which `restore()` checks before applying anything.
 
 ### Bias configuration is validated, not just bias class
 
