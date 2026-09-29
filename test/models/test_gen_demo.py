@@ -41,7 +41,6 @@ class TestDemoGANModel:
         """The demo satisfies the mixin contract and declares its config."""
         model = DemoGANModel()
         assert isinstance(model, GenerativeModelMixin)
-        assert model.model_config.supports_variable_atoms is False
         assert model.model_config.required_inputs == frozenset()
         assert model.model_config.outputs == frozenset({"positions", "atomic_numbers"})
         assert model.model_config.prediction_outputs is None

@@ -61,7 +61,6 @@ class DemoGANModel(nn.Module, GenerativeModelMixin):
             nn.Linear(hidden, num_atoms * 3),
         )
         self.model_config = GenerativeModelConfig(
-            supports_variable_atoms=False,
             required_inputs=frozenset(),
             outputs=frozenset({"positions", "atomic_numbers"}),
         )
@@ -102,7 +101,6 @@ class DemoDiffusionModel(nn.Module, GenerativeModelMixin):
             nn.Linear(hidden, num_atoms * 3),
         )
         self.model_config = GenerativeModelConfig(
-            supports_variable_atoms=False,
             required_inputs=frozenset(),
             outputs=frozenset({"positions", "atomic_numbers"}),
         )

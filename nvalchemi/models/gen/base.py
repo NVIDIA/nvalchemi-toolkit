@@ -65,15 +65,13 @@ class GenerativeModelConfig(BaseModel):
     so each wrapper owns its own config object — mirroring
     :class:`~nvalchemi.models.base.BaseModelMixin`).
 
-    The base schema holds only the four capability fields below. Models with
+    The base schema holds only the three capability fields below. Models with
     model-specific runtime fields should subclass it (e.g. ``class
     ClariConfig(GenerativeModelConfig): temperature: float = 1.0``) — the
     mixin's ``isinstance`` enforcement accepts subclasses.
 
     Attributes
     ----------
-    supports_variable_atoms
-        Whether the model accepts systems with varying atom counts.
     required_inputs
         Batch fields the model's conditioning reads (empty means
         unconditional). Declared here so a
@@ -93,7 +91,6 @@ class GenerativeModelConfig(BaseModel):
     --------
     >>> from nvalchemi.models.gen.base import GenerativeModelConfig
     >>> cfg = GenerativeModelConfig(
-    ...     supports_variable_atoms=True,
     ...     required_inputs=frozenset({"positions", "atomic_numbers"}),
     ...     outputs=frozenset({"positions", "atomic_numbers", "cell"}),
     ... )
@@ -109,10 +106,6 @@ class GenerativeModelConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    supports_variable_atoms: Annotated[
-        bool,
-        Field(description="Whether the model accepts variable atom counts."),
-    ]
     required_inputs: Annotated[
         frozenset[str],
         Field(

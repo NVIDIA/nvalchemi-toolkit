@@ -17,8 +17,8 @@
 Covers:
 
 * :class:`~nvalchemi.models.gen.base.GenerativeModelConfig` construction and
-  validation of its four capability fields (``supports_variable_atoms``,
-  ``required_inputs``, ``outputs``, ``prediction_outputs``),
+  validation of its capability fields (``required_inputs``, ``outputs``,
+  ``prediction_outputs``),
   ``extra="forbid"`` rejection, subclassing, and config round-trip
   (serialize -> deserialize -> equality).
 * :class:`~nvalchemi.models.gen.base.GenerativeModelMixin` contract via a tiny
@@ -96,7 +96,6 @@ def _build_cfg(**overrides) -> GenerativeModelConfig:
         The config.
     """
     fields = {
-        "supports_variable_atoms": True,
         "required_inputs": frozenset({"positions", "atomic_numbers"}),
         "outputs": frozenset({"positions", "atomic_numbers"}),
     }
@@ -192,12 +191,11 @@ class _ExtendedConfig(GenerativeModelConfig):
 
 
 class TestGenerativeModelConfig:
-    """``GenerativeModelConfig``: the four-field capability surface."""
+    """``GenerativeModelConfig``: the capability surface."""
 
     def test_construction(self) -> None:
-        """The four fields validate; ``prediction_outputs`` defaults to None."""
+        """The fields validate; ``prediction_outputs`` defaults to None."""
         cfg = _build_cfg()
-        assert cfg.supports_variable_atoms is True
         assert cfg.required_inputs == frozenset({"positions", "atomic_numbers"})
         assert cfg.outputs == frozenset({"positions", "atomic_numbers"})
         assert cfg.prediction_outputs is None
@@ -212,11 +210,9 @@ class TestGenerativeModelConfig:
     def test_field_declarations_required(self) -> None:
         """Omitting ``required_inputs``/``outputs`` raises."""
         with pytest.raises(ValidationError, match="required_inputs"):
-            GenerativeModelConfig(supports_variable_atoms=True)
+            GenerativeModelConfig()
         with pytest.raises(ValidationError, match="outputs"):
-            GenerativeModelConfig(
-                supports_variable_atoms=True, required_inputs=frozenset()
-            )
+            GenerativeModelConfig(required_inputs=frozenset())
 
     def test_config_round_trip(self) -> None:
         """Serialize -> deserialize -> equality."""
@@ -227,7 +223,6 @@ class TestGenerativeModelConfig:
     def test_prediction_outputs_round_trip(self) -> None:
         """A non-default ``prediction_outputs`` survives a round-trip."""
         cfg = _build_cfg(
-            supports_variable_atoms=False,
             required_inputs=frozenset(),
             outputs=frozenset({"positions"}),
             prediction_outputs={"flow"},
@@ -239,7 +234,6 @@ class TestGenerativeModelConfig:
     def test_subclassed_config(self) -> None:
         """A subclass carrying model-specific fields validates as a config."""
         cfg = _ExtendedConfig(
-            supports_variable_atoms=False,
             required_inputs=frozenset(),
             outputs=frozenset({"positions"}),
             temperature=2.5,
@@ -273,7 +267,6 @@ class TestGenerativeModelMixin:
             def __init__(self) -> None:
                 super().__init__()
                 self.model_config = _ExtendedConfig(
-                    supports_variable_atoms=True,
                     required_inputs=frozenset(),
                     outputs=frozenset({"positions"}),
                 )
