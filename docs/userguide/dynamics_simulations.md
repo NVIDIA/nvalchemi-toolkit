@@ -11,19 +11,19 @@ overview --- they generally differ only in what `pre_update` and `post_update` d
 ## Geometry optimization
 
 Geometry optimization finds the nearest local energy minimum by iteratively moving
-atoms downhill on the potential energy surface. The toolkit provides the **FIRE**
-(Fast Inertial Relaxation Engine) algorithm and the quasi-Newton **L-BFGS**, each
-with fixed- and variable-cell variants.
+atoms downhill on the potential energy surface. The toolkit provides the **FIRE2**
+(Fast Inertial Relaxation Engine, improved variant) algorithm and the quasi-Newton
+**L-BFGS**, each with fixed- and variable-cell variants.
 
 ### Fixed-cell optimization
 
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIRE` optimizes atomic positions
+{py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2` optimizes atomic positions
 while keeping the simulation cell fixed:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
-with FIRE(
+with FIRE2(
     model=model,
     dt=0.1,           # initial timestep (femtoseconds)
     n_steps=500,
@@ -32,7 +32,7 @@ with FIRE(
     relaxed = opt.run(batch)
 ```
 
-FIRE uses an adaptive timestep and velocity mixing: when the system is moving
+FIRE2 uses an adaptive timestep and velocity mixing: when the system is moving
 downhill (forces aligned with velocities), the timestep grows and velocities are
 biased toward the force direction. When the system overshoots, the timestep shrinks
 and velocities are zeroed. This makes it robust across a wide range of systems
@@ -40,16 +40,16 @@ without manual tuning.
 
 ### Variable-cell optimization
 
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIREVariableCell` extends FIRE to
+{py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2VariableCell` extends FIRE2 to
 simultaneously optimize both atomic positions and the simulation cell. This is
 useful for finding equilibrium crystal structures where the lattice parameters are
 not known a priori:
 
 ```python
-from nvalchemi.dynamics.optimizers.fire import FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2VariableCell
 from nvalchemi.dynamics import ConvergenceHook
 
-with FIREVariableCell(
+with FIRE2VariableCell(
     model=model,
     dt=0.1,
     n_steps=500,
@@ -110,9 +110,9 @@ it, like `history_size`, when state is allocated.
 
 ### Choosing between fixed and variable cell
 
-Use fixed-cell FIRE when the cell is known (e.g. a bulk crystal at experimental
+Use fixed-cell FIRE2 when the cell is known (e.g. a bulk crystal at experimental
 lattice parameters, or a molecule in vacuum where the cell is just a bounding box).
-Use variable-cell FIRE when the equilibrium cell shape or volume is unknown, such as
+Use variable-cell FIRE2 when the equilibrium cell shape or volume is unknown, such as
 when screening candidate crystal structures or computing equations of state.
 
 ## Molecular dynamics
