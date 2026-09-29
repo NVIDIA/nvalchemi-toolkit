@@ -147,18 +147,22 @@ class TestLBFGSRelaxation:
         assert int(dynamics._state.history_count.min()) > 0
 
     def test_run_with_convergence_hook(self):
+        # A reachable threshold, so run() actually takes the early-exit
+        # branch (base.py: `if ... _converged.numel() == batch.num_graphs:
+        # break`) instead of just exhausting n_steps every time.
         torch.manual_seed(0)
         batch = _make_batch(2, n_atoms_each=5, seed=1)
         dynamics = LBFGS(
             model=_make_model(),
-            n_steps=20,
-            convergence_hook=ConvergenceHook.from_fmax(1e-8),
+            n_steps=200,
+            convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         _forces(dynamics, batch)
         before = batch.forces.norm(dim=1).max().item()
-        dynamics.run(batch)
-        assert batch.forces.norm(dim=1).max().item() < before
-        assert dynamics.step_count == 20
+        out = dynamics.run(batch)
+        assert out.forces.norm(dim=1).max().item() < before
+        assert out.forces.norm(dim=1).max().item() < 0.05
+        assert dynamics.step_count < 200
 
     def test_freeze_atoms_hook(self):
         from nvalchemi._typing import AtomCategory
