@@ -85,7 +85,6 @@ def trivial_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     TensorDict
         Zeros under the ``"x1"`` key, aligned with ``inputs``.
     """
-    del rng
     n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
     return TensorDict({"x1": torch.zeros(n, 1, 3)}, batch_size=[n])
 
@@ -112,7 +111,6 @@ def batch_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):
     Batch
         ``num_samples`` (or ``inputs.num_graphs``) dummy graphs.
     """
-    del rng
     n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
     return make_batch(n)
 
@@ -134,7 +132,6 @@ def tile_condition(inputs, *, num_samples=None, rng=None):
     Any
         ``inputs``, unchanged.
     """
-    del num_samples, rng
     return inputs
 
 
@@ -168,7 +165,6 @@ class DeviceAwareGenerate:
         Batch
             Dummy graphs on ``self.device``.
         """
-        del rng
         n = inputs.num_graphs if isinstance(inputs, Batch) else num_samples
         return make_batch(n).to(self.device)
 
@@ -222,7 +218,6 @@ class DemoGANGenerate:
         Any
             The conditioned inputs for the generating call.
         """
-        del rng
         n = 1 if num_samples is None else num_samples
         if inputs is None:
             return None
@@ -331,7 +326,6 @@ class DemoDiffusionGenerate:
         Any
             The conditioned inputs for the generating call.
         """
-        del rng
         n = 1 if num_samples is None else num_samples
         if inputs is None:
             return None
